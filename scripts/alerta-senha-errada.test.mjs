@@ -7,15 +7,22 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  ErroSeguro,
+  LIMITE_LOGS,
+  LOGS_SQL,
+  checarSaturacao,
   detectarPicos,
+  escaparLike,
   filtrarJaAvisados,
   literalSql,
   mascararEmail,
+  mensagemDeErro,
   mensagemParaLog,
   montarInsertSql,
   montarMensagem,
   parsearEvento,
   parsearRespostaLogs,
+  rodarSql,
 } from "./alerta-senha-errada.mjs";
 
 const REF = "abcdefghijklmnopqrst";
@@ -169,7 +176,11 @@ test("IP ou e-mail inválido é recusado antes do SQL", () => {
 
 test("resposta da API: result, erro e formato inesperado", () => {
   assert.deepEqual(parsearRespostaLogs({ result: [1] }), [1]);
-  assert.throws(() => parsearRespostaLogs({ error: { message: "bad sql" } }), /bad sql/);
+  // O texto do erro da API não vai para o log (pode ecoar o SQL).
+  assert.throws(
+    () => parsearRespostaLogs({ error: { message: "bad sql: select ... a@b.com" } }),
+    (err) => err instanceof ErroSeguro && err.message === "API de logs respondeu erro",
+  );
   assert.throws(() => parsearRespostaLogs({ foo: 1 }));
 });
 
@@ -207,4 +218,127 @@ test("CLI sem fixture e sem secrets falha claro, sem despejar env", () => {
     assert.match(err.stderr, /SUPABASE_ACCESS_TOKEN ausente/);
     assert.ok(!err.stderr.includes("PATH"));
   }
+});
+
+// ---------- regressões do review do Codex ----------
+
+/** Emula `x like 'padrão' escape '!'` do Postgres para conferir o padrão gerado. */
+function likeComEscape(sql) {
+  const m = /like '((?:[^']|'')*)' escape '!'/.exec(sql);
+  assert.ok(m, "LIKE com ESCAPE '!' esperado no SQL");
+  const padrao = m[1].replace(/''/g, "'");
+  let re = "";
+  for (let i = 0; i < padrao.length; i++) {
+    const c = padrao[i];
+    if (c === "!") re += padrao[++i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    else if (c === "%") re += "[\\s\\S]*";
+    else if (c === "_") re += "[\\s\\S]";
+    else re += c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${re}$`);
+}
+
+test("e-mail com _ ou % no local: INSERT com ESCAPE '!', sem barra, sem lançar", () => {
+  const picoUnder = { tipo: "email", valor: "a_b@example.com", total: 5, inicio: 0, fim: 0 };
+  const picoPct = { tipo: "email", valor: "a%b@example.com", total: 5, inicio: 0, fim: 0 };
+
+  const sqlUnder = montarInsertSql(picoUnder);
+  const sqlPct = montarInsertSql(picoPct);
+  for (const sql of [sqlUnder, sqlPct]) {
+    assert.match(sql, /like '%\(conta [^']*\)%' escape '!'/);
+    assert.ok(!sql.includes("\\"));
+    assert.equal((sql.match(/'/g) ?? []).length % 2, 0);
+  }
+  assert.match(sqlUnder, /a!_b@example\.com/);
+  assert.match(sqlPct, /a!%b@example\.com/);
+
+  const reUnder = likeComEscape(sqlUnder);
+  assert.ok(reUnder.test(montarMensagem(picoUnder)));
+  assert.ok(!reUnder.test(montarMensagem({ ...picoUnder, valor: "axb@example.com" })));
+
+  const rePct = likeComEscape(sqlPct);
+  assert.ok(rePct.test(montarMensagem(picoPct)));
+  assert.ok(!rePct.test(montarMensagem({ ...picoPct, valor: "axyzb@example.com" })));
+
+  assert.equal(escaparLike("!%_x"), "!!!%!_x");
+});
+
+test("CLI dry-run com e-mail a_b@example.com no pico não derruba o lote", () => {
+  const dir = mkdtempSync(join(tmpdir(), "alerta-senha-"));
+  const arq = join(dir, "fixture.json");
+  const linhas = aPartirDe("2026-11-14T20:00:00Z", [0, 20, 40, 60, 80], {
+    ip: "203.0.113.10",
+    email: "a_b@example.com",
+  });
+  writeFileSync(arq, JSON.stringify({ result: linhas }));
+  const script = fileURLToPath(new URL("./alerta-senha-errada.mjs", import.meta.url));
+  const out = execFileSync(process.execPath, [script, "--fixture", arq], {
+    encoding: "utf8",
+    env: { PATH: process.env.PATH },
+  });
+  assert.match(out, /Picos: 2/);
+  assert.match(out, /\(conta a\*\*\*@example\.com\)/);
+  assert.ok(!out.includes("a_b@"));
+});
+
+test("leitura de logs pede as mais recentes e falha se saturar o limit", () => {
+  assert.match(LOGS_SQL, /order by timestamp desc/);
+  assert.match(LOGS_SQL, new RegExp(`limit ${LIMITE_LOGS}$`));
+  assert.equal(LIMITE_LOGS, 5000);
+
+  const quase = new Array(LIMITE_LOGS - 1).fill({});
+  assert.equal(checarSaturacao(quase), quase);
+  assert.throws(
+    () => checarSaturacao(new Array(LIMITE_LOGS).fill({})),
+    (err) => err instanceof ErroSeguro && /Leitura incompleta/.test(err.message),
+  );
+  assert.throws(() => checarSaturacao([1, 2, 3], 3), /Leitura incompleta/);
+});
+
+test("CLI: 5000 linhas saturadas sai 1, mensagem clara, nada gravado", () => {
+  const dir = mkdtempSync(join(tmpdir(), "alerta-senha-"));
+  const arq = join(dir, "fixture.json");
+  const cheio = Array.from({ length: LIMITE_LOGS }, (_, i) => INCIDENTE_14_11[i % 5]);
+  writeFileSync(arq, JSON.stringify({ result: cheio }));
+  const script = fileURLToPath(new URL("./alerta-senha-errada.mjs", import.meta.url));
+  try {
+    execFileSync(process.execPath, [script, "--fixture", arq], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.fail("deveria falhar");
+  } catch (err) {
+    assert.equal(err.status, 1);
+    assert.match(err.stderr, /Leitura incompleta/);
+    assert.ok(!err.stdout.includes("Gravaria"));
+  }
+});
+
+test("falha do supabase vira mensagem curta: sem comando, SQL, stderr nem e-mail", () => {
+  const sql = montarInsertSql({ tipo: "email", valor: "fulano.secreto@example.com", total: 5 });
+  const exec = () => {
+    const e = new Error(`Command failed: supabase db query --linked ${sql}`);
+    e.stderr = `ERROR: syntax error at or near ... fulano.secreto@example.com`;
+    throw e;
+  };
+  for (const rotulo of ["falha ao consultar avisos", "falha ao gravar aviso"]) {
+    assert.throws(
+      () => rodarSql(sql, rotulo, exec),
+      (err) => {
+        assert.ok(err instanceof ErroSeguro);
+        assert.equal(err.message, rotulo);
+        assert.equal(mensagemDeErro(err), rotulo);
+        return true;
+      },
+    );
+  }
+  assert.equal(rodarSql("select 1", "x", () => "[]"), "[]");
+});
+
+test("erro inesperado no main não ecoa a mensagem crua", () => {
+  const cru = new Error("insert into public.notifications ... fulano.secreto@example.com");
+  assert.equal(mensagemDeErro(cru), "erro inesperado");
+  assert.equal(mensagemDeErro(undefined), "erro inesperado");
+  assert.equal(mensagemDeErro(new ErroSeguro("API de logs falhou com HTTP 503")), "API de logs falhou com HTTP 503");
 });

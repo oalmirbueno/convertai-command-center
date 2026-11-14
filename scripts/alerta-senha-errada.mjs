@@ -15,6 +15,10 @@ export const JANELA_MS = 10 * 60 * 1000;
 export const LEITURA_MS = 30 * 60 * 1000;
 export const DEDUP_MS = 30 * 60 * 1000;
 export const TIPO_AVISO = "login_senha_errada";
+export const LIMITE_LOGS = 5000;
+
+/** Erro com mensagem curta e controlada: é a única que vai para o log do CI. */
+export class ErroSeguro extends Error {}
 
 const EMAIL_RE = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 
@@ -23,8 +27,8 @@ from logs
 where source = 'auth_logs'
   and (log_attributes['error_code'] = 'invalid_credentials'
        or event_message like '%invalid_credentials%')
-order by timestamp asc
-limit 5000`;
+order by timestamp desc
+limit ${LIMITE_LOGS}`;
 
 // ---------- parte pura ----------
 
@@ -198,13 +202,16 @@ export function literalSql(valor) {
   return `'${s.replace(/'/g, "''")}'`;
 }
 
-function escaparLike(s) {
-  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+// ESCAPE explícito com "!" em vez de barra invertida (literalSql recusa barra).
+export const ESCAPE_LIKE = "!";
+
+export function escaparLike(s) {
+  return String(s).replace(/[!%_]/g, (c) => `${ESCAPE_LIKE}${c}`);
 }
 
 export function montarInsertSql(pico) {
   const mensagem = literalSql(montarMensagem(pico));
-  const padrao = literalSql(`%${escaparLike(marcador(pico))}%`);
+  const padrao = `${literalSql(`%${escaparLike(marcador(pico))}%`)} escape '${ESCAPE_LIKE}'`;
   return `insert into public.notifications (user_id, message, notification_type, link)
 select distinct ur.user_id, ${mensagem}, '${TIPO_AVISO}', '/'
   from public.user_roles ur
@@ -238,10 +245,26 @@ export function parsearRespostaLogs(json) {
   if (Array.isArray(json)) return json;
   if (json && json.error) {
     const msg = typeof json.error === "string" ? json.error : json.error.message || "erro";
-    throw new Error(`API de logs respondeu erro: ${String(msg).slice(0, 300)}`);
+    // O texto do erro pode ecoar o SQL; não vai para o log.
+    throw new ErroSeguro("API de logs respondeu erro");
   }
   if (json && Array.isArray(json.result)) return json.result;
-  throw new Error("Resposta da API de logs em formato inesperado");
+  throw new ErroSeguro("Resposta da API de logs em formato inesperado");
+}
+
+/** Se a leitura bateu no limit, pode ter faltado linha: não avisa pela metade. */
+export function checarSaturacao(linhas, limite = LIMITE_LOGS) {
+  if (linhas.length >= limite) {
+    throw new ErroSeguro(
+      `Leitura incompleta: a API de logs devolveu ${linhas.length} linhas (limite ${limite}). Nenhum aviso gravado.`,
+    );
+  }
+  return linhas;
+}
+
+/** Só ErroSeguro passa adiante; o resto (stderr do supabase, SQL, e-mail) vira genérico. */
+export function mensagemDeErro(err) {
+  return err instanceof ErroSeguro ? err.message : "erro inesperado";
 }
 
 export function janelaLeitura(agora = Date.now(), duracaoMs = LEITURA_MS) {
@@ -259,20 +282,36 @@ async function buscarLogs({ projectId, token, agora = Date.now() }) {
   url.searchParams.set("sql", LOGS_SQL);
   url.searchParams.set("iso_timestamp_start", inicio);
   url.searchParams.set("iso_timestamp_end", fim);
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!resp.ok) throw new Error(`API de logs falhou com HTTP ${resp.status}`);
-  return parsearRespostaLogs(await resp.json());
+  let resp;
+  try {
+    resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch {
+    throw new ErroSeguro("falha ao consultar logs");
+  }
+  if (!resp.ok) throw new ErroSeguro(`API de logs falhou com HTTP ${resp.status}`);
+  let json;
+  try {
+    json = await resp.json();
+  } catch {
+    throw new ErroSeguro("API de logs devolveu JSON inválido");
+  }
+  return parsearRespostaLogs(json);
 }
 
-function rodarSql(sql) {
-  return execFileSync("supabase", ["db", "query", "--linked", "--output", "json", sql], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 120_000,
-  });
+/** Roda SQL pelo CLI; qualquer falha vira só `rotulo` (sem comando, SQL nem stderr). */
+export function rodarSql(sql, rotulo, exec = execFileSync) {
+  try {
+    return exec("supabase", ["db", "query", "--linked", "--output", "json", sql], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120_000,
+    });
+  } catch {
+    throw new ErroSeguro(rotulo);
+  }
 }
 
 function linhasDoJson(saida) {
@@ -296,8 +335,8 @@ function lerArgs(argv) {
     else if (a === "--dry-run") opts.write = false;
     else if (a === "--fixture") {
       opts.fixture = argv[++i];
-      if (!opts.fixture) throw new Error("--fixture precisa de um arquivo");
-    } else throw new Error(`Argumento desconhecido: ${a}`);
+      if (!opts.fixture) throw new ErroSeguro("--fixture precisa de um arquivo");
+    } else throw new ErroSeguro("Argumento desconhecido");
   }
   return opts;
 }
@@ -311,11 +350,12 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     const projectId = env.SUPABASE_PROJECT_ID;
     const token = env.SUPABASE_ACCESS_TOKEN;
     if (!projectId || !/^[a-z0-9]{20}$/.test(projectId)) {
-      throw new Error("SUPABASE_PROJECT_ID ausente ou em formato inválido");
+      throw new ErroSeguro("SUPABASE_PROJECT_ID ausente ou em formato inválido");
     }
-    if (!token) throw new Error("SUPABASE_ACCESS_TOKEN ausente");
+    if (!token) throw new ErroSeguro("SUPABASE_ACCESS_TOKEN ausente");
     linhas = await buscarLogs({ projectId, token });
   }
+  checarSaturacao(linhas);
 
   const eventos = linhas.map(parsearEvento).filter(Boolean);
   const falhas = eventos.filter(ehSenhaErrada).length;
@@ -328,7 +368,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   }
 
   if (opts.write) {
-    const recentes = linhasDoJson(rodarSql(AVISOS_RECENTES_SQL));
+    const recentes = linhasDoJson(rodarSql(AVISOS_RECENTES_SQL, "falha ao consultar avisos"));
     const antes = picos.length;
     picos = filtrarJaAvisados(picos, recentes);
     if (antes !== picos.length) console.log(`Já avisados nos últimos 30 min: ${antes - picos.length}.`);
@@ -337,7 +377,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   for (const p of picos) {
     const sql = montarInsertSql(p); // valida IP/e-mail antes de qualquer gravação
     console.log(`${opts.write ? "Gravando" : "[dry-run] Gravaria"}: ${mensagemParaLog(p)}`);
-    if (opts.write) rodarSql(sql);
+    if (opts.write) rodarSql(sql, "falha ao gravar aviso");
   }
   return 0;
 }
@@ -346,8 +386,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main().then(
     (code) => process.exit(code),
     (err) => {
-      // Só a mensagem: nada de env, headers ou stack com contexto sensível.
-      console.error(`Falha no alerta de senha errada: ${err?.message ?? "erro desconhecido"}`);
+      // Só mensagem controlada: nada de env, SQL, stderr, stack ou e-mail inteiro.
+      console.error(`Falha no alerta de senha errada: ${mensagemDeErro(err)}`);
       process.exit(1);
     },
   );
