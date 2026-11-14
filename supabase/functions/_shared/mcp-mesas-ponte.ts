@@ -68,6 +68,8 @@ export const RPCS_DA_PONTE = [
   'mesa_enviar_para_aprovacao',
   'transition_editorial_publication',
   'withdraw_file_client_approval',
+  'editar_legenda_publicacao_aprovada',
+  'ajustar_formato_publicacao_aprovada',
 ] as const;
 export type RpcDaPonte = (typeof RPCS_DA_PONTE)[number];
 

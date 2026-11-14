@@ -74,6 +74,11 @@ import {
   type EditorialSchedulePublicationTarget,
 } from "@/lib/editorialScheduler";
 import { PLATFORM_LABELS, isFilePublishable } from "@/lib/editorial";
+import { editorialErrorMessage } from "@/lib/editorialErrorMessage";
+import {
+  ehFormatoDePecaUnica,
+  opcoesDeFormatoNoAgendamento,
+} from "@/lib/editorialAjustesAprovados";
 import { cn } from "@/lib/utils";
 
 interface Option {
@@ -106,6 +111,20 @@ interface PendingAttempt {
   prepared?: {
     payload: Record<string, unknown>;
     expectedVersion: number | null;
+  };
+  /**
+   * Post que nasce neste agendamento com formato diferente do da mídia: ele é
+   * gravado primeiro como planejado, sem horário, e só agenda depois do
+   * ajuste de formato. Um novo clique da mesma tentativa continua daqui, sem
+   * criar outro post.
+   */
+  nascimento?: {
+    mutationId: string;
+    /** O save sem horário, reenviado igual (idempotente) se a resposta se perdeu. */
+    payload: Record<string, unknown>;
+    postNascidoId: string | null;
+    versao: number | null;
+    formatoAjustado: boolean;
   };
 }
 
@@ -164,6 +183,16 @@ function isSchedulablePost(bundle: EditorialPostBundle) {
   );
 }
 
+/** Formato de feed da peça: o do post que já existe (reel, vídeo) ou o da mídia. */
+function formatoDoFeed(
+  asset: EditorialApprovedMediaAsset,
+  formatoDoPost: string | null | undefined,
+) {
+  return formatoDoPost && formatoDoPost !== "story" && ehFormatoDePecaUnica(formatoDoPost)
+    ? formatoDoPost
+    : asset.contentType;
+}
+
 const stepItems = [
   { label: "Cliente", icon: CheckCircle2 },
   { label: "Conteúdo", icon: FileCheck2 },
@@ -181,7 +210,11 @@ export default function EditorialScheduleDialog({
   onOpenChange,
   onScheduled,
 }: EditorialScheduleDialogProps) {
-  const { savePost } = useEditorialMutations();
+  const { savePost, ajustarFormatoAprovado } = useEditorialMutations();
+  // Formato do agendamento: o da mídia (feed) ou Story, sempre por escolha.
+  const [formatoEscolhido, setFormatoEscolhido] = useState("");
+  // A troca de formato roda antes do save: os dois travam a tela.
+  const ocupado = savePost.isPending || ajustarFormatoAprovado.isPending;
   const [clientId, setClientId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [selectedAsset, setSelectedAsset] =
@@ -226,6 +259,7 @@ export default function EditorialScheduleDialog({
     setSelectedAsset(null);
     setSelectedExistingPlan(null);
     setSelectedAccountIds([]);
+    setFormatoEscolhido("");
     setScheduledAt(defaultScheduledAt || nextHourLocal());
     setAccountSearch("");
     setShowLibrary(true);
@@ -339,6 +373,13 @@ export default function EditorialScheduleDialog({
   const selectAsset = (asset: EditorialApprovedMediaAsset) => {
     setSelectedAsset(asset);
     const existing = existingPostByRootId.get(asset.id);
+    setFormatoEscolhido(
+      opcoesDeFormatoNoAgendamento(asset.contentType).length === 0
+        ? ""
+        : existing?.post.content_type === "story"
+          ? "story"
+          : formatoDoFeed(asset, existing?.post.content_type),
+    );
     const activePlans = existing
       ? activeEditorialSchedulePlans(existing.publications)
       : [];
@@ -402,7 +443,7 @@ export default function EditorialScheduleDialog({
   });
 
   const requestOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && savePost.isPending) return false;
+    if (!nextOpen && ocupado) return false;
     if (!nextOpen && dirty) {
       setDiscardConfirmOpen(true);
       return false;
@@ -443,20 +484,23 @@ export default function EditorialScheduleDialog({
       return;
     }
 
-    const fingerprint = JSON.stringify({
-      clientId,
-      projectId,
-      assetId: selectedAsset.id,
-      accountIds: [...selectedAccountIds].sort(),
-      scheduledAtIso,
-      existingPlan: selectedExistingPlan
-        ? {
-            postId: selectedExistingPlan.postId,
-            postVersion: selectedExistingPlan.postVersion,
-            planFingerprint: selectedExistingPlan.planFingerprint,
-          }
-        : null,
-    });
+    const impressaoDaTentativa = (versaoDoPost?: number) =>
+      JSON.stringify({
+        clientId,
+        projectId,
+        assetId: selectedAsset.id,
+        formatoEscolhido,
+        accountIds: [...selectedAccountIds].sort(),
+        scheduledAtIso,
+        existingPlan: selectedExistingPlan
+          ? {
+              postId: selectedExistingPlan.postId,
+              postVersion: versaoDoPost ?? selectedExistingPlan.postVersion,
+              planFingerprint: selectedExistingPlan.planFingerprint,
+            }
+          : null,
+      });
+    const fingerprint = impressaoDaTentativa();
     if (attemptRef.current?.fingerprint !== fingerprint) {
       attemptRef.current = {
         fingerprint,
@@ -467,6 +511,204 @@ export default function EditorialScheduleDialog({
     }
     const attempt = attemptRef.current;
 
+    const formatoPedido = ehFormatoDePecaUnica(formatoEscolhido)
+      ? formatoEscolhido
+      : null;
+    const nomeDoFormato = formatoPedido === "story" ? "Story" : "o formato escolhido";
+
+    // Post que já existe (ou que acabou de nascer planejado, sem horário): o
+    // formato (Story ou a volta para o feed) muda ANTES de agendar, pela RPC
+    // estreita, sem derrubar a aprovação. Se o ajuste falhar, nada é agendado:
+    // o erro sobe e o save que coloca horário não acontece.
+    const ajustarFormatoAntesDeAgendar = async (post: EditorialPostBundle) => {
+      if (!formatoPedido || post.post.content_type === formatoPedido) {
+        return post.post.version;
+      }
+      const nascimento =
+        attempt.nascimento?.postNascidoId === post.post.id
+          ? attempt.nascimento
+          : null;
+      let ajuste: { version: number };
+      try {
+        ajuste = await ajustarFormatoAprovado.mutateAsync({
+          postId: post.post.id,
+          expectedVersion: post.post.version,
+          contentType: formatoPedido,
+        });
+      } catch (error) {
+        throw new Error(
+          nascimento
+            ? `Nada foi agendado: o conteúdo ficou planejado, sem horário, no formato da mídia. Toque em Agendar de novo para repetir só a troca de formato. ${editorialErrorMessage(error, "Tente de novo.")}`
+            : `Nada foi agendado: o formato não mudou para ${nomeDoFormato}. ${editorialErrorMessage(error, "Tente de novo.")}`,
+        );
+      }
+      if (nascimento) {
+        nascimento.versao = ajuste.version;
+        nascimento.formatoAjustado = true;
+      }
+      // A versão do post subiu por causa do próprio ajuste: a seleção e a
+      // tentativa acompanham, para um novo clique não acusar "plano mudou".
+      setSelectedExistingPlan((atual) =>
+        atual && atual.postId === post.post.id
+          ? { ...atual, postVersion: ajuste.version }
+          : atual,
+      );
+      attempt.fingerprint = impressaoDaTentativa(ajuste.version);
+      return ajuste.version;
+    };
+
+    // O save completo do plano. `post` é o conteúdo que já existe (ou o que
+    // acabou de nascer planejado); `horarioIso` null grava sem horário.
+    const montarPayload = (
+      post: EditorialPostBundle | null,
+      horarioIso: string | null,
+      mutationId: string,
+    ) => {
+      const existingPublicationByAccountId = new Map(
+        activeEditorialSchedulePlans(
+          post?.publications || [],
+        ).map((bundle) => [bundle.publication.external_account_id, bundle]),
+      );
+      // Frente AP: a conta planejada que a pessoa desmarcou sai (o save da
+      // Agenda cancela a planejada que não vem); agendada ou publicada fica.
+      const completeAccountIds = new Set([
+        ...selectedAccountIds,
+        ...[...existingPublicationByAccountId.entries()]
+          .filter(([, bundle]) => bundle.publication.status !== "planned")
+          .map(([accountId]) => accountId),
+      ]);
+      // A conta tem conexão oficial com automação LIGADA? Sem isto o payload
+      // declarava "automatic" olhando só a quantidade de arquivos, e o banco
+      // recusava o agendamento inteiro. Verzelo é o caso real: conectado,
+      // token válido, automação desligada.
+      const automacaoPorConta = new Map(
+        (options?.accounts || []).map((account: any) => [
+          account.id,
+          account.connection_status === "connected" &&
+            account.automation_enabled === true,
+        ]),
+      );
+
+      const publicationTargets: EditorialSchedulePublicationTarget[] = [
+        ...completeAccountIds,
+      ].map((accountId) => {
+        const existing = existingPublicationByAccountId.get(accountId);
+        if (existing) {
+          if (!existing.internal?.idempotency_key) {
+            throw new Error(
+              "Não foi possível confirmar o plano completo. Atualize e tente novamente.",
+            );
+          }
+          const effectiveFileId =
+            existing.publication.file_id || post?.post.primary_file_id;
+          const existingAsset = effectiveFileId
+            ? approvedAssetByRootId.get(effectiveFileId)
+            : null;
+          if (!existingAsset) {
+            throw new Error(
+              "Um arquivo deste plano não está mais aprovado. Atualize e revise o conteúdo.",
+            );
+          }
+          return {
+            accountId,
+            id: existing.publication.id,
+            idempotencyKey: existing.internal.idempotency_key,
+            asset: existingAsset,
+            fileId: existing.publication.file_id,
+            caption: existing.publication.caption,
+            firstComment: existing.publication.first_comment,
+            altText: existing.publication.alt_text,
+            automationReady: automacaoPorConta.get(accountId) === true,
+          };
+        }
+        let idempotencyKey = attempt.publicationKeys.get(accountId);
+        if (!idempotencyKey) {
+          idempotencyKey = newId();
+          attempt.publicationKeys.set(accountId, idempotencyKey);
+        }
+        return {
+          accountId,
+          idempotencyKey,
+          automationReady: automacaoPorConta.get(accountId) === true,
+        };
+      });
+
+      return buildEditorialSchedulePayload({
+        clientId,
+        projectId,
+        asset: selectedAsset,
+        publicationTargets,
+        scheduledAtIso: horarioIso,
+        timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+        postIdempotencyKey: attempt.postIdempotencyKey,
+        mutationId,
+        contentType: formatoPedido,
+        existingPost: post
+          ? {
+              id: post.post.id,
+              idempotencyKey: post.internal!.idempotency_key,
+              title: post.post.title,
+              contentType: formatoPedido || post.post.content_type,
+              objective: post.post.objective,
+              defaultCaption: post.post.default_caption,
+              taskId: post.internal?.task_id,
+              responsibleId: post.internal?.responsible_id,
+              internalNotes: post.internal?.internal_notes,
+              revisionOfPostId:
+                post.internal?.revision_of_post_id,
+            }
+          : null,
+      });
+    };
+
+    // Post que NASCE neste agendamento com formato diferente do da mídia
+    // (Story): o save aprovado ignora o content_type do payload e cria o
+    // conteúdo no formato da mídia. Por isso ele nasce PLANEJADO, sem horário:
+    // nada entra na agenda nem vai ao ar. Daí em diante é um post que já
+    // existe: o formato muda e só então o horário é gravado. Num novo clique
+    // da mesma tentativa não nasce outro post: sem o id (resposta perdida), o
+    // mesmo save é reenviado e o banco devolve o post que já criou; com o id,
+    // segue direto para o ajuste (se ainda falta) e o agendamento.
+    const nascerPlanejado = async () => {
+      if (!attempt.nascimento) {
+        const mutationId = newId();
+        attempt.nascimento = {
+          mutationId,
+          payload: montarPayload(null, null, mutationId),
+          postNascidoId: null,
+          versao: null,
+          formatoAjustado: false,
+        };
+      }
+      const nascimento = attempt.nascimento;
+      if (!nascimento.postNascidoId) {
+        const nascido = await savePost.mutateAsync({
+          payload: nascimento.payload,
+          expectedVersion: null,
+        });
+        nascimento.postNascidoId = nascido.post_id;
+        nascimento.versao = nascido.version;
+      }
+      // O estado real vem do banco: versão atual, publicações criadas e se o
+      // formato já foi ajustado (o ajuste pode ter passado numa tentativa cuja
+      // resposta se perdeu; aí não é refeito).
+      let post: EditorialPostBundle;
+      try {
+        post = await loadEditorialPostForMutation(
+          nascimento.postNascidoId,
+          clientId,
+        );
+      } catch (error) {
+        throw new Error(
+          `Nada foi agendado: o conteúdo ficou planejado, sem horário${nascimento.formatoAjustado ? "" : ", no formato da mídia"}. Toque em Agendar de novo para continuar de onde parou. ${editorialErrorMessage(error, "Tente de novo.")}`,
+        );
+      }
+      nascimento.versao = post.post.version;
+      nascimento.formatoAjustado = post.post.content_type === formatoPedido;
+      return post;
+    };
+
+    // Só chega aqui com o horário gravado e o formato certo.
     const finishSchedule = (postId: string) => {
       setDirty(false);
       attemptRef.current = null;
@@ -508,106 +750,22 @@ export default function EditorialScheduleDialog({
             "Este conteúdo mudou e não está mais livre para um novo agendamento. Atualize a lista.",
           );
         }
+      } else if (
+        formatoPedido !== null &&
+        formatoPedido !== selectedAsset.contentType
+      ) {
+        // Nasce planejado, sem horário, e segue como post que já existe.
+        completePost = await nascerPlanejado();
       }
-
-      const existingPublicationByAccountId = new Map(
-        activeEditorialSchedulePlans(
-          completePost?.publications || [],
-        ).map((bundle) => [bundle.publication.external_account_id, bundle]),
-      );
-      // Frente AP: a conta planejada que a pessoa desmarcou sai (o save da
-      // Agenda cancela a planejada que não vem); agendada ou publicada fica.
-      const completeAccountIds = new Set([
-        ...selectedAccountIds,
-        ...[...existingPublicationByAccountId.entries()]
-          .filter(([, bundle]) => bundle.publication.status !== "planned")
-          .map(([accountId]) => accountId),
-      ]);
-      // A conta tem conexão oficial com automação LIGADA? Sem isto o payload
-      // declarava "automatic" olhando só a quantidade de arquivos, e o banco
-      // recusava o agendamento inteiro. Verzelo é o caso real: conectado,
-      // token válido, automação desligada.
-      const automacaoPorConta = new Map(
-        (options?.accounts || []).map((account: any) => [
-          account.id,
-          account.connection_status === "connected" &&
-            account.automation_enabled === true,
-        ]),
-      );
-
-      const publicationTargets: EditorialSchedulePublicationTarget[] = [
-        ...completeAccountIds,
-      ].map((accountId) => {
-        const existing = existingPublicationByAccountId.get(accountId);
-        if (existing) {
-          if (!existing.internal?.idempotency_key) {
-            throw new Error(
-              "Não foi possível confirmar o plano completo. Atualize e tente novamente.",
-            );
-          }
-          const effectiveFileId =
-            existing.publication.file_id || completePost?.post.primary_file_id;
-          const existingAsset = effectiveFileId
-            ? approvedAssetByRootId.get(effectiveFileId)
-            : null;
-          if (!existingAsset) {
-            throw new Error(
-              "Um arquivo deste plano não está mais aprovado. Atualize e revise o conteúdo.",
-            );
-          }
-          return {
-            accountId,
-            id: existing.publication.id,
-            idempotencyKey: existing.internal.idempotency_key,
-            asset: existingAsset,
-            fileId: existing.publication.file_id,
-            caption: existing.publication.caption,
-            firstComment: existing.publication.first_comment,
-            altText: existing.publication.alt_text,
-            automationReady: automacaoPorConta.get(accountId) === true,
-          };
-        }
-        let idempotencyKey = attempt.publicationKeys.get(accountId);
-        if (!idempotencyKey) {
-          idempotencyKey = newId();
-          attempt.publicationKeys.set(accountId, idempotencyKey);
-        }
-        return {
-          accountId,
-          idempotencyKey,
-          automationReady: automacaoPorConta.get(accountId) === true,
-        };
-      });
-
-      const payload = buildEditorialSchedulePayload({
-        clientId,
-        projectId,
-        asset: selectedAsset,
-        publicationTargets,
-        scheduledAtIso,
-        timezone: EDITORIAL_DEFAULT_TIME_ZONE,
-        postIdempotencyKey: attempt.postIdempotencyKey,
-        mutationId: attempt.mutationId,
-        existingPost: completePost
-          ? {
-              id: completePost.post.id,
-              idempotencyKey: completePost.internal!.idempotency_key,
-              title: completePost.post.title,
-              contentType: completePost.post.content_type,
-              objective: completePost.post.objective,
-              defaultCaption: completePost.post.default_caption,
-              taskId: completePost.internal?.task_id,
-              responsibleId: completePost.internal?.responsible_id,
-              internalNotes: completePost.internal?.internal_notes,
-              revisionOfPostId:
-                completePost.internal?.revision_of_post_id,
-            }
-          : null,
-      });
+      // Todo post que chega aqui com formato diferente do pedido é ajustado
+      // ANTES do único save que coloca horário. Ajuste falhou: nada agendado.
+      const versaoParaAgendar = completePost
+        ? await ajustarFormatoAntesDeAgendar(completePost)
+        : null;
 
       attempt.prepared = {
-        payload,
-        expectedVersion: completePost?.post.version || null,
+        payload: montarPayload(completePost, scheduledAtIso, attempt.mutationId),
+        expectedVersion: versaoParaAgendar,
       };
       const result = await savePost.mutateAsync(attempt.prepared);
       finishSchedule(result.post_id);
@@ -850,6 +1008,53 @@ export default function EditorialScheduleDialog({
                         )}
                       </span>
                     </div>
+                    {opcoesDeFormatoNoAgendamento(selectedAsset.contentType).length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-[11px] font-semibold text-muted-foreground">
+                          Onde vai sair
+                        </p>
+                        <div
+                          className="mt-1.5 grid grid-cols-2 gap-2"
+                          role="radiogroup"
+                          aria-label="Formato da publicação"
+                        >
+                          {opcoesDeFormatoNoAgendamento(selectedAsset.contentType).map((opcao) => {
+                            const valor =
+                              opcao.value === "story"
+                                ? "story"
+                                : formatoDoFeed(
+                                    selectedAsset,
+                                    selectedExistingPlan
+                                      ? existingPostByRootId.get(selectedAsset.id)?.post.content_type
+                                      : null,
+                                  );
+                            const ativo = formatoEscolhido === valor;
+                            return (
+                              <button
+                                key={opcao.value}
+                                type="button"
+                                role="radio"
+                                aria-checked={ativo}
+                                data-formato={opcao.value}
+                                onClick={() => {
+                                  setFormatoEscolhido(valor);
+                                  setDirty(true);
+                                  attemptRef.current = null;
+                                }}
+                                className={cn(
+                                  "h-10 rounded-md border px-3 text-[13px] font-medium",
+                                  ativo
+                                    ? "border-primary bg-primary/10 text-foreground"
+                                    : "border-border bg-background text-muted-foreground hover:bg-muted/40",
+                                )}
+                              >
+                                {opcao.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {/* Empilhados no aparelho estreito: lado a lado, "Trocar
                         conteúdo" quebrava dentro do próprio botão. */}
                     <div className="mt-3 grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
@@ -1145,7 +1350,7 @@ export default function EditorialScheduleDialog({
             variant="outline"
             className="h-11 w-full sm:h-10 sm:w-auto"
             onClick={() => requestOpenChange(false)}
-            disabled={savePost.isPending}
+            disabled={ocupado}
           >
             Cancelar
           </Button>
@@ -1154,13 +1359,13 @@ export default function EditorialScheduleDialog({
             className="h-11 w-full sm:h-10 sm:w-auto"
             onClick={handleSchedule}
             disabled={
-              savePost.isPending ||
+              ocupado ||
               missingFields.length > 0 ||
               hasUnavailableSelection
               || hasMissingSelectedAccounts
             }
           >
-            {savePost.isPending ? (
+            {ocupado ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" />
             ) : (
               <CalendarCheck2 className="mr-2 h-4 w-4" />

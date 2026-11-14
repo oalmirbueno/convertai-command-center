@@ -15048,6 +15048,14 @@ export type Database = {
         Returns: undefined
       }
       agencia_dados_sugestoes: { Args: never; Returns: Json }
+      ajustar_formato_publicacao_aprovada: {
+        Args: {
+          p_content_type: string
+          p_expected_version: number
+          p_post_id: string
+        }
+        Returns: Json
+      }
       aprovacao_email_tick: { Args: never; Returns: Json }
       aprovar_pelo_cliente: {
         Args: { p_file_id: string; p_nota?: string }
@@ -15504,6 +15512,14 @@ export type Database = {
         Returns: boolean
       }
       dossie_registrar_avancos_todos: { Args: never; Returns: number }
+      editar_legenda_publicacao_aprovada: {
+        Args: {
+          p_caption: string
+          p_expected_version: number
+          p_publication_id: string
+        }
+        Returns: Json
+      }
       editorial_alerta_agendamento_atrasado: { Args: never; Returns: Json }
       editorial_autopublish_tick: { Args: never; Returns: Json }
       editorial_can_publish_client: {

@@ -220,6 +220,20 @@ export interface TransitionEditorialPublicationInput {
   deferRefresh?: boolean;
 }
 
+export interface EditarLegendaAprovadaInput {
+  publicationId: string;
+  expectedVersion: number;
+  caption: string;
+  deferRefresh?: boolean;
+}
+
+export interface AjustarFormatoAprovadoInput {
+  postId: string;
+  expectedVersion: number;
+  contentType: "static" | "story" | "reel" | "video";
+  deferRefresh?: boolean;
+}
+
 export interface EditorialQueryResult {
   posts: EditorialPostBundle[];
   accounts: EditorialAccountRow[];
@@ -1529,7 +1543,68 @@ export function useEditorialMutations() {
     onSuccess: refresh,
   });
 
-  return { savePost, transitionPublication, archivePost };
+  /**
+   * Corrige só a legenda de uma publicação aprovada ou agendada, sem criar
+   * revisão e sem derrubar a aprovação. O banco grava quem editou e a
+   * legenda antes e depois (evento caption_edited_after_approval).
+   */
+  const editarLegendaAprovada = useMutation({
+    mutationFn: async (input: EditarLegendaAprovadaInput) => {
+      const { data, error } = await editorialDb.rpc(
+        "editar_legenda_publicacao_aprovada",
+        {
+          p_publication_id: input.publicationId,
+          p_expected_version: input.expectedVersion,
+          p_caption: input.caption,
+        },
+      );
+      if (error) throw error;
+      return data as {
+        publication_id: string;
+        post_id: string;
+        changed: boolean;
+        version: number;
+        post_version: number;
+        publicacoes_editadas: string[];
+      };
+    },
+    onSuccess: (_data, variables) =>
+      variables.deferRefresh ? undefined : refresh(),
+  });
+
+  /**
+   * Troca o formato de uma peça única aprovada (post estático, story, reel,
+   * vídeo) sem criar revisão. Carrossel não vira story.
+   */
+  const ajustarFormatoAprovado = useMutation({
+    mutationFn: async (input: AjustarFormatoAprovadoInput) => {
+      const { data, error } = await editorialDb.rpc(
+        "ajustar_formato_publicacao_aprovada",
+        {
+          p_post_id: input.postId,
+          p_expected_version: input.expectedVersion,
+          p_content_type: input.contentType,
+        },
+      );
+      if (error) throw error;
+      return data as {
+        post_id: string;
+        changed: boolean;
+        content_type: string;
+        version: number;
+      };
+    },
+    onSuccess: (_data, variables) =>
+      variables.deferRefresh ? undefined : refresh(),
+  });
+
+  return {
+    savePost,
+    transitionPublication,
+    archivePost,
+    editarLegendaAprovada,
+    ajustarFormatoAprovado,
+  };
 }
 
 // ------------------------------------------------------------------ Mesa

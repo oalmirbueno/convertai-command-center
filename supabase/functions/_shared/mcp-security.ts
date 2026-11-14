@@ -161,6 +161,8 @@ export const CLIENT_SCOPED_LEGACY_TOOLS = [
   'aceleriq_workspace_link_arquivo',
   'aceleriq_workspace_retirar_aprovacao',
   'aceleriq_reagendar_publicacao',
+  'aceleriq_editar_legenda_publicacao',
+  'aceleriq_ajustar_formato_publicacao',
 ] as const;
 
 const CLIENT_SCOPED_LEGACY_TOOL_SET = new Set<string>(CLIENT_SCOPED_LEGACY_TOOLS);

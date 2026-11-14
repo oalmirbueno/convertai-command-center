@@ -75,6 +75,12 @@ import {
   motivoDaRecusaDaAprovacao,
   NOTA_DO_AVAL,
 } from "@/lib/fileApprovalActions";
+import { mediaKindFromFile } from "@/lib/fileUrls";
+import {
+  formatosPermitidos,
+  legendaEditadaAposAprovacao,
+  type FormatoDePecaUnica,
+} from "@/lib/editorialAjustesAprovados";
 
 type PublicationAction =
   | "schedule"
@@ -121,7 +127,33 @@ const eventLabels: Record<string, string> = {
     "Snapshot editorial aprovado pelo cliente",
   approval_snapshot_client_rejected:
     "Ajustes editoriais pedidos pelo cliente",
+  caption_edited_after_approval: "Legenda editada após aprovação",
+  content_type_adjusted_after_approval: "Formato ajustado após aprovação",
 };
+
+const ROTULO_DO_FORMATO: Record<string, string> = {
+  static: "Post estático",
+  carousel: "Carrossel",
+  reel: "Reel",
+  story: "Story",
+  video: "Vídeo",
+  short: "Short",
+  article: "Artigo",
+  google_post: "Post Google",
+};
+
+function AvisoLegendaEditada({ quando, quem }: { quando: string; quem: string | null }) {
+  return (
+    <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2 py-1 text-[11px] font-medium text-warning">
+      <Pencil className="h-3 w-3" aria-hidden="true" />
+      Legenda editada após aprovação
+      <span className="font-normal text-muted-foreground">
+        {quem ? `por ${quem}, ` : ""}
+        {new Date(quando).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+      </span>
+    </p>
+  );
+}
 
 const publicationStatusClasses: Record<string, string> = {
   planned: "border-violet-500/25 bg-violet-500/10 text-violet-500",
@@ -329,7 +361,18 @@ export default function EditorialDetailSheet({
   onArchived,
   mesaHref = null,
 }: EditorialDetailSheetProps) {
-  const { transitionPublication, archivePost, savePost } = useEditorialMutations();
+  const {
+    transitionPublication,
+    archivePost,
+    savePost,
+    editarLegendaAprovada,
+    ajustarFormatoAprovado,
+  } = useEditorialMutations();
+  // Correção de legenda e de formato do conteúdo aprovado, sem revisão.
+  const [legendaAlvo, setLegendaAlvo] = useState<EditorialPublicationBundle | null>(null);
+  const [legendaTexto, setLegendaTexto] = useState("");
+  const [formatoAberto, setFormatoAberto] = useState(false);
+  const [formatoEscolhido, setFormatoEscolhido] = useState<FormatoDePecaUnica | "">("");
   // Agendamento inline: conta + data no proprio popup, sem abrir o editor.
   const [inlineAccountId, setInlineAccountId] = useState("");
   const [inlineWhen, setInlineWhen] = useState("");
@@ -808,6 +851,8 @@ export default function EditorialDetailSheet({
     if (!open) {
       setActionTarget(null);
       setAction(null);
+      setLegendaAlvo(null);
+      setFormatoAberto(false);
     }
   }, [open]);
 
@@ -843,6 +888,102 @@ export default function EditorialDetailSheet({
     !isImpersonating &&
     post.post.production_status !== "archived" &&
     approvalFiles.some((file) => !isFileEditable(file));
+
+  // Conteúdo aprovado (selo da aprovação gravado): legenda e formato mudam
+  // pelas RPCs estreitas, sem revisão. Só quem agenda (admin ou gestor).
+  const aprovado =
+    post.post.production_status === "ready" &&
+    !!post.internal?.approval_fingerprint;
+  const podeAjustarAprovado =
+    canPublish && !isImpersonating && aprovado && !post.publicadoGlobal;
+  const legendaEditavel = (bundle: EditorialPublicationBundle) =>
+    podeAjustarAprovado &&
+    ["planned", "scheduled"].includes(bundle.publication.status) &&
+    bundle.internal?.included_in_approval_snapshot !== false;
+  const publicacaoDaLegenda =
+    post.publications.find(
+      (bundle) => bundle.publication.status === "scheduled" && legendaEditavel(bundle),
+    ) ||
+    post.publications.find(legendaEditavel) ||
+    null;
+  const legendaEditada = legendaEditadaAposAprovacao(events);
+  const opcoesDeFormato = formatosPermitidos({
+    formatoAtual: post.post.content_type,
+    ehVideo:
+      mediaKindFromFile(
+        post.primaryFile?.file_name,
+        post.primaryFile?.file_url,
+        post.primaryFile?.mime_type || post.primaryFile?.file_type,
+        post.primaryFile?.extension,
+      ) === "video",
+    temLaminas: (post.primaryFileChildren?.length || 0) > 0,
+  });
+  const podeMudarFormato =
+    podeAjustarAprovado &&
+    opcoesDeFormato.length > 1 &&
+    post.publications.every(({ publication }) =>
+      ["planned", "scheduled", "cancelled"].includes(publication.status),
+    );
+
+  const abrirEdicaoDaLegenda = (bundle: EditorialPublicationBundle) => {
+    setLegendaAlvo(bundle);
+    setLegendaTexto(bundle.publication.caption ?? post.post.default_caption ?? "");
+  };
+
+  const salvarLegenda = async () => {
+    if (!legendaAlvo) return;
+    const texto = legendaTexto.trim();
+    if (!texto) {
+      toast.error("A legenda não pode ficar vazia.");
+      return;
+    }
+    try {
+      const resultado = await editarLegendaAprovada.mutateAsync({
+        publicationId: legendaAlvo.publication.id,
+        expectedVersion: legendaAlvo.publication.version,
+        caption: texto,
+      });
+      toast.success(
+        resultado.changed
+          ? "Legenda atualizada. A aprovação e o agendamento continuam valendo."
+          : "A legenda já estava assim. Nada mudou.",
+      );
+      setLegendaAlvo(null);
+    } catch (error) {
+      toast.error(editorialErrorMessage(error, "Não foi possível salvar a legenda."));
+    }
+  };
+
+  const abrirMudancaDeFormato = () => {
+    setFormatoEscolhido(
+      opcoesDeFormato.some((opcao) => opcao.value === post.post.content_type)
+        ? (post.post.content_type as FormatoDePecaUnica)
+        : "",
+    );
+    setFormatoAberto(true);
+  };
+
+  const salvarFormato = async () => {
+    if (!formatoEscolhido) {
+      toast.error("Escolha o formato.");
+      return;
+    }
+    try {
+      const resultado = await ajustarFormatoAprovado.mutateAsync({
+        postId: post.post.id,
+        expectedVersion: post.post.version,
+        contentType: formatoEscolhido,
+      });
+      toast.success(
+        resultado.changed
+          ? `Formato trocado para ${ROTULO_DO_FORMATO[resultado.content_type] || resultado.content_type}. A aprovação e o agendamento continuam valendo.`
+          : "O formato já era esse. Nada mudou.",
+      );
+      setFormatoAberto(false);
+    } catch (error) {
+      toast.error(editorialErrorMessage(error, "Não foi possível trocar o formato."));
+    }
+  };
 
   const openAction = (
     publication: EditorialPublicationBundle,
@@ -1045,8 +1186,18 @@ export default function EditorialDetailSheet({
                   Formato
                 </p>
                 <p className="mt-1 text-[13px] text-foreground">
-                  {post.post.content_type}
+                  {ROTULO_DO_FORMATO[post.post.content_type] || post.post.content_type}
                 </p>
+                {podeMudarFormato && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="mt-1 h-auto p-0 text-[12px]"
+                    onClick={abrirMudancaDeFormato}
+                  >
+                    Mudar formato
+                  </Button>
+                )}
               </div>
               {isStaff && post.internal?.responsible_id && (
                 <div>
@@ -1107,14 +1258,34 @@ export default function EditorialDetailSheet({
                   </p>
                 </div>
               )}
-              {post.post.default_caption && (
+              {(post.post.default_caption || publicacaoDaLegenda) && (
                 <div className="sm:col-span-2">
-                  <p className={texto.rotulo}>
-                    Legenda base
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap text-[13px] text-foreground">
-                    {post.post.default_caption}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={texto.rotulo}>
+                      Legenda base
+                    </p>
+                    {publicacaoDaLegenda && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[12px]"
+                        onClick={() => abrirEdicaoDaLegenda(publicacaoDaLegenda)}
+                        title="Corrige só a legenda. A aprovação e o agendamento continuam valendo."
+                      >
+                        <Pencil className="mr-1 h-3 w-3" />
+                        Editar legenda
+                      </Button>
+                    )}
+                  </div>
+                  {post.post.default_caption && (
+                    <p className="mt-1 whitespace-pre-wrap text-[13px] text-foreground">
+                      {post.post.default_caption}
+                    </p>
+                  )}
+                  {legendaEditada && (
+                    <AvisoLegendaEditada quando={legendaEditada.quando} quem={legendaEditada.quem} />
+                  )}
                 </div>
               )}
               {isStaff && post.internal?.revision_of_post_id && (
@@ -1377,9 +1548,15 @@ export default function EditorialDetailSheet({
                     )}
 
                     {publication.caption && (
-                      <p className={juntar(superficie.poco, "whitespace-pre-wrap p-3 text-[12px] text-foreground")}>
-                        {publication.caption}
-                      </p>
+                      <div>
+                        <p className={juntar(superficie.poco, "whitespace-pre-wrap p-3 text-[12px] text-foreground")}>
+                          {publication.caption}
+                        </p>
+                        {(() => {
+                          const editada = legendaEditadaAposAprovacao(events, publication.id);
+                          return editada ? <AvisoLegendaEditada quando={editada.quando} quem={editada.quem} /> : null;
+                        })()}
+                      </div>
                     )}
                     {publication.first_comment && (
                       <div className={juntar(superficie.poco, "p-3")}>
@@ -1482,6 +1659,15 @@ export default function EditorialDetailSheet({
                           desativado: !ready,
                           dica: ready ? "Agendar publicação" : "Finalize produção e aprovações primeiro",
                           aoEscolher: () => openAction(bundle, "schedule"),
+                        });
+                      }
+                      if (legendaEditavel(bundle)) {
+                        acoes.push({
+                          chave: "legenda",
+                          rotulo: "Editar legenda",
+                          icone: <Pencil className="h-3.5 w-3.5" />,
+                          dica: "Corrige só a legenda. A aprovação e o agendamento continuam valendo.",
+                          aoEscolher: () => abrirEdicaoDaLegenda(bundle),
                         });
                       }
                       if (["planned", "scheduled", "failed"].includes(status)) {
@@ -1853,6 +2039,123 @@ export default function EditorialDetailSheet({
                 <Send className="mr-2 h-4 w-4" />
               )}
               Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!legendaAlvo}
+        onOpenChange={(aberto) => {
+          if (!aberto && !editarLegendaAprovada.isPending) setLegendaAlvo(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar legenda</DialogTitle>
+            <DialogDescription>
+              Corrige só o texto. A aprovação, o horário e o formato continuam
+              iguais. Fica registrado no histórico quem editou e a legenda antes
+              e depois, e a ficha passa a mostrar "Legenda editada após aprovação".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="legenda-aprovada">Legenda</Label>
+            <Textarea
+              id="legenda-aprovada"
+              value={legendaTexto}
+              onChange={(event) => setLegendaTexto(event.target.value)}
+              rows={8}
+              maxLength={2200}
+            />
+            <p className="text-right text-[11px] text-muted-foreground">
+              {legendaTexto.length} de 2.200 caracteres
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLegendaAlvo(null)}
+              disabled={editarLegendaAprovada.isPending}
+            >
+              Voltar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void salvarLegenda()}
+              disabled={editarLegendaAprovada.isPending || !legendaTexto.trim()}
+            >
+              {editarLegendaAprovada.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Pencil className="mr-2 h-4 w-4" />
+              )}
+              Salvar legenda
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={formatoAberto}
+        onOpenChange={(aberto) => {
+          if (!aberto && !ajustarFormatoAprovado.isPending) setFormatoAberto(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mudar formato</DialogTitle>
+            <DialogDescription>
+              Troca o formato desta peça sem criar revisão. A aprovação, o
+              horário e a legenda continuam iguais, e a troca fica no histórico.
+              Carrossel não vira Story.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2" role="radiogroup" aria-label="Formato">
+            {opcoesDeFormato.map((opcao) => (
+              <button
+                key={opcao.value}
+                type="button"
+                role="radio"
+                aria-checked={formatoEscolhido === opcao.value}
+                onClick={() => setFormatoEscolhido(opcao.value)}
+                className={cn(
+                  "flex items-center justify-between rounded-lg border px-3 py-2 text-left text-[13px]",
+                  formatoEscolhido === opcao.value
+                    ? "border-primary bg-primary/5 text-foreground"
+                    : "border-border text-muted-foreground hover:bg-muted/40",
+                )}
+              >
+                {opcao.label}
+                {post.post.content_type === opcao.value && (
+                  <span className="text-[11px] text-muted-foreground">atual</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setFormatoAberto(false)}
+              disabled={ajustarFormatoAprovado.isPending}
+            >
+              Voltar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void salvarFormato()}
+              disabled={
+                ajustarFormatoAprovado.isPending ||
+                !formatoEscolhido ||
+                formatoEscolhido === post.post.content_type
+              }
+            >
+              {ajustarFormatoAprovado.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Trocar formato
             </Button>
           </DialogFooter>
         </DialogContent>

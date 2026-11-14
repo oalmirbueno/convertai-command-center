@@ -3081,6 +3081,14 @@
       "remote_name": "crm_whats_rotina",
       "remote_statements_sha256": "ddcf1cb797f90c0d276376e835d6e58070aa2f262ced44822c4e5e500b06a767",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114180000",
+      "path": "supabase/migrations/20261114180000_editar_legenda_e_formato_aprovados.sql",
+      "local_sha256": "c2524df9ba66250b0c24bfd00b3adea5ae02da8f41ebe8e2e0f8ba3bdf2d0ba3",
+      "remote_name": "editar_legenda_e_formato_aprovados",
+      "remote_statements_sha256": "da6a57d601890fc29b867e426f1633643c34eb371976a77f4e872922f4f75064",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -1206,7 +1206,9 @@ export default function EditorialEditor({
               <AjudaRecolhida className="ml-1.5" rotulo="O que continua editável">
                 Mídia e textos não podem mudar nesta versão. Conta,
                 horário, fuso, tarefa, responsável e notas internas
-                continuam editáveis.
+                continuam editáveis. Para corrigir só a legenda ou trocar
+                o formato (por exemplo, para Story), feche aqui e use
+                Editar legenda ou Mudar formato na ficha do conteúdo.
               </AjudaRecolhida>
             </div>
           )}
