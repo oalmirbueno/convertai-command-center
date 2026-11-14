@@ -83,8 +83,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Crect x='6' y='6' width='268' height='268' rx='34' fill='%23ffffff' fill-opacity='.03'/%3E%3C/svg%3E");
-  background-size: 280px 280px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='279' height='279'%3E%3Crect x='6' y='6' width='267' height='267' rx='34' fill='%23ffffff' fill-opacity='.03'/%3E%3C/svg%3E");
+  background-size: 279px 279px;
+  background-position: calc(50% + 139.5px) 0;
 }
 .el-brilho {
   position: absolute;
@@ -308,11 +309,15 @@
   color: var(--el-verde);
 }
 .el-h2 {
-  max-width: 18em;
+  max-width: 20em;
   font-size: 30px;
   font-weight: 500;
   line-height: 1.1;
   letter-spacing: -0.02em;
+}
+/* A parte verde do título desce para a linha de baixo, inteira. */
+.el-h2 em.el-quebra {
+  display: block;
 }
 .el-lead {
   max-width: 36em;
@@ -449,14 +454,14 @@
   z-index: 2;
 }
 .el-flutua-1 {
-  top: 54%;
-  left: -6px;
+  left: 0;
+  bottom: 12%;
   width: 250px;
   animation: el-acende 9s var(--el-curva) 0.6s infinite backwards;
 }
 .el-flutua-2 {
-  top: 10%;
-  right: -6px;
+  top: 12%;
+  right: 0;
   animation: el-acende 9s var(--el-curva) 2.2s infinite backwards;
 }
 .el-aviso {
@@ -556,11 +561,12 @@
     padding-bottom: 150px;
   }
   .el-flutua-1 {
-    left: -110px;
+    left: -70px;
+    bottom: 36%;
     width: 290px;
   }
   .el-flutua-2 {
-    right: -20px;
+    right: -8px;
   }
 }
 
@@ -694,75 +700,91 @@
   position: relative;
   max-width: 980px;
   margin: 48px auto 0;
-  padding-bottom: 24px;
+  padding-top: 5%;
 }
-.el-note {
+.el-aparelhos::before {
+  content: "";
+  position: absolute;
+  top: 10%;
+  left: 8%;
+  right: 8%;
+  bottom: -6%;
+  background: radial-gradient(ellipse 60% 50% at 50% 60%, rgba(0, 255, 106, 0.4) 0%, rgba(0, 255, 106, 0) 70%);
+  pointer-events: none;
+}
+/*
+ * O MacBook é uma foto de produto com a tela vazada: o webmail vivo fica atrás
+ * do vidro. A foto é dividida na dobradiça (95,265% da altura) para a tampa abrir.
+ */
+.el-mac {
   position: relative;
-  width: 88%;
-  -webkit-perspective: 1800px;
-  perspective: 1800px;
+  width: 86%;
+  -webkit-perspective: 2200px;
+  perspective: 2200px;
 }
-.el-note-tampa {
-  padding: 2.2% 2.2% 2.6%;
-  border: 1px solid #454c47;
-  border-bottom: 0;
-  border-radius: 18px 18px 0 0;
-  background: linear-gradient(180deg, #232825 0%, #111512 100%);
-  box-shadow: 0 0 80px -10px rgba(0, 255, 106, 0.35);
+.el-mac-tampa {
+  position: relative;
+  overflow: hidden;
+  padding-bottom: 57.908%;
   -webkit-transform-origin: 50% 100%;
   transform-origin: 50% 100%;
 }
-.el-note-tela {
+.el-mac-base {
   position: relative;
   overflow: hidden;
-  border-radius: 6px;
+  padding-bottom: 2.878%;
+}
+.el-mac-tampa img,
+.el-mac-base img {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  max-width: none;
+  height: auto;
+  pointer-events: none;
+}
+.el-mac-tampa img {
+  top: 0;
+}
+.el-mac-base img {
+  bottom: 0;
+}
+/* A tela: mesma posição do vidro na foto. As medidas de dentro são em em, e a letra acompanha a largura. */
+.el-mac-tela {
+  position: absolute;
+  top: 2.2%;
+  left: 7%;
+  width: 86%;
+  height: 93.2%;
+  overflow: hidden;
   background: #ffffff;
   color: #18211b;
+  font-size: calc(1.632vw - 0.65px);
 }
-.el-note-base {
-  position: relative;
-  height: 18px;
-  margin: 0 -7%;
-  border-radius: 2px 2px 18px 18px;
-  background: linear-gradient(180deg, #e3e7e3 0%, #a9b0ab 45%, #6f7772 100%);
-  box-shadow: 0 30px 50px -14px rgba(0, 0, 0, 0.95);
-}
-.el-note-base::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 16%;
-  height: 7px;
-  margin-left: -8%;
-  border-radius: 0 0 9px 9px;
-  background: #8e958f;
-}
-/* A tela do webmail dentro do notebook. */
 .el-tela-topo {
   display: flex;
   align-items: center;
-  height: 34px;
-  padding: 0 12px;
+  height: 2.6em;
+  padding: 1.1em 0.8em 0;
   border-bottom: 1px solid #e6eae6;
   background: #f3f5f3;
 }
 .el-tela-topo i {
-  width: 9px;
-  height: 9px;
-  margin-right: 5px;
+  width: 0.56em;
+  height: 0.56em;
+  margin-right: 0.32em;
   border-radius: 50%;
   background: #d3d8d3;
 }
 .el-tela-endereco {
   flex: 1 1 auto;
-  max-width: 320px;
-  height: 20px;
-  margin: 0 auto;
-  border-radius: 6px;
+  max-width: 20em;
+  height: 1.7em;
+  margin: 0 auto 0.3em;
+  border-radius: 0.4em;
   background: #ffffff;
-  font-size: 11px;
-  line-height: 20px;
+  font-size: 0.68em;
+  line-height: 1.7em;
   text-align: center;
   color: #6b766e;
   box-shadow: inset 0 0 0 1px #e1e6e1;
@@ -771,21 +793,20 @@
   display: flex;
 }
 .el-tela-lado {
-  display: none;
-  flex: 0 0 150px;
-  padding: 14px 10px;
+  flex: 0 0 9.4em;
+  padding: 0.8em 0.6em;
   border-right: 1px solid #eef1ee;
   background: #fafbfa;
-  font-size: 13px;
+  font-size: 0.8em;
   color: #5d6860;
 }
 .el-tela-lado b,
 .el-tela-lado span {
   display: flex;
   align-items: center;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 8px;
+  height: 2.4em;
+  padding: 0 0.8em;
+  border-radius: 0.6em;
   font-weight: 400;
 }
 .el-tela-lado b {
@@ -805,7 +826,7 @@
 .el-msg {
   display: flex;
   align-items: flex-start;
-  padding: 11px 14px;
+  padding: 1.24em 0.9em;
   border-bottom: 1px solid #eef1ee;
 }
 .el-msg:last-child {
@@ -816,13 +837,13 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  margin-right: 12px;
+  width: 2.4em;
+  height: 2.4em;
+  margin-right: 0.9em;
   border-radius: 50%;
   background: #e9ede9;
   color: #56615a;
-  font-size: 13px;
+  font-size: 0.82em;
   font-weight: 600;
 }
 .el-msg-texto {
@@ -835,29 +856,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.4;
 }
 .el-msg-texto strong {
-  font-size: 13.5px;
+  font-size: 0.84em;
   font-weight: 500;
   color: #3c4740;
 }
 .el-msg-texto .el-msg-endereco {
   font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-  font-size: 11.5px;
+  font-size: 0.72em;
   color: #00823a;
 }
 .el-msg-assunto {
-  font-size: 13px;
+  font-size: 0.82em;
   color: #3c4740;
 }
 .el-msg-trecho {
-  font-size: 12.5px;
+  font-size: 0.78em;
   color: #8a948d;
 }
 .el-msg time {
   flex: 0 0 auto;
-  margin-left: 10px;
-  font-size: 11.5px;
+  margin-left: 0.8em;
+  font-size: 0.72em;
   color: #8a948d;
 }
 .el-msg-nova {
@@ -874,29 +896,29 @@
   font-weight: 600;
   color: #0e1711;
 }
-.el-msg-mobile-some {
-  display: none;
-}
-/* O celular ao lado, com a tela acendendo e o aviso chegando. */
-.el-fone {
+/* O iPhone: a mesma ideia, com a tela de bloqueio viva atrás do vidro e a ilha da foto por cima. */
+.el-iphone {
   position: absolute;
   right: 0;
-  bottom: 0;
-  width: 30%;
-  min-width: 118px;
-  max-width: 250px;
-  padding: 3.2%;
-  border: 1px solid #4a514c;
-  border-radius: 13% / 6.4%;
-  background: linear-gradient(160deg, #2a2f2c 0%, #0c0f0d 60%);
-  box-shadow: 0 40px 70px -24px rgba(0, 0, 0, 0.95), 0 0 60px -14px rgba(0, 255, 106, 0.5);
+  bottom: -3%;
+  width: 26.5%;
 }
-.el-fone-tela {
+.el-iphone img {
   position: relative;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+.el-iphone-tela {
+  position: absolute;
+  top: 1.7%;
+  left: 4.6%;
+  width: 90.8%;
+  height: 96.6%;
   overflow: hidden;
-  padding-bottom: 205%;
-  border-radius: 11% / 5.4%;
-  background: #050806;
+  border-radius: 14% / 6.8%;
+  background: #020403;
+  font-size: calc(1.632vw - 0.65px);
 }
 .el-fone-luz {
   position: absolute;
@@ -904,25 +926,14 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: radial-gradient(ellipse 120% 70% at 50% 100%, rgba(0, 255, 106, 0.55) 0%, rgba(0, 255, 106, 0) 70%), linear-gradient(180deg, #0b1a11 0%, #06110a 100%);
-}
-.el-fone-luz::before {
-  content: "";
-  position: absolute;
-  top: 3%;
-  left: 50%;
-  width: 30%;
-  height: 3.2%;
-  margin-left: -15%;
-  border-radius: 999px;
-  background: #000000;
+  background: radial-gradient(ellipse 130% 60% at 50% 100%, rgba(0, 255, 106, 0.7) 0%, rgba(0, 255, 106, 0) 70%), radial-gradient(ellipse 90% 40% at 20% 0%, rgba(0, 190, 120, 0.35) 0%, rgba(0, 190, 120, 0) 70%), linear-gradient(180deg, #0b1a11 0%, #050d08 100%);
 }
 .el-fone-hora {
   position: absolute;
-  top: 13%;
+  top: 15%;
   left: 0;
   right: 0;
-  font-size: 30px;
+  font-size: 4em;
   font-weight: 300;
   line-height: 1;
   text-align: center;
@@ -930,73 +941,75 @@
 }
 .el-fone-hora small {
   display: block;
-  margin-top: 6px;
-  font-size: 11px;
+  margin-bottom: 0.5em;
+  font-size: 0.24em;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.78);
 }
 .el-fone-aviso {
   position: absolute;
-  top: 42%;
-  left: 6%;
-  right: 6%;
-  padding: 9px 10px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  top: 41%;
+  left: 5%;
+  right: 5%;
+  display: flex;
+  align-items: center;
+  padding: 0.7em 0.75em;
+  border-radius: 1.2em;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.el-fone-aviso i {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 2.2em;
+  height: 2.2em;
+  margin-right: 0.6em;
+  border-radius: 0.55em;
+  background: linear-gradient(180deg, #9dffbf 0%, #00e25c 100%);
+  color: #03130a;
+}
+.el-fone-aviso i svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+.el-fone-aviso div {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .el-fone-aviso b,
 .el-fone-aviso span {
   display: block;
   overflow: hidden;
-  font-size: 10.5px;
+  font-size: 0.74em;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.82);
 }
 .el-fone-aviso b {
-  font-size: 11px;
+  font-size: 0.78em;
   font-weight: 600;
   color: #ffffff;
 }
 .el-fone-aviso em {
-  display: block;
-  margin-bottom: 3px;
-  font-size: 9.5px;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-left: 0.4em;
+  font-size: 0.62em;
   font-style: normal;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: #7cf7a4;
+  color: rgba(255, 255, 255, 0.6);
 }
 @media (min-width: 720px) {
   .el-aparelhos {
     margin-top: 64px;
   }
-  .el-tela-lado {
-    display: block;
-  }
-  .el-msg-mobile-some {
-    display: flex;
-  }
-  .el-fone-hora {
-    font-size: 52px;
-  }
-  .el-fone-hora small {
-    font-size: 14px;
-  }
-  .el-fone-aviso {
-    padding: 12px 14px;
-    border-radius: 18px;
-  }
-  .el-fone-aviso b {
-    font-size: 14px;
-  }
-  .el-fone-aviso span {
-    font-size: 13px;
-  }
-  .el-fone-aviso em {
-    font-size: 11px;
+}
+@media (min-width: 1020px) {
+  .el-mac-tela,
+  .el-iphone-tela {
+    font-size: 16px;
   }
 }
 
@@ -1825,34 +1838,34 @@
 .el-anim .el-in .el-trilho span {
   transform: scaleY(1);
 }
-/* O notebook começa fechado e abre; a tela acende; depois o celular liga e o aviso chega. */
-.el-anim .el-note-tampa {
-  transform: rotateX(-84deg);
-  transition: transform 1700ms var(--el-curva) 200ms;
+/* O MacBook começa fechado e abre; a tela acende; depois o iPhone sobe, liga e o aviso chega. */
+.el-anim .el-mac-tampa {
+  transform: rotateX(-88deg);
+  transition: transform 1900ms var(--el-curva) 200ms;
 }
-.el-anim .el-in .el-note-tampa {
+.el-anim .el-in .el-mac-tampa {
   transform: rotateX(0deg);
 }
-.el-anim .el-note-tela {
+.el-anim .el-mac-tela > * {
   opacity: 0;
-  transition: opacity 700ms var(--el-curva) 1300ms;
+  transition: opacity 700ms var(--el-curva) 1500ms;
 }
-.el-anim .el-in .el-note-tela {
+.el-anim .el-in .el-mac-tela > * {
   opacity: 1;
 }
-.el-anim .el-fone {
+.el-anim .el-iphone {
   opacity: 0;
-  transform: translate3d(0, 40px, 0);
-  transition: opacity 800ms var(--el-curva) 900ms, transform 800ms var(--el-curva) 900ms;
+  transform: translate3d(0, 50px, 0);
+  transition: opacity 800ms var(--el-curva) 1000ms, transform 900ms var(--el-curva) 1000ms;
 }
-.el-anim .el-in .el-fone {
+.el-anim .el-in .el-iphone {
   opacity: 1;
   transform: none;
 }
 .el-anim .el-fone-luz,
 .el-anim .el-fone-hora {
   opacity: 0;
-  transition: opacity 600ms var(--el-curva) 1900ms;
+  transition: opacity 700ms var(--el-curva) 2100ms;
 }
 .el-anim .el-in .el-fone-luz,
 .el-anim .el-in .el-fone-hora {
@@ -1860,8 +1873,8 @@
 }
 .el-anim .el-fone-aviso {
   opacity: 0;
-  transform: translate3d(0, 18px, 0) scale(0.96);
-  transition: opacity 600ms var(--el-curva) 2500ms, transform 600ms var(--el-curva) 2500ms;
+  transform: translate3d(0, 1.2em, 0) scale(0.96);
+  transition: opacity 600ms var(--el-curva) 2800ms, transform 600ms var(--el-curva) 2800ms;
 }
 .el-anim .el-in .el-fone-aviso {
   opacity: 1;

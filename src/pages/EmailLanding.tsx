@@ -8,6 +8,8 @@ import { CAIXAS_MAXIMO, CAIXAS_MINIMO, caixasValidas, contaDoEmail, precosPronto
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import fotoDaDona from "@/assets/email/dona.jpg";
 import fotoDoDono from "@/assets/email/dono.jpg";
+import fotoDoMac from "@/assets/email/mac.png";
+import fotoDoIphone from "@/assets/email/iphone.png";
 import "./email-landing.css";
 
 /**
@@ -17,7 +19,8 @@ import "./email-landing.css";
  * o que vem incluído, o preço lido do banco, as objeções, as dúvidas e a chamada
  * final. O botão leva ao pedido em /email/pedir.
  * Nenhum valor é escrito aqui: tudo vem de produto_precos().
- * As duas fotos são imagens geradas para a página (cenário, não cliente real).
+ * As fotos de pessoas e de aparelhos são imagens geradas para a página (cenário,
+ * não cliente real). O MacBook e o iPhone têm a tela vazada: o e-mail vivo fica atrás.
  */
 
 const TRACO = 1.7;
@@ -164,15 +167,15 @@ export default function EmailLanding() {
         <div className="el-brilho el-brilho-a" />
         <div className="el-brilho el-brilho-b" />
         {[
-          [1120, 280],
-          [1120, 1680],
-          [280, 2800],
-          [840, 3920],
-          [1120, 5040],
-          [280, 6160],
-          [840, 7280],
-        ].map(([left, top], i) => (
-          <div key={top} className="el-cruz" style={{ left, top, animationDelay: `${i * 0.7}s` }} />
+          [2, 1],
+          [-2, 6],
+          [2, 10],
+          [-2, 14],
+          [2, 18],
+          [-2, 22],
+          [2, 26],
+        ].map(([coluna, linha], i) => (
+          <div key={linha} className="el-cruz" style={{ left: `calc(50% + ${coluna * 279}px)`, top: linha * 279, animationDelay: `${i * 0.7}s` }} />
         ))}
       </div>
 
@@ -278,13 +281,13 @@ export default function EmailLanding() {
         <section className="el-secao el-centro">
           <div className="el-caixa">
             <h2 className="el-h2 el-r">
-              Veja o seu e-mail chegando <em>como o de uma grande empresa</em>
+              Veja o seu e-mail chegando <em className="el-quebra">como o de uma grande empresa</em>
             </h2>
             <p className="el-lead el-r">{TEXTO.aparelhos}</p>
             <div className="el-aparelhos el-r" aria-hidden="true" style={{ textAlign: "left" }}>
-              <div className="el-note">
-                <div className="el-note-tampa">
-                  <div className="el-note-tela">
+              <div className="el-mac">
+                <div className="el-mac-tampa">
+                  <div className="el-mac-tela">
                     <div className="el-tela-topo">
                       <i />
                       <i />
@@ -302,7 +305,7 @@ export default function EmailLanding() {
                       </div>
                       <div className="el-tela-lista">
                         {CAIXA.map((m, i) => (
-                          <div key={m.de} className={i === 0 ? "el-msg el-msg-nova" : i > 1 ? "el-msg el-msg-mobile-some" : "el-msg"}>
+                          <div key={m.de} className={i === 0 ? "el-msg el-msg-nova" : "el-msg"}>
                             <span className="el-msg-avatar">{m.de.charAt(0)}</span>
                             <div className="el-msg-texto">
                               <strong>{m.de}</strong>
@@ -316,22 +319,31 @@ export default function EmailLanding() {
                       </div>
                     </div>
                   </div>
+                  <img src={fotoDoMac} width={1400} height={851} alt="" />
                 </div>
-                <div className="el-note-base" />
+                <div className="el-mac-base">
+                  <img src={fotoDoMac} width={1400} height={851} alt="" />
+                </div>
               </div>
-              <div className="el-fone">
-                <div className="el-fone-tela">
+              <div className="el-iphone">
+                <div className="el-iphone-tela">
                   <div className="el-fone-luz" />
                   <div className="el-fone-hora">
+                    <small>sexta-feira, 13 de novembro</small>
                     10:24
-                    <small>sexta-feira</small>
                   </div>
                   <div className="el-fone-aviso">
-                    <em>E-mail · agora</em>
-                    <b>Marina, da Sua Empresa</b>
-                    <span>Proposta comercial, conforme combinamos</span>
+                    <i>
+                      <Mail strokeWidth={2} />
+                    </i>
+                    <div>
+                      <b>Marina, da Sua Empresa</b>
+                      <span>Proposta comercial, conforme combinamos</span>
+                    </div>
+                    <em>agora</em>
                   </div>
                 </div>
+                <img src={fotoDoIphone} width={560} height={1141} alt="" />
               </div>
             </div>
           </div>
@@ -346,7 +358,7 @@ export default function EmailLanding() {
             <p className="el-lead el-r">{TEXTO.compara}</p>
             <div className="el-compara el-r" style={{ textAlign: "left" }} data-comparacao-de-arrastar="">
               <div className="el-lado el-lado-depois">
-                <span className="el-lado-rotulo">Com e-mail profissional</span>
+                <span className="el-lado-rotulo">Profissional</span>
                 <div className="el-carta">
                   <div className="el-carta-topo">
                     <span className="el-msg-avatar">M</span>
@@ -401,12 +413,12 @@ export default function EmailLanding() {
         </section>
 
         {/* A migração sem risco, com gente. */}
-        <section className="el-secao" id="como-funciona" style={{ paddingTop: 0 }}>
+        <section className="el-secao el-centro" id="como-funciona" style={{ paddingTop: 0 }}>
           <div className="el-caixa">
             <h2 className="el-h2 el-r">
-              Você continua trabalhando, <em>a gente faz a mudança</em>
+              Você continua trabalhando, <em className="el-quebra">a gente faz a mudança</em>
             </h2>
-            <div className="el-como">
+            <div className="el-como" style={{ textAlign: "left" }}>
               <div className="el-retrato el-r">
                 <img src={fotoDoDono} width={1280} height={853} loading="lazy" alt="Dono de empresa trabalhando no notebook" />
                 <div className="el-aviso" aria-hidden="true">
@@ -445,12 +457,12 @@ export default function EmailLanding() {
           </div>
         </section>
 
-        <section className="el-secao" id="inclui" style={{ paddingTop: 0 }}>
+        <section className="el-secao el-centro" id="inclui" style={{ paddingTop: 0 }}>
           <div className="el-caixa">
             <h2 className="el-h2 el-r">
               Tudo o que um e-mail de empresa <em>precisa ter</em>
             </h2>
-            <div className="el-bento">
+            <div className="el-bento" style={{ textAlign: "left" }}>
               <div className="el-b-2 el-r">
                 <div className="el-moldura el-cartao el-cartao-verde">
                   <div className="el-moldura-dentro">
@@ -680,7 +692,7 @@ export default function EmailLanding() {
         {/* Ação. */}
         <section className="el-final el-r">
           <h2 className="el-h2">
-            Na próxima proposta, assine com <em>o nome da sua empresa</em>
+            Na próxima proposta, assine com <em className="el-quebra">o nome da sua empresa</em>
           </h2>
           <p className="el-lead">Diga o domínio e quantas caixas precisa. A Aceleriq cuida do resto</p>
           <div className="el-acoes">
