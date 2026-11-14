@@ -238,7 +238,7 @@
   height: 100%;
   background: linear-gradient(100deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.75) 50%, rgba(255, 255, 255, 0) 100%);
   transform: translate3d(-140%, 0, 0);
-  animation: el-varre 4.6s var(--el-curva) 1.2s infinite;
+  animation: el-varre 8s ease-in-out 2s infinite;
   pointer-events: none;
 }
 @keyframes el-varre {
@@ -1886,7 +1886,7 @@
   display: flex;
   width: max-content;
   width: -webkit-max-content;
-  animation: el-corre 38s linear infinite;
+  animation: el-corre 60s linear infinite;
 }
 .el-faixa span {
   display: flex;
@@ -2135,7 +2135,7 @@
     animation: none;
   }
   .el-faixa-trilho {
-    animation-duration: 70s;
+    animation-duration: 80s;
   }
   .el-anim .el-r {
     transform: translate3d(0, 12px, 0);

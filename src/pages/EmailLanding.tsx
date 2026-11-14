@@ -175,8 +175,12 @@ export default function EmailLanding() {
   useEffect(() => {
     const antes = document.title;
     document.title = "E-mail profissional com migração feita | Aceleriq";
+    // A regra global do painel zera a duração de toda animação para quem pede menos
+    // movimento. Esta página tem a própria versão suave: a marca no <html> a tira da regra.
+    document.documentElement.classList.add("venda-com-movimento");
     return () => {
       document.title = antes;
+      document.documentElement.classList.remove("venda-com-movimento");
     };
   }, []);
 
