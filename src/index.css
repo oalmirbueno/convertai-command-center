@@ -364,8 +364,14 @@
 }
 
 /* Respect reduced motion */
+/* As páginas públicas de venda cuidam do próprio movimento reduzido (versão
+   suave, definida no CSS delas) e marcam o <html> com .venda-com-movimento
+   enquanto estão abertas. Sem essa exceção, toda animação delas durava 0,01 ms
+   e disparava em laço para quem tem os efeitos de animação desligados. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  html:not(.venda-com-movimento) *,
+  html:not(.venda-com-movimento) *::before,
+  html:not(.venda-com-movimento) *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }

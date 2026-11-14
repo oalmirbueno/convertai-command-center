@@ -138,10 +138,10 @@ export default function EmailLanding() {
       (entradas) => {
         if (!entradas.some((e) => e.isIntersecting)) return;
         observador.disconnect();
-        // Vai até um lado, até o outro e volta ao meio: 5 segundos, e para se a pessoa pegar a barra.
+        // Vai até um lado, até o outro e volta ao meio: 2,4 segundos, e para se a pessoa pegar a barra.
         const inicio = Date.now();
         relogio = window.setInterval(() => {
-          const t = (Date.now() - inicio) / 5200;
+          const t = (Date.now() - inicio) / 2400;
           if (t >= 1 || mexeuNaBarra.current) {
             window.clearInterval(relogio);
             if (!mexeuNaBarra.current) setCorte(50);
@@ -175,8 +175,12 @@ export default function EmailLanding() {
   useEffect(() => {
     const antes = document.title;
     document.title = "E-mail profissional com migração feita | Aceleriq";
+    // A regra global do painel zera a duração de toda animação para quem pede menos
+    // movimento. Esta página tem a própria versão suave: a marca no <html> a tira da regra.
+    document.documentElement.classList.add("venda-com-movimento");
     return () => {
       document.title = antes;
+      document.documentElement.classList.remove("venda-com-movimento");
     };
   }, []);
 
@@ -240,20 +244,20 @@ export default function EmailLanding() {
                 <span className="el-entra" style={{ display: "block" }}>
                   E-mail com o nome da sua empresa,
                 </span>{" "}
-                <em className="el-entra" style={{ display: "block", animationDelay: "250ms" }}>
+                <em className="el-entra" style={{ display: "block", animationDelay: "140ms" }}>
                   chegando na caixa de entrada
                 </em>
               </h1>
-              <p className="el-sub el-entra" style={{ animationDelay: "500ms" }}>
+              <p className="el-sub el-entra" style={{ animationDelay: "280ms" }}>
                 {TEXTO.promessa}
               </p>
-              <div className="el-acoes el-entra" style={{ animationDelay: "750ms" }}>
+              <div className="el-acoes el-entra" style={{ animationDelay: "400ms" }}>
                 <Pedir para={destino} />
                 <a href="#precos" className="el-botao-vazio">
                   Ver os preços
                 </a>
               </div>
-              <ul className="el-garantias el-entra" style={{ animationDelay: "1000ms" }}>
+              <ul className="el-garantias el-entra" style={{ animationDelay: "520ms" }}>
                 {["Migração feita por nós", "Sem ficar fora do ar", "Sem cobrança no pedido"].map((g) => (
                   <li key={g}>
                     <Check size={16} strokeWidth={2.6} aria-hidden="true" />
@@ -263,7 +267,7 @@ export default function EmailLanding() {
               </ul>
             </div>
 
-            <div className="el-pessoa el-entra" style={{ animationDelay: "400ms" }}>
+            <div className="el-pessoa el-entra" style={{ animationDelay: "180ms" }}>
               {/* Os dois avisos ficam acima da cabeça, fora da pessoa, e entram uma vez só. */}
               <div className="el-pessoa-avisos" aria-hidden="true">
                 <div className="el-flutua-1 el-aviso">
