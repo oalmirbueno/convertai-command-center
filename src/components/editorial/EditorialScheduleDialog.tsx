@@ -112,8 +112,20 @@ interface PendingAttempt {
     payload: Record<string, unknown>;
     expectedVersion: number | null;
   };
-  /** O post nasce neste agendamento com formato diferente do da mídia: confere depois do save. */
-  conferirFormatoDepois?: boolean;
+  /**
+   * Post que nasce neste agendamento com formato diferente do da mídia: ele é
+   * gravado primeiro como planejado, sem horário, e só agenda depois do
+   * ajuste de formato. Um novo clique da mesma tentativa continua daqui, sem
+   * criar outro post.
+   */
+  nascimento?: {
+    mutationId: string;
+    /** O save sem horário, reenviado igual (idempotente) se a resposta se perdeu. */
+    payload: Record<string, unknown>;
+    postNascidoId: string | null;
+    versao: number | null;
+    formatoAjustado: boolean;
+  };
 }
 
 interface SelectedExistingPlanSnapshot {
@@ -180,9 +192,6 @@ function formatoDoFeed(
     ? formatoDoPost
     : asset.contentType;
 }
-
-/** O agendamento foi gravado, mas a troca de formato pedida não. */
-class FormatoNaoConfirmadoError extends Error {}
 
 const stepItems = [
   { label: "Cliente", icon: CheckCircle2 },
@@ -507,13 +516,18 @@ export default function EditorialScheduleDialog({
       : null;
     const nomeDoFormato = formatoPedido === "story" ? "Story" : "o formato escolhido";
 
-    // Post que já existe: o formato (Story ou a volta para o feed) muda ANTES
-    // de agendar, pela RPC estreita, sem derrubar a aprovação. Se o ajuste
-    // falhar, nada é agendado: o erro sobe e o agendamento não acontece.
+    // Post que já existe (ou que acabou de nascer planejado, sem horário): o
+    // formato (Story ou a volta para o feed) muda ANTES de agendar, pela RPC
+    // estreita, sem derrubar a aprovação. Se o ajuste falhar, nada é agendado:
+    // o erro sobe e o save que coloca horário não acontece.
     const ajustarFormatoAntesDeAgendar = async (post: EditorialPostBundle) => {
       if (!formatoPedido || post.post.content_type === formatoPedido) {
         return post.post.version;
       }
+      const nascimento =
+        attempt.nascimento?.postNascidoId === post.post.id
+          ? attempt.nascimento
+          : null;
       let ajuste: { version: number };
       try {
         ajuste = await ajustarFormatoAprovado.mutateAsync({
@@ -523,8 +537,14 @@ export default function EditorialScheduleDialog({
         });
       } catch (error) {
         throw new Error(
-          `Nada foi agendado: o formato não mudou para ${nomeDoFormato}. ${editorialErrorMessage(error, "Tente de novo.")}`,
+          nascimento
+            ? `Nada foi agendado: o conteúdo ficou planejado, sem horário, no formato da mídia. Toque em Agendar de novo para repetir só a troca de formato. ${editorialErrorMessage(error, "Tente de novo.")}`
+            : `Nada foi agendado: o formato não mudou para ${nomeDoFormato}. ${editorialErrorMessage(error, "Tente de novo.")}`,
         );
+      }
+      if (nascimento) {
+        nascimento.versao = ajuste.version;
+        nascimento.formatoAjustado = true;
       }
       // A versão do post subiu por causa do próprio ajuste: a seleção e a
       // tentativa acompanham, para um novo clique não acusar "plano mudou".
@@ -537,87 +557,16 @@ export default function EditorialScheduleDialog({
       return ajuste.version;
     };
 
-    // Post que nasce neste agendamento com formato diferente do da mídia
-    // (Story): o banco cria o conteúdo aprovado no formato da mídia, no mesmo
-    // passo que agenda, então a escolha só pode ser conferida depois. Falha
-    // aqui nunca vira sucesso: o erro sobe, a tela fica aberta e um novo
-    // clique repete só a conferência e a troca (o save é idempotente).
-    const confirmarFormato = async (postId: string) => {
-      if (!formatoPedido) return;
-      const comoResolver =
-        "Toque em Agendar de novo para repetir só a troca de formato, ou abra o conteúdo e use Mudar formato antes do horário.";
-      let gravado: EditorialPostBundle;
-      try {
-        gravado = await loadEditorialPostForMutation(postId, clientId);
-      } catch (error) {
-        throw new FormatoNaoConfirmadoError(
-          `A publicação entrou na agenda, mas não deu para conferir se ficou como ${nomeDoFormato}. ${comoResolver} ${editorialErrorMessage(error, "Tente de novo.")}`,
-        );
-      }
-      if (gravado.post.content_type === formatoPedido) return;
-      try {
-        await ajustarFormatoAprovado.mutateAsync({
-          postId,
-          expectedVersion: gravado.post.version,
-          contentType: formatoPedido,
-        });
-      } catch (error) {
-        throw new FormatoNaoConfirmadoError(
-          `A publicação entrou na agenda, mas NÃO como ${nomeDoFormato}: continua no formato da mídia. ${comoResolver} ${editorialErrorMessage(error, "Tente de novo.")}`,
-        );
-      }
-    };
-
-    const finishSchedule = async (postId: string) => {
-      if (attempt.conferirFormatoDepois) await confirmarFormato(postId);
-      setDirty(false);
-      attemptRef.current = null;
-      toast.success(
-        selectedAccountIds.length > 1
-          ? `${selectedAccountIds.length} publicações agendadas.`
-          : "Publicação agendada no calendário.",
-      );
-      onScheduled({ postId, scheduledAt: scheduledAtIso, clientId, projectId });
-      onOpenChange(false);
-    };
-
-    try {
-      if (attempt.prepared) {
-        const recoveredResult = await savePost.mutateAsync(attempt.prepared);
-        await finishSchedule(recoveredResult.post_id);
-        return;
-      }
-
-      let completePost: EditorialPostBundle | null = null;
-      if (selectedExistingPlan) {
-        completePost = await loadEditorialPostForMutation(
-          selectedExistingPlan.postId,
-          clientId,
-        );
-        if (
-          !editorialSchedulePlanMatchesSnapshot(
-            completePost.post.version,
-            completePost.publications,
-            selectedExistingPlan,
-          )
-        ) {
-          throw new Error(
-            "Este plano mudou desde que você o selecionou. Atualize e confirme as contas novamente.",
-          );
-        }
-        if (!isSchedulablePost(completePost)) {
-          throw new Error(
-            "Este conteúdo mudou e não está mais livre para um novo agendamento. Atualize a lista.",
-          );
-        }
-      }
-      const versaoParaAgendar = completePost
-        ? await ajustarFormatoAntesDeAgendar(completePost)
-        : null;
-
+    // O save completo do plano. `post` é o conteúdo que já existe (ou o que
+    // acabou de nascer planejado); `horarioIso` null grava sem horário.
+    const montarPayload = (
+      post: EditorialPostBundle | null,
+      horarioIso: string | null,
+      mutationId: string,
+    ) => {
       const existingPublicationByAccountId = new Map(
         activeEditorialSchedulePlans(
-          completePost?.publications || [],
+          post?.publications || [],
         ).map((bundle) => [bundle.publication.external_account_id, bundle]),
       );
       // Frente AP: a conta planejada que a pessoa desmarcou sai (o save da
@@ -651,7 +600,7 @@ export default function EditorialScheduleDialog({
             );
           }
           const effectiveFileId =
-            existing.publication.file_id || completePost?.post.primary_file_id;
+            existing.publication.file_id || post?.post.primary_file_id;
           const existingAsset = effectiveFileId
             ? approvedAssetByRootId.get(effectiveFileId)
             : null;
@@ -684,52 +633,143 @@ export default function EditorialScheduleDialog({
         };
       });
 
-      const payload = buildEditorialSchedulePayload({
+      return buildEditorialSchedulePayload({
         clientId,
         projectId,
         asset: selectedAsset,
         publicationTargets,
-        scheduledAtIso,
+        scheduledAtIso: horarioIso,
         timezone: EDITORIAL_DEFAULT_TIME_ZONE,
         postIdempotencyKey: attempt.postIdempotencyKey,
-        mutationId: attempt.mutationId,
+        mutationId,
         contentType: formatoPedido,
-        existingPost: completePost
+        existingPost: post
           ? {
-              id: completePost.post.id,
-              idempotencyKey: completePost.internal!.idempotency_key,
-              title: completePost.post.title,
-              contentType: formatoPedido || completePost.post.content_type,
-              objective: completePost.post.objective,
-              defaultCaption: completePost.post.default_caption,
-              taskId: completePost.internal?.task_id,
-              responsibleId: completePost.internal?.responsible_id,
-              internalNotes: completePost.internal?.internal_notes,
+              id: post.post.id,
+              idempotencyKey: post.internal!.idempotency_key,
+              title: post.post.title,
+              contentType: formatoPedido || post.post.content_type,
+              objective: post.post.objective,
+              defaultCaption: post.post.default_caption,
+              taskId: post.internal?.task_id,
+              responsibleId: post.internal?.responsible_id,
+              internalNotes: post.internal?.internal_notes,
               revisionOfPostId:
-                completePost.internal?.revision_of_post_id,
+                post.internal?.revision_of_post_id,
             }
           : null,
       });
+    };
 
-      // Post que já existe sai daqui com o formato certo (ajuste acima). Só o
-      // que nasce agora, com formato diferente do da mídia, confere depois.
-      attempt.conferirFormatoDepois =
-        !completePost &&
+    // Post que NASCE neste agendamento com formato diferente do da mídia
+    // (Story): o save aprovado ignora o content_type do payload e cria o
+    // conteúdo no formato da mídia. Por isso ele nasce PLANEJADO, sem horário:
+    // nada entra na agenda nem vai ao ar. Daí em diante é um post que já
+    // existe: o formato muda e só então o horário é gravado. Num novo clique
+    // da mesma tentativa não nasce outro post: sem o id (resposta perdida), o
+    // mesmo save é reenviado e o banco devolve o post que já criou; com o id,
+    // segue direto para o ajuste (se ainda falta) e o agendamento.
+    const nascerPlanejado = async () => {
+      if (!attempt.nascimento) {
+        const mutationId = newId();
+        attempt.nascimento = {
+          mutationId,
+          payload: montarPayload(null, null, mutationId),
+          postNascidoId: null,
+          versao: null,
+          formatoAjustado: false,
+        };
+      }
+      const nascimento = attempt.nascimento;
+      if (!nascimento.postNascidoId) {
+        const nascido = await savePost.mutateAsync({
+          payload: nascimento.payload,
+          expectedVersion: null,
+        });
+        nascimento.postNascidoId = nascido.post_id;
+        nascimento.versao = nascido.version;
+      }
+      // O estado real vem do banco: versão atual, publicações criadas e se o
+      // formato já foi ajustado (o ajuste pode ter passado numa tentativa cuja
+      // resposta se perdeu; aí não é refeito).
+      let post: EditorialPostBundle;
+      try {
+        post = await loadEditorialPostForMutation(
+          nascimento.postNascidoId,
+          clientId,
+        );
+      } catch (error) {
+        throw new Error(
+          `Nada foi agendado: o conteúdo ficou planejado, sem horário${nascimento.formatoAjustado ? "" : ", no formato da mídia"}. Toque em Agendar de novo para continuar de onde parou. ${editorialErrorMessage(error, "Tente de novo.")}`,
+        );
+      }
+      nascimento.versao = post.post.version;
+      nascimento.formatoAjustado = post.post.content_type === formatoPedido;
+      return post;
+    };
+
+    // Só chega aqui com o horário gravado e o formato certo.
+    const finishSchedule = (postId: string) => {
+      setDirty(false);
+      attemptRef.current = null;
+      toast.success(
+        selectedAccountIds.length > 1
+          ? `${selectedAccountIds.length} publicações agendadas.`
+          : "Publicação agendada no calendário.",
+      );
+      onScheduled({ postId, scheduledAt: scheduledAtIso, clientId, projectId });
+      onOpenChange(false);
+    };
+
+    try {
+      if (attempt.prepared) {
+        const recoveredResult = await savePost.mutateAsync(attempt.prepared);
+        finishSchedule(recoveredResult.post_id);
+        return;
+      }
+
+      let completePost: EditorialPostBundle | null = null;
+      if (selectedExistingPlan) {
+        completePost = await loadEditorialPostForMutation(
+          selectedExistingPlan.postId,
+          clientId,
+        );
+        if (
+          !editorialSchedulePlanMatchesSnapshot(
+            completePost.post.version,
+            completePost.publications,
+            selectedExistingPlan,
+          )
+        ) {
+          throw new Error(
+            "Este plano mudou desde que você o selecionou. Atualize e confirme as contas novamente.",
+          );
+        }
+        if (!isSchedulablePost(completePost)) {
+          throw new Error(
+            "Este conteúdo mudou e não está mais livre para um novo agendamento. Atualize a lista.",
+          );
+        }
+      } else if (
         formatoPedido !== null &&
-        formatoPedido !== selectedAsset.contentType;
+        formatoPedido !== selectedAsset.contentType
+      ) {
+        // Nasce planejado, sem horário, e segue como post que já existe.
+        completePost = await nascerPlanejado();
+      }
+      // Todo post que chega aqui com formato diferente do pedido é ajustado
+      // ANTES do único save que coloca horário. Ajuste falhou: nada agendado.
+      const versaoParaAgendar = completePost
+        ? await ajustarFormatoAntesDeAgendar(completePost)
+        : null;
+
       attempt.prepared = {
-        payload,
+        payload: montarPayload(completePost, scheduledAtIso, attempt.mutationId),
         expectedVersion: versaoParaAgendar,
       };
       const result = await savePost.mutateAsync(attempt.prepared);
-      await finishSchedule(result.post_id);
+      finishSchedule(result.post_id);
     } catch (error: unknown) {
-      if (error instanceof FormatoNaoConfirmadoError) {
-        // Já está na agenda, no formato errado. Sem sucesso e sem fechar: a
-        // tentativa fica guardada para o próximo clique repetir só a troca.
-        toast.error("O formato não mudou", { description: error.message });
-        return;
-      }
       const message =
         error instanceof Error
           ? error.message

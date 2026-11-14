@@ -149,6 +149,61 @@ describe("RPC ajustar_formato_publicacao_aprovada", () => {
     expect(f).toContain("publication.status NOT IN ('planned', 'scheduled', 'cancelled')");
   });
 
+  it("imagem ou vídeo vale pela mídia efetiva de cada publicação viva, não só pelo arquivo principal", () => {
+    const inicio = f.indexOf("count(*) FILTER (WHERE NOT midia.encontrada)");
+    const recusaSemArquivo = f.indexOf("IF _midias_sem_arquivo > 0 THEN");
+    expect(inicio).toBeGreaterThan(0);
+    expect(recusaSemArquivo).toBeGreaterThan(inicio);
+    const checagem = f.slice(inicio, recusaSemArquivo);
+
+    // O principal e o arquivo efetivo de cada publicação não cancelada, sem repetir arquivo.
+    expect(checagem).toContain(
+      "SELECT _post.primary_file_id AS file_id\n      UNION\n      SELECT COALESCE(publication.file_id, _post.primary_file_id)\n      FROM public.editorial_publications AS publication",
+    );
+    expect(checagem).toContain("publication.post_id = _post.id");
+    expect(checagem).toContain("publication.status <> 'cancelled'");
+    expect(checagem).toContain("LEFT JOIN public.files AS arquivo\n      ON arquivo.id = efetiva.file_id");
+    expect(checagem).toContain("arquivo.id IS NOT NULL AS encontrada");
+    expect(checagem).toContain("INTO _midias_sem_arquivo, _midias_video, _midias_imagem");
+    // A mesma régua de vídeo de sempre, agora aplicada a cada arquivo.
+    expect(checagem).toContain("lower(COALESCE(arquivo.mime_type, '')) LIKE 'video/%'");
+    expect(checagem).toContain("lower(COALESCE(arquivo.extension, '')) IN ('mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi')");
+    expect(checagem).toContain("lower(COALESCE(arquivo.file_type, '')) IN ('video', 'vídeo')");
+    // A leitura antiga, que só olhava o arquivo principal, saiu.
+    expect(f).not.toContain("WHERE id = _post.primary_file_id");
+    expect(f).not.toContain("_e_video");
+    expect(f).not.toContain("_arquivo public.files%ROWTYPE");
+
+    // Um vídeo em qualquer conta impede static; uma imagem em qualquer conta impede reel e video.
+    const regras = f.slice(recusaSemArquivo, f.indexOf("IF _formato_antes = _formato THEN"));
+    expect(regras).toContain("O arquivo deste conteúdo não foi encontrado.");
+    expect(regras).toContain("IF _midias_video > 0 AND _formato = 'static' THEN");
+    expect(regras).toContain("IF _midias_imagem > 0 AND _formato IN ('reel', 'video') THEN");
+    // Mistura (imagem numa conta, vídeo em outra): a mensagem diz o que há e aponta o Story.
+    expect(regras).toContain("Há vídeo em uma das contas deste conteúdo e imagem em outra: Post estático não serve para o vídeo. Escolha Story, que vale para as duas.");
+    expect(regras).toContain("Há imagem em uma das contas deste conteúdo e vídeo em outra: Reel e Vídeo não servem para a imagem. Escolha Story, que vale para as duas.");
+    // Story nunca é recusado por tipo de mídia: vale para imagem, vídeo e mistura.
+    expect(regras).not.toContain("'story'");
+  });
+
+  it("a recusa por mídia vem antes de qualquer gravação (tarefa, post, impressão digital, evento)", () => {
+    const gravacoes = ["UPDATE public.", "INSERT INTO", "set_config("].map((g) => f.indexOf(g));
+    for (const posicao of gravacoes) expect(posicao).toBeGreaterThan(0);
+    const primeiraGravacao = Math.min(...gravacoes);
+    for (const recusa of [
+      "INTO _midias_sem_arquivo, _midias_video, _midias_imagem",
+      "O arquivo deste conteúdo não foi encontrado.",
+      "Este conteúdo é um vídeo. Escolha Story, Reel ou Vídeo.",
+      "Este conteúdo é uma imagem. Escolha Post estático ou Story.",
+      "Post estático não serve para o vídeo.",
+      "Reel e Vídeo não servem para a imagem.",
+      "Carrossel não vira Story: o Story precisa de uma peça só.",
+    ]) {
+      expect(f.indexOf(recusa), recusa).toBeGreaterThan(0);
+      expect(f.indexOf(recusa), recusa).toBeLessThan(primeiraGravacao);
+    }
+  });
+
   it("não usa o save aprovado que recusa content_type e não mexe em status nem horário", () => {
     expect(f).not.toContain("save_approved_editorial_post");
     expect(f).not.toMatch(/UPDATE public\.editorial_publications\b/);
@@ -256,43 +311,118 @@ describe("formato: story escolhível, nunca inferido", () => {
     expect(dialogo).toContain("ajustarFormatoAprovado.mutateAsync");
   });
 
-  it("o formato muda ANTES de agendar; se o ajuste falha, não agenda e não mostra sucesso", () => {
+  it("save sem horário: scheduledAtIso null grava as publicações planejadas, sem scheduled_at", () => {
+    const [asset] = buildApprovedMediaAssets([imagem]);
+    const base = {
+      clientId: "c1",
+      projectId: "p1",
+      asset,
+      publicationTargets: [
+        { accountId: "a1", idempotencyKey: "k1" },
+        { accountId: "a2", idempotencyKey: "k2" },
+      ],
+      timezone: "America/Sao_Paulo",
+      postIdempotencyKey: "pk",
+      mutationId: "m1",
+      contentType: "story",
+    };
+    const semHorario = buildEditorialSchedulePayload({ ...base, scheduledAtIso: null });
+    expect(semHorario.id).toBeNull();
+    expect(semHorario.publications).toHaveLength(2);
+    for (const publicacao of semHorario.publications) expect(publicacao.scheduled_at).toBeNull();
+    const comHorario = buildEditorialSchedulePayload({ ...base, scheduledAtIso: "2026-11-20T15:00:00.000Z" });
+    for (const publicacao of comHorario.publications) expect(publicacao.scheduled_at).toBe("2026-11-20T15:00:00.000Z");
+  });
+
+  it("o formato muda ANTES de qualquer save com horário; post novo em outro formato nasce planejado, ajusta e só então agenda", () => {
     const dialogo = ler("src/components/editorial/EditorialScheduleDialog.tsx");
     const fn = dialogo.slice(dialogo.indexOf("const handleSchedule = async"), dialogo.indexOf("const readySteps"));
-    const fluxo = fn.slice(fn.indexOf("    try {\n      if (attempt.prepared)"));
+    const inicioDoFluxo = fn.indexOf("    try {\n      if (attempt.prepared)");
+    const fluxo = fn.slice(inicioDoFluxo);
 
-    // No post que já existe, o ajuste vem antes do save que agenda, e o save usa a versão que o ajuste devolveu.
+    // Ordem do fluxo: (1) post novo em formato diferente do da mídia nasce planejado, (2) ajuste, (3) o
+    // único save com horário, que usa a versão que o ajuste devolveu. No post que já existe só (2) e (3).
+    const nasce = fluxo.indexOf("completePost = await nascerPlanejado();");
     const ajuste = fluxo.indexOf("await ajustarFormatoAntesDeAgendar(completePost)");
+    const horario = fluxo.indexOf("payload: montarPayload(completePost, scheduledAtIso, attempt.mutationId),");
     const agenda = fluxo.indexOf("await savePost.mutateAsync(attempt.prepared)", ajuste);
-    expect(ajuste).toBeGreaterThan(0);
-    expect(agenda).toBeGreaterThan(ajuste);
+    expect(nasce).toBeGreaterThan(0);
+    expect(ajuste).toBeGreaterThan(nasce);
+    expect(horario).toBeGreaterThan(ajuste);
+    expect(agenda).toBeGreaterThan(horario);
     expect(fluxo.slice(ajuste, agenda)).toContain("expectedVersion: versaoParaAgendar,");
+    expect(fluxo.slice(0, nasce)).toContain(
+      "} else if (\n        formatoPedido !== null &&\n        formatoPedido !== selectedAsset.contentType\n      ) {",
+    );
+    // Nenhum outro save com horário: scheduledAtIso só entra no payload final, depois do ajuste.
+    expect(fluxo.match(/montarPayload\(/g)).toHaveLength(1);
+    expect(fn.match(/montarPayload\([^)]*scheduledAtIso/g)).toHaveLength(1);
 
-    // O ajuste anterior não engole erro: ele sobe e o save não roda.
-    const antes = fn.slice(fn.indexOf("const ajustarFormatoAntesDeAgendar"), fn.indexOf("const confirmarFormato"));
+    // (1) O post novo nasce com scheduled_at null: o banco cria planejado e não agenda.
+    const montar = fn.slice(fn.indexOf("const montarPayload"), fn.indexOf("const nascerPlanejado"));
+    expect(montar).toContain("horarioIso: string | null,");
+    expect(montar).toContain("scheduledAtIso: horarioIso,");
+    expect(montar).not.toMatch(/scheduledAtIso,/);
+    const nascer = fn.slice(fn.indexOf("const nascerPlanejado"), fn.indexOf("const finishSchedule"));
+    expect(nascer).toContain("payload: montarPayload(null, null, mutationId),");
+    expect(nascer).not.toContain("scheduledAtIso");
+    expect(nascer).not.toContain("attempt.prepared");
+    expect(nascer).not.toContain("toast.");
+    expect(nascer).not.toContain("finishSchedule");
+    expect(nascer).not.toMatch(/catch \([^)]*\) \{\s*\}/);
+    // Novo clique da mesma tentativa não cria outro post: reusa o save e as chaves (resposta perdida) ou o
+    // post que já nasceu, e lê do banco se o formato já foi ajustado.
+    expect(nascer).toContain("if (!attempt.nascimento) {");
+    expect(nascer).toContain("if (!nascimento.postNascidoId) {");
+    expect(nascer).toContain("payload: nascimento.payload,");
+    expect(nascer).toContain("nascimento.postNascidoId = nascido.post_id;");
+    expect(nascer.match(/savePost\.mutateAsync\(/g)).toHaveLength(1);
+    expect(nascer.indexOf("savePost.mutateAsync(")).toBeGreaterThan(nascer.indexOf("if (!nascimento.postNascidoId) {"));
+    expect(nascer).toContain("nascimento.formatoAjustado = post.post.content_type === formatoPedido;");
+    expect(nascer).toContain("Nada foi agendado");
+    expect(dialogo).toContain("postNascidoId: string | null;");
+    expect(dialogo).toContain("versao: number | null;");
+    expect(dialogo).toContain("formatoAjustado: boolean;");
+
+    // (2) O ajuste não engole erro: ele sobe e o save com horário não roda. Formato já certo não é refeito.
+    const antes = fn.slice(fn.indexOf("const ajustarFormatoAntesDeAgendar"), fn.indexOf("const montarPayload"));
+    expect(antes).toContain("if (!formatoPedido || post.post.content_type === formatoPedido) {\n        return post.post.version;");
     expect(antes).toContain("ajustarFormatoAprovado.mutateAsync");
     expect(antes).toContain("throw new Error(");
-    expect(antes).toContain("Nada foi agendado");
+    expect(antes).toContain(
+      "Nada foi agendado: o conteúdo ficou planejado, sem horário, no formato da mídia. Toque em Agendar de novo para repetir só a troca de formato.",
+    );
+    expect(antes).toContain("Nada foi agendado: o formato não mudou para ${nomeDoFormato}.");
+    expect(antes).toContain("nascimento.formatoAjustado = true;");
     expect(antes).not.toContain("toast.");
+    expect(antes).not.toContain("savePost");
+    expect(antes).not.toMatch(/catch \([^)]*\) \{\s*\}/);
+    expect(fn.match(/ajustarFormatoAprovado\.mutateAsync\(/g)).toHaveLength(1);
 
-    // A conferência depois do save também não mascara: erro, sem sucesso. Ela só existe para o post que
-    // nasce no agendamento com formato diferente do da mídia; o post que já existe nunca depende dela.
-    const depois = fn.slice(fn.indexOf("const confirmarFormato"), fn.indexOf("const finishSchedule"));
-    expect(depois.match(/throw new FormatoNaoConfirmadoError\(/g)).toHaveLength(2);
-    expect(depois).not.toContain("toast.");
-    expect(depois).not.toMatch(/catch \([^)]*\) \{\s*\}/);
-    const fim = fn.slice(fn.indexOf("const finishSchedule"), fn.indexOf("    try {\n      if (attempt.prepared)"));
-    const confere = fim.indexOf("if (attempt.conferirFormatoDepois) await confirmarFormato(postId);");
-    expect(confere).toBeGreaterThan(0);
-    expect(fim.indexOf("toast.success(")).toBeGreaterThan(confere);
-    expect(fluxo).toContain("attempt.conferirFormatoDepois =\n        !completePost &&\n        formatoPedido !== null &&\n        formatoPedido !== selectedAsset.contentType;");
+    // (3) Sucesso e fechamento só depois do save com horário, já no formato certo.
+    const fim = fn.slice(fn.indexOf("const finishSchedule"), inicioDoFluxo);
+    expect(fim).toContain("toast.success(");
+    expect(fim).toContain("onOpenChange(false);");
+    expect(fn.match(/toast\.success\(/g)).toHaveLength(1);
+    expect(fn.match(/onOpenChange\(false\)/g)).toHaveLength(1);
+    const chamadas = [...fluxo.matchAll(/finishSchedule\(/g)].map((m) => m.index!);
+    expect(chamadas).toHaveLength(2);
+    for (const chamada of chamadas) {
+      expect(fluxo.slice(0, chamada).trimEnd().split("\n").at(-1)).toContain("await savePost.mutateAsync(attempt.prepared);");
+    }
+    expect(fluxo.indexOf("finishSchedule(result.post_id);")).toBeGreaterThan(agenda);
 
-    // O aviso antigo, que dizia "Agendado" com o formato errado, saiu.
-    expect(dialogo).not.toContain("Agendado, mas");
-    expect(dialogo).not.toContain("toast.warning(");
-    const erro = fn.slice(fn.indexOf("if (error instanceof FormatoNaoConfirmadoError)"));
-    expect(erro.slice(0, erro.indexOf("return;"))).toContain("toast.error(");
-    expect(erro.slice(0, erro.indexOf("return;"))).not.toContain("onOpenChange(false)");
+    // O fluxo inseguro saiu: nada de agendar no formato da mídia e conferir depois.
+    for (const antigo of [
+      "FormatoNaoConfirmadoError",
+      "conferirFormatoDepois",
+      "confirmarFormato",
+      "Agendado, mas",
+      "entrou na agenda, mas",
+      "toast.warning(",
+    ]) {
+      expect(dialogo, antigo).not.toContain(antigo);
+    }
   });
 
   it("ajuste de formato na ficha: peça única troca, carrossel não", () => {

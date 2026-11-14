@@ -25,7 +25,10 @@
 -- 2) ajustar_formato_publicacao_aprovada(post, versão, formato)
 --    Troca o formato entre peça única: static, story, reel, video. Imagem vai
 --    para static ou story; vídeo para reel, video ou story. Carrossel nunca
---    vira story. A tarefa vinculada acompanha o formato (o tipo da tarefa e o
+--    vira story. Imagem ou vídeo é decidido pela mídia que cada conta publica
+--    de verdade (o arquivo da publicação viva ou, sem ele, o principal), não
+--    só pelo arquivo principal: com imagem numa conta e vídeo em outra, só
+--    story vale. A tarefa vinculada acompanha o formato (o tipo da tarefa e o
 --    formato precisam bater). Auditoria: content_type_adjusted_after_approval
 --    com o formato antes e depois.
 --
@@ -331,8 +334,9 @@ DECLARE
   _formato text := lower(btrim(COALESCE(p_content_type, '')));
   _post public.editorial_posts%ROWTYPE;
   _post_internal public.editorial_post_internal%ROWTYPE;
-  _arquivo public.files%ROWTYPE;
-  _e_video boolean;
+  _midias_sem_arquivo bigint;
+  _midias_video bigint;
+  _midias_imagem bigint;
   _task_id uuid;
   _tipo_tarefa_antes text;
   _tipo_tarefa_depois text;
@@ -420,20 +424,51 @@ BEGIN
     RAISE EXCEPTION 'Carrossel não vira Story: o Story precisa de uma peça só.';
   END IF;
 
-  SELECT * INTO _arquivo
-  FROM public.files
-  WHERE id = _post.primary_file_id;
-  IF NOT FOUND THEN
+  -- Imagem ou vídeo: vale a mídia que cada conta publica de verdade, não só o
+  -- arquivo principal. A mídia efetiva de uma publicação viva é o arquivo
+  -- dela ou, sem ele, o principal. Cada arquivo distinto (o principal e o de
+  -- cada publicação não cancelada) é classificado; se um deles não existe, o
+  -- ajuste é recusado. Sem publicação com arquivo próprio, sobra só o
+  -- principal e a regra é a de sempre.
+  SELECT
+    count(*) FILTER (WHERE NOT midia.encontrada),
+    count(*) FILTER (WHERE midia.encontrada AND midia.e_video),
+    count(*) FILTER (WHERE midia.encontrada AND NOT midia.e_video)
+  INTO _midias_sem_arquivo, _midias_video, _midias_imagem
+  FROM (
+    SELECT
+      arquivo.id IS NOT NULL AS encontrada,
+      (
+        lower(COALESCE(arquivo.mime_type, '')) LIKE 'video/%'
+        OR lower(COALESCE(arquivo.extension, '')) IN ('mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi')
+        OR lower(COALESCE(arquivo.file_type, '')) IN ('video', 'vídeo')
+      ) AS e_video
+    FROM (
+      SELECT _post.primary_file_id AS file_id
+      UNION
+      SELECT COALESCE(publication.file_id, _post.primary_file_id)
+      FROM public.editorial_publications AS publication
+      WHERE publication.post_id = _post.id
+        AND publication.status <> 'cancelled'
+    ) AS efetiva
+    LEFT JOIN public.files AS arquivo
+      ON arquivo.id = efetiva.file_id
+  ) AS midia;
+  IF _midias_sem_arquivo > 0 THEN
     RAISE EXCEPTION 'O arquivo deste conteúdo não foi encontrado.';
   END IF;
-  _e_video :=
-    lower(COALESCE(_arquivo.mime_type, '')) LIKE 'video/%'
-    OR lower(COALESCE(_arquivo.extension, '')) IN ('mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi')
-    OR lower(COALESCE(_arquivo.file_type, '')) IN ('video', 'vídeo');
-  IF _e_video AND _formato = 'static' THEN
+  -- Um vídeo em qualquer conta impede Post estático; uma imagem em qualquer
+  -- conta impede Reel e Vídeo. Story vale para imagem, vídeo e para a mistura.
+  IF _midias_video > 0 AND _formato = 'static' THEN
+    IF _midias_imagem > 0 THEN
+      RAISE EXCEPTION 'Há vídeo em uma das contas deste conteúdo e imagem em outra: Post estático não serve para o vídeo. Escolha Story, que vale para as duas.';
+    END IF;
     RAISE EXCEPTION 'Este conteúdo é um vídeo. Escolha Story, Reel ou Vídeo.';
   END IF;
-  IF NOT _e_video AND _formato IN ('reel', 'video') THEN
+  IF _midias_imagem > 0 AND _formato IN ('reel', 'video') THEN
+    IF _midias_video > 0 THEN
+      RAISE EXCEPTION 'Há imagem em uma das contas deste conteúdo e vídeo em outra: Reel e Vídeo não servem para a imagem. Escolha Story, que vale para as duas.';
+    END IF;
     RAISE EXCEPTION 'Este conteúdo é uma imagem. Escolha Post estático ou Story.';
   END IF;
 
