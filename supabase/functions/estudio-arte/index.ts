@@ -233,9 +233,11 @@ import { NIVEIS_CLAREZA, NIVEIS_RISCO_POLITICA, POLITICAS_META, TAMANHO_DO_FORMA
 import { ANATOMIA_DO_ESTATICO, REGRAS_DE_HONESTIDADE } from "../_shared/conhecimento-ads.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
+  assentarLotesEncerrados,
   capaLiberouAsOutras,
   type DependenciasDaFila,
   type DependenciasDaVigia,
+  type DependenciasDoAssento,
   esperaDoChute,
   type EtapaDaFila,
   type ItemDaFila,
@@ -11935,6 +11937,43 @@ async function assentarTrabalho(trabalhoId: string): Promise<void> {
   }
 }
 
+/**
+ * Lote encerrado fora do passo (regra em assentarLotesEncerrados): a RPC estudio_fila_pegar fecha linhas sozinha
+ * (pedido há mais de 12 h na fila, tentativas no fim) sem devolver os trabalhos. Só lê a fila e o status, e
+ * entrega os trabalhos ainda "gerando" ao mesmo assentarTrabalho. Não gera nada e não marca erro.
+ */
+function dependenciasDoAssento(): DependenciasDoAssento {
+  const db = servico();
+  return {
+    encerrados: async (desde) => {
+      const { data, error } = await db.from(TABELA_DA_FILA).select("trabalho_id")
+        .in("status", ["erro", "cancelado"])
+        .gte("concluido_em", desde)
+        .order("concluido_em", { ascending: false })
+        .limit(300);
+      if (error) throw erroDaFila(error);
+      return ((data ?? []) as { trabalho_id?: unknown }[]).map((l) => (typeof l.trabalho_id === "string" ? l.trabalho_id : ""));
+    },
+    gerando: async (trabalhos) => {
+      const { data, error } = await db.from("estudio_trabalhos").select("id").in("id", trabalhos).eq("status", "gerando");
+      if (error) throw new ErroEstudio(503, "trabalho_indisponivel", "Não foi possível ler o status dos trabalhos.");
+      return ((data ?? []) as { id?: unknown }[]).map((t) => String(t.id));
+    },
+    assentar: assentarTrabalho,
+    agora: () => new Date(),
+  };
+}
+
+/** Sem passo para pegar: confere os lotes que a RPC encerrou sozinha. Nunca derruba o processar_fila. */
+async function assentarEncerradosForaDoPasso(): Promise<void> {
+  try {
+    const trabalhos = await assentarLotesEncerrados(dependenciasDoAssento());
+    if (trabalhos.length) console.warn("estudio-arte: lote encerrado fora do passo", { trabalhos });
+  } catch (e) {
+    registrarFalha("estudio-arte: lotes encerrados fora do passo não foram conferidos", e, {});
+  }
+}
+
 /** Uma volta da vigia antes de pegar o passo. Nunca derruba o processar_fila: falha fica no log. */
 async function vigiarAntesDePegar(): Promise<LinhaVigiada[]> {
   try {
@@ -11995,7 +12034,13 @@ async function processarFila(ch: Chamador, _corpo: Record<string, unknown>) {
   const deps = dependenciasDaFila(ch);
   const token = crypto.randomUUID();
   const item = await deps.pegar(token);
-  if (!item) return json({ processando: null });
+  if (!item) {
+    // Nada para pegar. A RPC pode ter acabado de encerrar linhas sozinha (expiradas, tentativas no fim), e a
+    // vigia só olha "rodando": o trabalho cujo lote acabou assim não fica "gerando".
+    const assento = assentarEncerradosForaDoPasso();
+    if (!emSegundoPlano(assento)) await assento;
+    return json({ processando: null });
+  }
   EM_VOO.set(item.id, { fila: item.id, trabalho_id: item.trabalho_id, ordem: item.ordem, etapa: item.etapa });
   const passo = processarItem(deps, item, token)
     .then(async (p) => {

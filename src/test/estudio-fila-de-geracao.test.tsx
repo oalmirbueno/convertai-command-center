@@ -23,6 +23,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 
 import {
+  assentarLotesEncerrados,
   AVISO_ESPERANDO_A_CAPA,
   capaLiberouAsOutras,
   decidirPreso,
@@ -37,6 +38,7 @@ import {
   type ArteDaLamina,
   type DependenciasDaFila,
   type DependenciasDaVigia,
+  type DependenciasDoAssento,
   type EtapaDaFila,
   type ItemDaFila,
   type ItemPreso,
@@ -81,7 +83,18 @@ const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8").replace(/\
 
 // ------------------------------------------------------------ banco de mentira
 
-type Linha = ItemDaFila & { trava_ate: number | null; proxima_em: number; criado_em: number; atualizado_em: number; aviso?: string | null; erro_codigo?: string | null };
+type Linha = ItemDaFila & {
+  trava_ate: number | null;
+  proxima_em: number;
+  criado_em: number;
+  atualizado_em: number;
+  aviso?: string | null;
+  erro_codigo?: string | null;
+  /** Relógio do banco (a RPC) ou ISO (a mudança que o passo grava). */
+  concluido_em?: number | string | null;
+};
+
+const DOZE_HORAS_MS = 12 * 60 * 60 * 1000;
 
 /** Mesma regra da RPC estudio_fila_pegar do G-01 (sem SQL): serve para testar a corrente inteira. */
 class BancoDaFila {
@@ -90,6 +103,8 @@ class BancoDaFila {
   versoes: Record<string, number> = {};
   /** Hora (relógio do banco) em que a versão mais nova de cada lâmina foi gravada. */
   versoesEm: Record<string, number> = {};
+  /** Status do trabalho e as lâminas da direção dele (só o que o assento do fim do lote lê). */
+  trabalhos: Record<string, { status: string; direcao: number[] }> = {};
   seq = 0;
 
   /** A arte da lâmina foi gravada no trabalho agora (o que o gerar faz antes de fechar o passo). */
@@ -164,7 +179,11 @@ class BancoDaFila {
     const agora = this.relogio;
     for (const l of this.linhas) {
       if (l.status === "rodando" && (l.trava_ate ?? 0) < agora && l.tentativas + 1 >= l.max_tentativas) {
-        Object.assign(l, { status: "erro", erro_codigo: "tentativas_esgotadas", trava_token: null, trava_ate: null });
+        Object.assign(l, { status: "erro", erro_codigo: "tentativas_esgotadas", trava_token: null, trava_ate: null, concluido_em: agora });
+      }
+      // Pedido esquecido na fila por mais de 12 h sai dela. A RPC não devolve de qual trabalho era.
+      if (l.status === "fila" && l.criado_em < agora - DOZE_HORAS_MS) {
+        Object.assign(l, { status: "cancelado", erro_codigo: "expirou", concluido_em: agora });
       }
     }
     if (this.rodando().length >= LIMITES_DA_FILA.GLOBAL) return null;
@@ -191,6 +210,28 @@ class BancoDaFila {
     if (typeof c.atualizado_em === "string") c.atualizado_em = Date.parse(c.atualizado_em as string);
     Object.assign(l, c);
     return true;
+  }
+
+  /** O assento do fim do lote, com a mesma guarda do assentarTrabalho da função (só "gerando", só sem linha ativa). */
+  assentar(trabalho: string) {
+    const t = this.trabalhos[trabalho];
+    if (!t || t.status !== "gerando") return;
+    if (this.linhas.some((l) => l.trabalho_id === trabalho && (l.status === "fila" || l.status === "rodando"))) return;
+    const comArte = t.direcao.filter((ordem) => (this.versoes[`${trabalho}#${ordem}`] || 0) > 0);
+    t.status = statusDoTrabalhoEmProducao({ ordensDaDirecao: t.direcao, ordensComArte: comArte, geracaoAtiva: false });
+  }
+
+  assento(): DependenciasDoAssento {
+    const fechadaEm = (l: Linha) => (typeof l.concluido_em === "string" ? Date.parse(l.concluido_em) : l.concluido_em ?? NaN);
+    return {
+      encerrados: async (desde) => this.linhas
+        .filter((l) => (l.status === "erro" || l.status === "cancelado") && fechadaEm(l) >= Date.parse(desde))
+        .sort((a, b) => fechadaEm(b) - fechadaEm(a))
+        .map((l) => l.trabalho_id),
+      gerando: async (ids) => ids.filter((id) => this.trabalhos[id] && this.trabalhos[id].status === "gerando"),
+      assentar: async (id) => this.assentar(id),
+      agora: () => new Date(this.relogio),
+    };
   }
 
   deps(usuario: string, executar: (etapa: EtapaDaFila, item: ItemDaFila) => Promise<ResultadoDoPasso>): DependenciasDaFila {
@@ -847,6 +888,89 @@ describe("fim do lote: o trabalho não fica gerando", () => {
     expect(statusDoTrabalhoEmProducao({ ordensDaDirecao: [1, 2], ordensComArte: [1, 9], geracaoAtiva: false })).toBe("dirigido");
   });
 
+  it("a última lâmina expira na fila (12 h) sem passar por passo nenhum: o trabalho sai de gerando, sem erro e sem gerar", async () => {
+    const banco = new BancoDaFila();
+    const chamadas: string[] = [];
+    const deps = banco.deps("u1", iaDeMentira(banco, chamadas));
+    // T: lâminas 1 e 2 com arte; a 3 ficou esquecida na fila (painel de quem pediu fechado).
+    banco.trabalhos.T = { status: "gerando", direcao: [1, 2, 3] };
+    banco.gravarArte("T", 1);
+    banco.gravarArte("T", 2);
+    banco.pedir({ client: "A", trabalho: "T", ordens: [3], usuario: "u9" });
+    // Antigo: "gerando" de antes, sem linha nenhuma na fila. Não é com esta regra.
+    banco.trabalhos.Antigo = { status: "gerando", direcao: [1, 2] };
+    banco.relogio += DOZE_HORAS_MS + 60_000;
+    // V: uma lâmina foi parada agora e a outra segue na fila. O lote não acabou.
+    banco.trabalhos.V = { status: "gerando", direcao: [1, 2] };
+    banco.pedir({ client: "B", trabalho: "V", ordens: [1, 2], usuario: "u9" });
+    Object.assign(banco.linhas[1], { status: "cancelado", erro_codigo: "cancelado_pela_equipe", concluido_em: banco.relogio });
+
+    // u1 chama a fila e não tem nada: a pegada expira a linha de T e não devolve nada. Era aqui que T ficava preso.
+    expect(await processarUmPasso(deps, "t1")).toBeNull();
+    expect(banco.linhas[0]).toMatchObject({ status: "cancelado", erro_codigo: "expirou" });
+    expect(await vigiarFila(banco.vigia())).toEqual([]);
+    expect(banco.trabalhos.T.status).toBe("gerando");
+
+    // Sem item para pegar, a função confere os lotes encerrados fora do passo.
+    expect((await assentarLotesEncerrados(banco.assento())).sort()).toEqual(["T", "V"]);
+    expect(banco.trabalhos.T.status).toBe("dirigido");
+    // Com linha ainda na fila, o trabalho segue gerando; o antigo fica como está.
+    expect(banco.trabalhos.V.status).toBe("gerando");
+    expect(banco.trabalhos.Antigo.status).toBe("gerando");
+    // Nada foi gerado, e a linha expirada não virou outra coisa.
+    expect(chamadas).toEqual([]);
+    expect(banco.versoes["T#3"]).toBeUndefined();
+    expect(banco.linhas[0]).toMatchObject({ status: "cancelado", erro_codigo: "expirou" });
+    // De novo: nada a fazer com T (já assentado).
+    expect(await assentarLotesEncerrados(banco.assento())).toEqual(["V"]);
+  });
+
+  it("a RPC fecha a linha com as tentativas no fim: o trabalho também sai de gerando; com todas as lâminas, pronto", async () => {
+    const banco = new BancoDaFila();
+    const chamadas: string[] = [];
+    banco.trabalhos.T = { status: "gerando", direcao: [1, 2] };
+    banco.gravarArte("T", 1);
+    banco.pedir({ client: "A", trabalho: "T", ordens: [2], usuario: "u9" });
+    const p = banco.pegar("morto", "u9") as ItemDaFila;
+    // A arte saiu, a função morreu, e a linha gastou as tentativas sem ninguém conseguir ler o trabalho.
+    banco.gravar(p, "morto", { versoes_antes: 0, tentativas: 2 });
+    banco.gravarArte("T", 2);
+    banco.relogio += TRAVA_MS + 1000;
+    expect(await vigiarFila(banco.vigia(false))).toEqual([]);
+    expect(await processarUmPasso(banco.deps("u1", iaDeMentira(banco, chamadas)), "t1")).toBeNull();
+    expect(banco.linhas[0]).toMatchObject({ status: "erro", erro_codigo: "tentativas_esgotadas" });
+    expect(await assentarLotesEncerrados(banco.assento())).toEqual(["T"]);
+    // O status vem das lâminas com arte, não do erro da linha.
+    expect(banco.trabalhos.T.status).toBe("pronto");
+    expect(chamadas).toEqual([]);
+  });
+
+  it("lote encerrado fora do passo: só dentro da janela, sem repetir trabalho, e a falha de um não para os outros", async () => {
+    const lidos: string[][] = [];
+    const assentados: string[] = [];
+    const deps = (encerrados: string[], gerando: string[]): DependenciasDoAssento => ({
+      encerrados: async (desde) => {
+        expect(agora.getTime() - Date.parse(desde)).toBe(LIMITES_DA_FILA.JANELA_DO_ASSENTO_S * 1000);
+        return encerrados;
+      },
+      gerando: async (ids) => (lidos.push(ids), gerando),
+      assentar: async (id) => {
+        if (id === "quebra") throw new Error("banco fora do ar");
+        assentados.push(id);
+      },
+      agora: () => agora,
+    });
+    // Nenhuma linha fechada na janela: não lê trabalho nenhum.
+    expect(await assentarLotesEncerrados(deps([], ["x"]))).toEqual([]);
+    expect(lidos).toEqual([]);
+    expect(await assentarLotesEncerrados(deps(["a", "quebra", "a", "", "b", "c"], ["c", "quebra", "a", "fora"]))).toEqual(["a", "quebra", "c"]);
+    expect(lidos).toEqual([["a", "quebra", "b", "c"]]);
+    expect(assentados).toEqual(["a", "c"]);
+    // Teto por volta.
+    const muitos = Array.from({ length: LIMITES_DA_FILA.MAX_ASSENTOS + 30 }, (_, i) => `t${i}`);
+    expect(await assentarLotesEncerrados(deps(muitos, muitos))).toHaveLength(LIMITES_DA_FILA.MAX_ASSENTOS);
+  });
+
   it("Mesa Ads: status gerando antigo, sem gravação recente, não aparece como geração ativa", () => {
     const agoraMs = Date.parse("2026-11-14T21:00:00Z");
     const base = { id: "t", direcao: { cards: [{ ordem: 1 }, { ordem: 2 }] }, cards: [{ ordem: 1, versao: 1, storage_path: "a" }] };
@@ -866,6 +990,17 @@ describe("fim do lote: o trabalho não fica gerando", () => {
     expect(f).toContain("if (p.gravou && linhaFechada(p.mudanca.status)) await assentarTrabalho(item.trabalho_id);");
     expect(f).toContain("if ((data ?? []).length) await assentarTrabalho(t.id);");
     expect(f).toContain("for (const id of fechados) await assentarTrabalho(id);");
+    // Sem passo para pegar: confere os lotes que a RPC encerrou sozinha (expirados, tentativas no fim), sem gerar.
+    const processar = f.slice(f.indexOf("async function processarFila("), f.indexOf("// ------------------------------------- ações da lâmina em segundo plano"));
+    expect(processar).toContain("if (!item) {\n");
+    expect(processar.indexOf("const assento = assentarEncerradosForaDoPasso();")).toBeGreaterThan(processar.indexOf("if (!item) {"));
+    expect(processar.indexOf("const assento = assentarEncerradosForaDoPasso();")).toBeLessThan(processar.indexOf("return json({ processando: null });"));
+    const assento = f.slice(f.indexOf("function dependenciasDoAssento("), f.indexOf("async function vigiarAntesDePegar("));
+    expect(assento).toContain('.in("status", ["erro", "cancelado"])');
+    expect(assento).toContain('.gte("concluido_em", desde)');
+    expect(assento).toContain('.in("id", trabalhos).eq("status", "gerando")');
+    expect(assento).toContain("assentar: assentarTrabalho,");
+    expect(assento).not.toMatch(/\.(update|insert|delete|upsert)\(/);
     // Só mexe em trabalho "gerando" e só se ninguém gravou no meio.
     expect(f).toContain('.update({ status }).eq("id", trabalhoId).eq("status", "gerando").eq("atualizado_em", t.atualizado_em);');
     // Nenhum caminho deixa mais o trabalho "gerando" sem geração ativa.
