@@ -35,6 +35,7 @@ import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
 import MudarPlano from "@/components/admin/MudarPlano";
+import ExtrasDoCliente from "@/components/clientes/ExtrasDoCliente";
 import GerarLinkDoBriefing from "@/components/briefing/GerarLinkDoBriefing";
 import { estadoDoLink, modeloDeFabrica } from "../../../supabase/functions/_shared/briefing-modelos";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
@@ -1065,6 +1066,8 @@ export default function EditClientDrawer({
             {/* ── Plano e cobrança (admin) ── */}
             {isAdmin && (
               <div className={painelDaAba("plano")}>
+                {/* 14/11/2026: o que o cliente comprou além da mensalidade (order bumps e upsells), com o financeiro junto. */}
+                {abaAberta === "plano" && <ExtrasDoCliente clientId={client.id} nomeDoCliente={client.company_name || client.full_name || undefined} mensalidade={Number(planValue) || 0} />}
                 <GrupoDeCampos titulo="Plano">
                   <CampoDeFormulario rotulo="Plano do catálogo" apoio="Preenche nome e valor. O valor segue editável.">
                     <select
