@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
+import { Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, MessagesSquare, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useProduto, useRelerProduto } from "@/hooks/useProduto";
@@ -24,6 +24,7 @@ const EquipeDoProduto = lazy(() => import("@/components/produto/EquipeDoProduto"
 const AutomacoesDaConta = lazy(() => import("@/components/produto/AutomacoesDaConta"));
 const CaptacaoDaConta = lazy(() => import("@/components/produto/CaptacaoDaConta"));
 const EspacoDaConta = lazy(() => import("@/components/produto/espaco/EspacoDaConta"));
+const IntegracoesDaConta = lazy(() => import("@/components/produto/IntegracoesDaConta"));
 
 /**
  * O produto CRM e E-mail (13/11/2026): um lugar à parte do painel e da área
@@ -36,8 +37,8 @@ const EspacoDaConta = lazy(() => import("@/components/produto/espaco/EspacoDaCon
  * as tabelas da empresa (src/lib/comercial/escopo.ts).
  */
 
-type Secao = "inicio" | "crm" | "equipe" | "automacoes" | "captacao" | "espaco" | "email" | "conta";
-const SECOES: Secao[] = ["inicio", "crm", "equipe", "automacoes", "captacao", "espaco", "email", "conta"];
+type Secao = "inicio" | "crm" | "equipe" | "automacoes" | "captacao" | "integracoes" | "espaco" | "email" | "conta";
+const SECOES: Secao[] = ["inicio", "crm", "equipe", "automacoes", "captacao", "integracoes", "espaco", "email", "conta"];
 
 interface ItemDoMenu {
   rotulo: string;
@@ -70,6 +71,7 @@ function itensDoCrm(estado: EstadoDoProduto): Array<{ grupo: string; itens: Item
         { rotulo: "Equipe", para: "/app/equipe", icone: <Users className={I} aria-hidden="true" />, ativo: comeca("/app/equipe") },
         { rotulo: "Automações", para: "/app/automacoes", icone: <Workflow className={I} aria-hidden="true" />, ativo: comeca("/app/automacoes") },
         { rotulo: "Captação", para: "/app/captacao", icone: <Magnet className={I} aria-hidden="true" />, ativo: comeca("/app/captacao") },
+        { rotulo: "Meta e WhatsApp", para: "/app/integracoes", icone: <MessagesSquare className={I} aria-hidden="true" />, ativo: comeca("/app/integracoes") },
         { rotulo: "Espaço", para: "/app/espaco", icone: <FileText className={I} aria-hidden="true" />, ativo: comeca("/app/espaco") },
       ],
     },
@@ -248,6 +250,7 @@ export default function ProdutoApp() {
   else if (!estado.crm && secao !== "inicio") corpo = <SemAcesso estado={estado} produto="crm" />;
   else if (secao === "automacoes") corpo = <Suspense fallback={espera}><AutomacoesDaConta estado={estado} /></Suspense>;
   else if (secao === "captacao") corpo = <Suspense fallback={espera}><CaptacaoDaConta estado={estado} /></Suspense>;
+  else if (secao === "integracoes") corpo = <Suspense fallback={espera}><IntegracoesDaConta estado={estado} /></Suspense>;
   else if (secao === "espaco") corpo = <Suspense fallback={espera}><EspacoDaConta estado={estado} /></Suspense>;
   else corpo = <InicioDoProduto estado={estado} />;
 

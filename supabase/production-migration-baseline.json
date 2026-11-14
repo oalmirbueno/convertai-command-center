@@ -3065,6 +3065,22 @@
       "remote_name": "crm_espaco",
       "remote_statements_sha256": "5bd43227e22e475423bd7ca0a3799bef68ed80b326950c2e934dfa50bad5a5d3",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114100000",
+      "path": "supabase/migrations/20261114100000_crm_meta_leads_e_whatsapp.sql",
+      "local_sha256": "24d632abac2bb330b363a711380d8dcede763594982b0f1ed2ee18cae25bc3f3",
+      "remote_name": "crm_meta_leads_e_whatsapp",
+      "remote_statements_sha256": "1d16033ce3e773da03c86f4c606f4348b3121be9d2896e260e1920903c420173",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114110000",
+      "path": "supabase/migrations/20261114110000_crm_whats_rotina.sql",
+      "local_sha256": "fb4765372564cf5e8535fe551aa6e15ca24bbdf498c5a42e505efa7344264b37",
+      "remote_name": "crm_whats_rotina",
+      "remote_statements_sha256": "ddcf1cb797f90c0d276376e835d6e58070aa2f262ced44822c4e5e500b06a767",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

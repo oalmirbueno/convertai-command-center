@@ -170,6 +170,12 @@ export const leadQualificado = (lead: Lead, temProximoPasso: boolean) =>
   Boolean(lead.classe) && Boolean(lead.owner_id) && temProximoPasso;
 
 export interface Lead {
+  /** Nota e faixa da pontuação automática (só no CRM da conta; lead que veio do formulário da Meta). */
+  nota?: number | null;
+  faixa?: "quente" | "morno" | "frio" | null;
+  nota_motivos?: string[] | null;
+  fila_desde?: string | null;
+  nutricao?: boolean | null;
   /** Campos próprios da empresa cliente (só no CRM da conta). */
   campos?: Record<string, unknown> | null;
   id: string;

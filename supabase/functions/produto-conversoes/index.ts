@@ -3,7 +3,9 @@
  *
  * Robô do cron (a cada 2 minutos, só quando há evento esperando; x-cron-secret
  * ou a chave de serviço). Lê a fila crm_conversoes (negócio que entrou por
- * formulário = Lead; negócio ganho = Purchase), monta o evento no formato da
+ * formulário = Lead; negócio ganho = Purchase; lead do formulário da Meta que
+ * qualificou = QualifiedLead e que chegou à simulação = SimulationCompleted,
+ * estes dois sempre que a empresa tem Pixel e token), monta o evento no formato da
  * API de Conversões (_shared/conversoes-da-meta.ts: e-mail, telefone e nome com
  * SHA-256, fbc a partir do fbclid, event_source_url) e envia para o Pixel da
  * empresa com o token dela, que mora no Vault e só chega aqui por
@@ -19,7 +21,7 @@
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
-import { corpoDoEnvio, enderecoDosEventos, lerRespostaDaMeta, montarEventoDaMeta, semSegredo, VERSAO_DA_GRAPH, type ConversaoDaFila, type ResultadoDaMeta } from "../_shared/conversoes-da-meta.ts";
+import { conversaoDeTeste, corpoDoEnvio, enderecoDosEventos, lerRespostaDaMeta, montarEventoDaMeta, semSegredo, VERSAO_DA_GRAPH, type ConversaoDaFila, type ResultadoDaMeta } from "../_shared/conversoes-da-meta.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -66,6 +68,9 @@ async function conexaoDaConta(db: SupabaseClient, contaId: string): Promise<Cone
   return { pixel: r.pixel, token: r.token, codigo_de_teste: r.codigo_de_teste || null, eventos: Array.isArray(r.eventos) ? r.eventos : [] };
 }
 
+/** As etapas do lead do formulário da Meta não dependem da lista de eventos que a empresa ligou. */
+const SEMPRE_SAEM = ["QualifiedLead", "SimulationCompleted"];
+
 /** Uma chamada à Meta. Nunca lança: rede caída e prazo estourado viram "tentar de novo". */
 export async function enviarParaAMeta(c: ConversaoDaFila, conexao: Conexao, buscar: typeof fetch = fetch): Promise<ResultadoDaMeta> {
   const controle = new AbortController();
@@ -99,7 +104,7 @@ async function rodar(db: SupabaseClient, limite: number) {
   if (error) throw new Error("leitura da fila");
   const fila = (Array.isArray(data) ? data : []) as ConversaoDaFila[];
   const conexoes = new Map<string, Conexao | null>();
-  const resumo = { pegos: fila.length, enviados: 0, de_novo: 0, erros: 0, sem_tempo: 0 };
+  const resumo = { pegos: fila.length, enviados: 0, de_novo: 0, erros: 0, sem_tempo: 0, de_teste: 0 };
 
   const anotar = async (id: string, r: ResultadoDaMeta) => {
     const { error: falha } = await db.rpc("crm_conversao_resultado", { _id: id, _ok: r.ok, _erro: r.ok ? null : r.erro, _definitivo: r.definitivo });
@@ -115,13 +120,20 @@ async function rodar(db: SupabaseClient, limite: number) {
       continue;
     }
     try {
+      // Lead simulado pela tela: o evento sai da fila sem ir para a Meta (a Meta recusaria o lead_id falso).
+      if (conversaoDeTeste(c.dados)) {
+        const { error: falha } = await db.from("crm_conversoes").delete().eq("id", c.id);
+        if (falha) await anotar(c.id, { ok: false, definitivo: true, erro: "Lead de teste: o evento não vai para a Meta." });
+        else resumo.de_teste += 1;
+        continue;
+      }
       if (!conexoes.has(c.conta_id)) conexoes.set(c.conta_id, await conexaoDaConta(db, c.conta_id));
       const conexao = conexoes.get(c.conta_id) || null;
       if (!conexao) {
         await anotar(c.id, { ok: false, definitivo: true, erro: "A empresa está sem Pixel ou sem token da Meta." });
         continue;
       }
-      if (conexao.eventos.indexOf(c.evento) < 0) {
+      if (SEMPRE_SAEM.indexOf(c.evento) < 0 && conexao.eventos.indexOf(c.evento) < 0) {
         await anotar(c.id, { ok: false, definitivo: true, erro: "Esse tipo de evento foi desligado na empresa." });
         continue;
       }
