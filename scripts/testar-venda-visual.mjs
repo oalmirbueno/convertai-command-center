@@ -132,7 +132,7 @@ async function verPagina({ largura, ligada, parado }) {
   await pagina.waitForTimeout(parado ? 500 : 1800);
   await semTransbordo(pagina, nome, largura);
   await pagina.screenshot({ path: resolve(saida, `${nome}-topo-${largura}.png`) });
-  if (!parado) {
+  {
     // Rola a página inteira para as entradas acontecerem, medindo o transbordo no caminho.
     const altura = await pagina.evaluate(() => document.documentElement.scrollHeight);
     for (let y = 0; y < altura; y += 500) {
@@ -146,6 +146,35 @@ async function verPagina({ largura, ligada, parado }) {
     await pagina.evaluate(() => window.scrollTo(0, 0));
     await pagina.waitForTimeout(300);
   }
+  // O notebook abriu com a rolagem e o celular ligou.
+  await pagina.evaluate(() => document.querySelector("[data-notebook]").scrollIntoView({ block: "center" }));
+  await pagina.waitForTimeout(parado ? 900 : 1600);
+  const tampa = await pagina.evaluate(() => document.querySelector(".vd-note-tampa").style.transform);
+  exigir(/rotateX\((-?0(\.0+)?|-?0\.\d+)deg\)/.test(tampa), `${nome}@${largura}: o notebook não abriu (${tampa})`);
+  exigir((await pagina.locator(".vd-note.vd-ligado").count()) === 1, `${nome}@${largura}: o celular ao lado do notebook não ligou`);
+  await pagina.click('[data-aba="funil"]');
+  await pagina.waitForTimeout(500);
+  await pagina.screenshot({ path: resolve(saida, `${nome}-notebook-${largura}.png`) });
+  // O funil de demonstração anda: a seta leva o negócio até Fechado e o total muda.
+  await pagina.evaluate(() => document.querySelector("[data-funil-vivo]").scrollIntoView({ block: "center" }));
+  const antes = await pagina.textContent("[data-vendido]");
+  await pagina.click('[data-avancar-negocio="n4"]');
+  await pagina.waitForTimeout(300);
+  const depois = await pagina.textContent("[data-vendido]");
+  exigir(antes !== depois, `${nome}@${largura}: o funil de demonstração não somou a venda (${antes} -> ${depois})`);
+  if (largura > 1000) {
+    // No computador o cartão também vai arrastado com o mouse.
+    const cartao = await pagina.locator('[data-negocio="n1"]').boundingBox();
+    const alvo = await pagina.locator('[data-etapa="2"]').boundingBox();
+    await pagina.mouse.move(cartao.x + 40, cartao.y + 20);
+    await pagina.mouse.down();
+    await pagina.mouse.move(alvo.x + alvo.width / 2, alvo.y + 120, { steps: 12 });
+    await pagina.screenshot({ path: resolve(saida, `${nome}-arrastando-${largura}.png`) });
+    await pagina.mouse.up();
+    await pagina.waitForTimeout(200);
+    exigir((await pagina.locator('[data-etapa="2"] [data-negocio="n1"]').count()) === 1, `${nome}@${largura}: arrastar o cartão não mudou a etapa`);
+  }
+  await semTransbordo(pagina, `${nome} (depois de mexer)`, largura);
   const cobranca = await pagina.getAttribute("[data-pagina-de-venda]", "data-cobranca");
   exigir(cobranca === (ligada ? "ligada" : "desligada"), `${nome}@${largura}: a página não percebeu a cobrança ${ligada ? "ligada" : "desligada"}`);
   const botao = (await pagina.textContent('[data-comprar="pro"]')) || "";
@@ -162,6 +191,9 @@ async function comprar({ largura, ligada }) {
   await pagina.goto(`${origem}/crm?utm_source=meta&utm_campaign=crm`, { waitUntil: "domcontentloaded", timeout: 180000 });
   await pagina.waitForSelector("[data-planos-da-venda]", { timeout: 60000 });
   await pagina.click('[data-seletor-de-usuarios] button[aria-label="Mais um usuário"]');
+  await pagina.click('[data-plano="starter"]');
+  exigir((await pagina.locator('[data-comprar="starter"]').count()) === 1, `${nome}@${largura}: trocar de plano não trocou o botão`);
+  await pagina.click('[data-plano="pro"]');
   await pagina.click('[data-comprar="pro"]');
   await pagina.waitForSelector("[data-onboarding-do-produto]", { timeout: 60000 });
   exigir(/\/crm\/comecar\?plano=pro&usuarios=4&utm_source=meta&utm_campaign=crm$/.test(pagina.url()), `${nome}@${largura}: endereço do cadastro errado (${pagina.url()})`);
