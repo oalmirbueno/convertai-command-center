@@ -199,6 +199,8 @@ const typeIcon = (type: string) => {
   if (type === "renewal") return "REC";
   if (type === "ads_recharge") return "ADS";
   if (type === "freela") return "FRL";
+  // 14/11/2026: cobrança de extra do cliente (suporte, CRM, e-mail, comissão), ligada a client_extras.
+  if (type === "extra") return "EXT";
   return "AVU";
 };
 
@@ -229,6 +231,17 @@ function LegacyFinanceiro() {
     enabled: isAdmin,
   });
   const { data: projectPayments } = paymentsQuery;
+  // Extras mensais ativos dos clientes (client_extras): entram no resumo das mensalidades.
+  const { data: extrasPorMes = 0 } = useQuery({
+    queryKey: ["extras-mensais-ativos"],
+    enabled: isAdmin,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("client_extras").select("valor").eq("cobranca", "mensal").eq("status", "ativo");
+      if (error) return 0;
+      return Math.round(((data ?? []) as Array<{ valor: number }>).reduce((s, e) => s + (Number(e.valor) || 0), 0) * 100) / 100;
+    },
+  });
   const { data: financeSettings } = useFinanceSettings();
   const { data: allExpensesCash } = useQuery({
     queryKey: ["expenses"],
@@ -1807,6 +1820,8 @@ function LegacyFinanceiro() {
                       { rotulo: "Mensalistas", valor: String(mensalistas.length) },
                       { rotulo: "Planos distintos", valor: String(planNames.length), cor: "text-primary" },
                       { rotulo: "MRR esperado", valor: fmt(mensalistas.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0)), cor: "text-success" },
+                      // 14/11/2026: extras mensais ativos (suporte, CRM, e-mail, automação) somam à parte, para o MRR do plano não mudar de sentido.
+                      ...(extrasPorMes > 0 ? [{ rotulo: "Extras recorrentes", valor: `${fmt(extrasPorMes)}/mês`, cor: "text-success" }] : []),
                       { rotulo: "Renovam em até 15 dias", valor: String(mensalistas.filter((c: any) => {
                         const renewal = parseAppDate(c.plan_renewal_date);
                         if (!renewal) return false;

@@ -3089,6 +3089,14 @@
       "remote_name": "editar_legenda_e_formato_aprovados",
       "remote_statements_sha256": "da6a57d601890fc29b867e426f1633643c34eb371976a77f4e872922f4f75064",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114190000",
+      "path": "supabase/migrations/20261114190000_extras_do_cliente.sql",
+      "local_sha256": "31a00ad5d6e342a12fb8382d7ea543416b919c5d317f535f4df8622fa3114b96",
+      "remote_name": "extras_do_cliente",
+      "remote_statements_sha256": "54b681dcacaeff91606847afa85312acfd8bf08b1a1cf404e52949a874a93c4b",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
