@@ -1042,7 +1042,7 @@ export default function EditorialScheduleDialog({
                                   attemptRef.current = null;
                                 }}
                                 className={cn(
-                                  "h-10 rounded-lg border px-3 text-[13px] font-medium",
+                                  "h-10 rounded-md border px-3 text-[13px] font-medium",
                                   ativo
                                     ? "border-primary bg-primary/10 text-foreground"
                                     : "border-border bg-background text-muted-foreground hover:bg-muted/40",
