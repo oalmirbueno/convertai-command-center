@@ -57,6 +57,7 @@ import {
 import { blocosDoTexto, FORMATOS_DO_POST, QUADRO_DO_POST, type FormatoDoPost } from "../_shared/direcao-arte.ts";
 import { caminhoDaResposta, caminhoNaArea, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 import { fidelidadeValida, ROTULO_DA_FIDELIDADE, type Fidelidade } from "./modulos/fidelidade-do-conteudo.ts";
+import { laminasParaTirar } from "./operacoes-de-conteudo.ts";
 
 export const OPERACOES_DO_DIRETOR = [
   "reordenar", "mudar_formato", "trocar_texto", "arquivar_versoes", "refazer",
@@ -363,6 +364,9 @@ export function separarDoPlano(acao: AcaoDoAgente | null): { livre: AcaoDoAgente
 /**
  * Proposta do diretor a partir do campo `acoes` da resposta. Reordenar junto
  * com ações nas lâminas não entra (a ordem mudaria no meio): fica em ignorados.
+ * Tirar, duplicar e adicionar lâmina: várias da mesma operação valem (da maior
+ * lâmina para a menor); misturadas entre si ou com outra operação de lâmina,
+ * ficam em ignorados.
  */
 export function normalizarAcoesDoDiretor(bruto: unknown, t: TrabalhoParaAcoes, id?: string): AcaoDoAgente | null {
   const alvos = alvosDoTrabalho(t);
@@ -381,24 +385,62 @@ export function normalizarAcoesDoDiretor(bruto: unknown, t: TrabalhoParaAcoes, i
     acao.ignorados.push(...acao.itens.filter((i) => i.operacao === "reordenar").map((i) => i.ref));
     acao.itens = acao.itens.filter((i) => i.operacao !== "reordenar");
   }
-  // Frente RO: tirar e duplicar lâmina mudam a numeração; com outra operação de lâmina no mesmo pedido, as
-  // referências l1..lN mudariam no meio. Vale uma coisa só: essas duas ficam de fora (a equipe pede de novo).
+  // Frente RO: tirar, duplicar e adicionar lâmina mudam a numeração; com outra operação de lâmina no mesmo pedido,
+  // ou com mais de um TIPO delas (tirar + duplicar), as referências l1..lN mudariam no meio: essas ficam de fora
+  // (a equipe pede de novo). Várias da MESMA operação ("tira a 6 e a 7") valem: vão da maior para a menor.
   const numeracao = ["tirar_lamina", "duplicar_lamina", "adicionar_lamina"];
   const mexeNaNumeracao = acao.itens.filter((i) => numeracao.indexOf(i.operacao) >= 0);
+  const tiposDeNumeracao = mexeNaNumeracao.map((i) => i.operacao).filter((op, k, lista) => lista.indexOf(op) === k);
   const outrasDeLamina = acao.itens.filter((i) => soDoTrabalho.indexOf(i.operacao) < 0 && numeracao.indexOf(i.operacao) < 0);
-  if (mexeNaNumeracao.length && (outrasDeLamina.length || mexeNaNumeracao.length > 1)) {
+  if (mexeNaNumeracao.length && (outrasDeLamina.length || tiposDeNumeracao.length > 1)) {
     acao.ignorados.push(...mexeNaNumeracao.map((i) => i.ref));
     acao.itens = acao.itens.filter((i) => mexeNaNumeracao.indexOf(i) < 0);
+  } else if (mexeNaNumeracao.length > 1) {
+    // A trava de cada item olhou o trabalho de hoje; juntas, não podem zerar o carrossel nem passar de 10 lâminas.
+    const total = t.direcao.cards.length;
+    const tira = tiposDeNumeracao[0] === "tirar_lamina";
+    const cabem = tira ? total - 1 : 10 - total;
+    if (mexeNaNumeracao.length > cabem) {
+      // Sobram as primeiras do pedido; ao tirar todas, fica a de menor número (a capa).
+      const ordenadas = tira ? mexeNaNumeracao.slice().sort((a, b) => Number(b.alvo_id) - Number(a.alvo_id)) : mexeNaNumeracao;
+      const fora = ordenadas.slice(Math.max(0, cabem));
+      const motivo = tira ? "O trabalho precisa de pelo menos uma lâmina." : "O carrossel fica com no máximo 10 lâminas.";
+      acao.recusados.push(...fora.map((i) => ({ ref: i.ref, titulo: i.titulo, operacao: i.operacao, motivo })));
+      acao.itens = acao.itens.filter((i) => fora.indexOf(i) < 0);
+    }
   }
   // Troca de texto antes de refazer: a lâmina nova já sai com o texto novo. Tirar e duplicar lâmina mudam a
-  // numeração: vão por último entre as sem custo (a ordem das outras já foi aplicada).
+  // numeração: vão por último entre as sem custo (a ordem das outras já foi aplicada). Entre várias da mesma
+  // operação de numeração, da maior lâmina para a menor: o executor lê a ordem de agora, e tirar a 6 antes da 7
+  // faria a 7 virar 6 (o segundo item falharia ou tiraria a lâmina errada).
   const peso: Record<string, number> = { mudar_fidelidade: 0, adicionar_lamina: 4, aplicar_mudanca: 0, trocar_texto: 0, trocar_logo: 1, tirar_referencias: 1, arquivar_versoes: 1, mudar_qualidade: 2, mudar_formato: 2, reordenar: 3, duplicar_lamina: 4, tirar_lamina: 5, ajustar_texto: 6, refazer: 7, variacoes: 8, entregar: 9, agendar: 10 };
-  acao.itens.sort((a, b) => (peso[a.operacao] ?? 9) - (peso[b.operacao] ?? 9));
+  acao.itens.sort((a, b) => {
+    const porPeso = (peso[a.operacao] ?? 9) - (peso[b.operacao] ?? 9);
+    if (porPeso) return porPeso;
+    return a.operacao === b.operacao && numeracao.indexOf(a.operacao) >= 0 ? Number(b.alvo_id) - Number(a.alvo_id) : 0;
+  });
   if (!acao.itens.length && !acao.recusados.length) return null;
   // Só refazer (gerar de novo): não tem volta; a tela avisa antes.
   if (acao.itens.length && acao.itens.every((i) => i.operacao === "refazer")) acao.sem_desfazer = true;
   else delete acao.sem_desfazer;
   return acao;
+}
+
+/**
+ * Reserva em código do pedido de tirar lâminas (o código leu tirar_lamina no pedido): quando o modelo não
+ * devolve ação aproveitável, a proposta sai dos números citados na mensagem (laminasParaTirar), um item por
+ * lâmina que existe, pelas mesmas regras e travas de sempre. Nada é feito aqui: quem decide entre fazer na hora
+ * e pedir Confirmar é o fluxo da conversa. Sem número citado que exista, fica como o modelo deixou.
+ */
+export function comReservaDeTirarLaminas(acao: AcaoDoAgente | null, mensagem: string, t: TrabalhoParaAcoes, id?: string): AcaoDoAgente | null {
+  if (acao) return acao;
+  const ordens = laminasParaTirar(mensagem, t.direcao.cards.map((c) => c.ordem));
+  if (!ordens.length) return null;
+  const lista = ordens.slice().sort((a, b) => a - b);
+  const resumo = lista.length === 1
+    ? `Tirar a lâmina ${lista[0]} do carrossel (fica guardada; o Desfazer devolve).`
+    : `Tirar as lâminas ${lista.slice(0, -1).join(", ")} e ${lista[lista.length - 1]} do carrossel (ficam guardadas; o Desfazer devolve).`;
+  return normalizarAcoesDoDiretor({ resumo, itens: ordens.map((o) => ({ operacao: "tirar_lamina", ref: `l${o}`, para: "" })) }, t, id);
 }
 
 /** Bloco do prompt com os alvos e a regra das ações do diretor. */
@@ -411,9 +453,9 @@ ${regraDasAcoes({
     arquivar_versoes: "ref da lâmina; tira as versões antigas da lista (ficam guardadas). para vazio.",
     refazer: "ref de cada lâmina a gerar de novo pelo caminho de sempre (tem custo, mostrado antes). para vazio.",
     mudar_qualidade: 'ref t1; para "baixa", "media" ou "alta" (qualidade da imagem nas próximas gerações).',
-    tirar_lamina: "ref da lâmina a tirar do carrossel (fica guardada; Desfazer devolve). para vazio. Sozinha no pedido.",
-    duplicar_lamina: "ref da lâmina a copiar; a cópia (com o MESMO texto) entra logo depois dela, sem arte. Só quando a equipe pede cópia. para vazio. Sozinha no pedido.",
-    adicionar_lamina: "ref da lâmina depois da qual entra uma lâmina NOVA; para com o texto completo dela (outro conteúdo, nunca o da lâmina copiada). Sozinha no pedido.",
+    tirar_lamina: "ref da lâmina a tirar do carrossel (fica guardada; Desfazer devolve). para vazio. Pedido de tirar várias lâminas: UM item por lâmina, todos no mesmo acoes, com os números de hoje (o código tira da maior para a menor). Sem outra operação de lâmina, duplicar_lamina nem adicionar_lamina no mesmo pedido.",
+    duplicar_lamina: "ref da lâmina a copiar; a cópia (com o MESMO texto) entra logo depois dela, sem arte. Só quando a equipe pede cópia. para vazio. Várias cópias: um item por lâmina. Sem outra operação de lâmina, tirar_lamina nem adicionar_lamina no mesmo pedido.",
+    adicionar_lamina: "ref da lâmina depois da qual entra uma lâmina NOVA; para com o texto completo dela (outro conteúdo, nunca o da lâmina copiada). Várias lâminas novas: um item por lâmina de referência. Sem outra operação de lâmina, tirar_lamina nem duplicar_lamina no mesmo pedido.",
     mudar_fidelidade: 'ref t1; para "identico", "proximo" ou "criativo" (só na arte rápida com post ou Fazer igual). Junto, as mudanças de texto de todas as lâminas nessa fidelidade.',
     trocar_logo: 'ref da lâmina (ou t1 para todas); para "principal", "alternativa" ou "auto" (a que contrasta com o fundo).',
     tirar_referencias: "ref da lâmina; tira as referências escolhidas só para ela (volta a seguir o conjunto). para vazio.",

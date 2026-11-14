@@ -104,7 +104,7 @@
  * confere saldo e cota e debita a carteira do cliente.
  */
 
-import { clienteInternoDaAgencia, falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { clienteInternoDaAgencia, falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo, resumoDoQueFoiFeito } from "../_shared/nucleo-das-mesas.ts";
 import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
@@ -325,6 +325,7 @@ import {
   devolverVersoesDaLamina,
   MOTIVO_CONTINUO,
   MOTIVO_ENTREGUE,
+  comReservaDeTirarLaminas,
   normalizarAcoesDoDiretor,
   // Frente AG (27/09): o "Ir para" do diretor (o item no Estúdio) e da área que a resposta citou.
   anexosDaRespostaDoDiretor,
@@ -10668,7 +10669,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   let resposta = (await fecharNucleo(servico(), limparTexto(bruto.resposta, 9000), previas, { clientId: t.client_id, agente: "estúdio (diretor de arte)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoDiretor })).texto;
   const memoriaNova = limparTexto(bruto.memoria, 400);
   // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer...).
-  const acaoProposta = comCaminhoDoDiretor(normalizarAcoesDoDiretor(acoesBrutas, t as unknown as TrabalhoParaAcoes), t, mensagem);
+  // Pedido de tirar lâmina (uma ou várias) sem ação aproveitável do modelo: a proposta sai dos números do pedido.
+  const acaoDoModelo = normalizarAcoesDoDiretor(acoesBrutas, t as unknown as TrabalhoParaAcoes);
+  const acaoNormalizada = intencao === "tirar_lamina" && !reescreverTudo ? comReservaDeTirarLaminas(acaoDoModelo, mensagem, t as unknown as TrabalhoParaAcoes) : acaoDoModelo;
+  const acaoProposta = comCaminhoDoDiretor(acaoNormalizada, t, mensagem);
   // Frente RO, fase 2: na dúvida real (ambíguo, lâmina que o pedido não diz, diretor e Jev discordando), uma pergunta
   // curta com opções clicáveis, e nada muda.
   const duvida = precisaPerguntar(entendimento, { total, emFoco, ordensDasMudancas: mudancas.filter((m) => m.alvo === "lamina" && m.ordem !== null).map((m) => m.ordem as number) });
@@ -10854,7 +10858,9 @@ async function executarOQueNaoCusta(
     };
     const pode = podeExecutarDireto(junta, regrasDoDiretor(t as unknown as TrabalhoParaAcoes), { pedidoClaro: true, maxItens: 12 });
     if (pode.direto) {
-      const feita = await executarDireto(junta, (item, acao) => executarItemDoDiretor(t.id, item, acao), { userId: ch.userId, lote: 1 });
+      const executada = await executarDireto(junta, (item, acao) => executarItemDoDiretor(t.id, item, acao), { userId: ch.userId, lote: 1 });
+      // O resumo foi escrito antes da execução: feito na hora, não fica "a lista aguarda confirmação" no cartão.
+      const feita: AcaoDoAgente = { ...executada, resumo: resumoDoQueFoiFeito(executada.resumo) };
       const aplicadas = (feita.resultados || []).filter((r) => r.ok && r.operacao === OPERACAO_DA_MUDANCA).map((r) => String(junta.itens.find((i) => i.ref === r.ref && i.operacao === r.operacao)?.para || "")).filter(Boolean);
       const feitas = e.mudancas.filter((m) => aplicadas.indexOf(m.id) >= 0);
       const plano = montarPlano({ id: planoId, itens: comCusto, mudancasFeitas: feitas, comArte, claro: true });

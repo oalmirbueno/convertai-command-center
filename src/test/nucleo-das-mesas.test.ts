@@ -160,4 +160,16 @@ describe("fala honesta depois de executar", () => {
     expect(r).toMatch(/Feito agora; o Desfazer fica no cartão\./);
     expect(falaDoQueFoiFeito(t, false)).toBe(t);
   });
+
+  it("o resumo do cartão feito na hora não continua 'a lista aguarda confirmação'", async () => {
+    const { falaDoQueFoiFeito, resumoDoQueFoiFeito } = await import("../../supabase/functions/_shared/nucleo-das-mesas");
+    const resumo = "Vou tirar a lâmina 7 do carrossel. A lista aguarda confirmação.";
+    expect(falaDoQueFoiFeito(resumo, true)).not.toMatch(/aguarda confirma/i);
+    const r = resumoDoQueFoiFeito(resumo);
+    expect(r).toBe("Vou tirar a lâmina 7 do carrossel. Feito agora; o Desfazer fica no cartão.");
+    expect(resumoDoQueFoiFeito("Tiro a lâmina 7; a lista está pronta para confirmar.")).toBe("Feito agora; o Desfazer fica no cartão.");
+    // Resumo que não promete confirmação fica como está (nada de frase a mais em todo cartão).
+    expect(resumoDoQueFoiFeito("Vou aplicar 2 mudanças.")).toBe("Vou aplicar 2 mudanças.");
+    expect(resumoDoQueFoiFeito("")).toBe("");
+  });
 });

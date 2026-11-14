@@ -315,6 +315,8 @@ export async function fecharNucleo(
   return { texto: saida, recusados: conferido.recusados, encaminhado };
 }
 
+const PROMETE_CONFIRMACAO = /(pront[ao]s?|preparad[ao]s?) para (voc[eê] )?confirmar|aguarda(m)? (a sua |sua )?confirma[cç][aã]o|s[oó] muda (ap[oó]s|depois d)a confirma[cç][aã]o|est[aá] no cart[aã]o aguardando/i;
+
 /**
  * A fala do modelo é escrita antes de o servidor executar o que não tem custo: quando a ação foi
  * feita na hora, "está pronta para confirmar" vira mentira. Tira essas frases e diz o que aconteceu.
@@ -322,7 +324,7 @@ export async function fecharNucleo(
  */
 export function falaDoQueFoiFeito(texto: string, feitoAgora: boolean): string {
   if (!feitoAgora) return texto;
-  const pendente = /(pront[ao]s?|preparad[ao]s?) para (voc[eê] )?confirmar|aguarda(m)? (a sua |sua )?confirma[cç][aã]o|s[oó] muda (ap[oó]s|depois d)a confirma[cç][aã]o|est[aá] no cart[aã]o aguardando/i;
+  const pendente = PROMETE_CONFIRMACAO;
   // Nada prometendo confirmação e a fala já diz que fez: fica como está.
   if (!pendente.test(String(texto || "")) && /\bfeit[oa]s?\b|\bregistrei\b|\bapliquei\b|\btroquei\b/i.test(String(texto || ""))) return texto;
   const sem = String(texto || "")
@@ -332,6 +334,15 @@ export function falaDoQueFoiFeito(texto: string, feitoAgora: boolean): string {
     .join(" ")
     .trim();
   return `${sem}${sem ? "\n\n" : ""}Feito agora; o Desfazer fica no cartão.`;
+}
+
+/**
+ * O `resumo` do cartão de uma ação feita na hora: o modelo também o escreve antes da execução ("a lista aguarda
+ * confirmação"). Só o resumo que promete confirmação é reescrito (falaDoQueFoiFeito), numa linha; o resto fica.
+ */
+export function resumoDoQueFoiFeito(resumo: string): string {
+  const r = String(resumo || "");
+  return PROMETE_CONFIRMACAO.test(r) ? falaDoQueFoiFeito(r, true).replace(/\s*\n+\s*/g, " ") : r;
 }
 
 /**
