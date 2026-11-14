@@ -323,8 +323,8 @@ export default function ProdutoLanding() {
         <section className="vd-secao vd-secao-2">
           <div className="vd-dentro vd-centro">
             <Revela>
-              <Rotulo>respostas diretas para as suas dúvidas</Rotulo>
-              <h2 className="vd-h2 vd-h2-fino">Objeções? <strong>Vamos direto ao ponto</strong></h2>
+              <Rotulo>antes de decidir</Rotulo>
+              <h2 className="vd-h2 vd-h2-fino">Ainda na dúvida? <strong>Vamos direto ao ponto</strong></h2>
             </Revela>
             <div className="vd-objecoes">
               {OBJECOES(dias).map((o, i) => (
