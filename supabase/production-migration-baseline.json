@@ -3085,9 +3085,9 @@
     {
       "version": "20261114180000",
       "path": "supabase/migrations/20261114180000_editar_legenda_e_formato_aprovados.sql",
-      "local_sha256": "2945fb886fd971b14cef255b496d2a811ded728af38dceca535566e9c5c10324",
+      "local_sha256": "c2524df9ba66250b0c24bfd00b3adea5ae02da8f41ebe8e2e0f8ba3bdf2d0ba3",
       "remote_name": "editar_legenda_e_formato_aprovados",
-      "remote_statements_sha256": "1443f19d3f74f195fe593a3b63f2486e5635a21ca41f37cb10fb80c339b2f75a",
+      "remote_statements_sha256": "da6a57d601890fc29b867e426f1633643c34eb371976a77f4e872922f4f75064",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],
