@@ -233,15 +233,36 @@ import { NIVEIS_CLAREZA, NIVEIS_RISCO_POLITICA, POLITICAS_META, TAMANHO_DO_FORMA
 import { ANATOMIA_DO_ESTATICO, REGRAS_DE_HONESTIDADE } from "../_shared/conhecimento-ads.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
+  capaLiberouAsOutras,
   type DependenciasDaFila,
+  type DependenciasDaVigia,
+  esperaDoChute,
   type EtapaDaFila,
   type ItemDaFila,
+  type ItemPreso,
   LIMITES_DA_FILA,
+  linhaFechada,
   ordensDoPedido,
   processarItem,
   type ResultadoDoPasso,
+  statusDoTrabalhoEmProducao,
+  vigiarFila,
 } from "./fila-de-geracao.ts";
+import {
+  type AcaoEmSegundoPlano,
+  concluirPedido,
+  corpoComStatus,
+  LIMITES_DO_SEGUNDO_PLANO,
+  novoPedido,
+  pedeSegundoPlano,
+  pedidoParaATela,
+  type PedidosDoTrabalho,
+  pedidosDoTrabalho,
+  pulsarPedido,
+  registrarPedido,
+} from "./segundo-plano.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+import type { LinhaVigiada } from "./fila-de-geracao.ts";
 import {
   type AcaoDoAgente,
   type AcaoGuardada,
@@ -1092,6 +1113,8 @@ type Direcao = {
   duvida_do_ajuste?: DuvidaGuardada | null;
   /** 05/11/2026: os GIFs feitos a partir das lâminas (peças a mais; a lâmina não muda). */
   gifs?: GifDaLamina[];
+  /** 14/11/2026: ajuste, conferência e correção pedidos pela tela em segundo plano (segundo-plano.ts), um por lâmina. */
+  em_segundo_plano?: PedidosDoTrabalho | null;
 };
 
 type Reabertura = {
@@ -1601,10 +1624,36 @@ function quadroDoCard(t: Pick<Trabalho, "tipo"> & { direcao?: Pick<Direcao, "for
   };
 }
 
-function statusDepoisDeGerar(t: Trabalho, novas: VersaoCard[]): string {
+/**
+ * Status do trabalho depois de gravar versões. 14/11/2026: "gerando" só enquanto outra lâmina do trabalho ainda
+ * gera na fila; sem isso, o trabalho com lâmina faltando volta para "dirigido" (a tela mostra "5 de 7 com arte")
+ * em vez de ficar "gerando" para sempre.
+ */
+function statusDepoisDeGerar(t: Trabalho, novas: VersaoCard[], geracaoAtiva = false): string {
   const todas = [...t.cards, ...novas];
-  const completo = t.direcao.cards.every((c) => todas.some((v) => v.ordem === c.ordem));
-  return completo ? "pronto" : "gerando";
+  return statusDoTrabalhoEmProducao({
+    ordensDaDirecao: t.direcao.cards.map((c) => c.ordem),
+    ordensComArte: todas.map((v) => v.ordem),
+    geracaoAtiva,
+  });
+}
+
+/** Outra lâmina deste trabalho ainda vai gerar (fila ou rodando, no fundo ou no gerar)? Sem a tabela ou com erro: não. */
+async function outraLaminaGerando(trabalhoId: string, ordem: number): Promise<boolean> {
+  try {
+    const { data, error } = await servico()
+      .from("estudio_fila")
+      .select("id")
+      .eq("trabalho_id", trabalhoId)
+      .neq("ordem", ordem)
+      .in("status", ["fila", "rodando"])
+      .in("etapa", ["fundo", "gerar"])
+      .limit(1);
+    return !error && Array.isArray(data) && data.length > 0;
+  } catch (e) {
+    registrarFalha("estudio-arte: fila do trabalho não lida", e, { trabalho_id: trabalhoId });
+    return false;
+  }
 }
 
 // ------------------------------------------------------ contexto do cliente
@@ -7491,10 +7540,11 @@ async function gravarVersao(
     ...(meta.regras && meta.regras.length ? { regras_seguidas: meta.regras } : {}),
   };
   // Acrescenta a versao (nunca substitui): o caminho no bucket ja e unico.
+  const geracaoAtiva = await outraLaminaGerando(t.id, card.ordem);
   const gravado = await mutarTrabalho(t.id, (atual) => ({
     cards: [...atual.cards, nova],
     custo_usd: arred(num(atual.custo_usd) + custo),
-    status: statusDepoisDeGerar(atual, [nova]),
+    status: statusDepoisDeGerar(atual, [nova], geracaoAtiva),
   }));
   return json({
     trabalho_id: t.id,
@@ -10088,7 +10138,8 @@ async function reabrir(ch: Chamador, corpo: Record<string, unknown>) {
     };
     const completo = x.direcao.cards.length > 0 && x.direcao.cards.every((c) => x.cards.some((v) => v.ordem === c.ordem));
     return {
-      status: completo ? "pronto" : x.cards.length ? "gerando" : "dirigido",
+      // 14/11/2026: reabrir não gera nada; com lâmina faltando o trabalho fica "dirigido" (não "gerando").
+      status: completo ? "pronto" : "dirigido",
       entrega_rodada: rodada + 1,
       entrega_status: x.entrega_status === "reprovado" ? "reprovado" : null,
       ...(motivo ? { entrega_aviso: motivo } : {}),
@@ -11600,18 +11651,47 @@ function emSegundoPlano(p: Promise<unknown>): boolean {
   return false;
 }
 
-/** Chama processar_fila de novo com o login de quem pediu (no máximo o teto global de vezes). */
-function chutarFila(token: string, vezes: number) {
+const esperarMs = (ms: number) => new Promise<void>((ok) => setTimeout(ok, ms));
+
+/** Quanto o chute espera pelo "aceito" (202) da próxima invocação antes de largar a conexão. */
+const ESPERA_DO_ACEITE_MS = 45_000;
+
+/**
+ * Chama processar_fila de novo com o login de quem pediu (no máximo o teto global de vezes).
+ *
+ * 14/11/2026: o chute só DISPARA a próxima invocação (ela responde 202 e roda o passo no segundo plano dela).
+ * Saiu o AbortSignal.timeout(20 s): abortar o pedido no meio podia derrubar a invocação seguinte antes de ela
+ * pegar o passo e quebrava a corrente. Agora o chute espera o aceite por até 45 s e, sem resposta, só larga a
+ * conexão (não aborta). Falha de rede ou 5xx: uma nova tentativa depois de 2 s; depois disso a vigia retoma.
+ * `esperaMs`: chute com espera (fundo ocupado, nova tentativa), sem gastar CPU enquanto espera.
+ */
+function chutarFila(token: string, vezes: number, esperaMs = 0) {
   const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/estudio-arte`;
   const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const n = Math.max(0, Math.min(vezes, LIMITES_DA_FILA.GLOBAL));
+  const disparar = async (): Promise<boolean> => {
+    try {
+      const pedido = fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(anon ? { apikey: anon } : {}) },
+        body: JSON.stringify({ acao: "processar_fila" }),
+      }).then(async (r) => {
+        await r.body?.cancel().catch(() => null);
+        return r.status < 500;
+      });
+      // Sem aceite no tempo: larga (a invocação seguinte segue viva do lado dela) e conta como disparado.
+      return await Promise.race([pedido, esperarMs(ESPERA_DO_ACEITE_MS).then(() => true)]);
+    } catch {
+      return false;
+    }
+  };
   for (let i = 0; i < n; i++) {
-    const p = fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(anon ? { apikey: anon } : {}) },
-      body: JSON.stringify({ acao: "processar_fila" }),
-      signal: AbortSignal.timeout(20_000),
-    }).then((r) => r.body?.cancel()).catch(() => null);
+    const p = (async () => {
+      if (esperaMs > 0) await esperarMs(esperaMs);
+      if (await disparar()) return;
+      await esperarMs(2_000);
+      if (!(await disparar())) console.error("estudio-arte: chute da fila falhou duas vezes (a vigia do painel retoma)");
+    })();
     emSegundoPlano(p);
   }
 }
@@ -11752,7 +11832,10 @@ async function enfileirar(ch: Chamador, corpo: Record<string, unknown>) {
       itens.push(...((data ?? []) as Record<string, unknown>[]));
     }
   }
-  if (itens.length) chutarFila(ch.token, Math.min(itens.length, paralelo));
+  // 14/11/2026: com a capa no lote e ainda sem versão, uma corrente só. As outras lâminas esperam a capa
+  // (capa_pendente) e é ela que as solta ao sair do gerar; a segunda corrente só gastaria passos esperando.
+  const capaNoLote = novas.length > 1 && novas.indexOf(1) >= 0 && !versaoAtual(t, 1);
+  if (itens.length) chutarFila(ch.token, capaNoLote ? 1 : Math.min(itens.length, paralelo));
   return json({ lote_id: lote, itens, ja_na_fila: jaNaFila.filter((o) => ordens.indexOf(o) >= 0) });
 }
 
@@ -11773,24 +11856,265 @@ async function cancelarFila(ch: Chamador, corpo: Record<string, unknown>) {
   if (ordens.length) q = q.in("ordem", ordens);
   const { data, error } = await q.select("ordem");
   if (error) throw erroDaFila(error);
+  // O lote pode ter acabado aqui: o trabalho não fica "gerando" sem nada na fila.
+  if ((data ?? []).length) await assentarTrabalho(t.id);
   return json({ canceladas: (data ?? []).map((d) => Number((d as { ordem: unknown }).ordem)) });
+}
+
+// ---------------------------------------------- vigia e fim do lote (14/11/2026)
+
+const COLUNAS_DA_VIGIA = `${COLUNAS_DA_FILA}, trava_ate, atualizado_em`;
+
+/**
+ * A vigia da fila com a chave de serviço: olha as linhas "rodando" de TODAS as pessoas (a RPC só vê as de quem
+ * chamou) e nunca gera nada, só muda a linha (decidirPreso em fila-de-geracao.ts). A arte da lâmina é lida do
+ * trabalho só quando a regra precisa (trava vencida ou passo velho), uma leitura por trabalho na volta.
+ */
+function dependenciasDaVigia(): DependenciasDaVigia {
+  const db = servico();
+  const cards: Record<string, Promise<VersaoCard[] | null>> = {};
+  const cardsDe = (trabalhoId: string) => {
+    if (!cards[trabalhoId]) {
+      cards[trabalhoId] = (async () => {
+        const { data, error } = await db.from("estudio_trabalhos").select("cards").eq("id", trabalhoId).maybeSingle();
+        if (error || !data) return null;
+        const lista = (data as { cards?: unknown }).cards;
+        return Array.isArray(lista) ? (lista as VersaoCard[]) : [];
+      })();
+    }
+    return cards[trabalhoId];
+  };
+  return {
+    presos: async () => {
+      const { data, error } = await db.from(TABELA_DA_FILA).select(COLUNAS_DA_VIGIA).eq("status", "rodando").order("atualizado_em", { ascending: true }).limit(60);
+      if (error) throw erroDaFila(error);
+      return ((data ?? []) as unknown as Record<string, unknown>[]).map((l): ItemPreso => ({
+        ...itemDaFila(l),
+        trava_ate: typeof l.trava_ate === "string" ? l.trava_ate : null,
+        atualizado_em: typeof l.atualizado_em === "string" ? l.atualizado_em : null,
+      }));
+    },
+    arte: async (item) => {
+      const lista = await cardsDe(item.trabalho_id);
+      if (!lista) return null;
+      const daLamina = lista.filter((c) => c && c.ordem === item.ordem);
+      const ultima = daLamina.reduce<string | null>((m, c) => {
+        const em = typeof c.criado_em === "string" ? c.criado_em : null;
+        return em && (!m || em > m) ? em : m;
+      }, null);
+      return { versoes: daLamina.length, ultima_em: ultima };
+    },
+    aplicar: async (item, campos) => {
+      // Só grava se a linha ainda é a mesma (rodando, mesma trava): passo vivo que terminou no meio vence a vigia.
+      let q = db.from(TABELA_DA_FILA).update(campos).eq("id", item.id).eq("status", "rodando");
+      q = item.trava_token ? q.eq("trava_token", item.trava_token) : q.is("trava_token", null);
+      const { data, error } = await q.select("id").maybeSingle();
+      return !error && !!data;
+    },
+    agora: () => new Date(),
+  };
+}
+
+/**
+ * Fim do lote: sem nada na fila para o trabalho, o status sai de "gerando" ("pronto" com todas as lâminas,
+ * "dirigido" com lâmina faltando). Só mexe em trabalho "gerando" e só se ninguém gravou no meio.
+ */
+async function assentarTrabalho(trabalhoId: string): Promise<void> {
+  try {
+    const db = servico();
+    const { data: ativos, error } = await db.from(TABELA_DA_FILA).select("id").eq("trabalho_id", trabalhoId).in("status", ["fila", "rodando"]).limit(1);
+    if (error || (ativos ?? []).length) return;
+    const { data } = await db.from("estudio_trabalhos").select("status, atualizado_em, cards, laminas:direcao->cards").eq("id", trabalhoId).maybeSingle();
+    const t = data as { status?: string; atualizado_em?: string; cards?: unknown; laminas?: unknown } | null;
+    if (!t || t.status !== "gerando" || !t.atualizado_em) return;
+    const ordens = (lista: unknown) => (Array.isArray(lista) ? lista : []).map((c) => Number((c as { ordem?: unknown })?.ordem)).filter((n) => Number.isFinite(n));
+    const status = statusDoTrabalhoEmProducao({ ordensDaDirecao: ordens(t.laminas), ordensComArte: ordens(t.cards), geracaoAtiva: false });
+    await db.from("estudio_trabalhos").update({ status }).eq("id", trabalhoId).eq("status", "gerando").eq("atualizado_em", t.atualizado_em);
+  } catch (e) {
+    registrarFalha("estudio-arte: status do trabalho não assentou", e, { trabalho_id: trabalhoId });
+  }
+}
+
+/** Uma volta da vigia antes de pegar o passo. Nunca derruba o processar_fila: falha fica no log. */
+async function vigiarAntesDePegar(): Promise<LinhaVigiada[]> {
+  try {
+    const feitas = await vigiarFila(dependenciasDaVigia());
+    if (!feitas.length) return [];
+    console.warn("estudio-arte: vigia da fila", { linhas: feitas.map((f) => ({ item: f.item.id, trabalho_id: f.item.trabalho_id, ordem: f.item.ordem, etapa: f.item.etapa, acao: f.acao })) });
+    const fechados = [...new Set(feitas.filter((f) => f.acao === "feito" || f.acao === "erro").map((f) => f.item.trabalho_id))];
+    for (const id of fechados) await assentarTrabalho(id);
+    return feitas;
+  } catch (e) {
+    registrarFalha("estudio-arte: vigia da fila falhou", e, {});
+    return [];
+  }
+}
+
+/**
+ * Passos e pedidos rodando nesta invocação. A função não consegue impedir o "CPU Time exceeded", mas o runtime
+ * avisa antes de derrubar (beforeunload): o log diz o que estava em voo. A recuperação não depende deste log:
+ * a linha da fila fica com a vigia (trava e arte gravada) e o pedido em segundo plano, com o pulso.
+ */
+const EM_VOO = new Map<string, Record<string, unknown>>();
+try {
+  (globalThis as { addEventListener?: (tipo: string, f: (ev: { detail?: { reason?: unknown } }) => void) => void }).addEventListener?.("beforeunload", (ev) => {
+    if (!EM_VOO.size) return;
+    console.warn("estudio-arte: a função vai parar com trabalho em voo (a vigia e o pulso recuperam)", { motivo: String(ev?.detail?.reason ?? "desconhecido"), em_voo: [...EM_VOO.values()] });
+  });
+} catch { /* runtime sem o evento: segue sem o log */ }
+
+/** A capa saiu do gerar: as lâminas do trabalho que esperavam por ela (15 s por volta) andam agora. */
+async function soltarQuemEsperavaACapa(item: ItemDaFila): Promise<void> {
+  const agora = new Date().toISOString();
+  const { error } = await servico().from(TABELA_DA_FILA)
+    .update({ proxima_em: agora, aviso: null, atualizado_em: agora })
+    .eq("trabalho_id", item.trabalho_id)
+    .eq("status", "fila")
+    .eq("etapa", "gerar")
+    .neq("ordem", 1)
+    .gt("proxima_em", agora);
+  if (error) registrarFalha("estudio-arte: lâminas à espera da capa não foram soltas", error, { trabalho_id: item.trabalho_id });
 }
 
 /**
  * processar_fila {}: pega UM passo de quem chamou (pela trava do banco) e
  * responde na hora; o passo roda em segundo plano e, no fim, chama o próximo.
- * Chamado pela própria função (corrente) e pela vigia do painel de quem pediu.
+ * Chamado pela própria função (corrente) e pela vigia do painel.
+ *
+ * 14/11/2026: antes de pegar, a vigia resolve o que ficou preso em "rodando" de qualquer pessoa (função morta
+ * por limite de CPU). Um passo por invocação continua valendo: gerar e conferir nunca rodam na mesma invocação.
  */
 async function processarFila(ch: Chamador, _corpo: Record<string, unknown>) {
+  const vigiadas = await vigiarAntesDePegar();
+  // Linha de quem chamou que voltou para a fila com espera (função morta, tentativa contada): um chute na hora dela.
+  for (const v of vigiadas) {
+    if (v.acao !== "repetir" || v.item.pedido_por !== ch.userId) continue;
+    const esperaS = LIMITES_DA_FILA.ESPERA_DA_REPETICAO_S * (v.item.tentativas + 1);
+    if (esperaS <= LIMITES_DA_FILA.ESPERA_MAXIMA_DO_CHUTE_S) chutarFila(ch.token, 1, esperaS * 1000 + 500);
+  }
   const deps = dependenciasDaFila(ch);
   const token = crypto.randomUUID();
   const item = await deps.pegar(token);
   if (!item) return json({ processando: null });
+  EM_VOO.set(item.id, { fila: item.id, trabalho_id: item.trabalho_id, ordem: item.ordem, etapa: item.etapa });
   const passo = processarItem(deps, item, token)
-    .catch((e) => console.error("estudio-arte: passo da fila falhou", { erro: e instanceof Error ? e.name : "desconhecido" }))
-    .finally(() => chutarFila(ch.token, 1));
+    .then(async (p) => {
+      let chutes = 1;
+      // A capa saiu do gerar: quem esperava por ela anda agora, com as correntes do paralelo do trabalho.
+      if (capaLiberouAsOutras(item, p.etapa, p.mudanca)) {
+        await soltarQuemEsperavaACapa(item);
+        chutes = Math.max(1, item.paralelo);
+      }
+      // A linha fechou (feito, erro): se o lote acabou, o trabalho não fica "gerando".
+      if (p.gravou && linhaFechada(p.mudanca.status)) await assentarTrabalho(item.trabalho_id);
+      chutarFila(ch.token, chutes);
+      // Esta linha ficou esperando (fundo ocupado, nova tentativa): um chute na hora em que ela pode andar.
+      const espera = p.gravou ? esperaDoChute(p.mudanca, new Date()) : null;
+      if (espera !== null) chutarFila(ch.token, 1, espera + 500);
+    })
+    .catch((e) => {
+      console.error("estudio-arte: passo da fila falhou", { erro: e instanceof Error ? e.name : "desconhecido" });
+      chutarFila(ch.token, 1);
+    })
+    .finally(() => EM_VOO.delete(item.id));
   if (!emSegundoPlano(passo)) await passo;
   return json({ processando: item.id, ordem: item.ordem, etapa: item.etapa }, 202);
+}
+
+// ------------------------------------- ações da lâmina em segundo plano (14/11/2026)
+//
+// ajustar_card, ajustar_texto, conferir_card e corrigir_card com `segundo_plano: true` (regra em segundo-plano.ts):
+// a função confere o acesso, registra o pedido no trabalho, responde 202 e roda a MESMA ação depois da resposta.
+// A tela acompanha pelo banco. Sem o `segundo_plano`, tudo segue como antes (resposta com fôlego).
+
+const temSegundoPlano = () => typeof (globalThis as { EdgeRuntime?: { waitUntil?: unknown } }).EdgeRuntime?.waitUntil === "function";
+
+const ROTULO_DO_PEDIDO: Record<AcaoEmSegundoPlano, string> = {
+  ajustar_card: "ajuste",
+  ajustar_texto: "ajuste de texto",
+  conferir_card: "conferência",
+  corrigir_card: "correção",
+};
+
+/**
+ * Lê e grava os pedidos em segundo plano do trabalho com a trava otimista do trabalho (atualizado_em): não apaga
+ * o que outra gravação fez no meio. `mudar` devolve o mapa novo ou null (nada a gravar). Devolve se gravou.
+ */
+async function gravarPedidos(trabalhoId: string, mudar: (pedidos: PedidosDoTrabalho) => PedidosDoTrabalho | null): Promise<boolean> {
+  const db = servico();
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    const { data, error } = await db.from("estudio_trabalhos").select("atualizado_em, direcao").eq("id", trabalhoId).maybeSingle();
+    if (error || !data) return false;
+    const linha = data as { atualizado_em: string; direcao: Record<string, unknown> | null };
+    if (!linha.direcao || typeof linha.direcao !== "object") return false;
+    const novo = mudar(pedidosDoTrabalho(linha.direcao.em_segundo_plano));
+    if (!novo) return false;
+    const r = await db.from("estudio_trabalhos")
+      .update({ direcao: { ...linha.direcao, em_segundo_plano: novo } })
+      .eq("id", trabalhoId)
+      .eq("atualizado_em", linha.atualizado_em)
+      .select("id")
+      .maybeSingle();
+    if (r.error) return false;
+    if (r.data) return true;
+  }
+  return false;
+}
+
+/**
+ * Aceita a ação em segundo plano: 202 com o pedido. Null quando não deu para registrar o pedido no trabalho
+ * (quem chamou segue pelo caminho de antes, com fôlego). Lâmina com pedido vivo: 409 lamina_ocupada.
+ */
+async function aceitarEmSegundoPlano(ch: Chamador, acao: AcaoEmSegundoPlano, corpo: Record<string, unknown>, rodar: () => Promise<Response>): Promise<Response | null> {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const ordem = lerOrdem(corpo);
+  const agora = new Date();
+  const pedido = novoPedido({ id: crypto.randomUUID(), acao, ordem, por: ch.userId, versoes_antes: t.cards.filter((c) => c.ordem === ordem).length }, agora);
+  const registrou = await gravarPedidos(t.id, (pedidos) => {
+    const r = registrarPedido(pedidos, pedido, agora);
+    if (!r.ok) {
+      throw new ErroEstudio(409, "lamina_ocupada", `A lâmina ${ordem} já tem um pedido em andamento (${ROTULO_DO_PEDIDO[r.ocupada.acao]}). Espere terminar.`, { pedido: pedidoParaATela(r.ocupada) });
+    }
+    return r.pedidos;
+  });
+  if (!registrou) return null;
+
+  EM_VOO.set(pedido.id, { pedido: pedido.id, acao, trabalho_id: t.id, ordem });
+  const trabalho = (async () => {
+    // Pulso: a tela sabe que a função segue viva. Um de cada vez; pulso que falha só atrasa o próximo.
+    let pulsando = false;
+    const relogio = setInterval(() => {
+      if (pulsando) return;
+      pulsando = true;
+      gravarPedidos(t.id, (p) => pulsarPedido(p, ordem, pedido.id, new Date()))
+        .catch(() => false)
+        .finally(() => { pulsando = false; });
+    }, LIMITES_DO_SEGUNDO_PLANO.PULSO_S * 1000);
+    let final: Record<string, unknown>;
+    try {
+      const r = await rodar();
+      const lido = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+      final = corpoComStatus(lido && typeof lido === "object" ? lido : {}, r.ok, r.status);
+    } catch (e) {
+      console.error("estudio-arte: ação em segundo plano falhou", { acao, erro: e instanceof Error ? e.name : "desconhecido" });
+      final = { error: "erro_interno", mensagem: "Erro inesperado no estúdio. Tente de novo.", status_http: 500 };
+    } finally {
+      clearInterval(relogio);
+    }
+    // O resultado precisa chegar ao pedido: tenta de novo com espera curta (outra gravação no trabalho pode ganhar a corrida).
+    for (let vez = 0; vez < 4; vez++) {
+      let saiu = false;
+      const gravou = await gravarPedidos(t.id, (p) => {
+        const novo = concluirPedido(p, ordem, pedido.id, final, new Date());
+        if (!novo) saiu = true;
+        return novo;
+      }).catch(() => false);
+      if (gravou || saiu) break;
+      await esperarMs(400 * (vez + 1));
+    }
+  })().finally(() => EM_VOO.delete(pedido.id));
+  if (!emSegundoPlano(trabalho)) await trabalho;
+  return json({ em_segundo_plano: true, pedido: pedidoParaATela(pedido) }, 202);
 }
 
 /**
@@ -11942,7 +12266,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       return { formato, ...QUADRO_DO_POST[formato].final };
     },
     ehPostDeFotos: (t) => ehPostDeFotos(t.direcao),
-    statusDepoisDeGerar: (t, ordem) => t.direcao.cards.every((c) => c.ordem === ordem || t.cards.some((v) => v.ordem === c.ordem)) ? "pronto" : "gerando",
+    statusDepoisDeGerar: (t, ordem) => t.direcao.cards.every((c) => c.ordem === ordem || t.cards.some((v) => v.ordem === c.ordem)) ? "pronto" : "dirigido",
     atualizarTexto: (t, ordem, novoTexto) => ({
       ...t.direcao,
       cards: t.direcao.cards.map((c) => c.ordem === ordem ? { ...c, texto_exato: novoTexto, blocos: blocosDoTexto(novoTexto, c.funcao) } : c),
@@ -11962,7 +12286,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       return { formato, ...QUADRO_DO_POST[formato].final };
     },
     ehPostDeFotos: (t) => ehPostDeFotos(t.direcao),
-    statusDepoisDeGerar: (t, ordem) => t.direcao.cards.every((c) => c.ordem === ordem || t.cards.some((v) => v.ordem === c.ordem)) ? "pronto" : "gerando",
+    statusDepoisDeGerar: (t, ordem) => t.direcao.cards.every((c) => c.ordem === ordem || t.cards.some((v) => v.ordem === c.ordem)) ? "pronto" : "dirigido",
   }),
   // 21/10: "Gerar" no Template. Texto pelo redator do refino (base de copy, voz e cérebro); foto pelo gerador do trabalho, sem texto.
   ...acoesDaGeracaoDoTemplate<Chamador, Trabalho>({
@@ -12228,20 +12552,33 @@ Deno.serve(async (req) => {
   if (!executar) return erro(400, "acao_desconhecida", "Ação desconhecida.", { aceitas: Object.keys(ACOES) });
 
   const chamador = ch;
+  const respostaDoErro = (e: unknown): Response => {
+    // Frente FS: erro do motor, do Jev e do servidor (5xx) com motivo no log; o 4xx de validação só volta para a tela.
+    if (e instanceof IaMotorErro || e instanceof JevErro || (e instanceof ErroEstudio && e.status >= 500)) registrarFalha("estudio-arte: ação falhou", e, { acao });
+    if (e instanceof ErroEstudio) return erro(e.status, e.codigo, e.message, e.detalhes);
+    if (e instanceof IaMotorErro) return respostaDoMotor(e);
+    if (e instanceof JevErro) return erro(502, "jev_indisponivel", "A conferência do Jev não respondeu. Tente de novo.", { codigo: e.codigo });
+    // Log so com o codigo e a acao: nada de prompt nem dado de cliente.
+    console.error("estudio-arte: falha inesperada", { acao, erro: e instanceof Error ? e.name : "desconhecido" });
+    return erro(500, "erro_interno", "Erro inesperado no estúdio. Tente de novo.");
+  };
   const rodar = async (): Promise<Response> => {
     try {
       return await executar(chamador, corpo);
     } catch (e) {
-      // Frente FS: erro do motor, do Jev e do servidor (5xx) com motivo no log; o 4xx de validação só volta para a tela.
-      if (e instanceof IaMotorErro || e instanceof JevErro || (e instanceof ErroEstudio && e.status >= 500)) registrarFalha("estudio-arte: ação falhou", e, { acao });
-      if (e instanceof ErroEstudio) return erro(e.status, e.codigo, e.message, e.detalhes);
-      if (e instanceof IaMotorErro) return respostaDoMotor(e);
-      if (e instanceof JevErro) return erro(502, "jev_indisponivel", "A conferência do Jev não respondeu. Tente de novo.", { codigo: e.codigo });
-      // Log so com o codigo e a acao: nada de prompt nem dado de cliente.
-      console.error("estudio-arte: falha inesperada", { acao, erro: e instanceof Error ? e.name : "desconhecido" });
-      return erro(500, "erro_interno", "Erro inesperado no estúdio. Tente de novo.");
+      return respostaDoErro(e);
     }
   };
+  // 14/11/2026: ajuste, conferência e correção pedidos pela tela com `segundo_plano`: 202 na hora e a ação roda
+  // depois da resposta; a tela acompanha pelo banco (o fôlego não sobrevive a "CPU Time exceeded").
+  if (pedeSegundoPlano(acao, corpo) && temSegundoPlano()) {
+    try {
+      const aceito = await aceitarEmSegundoPlano(chamador, acao, corpo, rodar);
+      if (aceito) return aceito;
+    } catch (e) {
+      return respostaDoErro(e);
+    }
+  }
   // Imagem e conferência passam fácil de 150 s: a resposta começa na hora (resposta-com-folego.ts).
   return ACOES_LONGAS.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
 });

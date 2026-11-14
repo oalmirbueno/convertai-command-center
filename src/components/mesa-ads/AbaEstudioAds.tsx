@@ -49,6 +49,7 @@ import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   arteDoPlanoPedida,
+  gerandoDeVerdade,
   laminasSemArte,
   pegarArteDoPlano,
   produzirLamina,
@@ -262,7 +263,8 @@ export default function AbaEstudioAds({
     refetchInterval: (q) => {
       const dados = (q.state.data || []) as any[];
       const montando = dados.some((t) => !(t.direcao && Array.isArray(t.direcao.cards) && t.direcao.cards.length));
-      const gerando = dados.some((t) => t.status === "gerando");
+      // 14/11/2026: "gerando" antigo (sem gravação recente) não mantém a releitura para sempre.
+      const gerando = dados.some((t) => gerandoDeVerdade(t));
       return temTrabalhos && (montando || gerando) ? 8000 : false;
     },
   });

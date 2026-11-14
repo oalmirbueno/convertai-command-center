@@ -111,8 +111,26 @@ export function etapaNaPrancheta(i: ItemNaFila): { etapa: EtapaDaLamina; detalhe
   if (i.etapa === "conferir") return { etapa: i.rodadas > 0 ? "reconferindo" : "conferindo" };
   if (i.etapa === "corrigir") return { etapa: "corrigindo" };
   if (i.status === "fila" && !i.iniciado_em) return { etapa: "fila" };
+  // 14/11/2026: a lâmina que voltou para a fila esperando (a capa, uma nova tentativa) mostra "na fila" com o
+  // motivo que o servidor gravou, em vez de "gerando" por minutos. O início não muda: ao voltar a gerar, o
+  // cronômetro segue de onde estava.
+  if (i.status === "fila" && i.etapa === "gerar" && i.aviso) return { etapa: "fila", detalhe: i.aviso };
   if (i.etapa === "fundo") return { etapa: "gerando", detalhe: "Fundo contínuo" };
   return { etapa: "gerando" };
+}
+
+/** Linha sem data nenhuma (não deveria existir): o início é a primeira vez que a tela a viu, e não muda a cada leitura. */
+const primeiraVez: Record<string, number> = {};
+
+/**
+ * Início da lâmina: quando o servidor começou (iniciado_em) ou, antes disso, quando o pedido entrou
+ * (criado_em). Nunca a hora da leitura: reler a fila, uma nova tentativa ou a espera da capa não recomeçam o cronômetro.
+ */
+export function inicioDoItem(i: Pick<ItemNaFila, "id" | "iniciado_em" | "criado_em">, agora = Date.now()): number {
+  const desde = Date.parse(i.iniciado_em || i.criado_em);
+  if (isFinite(desde)) return desde;
+  if (!primeiraVez[i.id]) primeiraVez[i.id] = agora;
+  return primeiraVez[i.id];
 }
 
 /** Andamento por lâmina, lido do servidor (o mesmo formato do indicador da prancheta). */
@@ -121,8 +139,7 @@ export function andamentoDaFila(itens: ItemNaFila[]): Record<number, AndamentoDa
   for (const i of itens) {
     if (!estaAtivo(i)) continue;
     const { etapa, detalhe } = etapaNaPrancheta(i);
-    const desde = Date.parse(i.iniciado_em || i.criado_em);
-    saida[i.ordem] = { etapa, desde: isFinite(desde) ? desde : Date.now(), ...(detalhe ? { detalhe } : {}) };
+    saida[i.ordem] = { etapa, desde: inicioDoItem(i), ...(detalhe ? { detalhe } : {}) };
   }
   return saida;
 }
@@ -157,8 +174,25 @@ export function mudancasDaFila(antes: ItemNaFila[] | null, depois: ItemNaFila[],
   return saida;
 }
 
-/** O passo está parado (corrente do servidor quebrou) e a vigia pode empurrar? */
-export function precisaDeEmpurrao(itens: ItemNaFila[], userId: string | null | undefined, agora = Date.now()): boolean {
+/** Trava vencida há mais que isto numa linha de OUTRA pessoa: o painel chama a função para a vigia limpar. */
+export const FOLGA_DA_LIMPEZA_MS = 30_000;
+/** Quantas vezes o mesmo painel pede a limpeza da MESMA linha de outra pessoa (a função antiga não limpa: sem laço). */
+export const MAX_PEDIDOS_DE_LIMPEZA = 3;
+
+/** Linhas "rodando" de OUTRA pessoa com a trava vencida há mais que a folga (a vigia do servidor resolve). */
+export function presasDeOutros(itens: ItemNaFila[], userId: string | null | undefined, agora = Date.now()): string[] {
+  if (!userId) return [];
+  return itens
+    .filter((i) => {
+      if (i.status !== "rodando" || i.pedido_por === userId) return false;
+      const trava = i.trava_ate ? Date.parse(i.trava_ate) : NaN;
+      return isFinite(trava) && agora - trava > FOLGA_DA_LIMPEZA_MS;
+    })
+    .map((i) => i.id);
+}
+
+/** O passo de quem está logado está parado (a corrente do servidor quebrou)? */
+export function meuPassoParado(itens: ItemNaFila[], userId: string | null | undefined, agora = Date.now()): boolean {
   if (!userId) return false;
   return itens.some((i) => {
     if (i.pedido_por !== userId) return false;
@@ -170,6 +204,17 @@ export function precisaDeEmpurrao(itens: ItemNaFila[], userId: string | null | u
     const proxima = Date.parse(i.proxima_em || i.criado_em);
     return isFinite(proxima) && agora - proxima > PARADO_HA_MS;
   });
+}
+
+/**
+ * O passo está parado (corrente do servidor quebrou) e a vigia pode empurrar?
+ *
+ * 14/11/2026: linha "rodando" com a trava vencida, de QUALQUER pessoa, também pede a chamada. O processar_fila
+ * começa pela vigia do servidor, que limpa o que ficou preso de todo mundo (sem gerar nada); o passo em si
+ * continua só o de quem está logado.
+ */
+export function precisaDeEmpurrao(itens: ItemNaFila[], userId: string | null | undefined, agora = Date.now()): boolean {
+  return meuPassoParado(itens, userId, agora) || presasDeOutros(itens, userId, agora).length > 0;
 }
 
 export interface GeracaoDoCliente {
@@ -444,12 +489,16 @@ export function useGeracoesEmAndamento(ativo: boolean, userId: string | null | u
     },
   });
   const ultimoEmpurrao = useRef(0);
+  // Limpezas já pedidas por linha de outra pessoa: com teto, para não chamar sem fim se a função não limpar.
+  const limpezas = useRef<Record<string, number>>({});
   useEffect(() => {
     const d = q.data;
     if (!d || !d.itens.length) return;
     const agora = Date.now();
     if (agora - ultimoEmpurrao.current < INTERVALO_DO_EMPURRAO_MS) return;
-    if (!precisaDeEmpurrao(d.itens, userId, agora)) return;
+    const alheias = presasDeOutros(d.itens, userId, agora).filter((id) => (limpezas.current[id] || 0) < MAX_PEDIDOS_DE_LIMPEZA);
+    if (!meuPassoParado(d.itens, userId, agora) && !alheias.length) return;
+    for (const id of alheias) limpezas.current[id] = (limpezas.current[id] || 0) + 1;
     ultimoEmpurrao.current = agora;
     void empurrarFila();
   }, [q.data, userId]);
