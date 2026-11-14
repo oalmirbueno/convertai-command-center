@@ -75,6 +75,9 @@ const CAIXA = [
   { de: "Contabilidade", endereco: "", assunto: "Documentos do mês", trecho: "Precisamos dos extratos até sexta para fechar o período", hora: "Ontem" },
 ];
 
+/** Os endereços que correm na faixa: exemplos de caixas de uma empresa. */
+const ENDERECOS = ["vendas", "financeiro", "contato", "comercial", "atendimento", "diretoria", "compras", "suporte"];
+
 const DORES: Array<{ forte: string; resto: string }> = [
   { forte: "Endereço pessoal", resto: "passa imagem de negócio improvisado" },
   { forte: "A proposta cai no spam", resto: "e o cliente nem fica sabendo" },
@@ -125,6 +128,36 @@ export default function EmailLanding() {
   const p = precosProntos(precos.data) ? precos.data : null;
   const [caixas, setCaixas] = useState(5);
   const [corte, setCorte] = useState(50);
+  const compara = useRef<HTMLDivElement>(null);
+  const mexeuNaBarra = useRef(false);
+  useEffect(() => {
+    const el = compara.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    let relogio = 0;
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (!entradas.some((e) => e.isIntersecting)) return;
+        observador.disconnect();
+        // Vai até um lado, até o outro e volta ao meio: 2,4 segundos, e para se a pessoa pegar a barra.
+        const inicio = Date.now();
+        relogio = window.setInterval(() => {
+          const t = (Date.now() - inicio) / 2400;
+          if (t >= 1 || mexeuNaBarra.current) {
+            window.clearInterval(relogio);
+            if (!mexeuNaBarra.current) setCorte(50);
+            return;
+          }
+          setCorte(Math.round(50 - 26 * Math.sin(t * Math.PI * 2)));
+        }, 32);
+      },
+      { threshold: 0.55 },
+    );
+    observador.observe(el);
+    return () => {
+      observador.disconnect();
+      window.clearInterval(relogio);
+    };
+  }, []);
   const tocou = useRef(false);
   // A calculadora começa no número de caixas que a mensalidade já cobre.
   useEffect(() => {
@@ -202,18 +235,25 @@ export default function EmailLanding() {
         {/* Atenção: a promessa, com gente de verdade e o e-mail chegando. */}
         <section className="el-heroi">
           <div className="el-caixa el-heroi-grade">
-            <div className="el-heroi-texto el-entra">
+            <div className="el-heroi-texto">
               <h1 className="el-h1">
-                E-mail com o nome da sua empresa, <em>chegando na caixa de entrada</em>
+                <span className="el-entra" style={{ display: "block" }}>
+                  E-mail com o nome da sua empresa,
+                </span>{" "}
+                <em className="el-entra" style={{ display: "block", animationDelay: "140ms" }}>
+                  chegando na caixa de entrada
+                </em>
               </h1>
-              <p className="el-sub">{TEXTO.promessa}</p>
-              <div className="el-acoes">
+              <p className="el-sub el-entra" style={{ animationDelay: "280ms" }}>
+                {TEXTO.promessa}
+              </p>
+              <div className="el-acoes el-entra" style={{ animationDelay: "400ms" }}>
                 <Pedir para={destino} />
                 <a href="#precos" className="el-botao-vazio">
                   Ver os preços
                 </a>
               </div>
-              <ul className="el-garantias">
+              <ul className="el-garantias el-entra" style={{ animationDelay: "520ms" }}>
                 {["Migração feita por nós", "Sem ficar fora do ar", "Sem cobrança no pedido"].map((g) => (
                   <li key={g}>
                     <Check size={16} strokeWidth={2.6} aria-hidden="true" />
@@ -276,6 +316,19 @@ export default function EmailLanding() {
             </div>
           </div>
         </section>
+
+        <div className="el-faixa" aria-hidden="true">
+          <div className="el-faixa-trilho">
+            {[0, 1].map((volta) =>
+              ENDERECOS.map((e) => (
+                <span key={`${volta}-${e}`}>
+                  <Mail size={18} strokeWidth={TRACO} />
+                  <b>{e}</b>@suaempresa.com.br
+                </span>
+              )),
+            )}
+          </div>
+        </div>
 
         {/* Desejo: o notebook abre, a tela acende, o celular liga e o aviso chega. */}
         <section className="el-secao el-centro">
@@ -356,7 +409,7 @@ export default function EmailLanding() {
               Arraste e veja <em>a diferença</em>
             </h2>
             <p className="el-lead el-r">{TEXTO.compara}</p>
-            <div className="el-compara el-r" style={{ textAlign: "left" }} data-comparacao-de-arrastar="">
+            <div ref={compara} className="el-compara el-r" style={{ textAlign: "left" }} data-comparacao-de-arrastar="">
               <div className="el-lado el-lado-depois">
                 <span className="el-lado-rotulo">Profissional</span>
                 <div className="el-carta">
@@ -403,7 +456,10 @@ export default function EmailLanding() {
                 min={6}
                 max={94}
                 value={corte}
-                onChange={(e) => setCorte(Math.max(6, Math.min(94, Number(e.target.value) || 50)))}
+                onChange={(e) => {
+                  mexeuNaBarra.current = true;
+                  setCorte(Math.max(6, Math.min(94, Number(e.target.value) || 50)));
+                }}
                 aria-label="Arraste para comparar o e-mail de hoje com o e-mail profissional"
                 data-barra-de-comparar=""
               />
@@ -545,7 +601,7 @@ export default function EmailLanding() {
           <div className="el-oferta-grade">
             <div>
               <h2 className="el-h2">
-                O e-mail completo para <em>a sua equipe vender mais</em>
+                O e-mail completo para <em className="el-quebra">a sua equipe vender mais</em>
               </h2>
               <p className="el-lead">Arraste a barra e escolha quantas caixas a empresa precisa. A conta aparece na hora</p>
               <ul className="el-barras el-barras-escuras">
@@ -578,7 +634,7 @@ export default function EmailLanding() {
                     <p className="el-total-rotulo">
                       Para {conta.caixas} {conta.caixas === 1 ? "caixa" : "caixas"}
                     </p>
-                    <span className="el-total-valor" data-mensal-do-email="">
+                    <span key={conta.mensal} className="el-total-valor el-pulo" data-mensal-do-email="">
                       {reais(conta.mensal)}
                       <small>por mês</small>
                     </span>
