@@ -71,7 +71,13 @@ O Codex revisou `1215682` e confirmou que os dois P1 anteriores foram corrigidos
 
 **P1-4: a aba B podia gravar o par velho por cima do novo.** B recebia a sessão `t0` sem rede; A terminava e gravava `t1`; o SDK de B gravava `t0` de novo. A proteção só olhava o mapa `trocados` da própria aba. Correção: ao registrar a troca, grava também uma impressão curta do token velho no `localStorage` (`aceleriq-auth-tokens-trocados`, sem o token em si, validade de 10 min). Qualquer aba recusa gravar um token já trocado.
 
-Testes unitários cobrem os dois casos. O P2 sem `navigator.locks` continua residual.
+Testes unitários cobrem os dois casos.
+
+**P1-5 (segunda revisão, aba suspensa) e P1-6 (TTL de 10 min):** o Codex mostrou que o pulso não roda se a aba fica suspensa (timers parados) e que, depois de 10 min, a impressão compartilhada some e o par velho poderia voltar. Correção:
+- a renovação segura uma trava HTTP própria (`aceleriq-auth-renovacao-em-voo`), diferente da trava do login, até o pedido terminar. Mesmo com a aba suspensa e a marca vencida, outra aba vê a trava e não reenvia. A trava do login continua sendo solta aos 8 s, então envio e `getSession` não travam;
+- `setItem` também recusa um par com `expires_at` menor ou igual ao que já está gravado (token velho não sobrescreve o novo, mesmo depois do TTL da impressão). Login ou sessão nova sem `expires_at` não entram nessa regra.
+
+Testes: aba suspensa sem pulso/marca, outra aba não manda POST; `setItem` do par velho depois de limpar a lista compartilhada não sobrescreve. O P2 sem `navigator.locks` continua residual (aí valem a marca e o pulso).
 
 ## O que muda (só front e testes)
 

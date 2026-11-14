@@ -266,6 +266,8 @@ export const INTERVALO_DA_MARCA_MS = 20_000;
 export const CHAVE_DOS_TROCADOS = "aceleriq-auth-tokens-trocados";
 /** Depois disso, a impressão some; se a aba morreu, as outras voltam a poder gravar. */
 export const VALIDADE_DO_TROCADO_MS = 10 * 60 * 1000;
+/** Trava só da renovação HTTP: fica presa até a resposta, mesmo depois de soltar a trava do login. */
+export const NOME_DA_TRAVA_DE_RENOVACAO = "aceleriq-auth-renovacao-em-voo";
 /** Folga mínima do access token para responder com ele sem ir ao servidor. */
 const FOLGA_DO_TOKEN_MS = 10_000;
 
@@ -319,6 +321,39 @@ function impressao(token: string): string {
 function localStorageOuNada(): Storage | null {
   try {
     return typeof localStorage !== "undefined" ? localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+type LocksDoNavegador = {
+  request: (
+    nome: string,
+    opcoes: Record<string, unknown>,
+    fn: (lock: unknown) => Promise<unknown>,
+  ) => Promise<unknown>;
+};
+
+function locksDoNavegador(): LocksDoNavegador | null {
+  const locks = typeof navigator !== "undefined" ? (navigator as unknown as { locks?: LocksDoNavegador }).locks : undefined;
+  return locks && typeof locks.request === "function" ? locks : null;
+}
+
+/** Outra aba (ou esta, em outro fluxo) ainda segura a trava da renovação HTTP? */
+async function travaDeRenovacaoOcupada(): Promise<boolean> {
+  const locks = locksDoNavegador();
+  if (!locks) return false;
+  let ocupada = false;
+  await locks.request(NOME_DA_TRAVA_DE_RENOVACAO, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+    ocupada = !lock;
+  });
+  return ocupada;
+}
+
+function sessaoDoValor(valor: string): SessaoGuardada | null {
+  try {
+    const v = JSON.parse(valor) as SessaoGuardada;
+    return v && typeof v === "object" ? v : null;
   } catch {
     return null;
   }
@@ -469,8 +504,9 @@ export type PedidoDeRenovacao = {
  *  - token já trocado neste navegador: devolve o par novo, sem rede;
  *  - outra renovação no ar (esta aba): espera ela até o prazo e decide de
  *    novo; passou do prazo, responde sem rede (responderSemRede);
- *  - outra aba soltou a trava com este token no ar: responde sem rede;
- *  - senão manda. Se passar do prazo, solta quem espera com falha de rede e
+ *  - outra aba soltou a trava com este token no ar (marca ou trava HTTP): responde sem rede;
+ *  - senão manda, segurando a trava da renovação até o HTTP terminar (não depende do pulso);
+ *    se passar do prazo, solta quem espera com falha de rede e
  *    o pedido continua; quando a resposta chegar, grava o par novo (se o
  *    storage ainda tiver o token velho) e registra a troca.
  */
@@ -496,7 +532,9 @@ export async function renovarSemDuplicar(p: PedidoDeRenovacao): Promise<Response
       }
       return responderSemRede(p.storage, p.chave);
     }
-    if (outraAbaRenovando(p.token)) return responderSemRede(p.storage, p.chave);
+    if (outraAbaRenovando(p.token) || (await travaDeRenovacaoOcupada())) return responderSemRede(p.storage, p.chave);
+    // Depois do await, outra renovação desta aba pode ter começado.
+    if (vooAtual) continue;
     return enviarUmaRenovacao(p, prazo);
   }
 }
@@ -505,17 +543,38 @@ function enviarUmaRenovacao(p: PedidoDeRenovacao, prazo: number): Promise<Respon
   let terminar: () => void = () => undefined;
   const voo: Voo = { token: p.token, desde: Date.now(), fim: new Promise<void>((ok) => (terminar = ok)), soltou: false };
   vooAtual = voo;
-  const pedido = Promise.resolve()
-    .then(() => p.mandar(p.token))
-    .then(async (resposta) => {
-      await observarRespostaDeRenovacao(p.token, resposta);
-      if (resposta.ok) {
-        const nova = await sessaoDaResposta(resposta);
-        if (nova) {
-          registrarTroca(p.token, nova);
-          if (voo.soltou) await gravarSeAindaForOVelho(p.storage, p.chave, p.token, nova);
-        }
+  const observarEGravar = async (resposta: Response) => {
+    await observarRespostaDeRenovacao(p.token, resposta);
+    if (resposta.ok) {
+      const nova = await sessaoDaResposta(resposta);
+      if (nova) {
+        registrarTroca(p.token, nova);
+        if (voo.soltou) await gravarSeAindaForOVelho(p.storage, p.chave, p.token, nova);
       }
+    }
+    return resposta;
+  };
+
+  const mandarComTrava = async (): Promise<Response | "ocupada"> => {
+    const locks = locksDoNavegador();
+    const mandar = () => p.mandar(p.token).then(observarEGravar);
+    if (!locks) return mandar();
+    // Segura a trava até o HTTP terminar (mesmo depois de soltar a trava do login e com a aba suspensa, sem pulso).
+    const resultado = await locks.request(
+      NOME_DA_TRAVA_DE_RENOVACAO,
+      { mode: "exclusive", ifAvailable: true },
+      async (lock) => {
+        if (!lock) return "ocupada" as const;
+        return mandar();
+      },
+    );
+    return (resultado as Response | "ocupada" | undefined) ?? "ocupada";
+  };
+
+  const pedido = Promise.resolve()
+    .then(mandarComTrava)
+    .then((resposta) => {
+      if (resposta === "ocupada") return responderSemRede(p.storage, p.chave);
       return resposta;
     })
     .finally(() => {
@@ -598,10 +657,27 @@ export function protegerSessaoGuardada(storage: PreviewAuthStorage | undefined):
   if (!storage) return storage;
   const protegido: PreviewAuthStorage = {
     getItem: (chave) => storage.getItem(chave),
-    setItem: (chave, valor) => {
-      if (/-auth-token$/.test(chave) && tokenJaFoiTrocado(refreshTokenDoValor(valor))) {
-        console.warn("[Auth] gravação de token já trocado ignorada; o par novo continua no storage.");
-        return;
+    setItem: async (chave, valor) => {
+      if (/-auth-token$/.test(chave)) {
+        const nova = sessaoDoValor(valor);
+        const tokenNovo = nova?.refresh_token || refreshTokenDoValor(valor);
+        if (tokenJaFoiTrocado(tokenNovo)) {
+          console.warn("[Auth] gravação de token já trocado ignorada; o par novo continua no storage.");
+          return;
+        }
+        const atual = await lerSessaoGuardada(storage, chave);
+        if (
+          atual?.refresh_token &&
+          tokenNovo &&
+          atual.refresh_token !== tokenNovo &&
+          sessaoEstaViva(atual) &&
+          typeof nova?.expires_at === "number" &&
+          typeof atual.expires_at === "number" &&
+          nova.expires_at <= atual.expires_at
+        ) {
+          console.warn("[Auth] par velho não sobrescreve a sessão mais nova no storage.");
+          return;
+        }
       }
       return storage.setItem(chave, valor);
     },

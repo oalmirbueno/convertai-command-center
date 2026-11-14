@@ -22,10 +22,35 @@ import {
 
 const CHAVE_PADRAO = "sb-x-auth-token";
 
+function lockManagerFalso() {
+  const filas = new Map<string, Promise<unknown>>();
+  const ocupadas = new Set<string>();
+  return {
+    request(nome: string, opcoes: { ifAvailable?: boolean; signal?: AbortSignal }, fn: (lock: unknown) => Promise<unknown>) {
+      if (opcoes.ifAvailable && ocupadas.has(nome)) return fn(null);
+      const antes = filas.get(nome) || Promise.resolve();
+      const vez = antes.then(async () => {
+        ocupadas.add(nome);
+        try {
+          return await fn({ name: nome });
+        } finally {
+          ocupadas.delete(nome);
+        }
+      });
+      filas.set(nome, vez.catch(() => undefined));
+      return vez;
+    },
+  };
+}
+
+const travaOriginal = Object.getOwnPropertyDescriptor(globalThis.navigator, "locks");
+
 afterEach(() => {
   esquecerTokensMortos();
   esquecerRenovacaoEmVooParaTeste();
   localStorage.removeItem(CHAVE_PADRAO);
+  if (travaOriginal) Object.defineProperty(globalThis.navigator, "locks", travaOriginal);
+  else delete (globalThis.navigator as unknown as { locks?: unknown }).locks;
   vi.useRealTimers();
 });
 
@@ -228,6 +253,42 @@ describe("renovação do token não é cancelada (14/11: 'context canceled' derr
       removeItem: (k: string) => void localStorage.removeItem(k),
     })!;
     storageB.setItem(CHAVE_PADRAO, JSON.stringify(velha));
+    expect(JSON.parse(localStorage.getItem(CHAVE_PADRAO) || "{}").refresh_token).toBe("r2");
+  });
+
+  it("aba suspensa (sem pulso, marca vencida) não deixa outra aba reenviar: a trava HTTP continua presa", async () => {
+    Object.defineProperty(globalThis.navigator, "locks", { value: lockManagerFalso(), configurable: true });
+    vi.useFakeTimers();
+    localStorage.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a1", refresh_token: "r1", expires_at: Math.floor(Date.now() / 1000) + 600, user: { id: "u1" } }));
+    const base = vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch;
+    const f = criarFetchComPrazo(base, 30);
+    const primeira = f(RENOVAR, corpo("r1")).catch((e: Error) => e);
+    await vi.advanceTimersByTimeAsync(PRAZO_PARA_SOLTAR_RENOVACAO_MS + 10);
+    expect(await primeira).toBeInstanceOf(TypeError);
+    expect(base).toHaveBeenCalledTimes(1);
+
+    // Simula aba A suspensa: mapa local e marca somem, pulso para; o HTTP (e a trava) seguem.
+    esquecerRenovacaoEmVooParaTeste();
+    expect(localStorage.getItem(CHAVE_DA_MARCA_EM_VOO)).toBeNull();
+
+    const outra = criarFetchComPrazo(vi.fn(async () => new Response("{}", { status: 500 })) as unknown as typeof fetch);
+    localStorage.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a1", refresh_token: "r1", expires_at: Math.floor(Date.now() / 1000) + 600, user: { id: "u1" } }));
+    const r = await outra(RENOVAR, corpo("r1"));
+    expect((await r.json()).access_token).toBe("a1");
+    expect(base).toHaveBeenCalledTimes(1);
+  });
+
+  it("depois de 10 min, setItem do par velho (expires_at menor) ainda não sobrescreve o novo", async () => {
+    const agora = Math.floor(Date.now() / 1000);
+    localStorage.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a2", refresh_token: "r2", expires_at: agora + 3600, user: { id: "u1" } }));
+    esquecerMapaDeTrocasParaTeste();
+    localStorage.removeItem(CHAVE_DOS_TROCADOS);
+    const s = protegerSessaoGuardada({
+      getItem: (k: string) => localStorage.getItem(k),
+      setItem: (k: string, v: string) => localStorage.setItem(k, v),
+      removeItem: (k: string) => void localStorage.removeItem(k),
+    })!;
+    await s.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a1", refresh_token: "r1", expires_at: agora + 100, user: { id: "u1" } }));
     expect(JSON.parse(localStorage.getItem(CHAVE_PADRAO) || "{}").refresh_token).toBe("r2");
   });
 
