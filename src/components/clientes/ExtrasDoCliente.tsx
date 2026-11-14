@@ -38,7 +38,7 @@ const numero = (t: string) => Number(String(t).replace(/\./g, "").replace(",", "
 
 function mensagemDoErro(e: unknown): string {
   const m = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
-  if (m.includes("PARCELAS_NAO_FECHAM")) return "As parcelas não somam o valor total.";
+  if (m.includes("PARCELAS_PASSAM_DO_TOTAL")) return "As parcelas passam do valor total.";
   if (m.includes("COMISSAO_JA_LANCADA")) return "A comissão deste mês já foi lançada.";
   if (m.includes("EXTRA_JA_INICIADO")) return "Este extra já está sendo cobrado.";
   if (m.includes("SO_ADMIN")) return "Só o administrador mexe nos extras.";
@@ -54,14 +54,14 @@ const COBRANCAS: { valor: CobrancaDoExtra; rotulo: string }[] = [
 export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }: { clientId: string; nomeDoCliente?: string; mensalidade?: number }) {
   const qc = useQueryClient();
   const [adicionando, setAdicionando] = useState(false);
-  const [acao, setAcao] = useState<{ tipo: "iniciar" | "comissao" | "encerrar"; id: string } | null>(null);
+  const [acao, setAcao] = useState<{ tipo: "iniciar" | "comissao" | "encerrar" | "editar" | "cobrancas"; id: string } | null>(null);
 
   const dados = useQuery({
     queryKey: ["extras-do-cliente", clientId],
     queryFn: async () => {
       const [extras, cobrancas] = await Promise.all([
         (supabase as any).from("client_extras").select("*").eq("client_id", clientId).order("created_at", { ascending: true }),
-        (supabase as any).from("billing").select("id, extra_id, amount, paid_amount, status, due_date, paid_date, description").eq("client_id", clientId).not("extra_id", "is", null).order("due_date", { ascending: true }),
+        (supabase as any).from("billing").select("id, extra_id, amount, paid_amount, status, due_date, paid_date, description, competencia").eq("client_id", clientId).not("extra_id", "is", null).order("due_date", { ascending: true }),
       ]);
       if (extras.error) throw extras.error;
       return { extras: (extras.data ?? []) as Extra[], cobrancas: (cobrancas.data ?? []) as CobrancaDeExtra[] };
@@ -102,7 +102,7 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
         <ul className="divide-y divide-border border-y border-border">
           {extras.map((e) => {
             const doExtra = cobrancas.filter((c) => c.extra_id === e.id);
-            const unico = andamentoDoUnico(doExtra);
+            const unico = andamentoDoUnico(doExtra, Number(e.valor) || 0);
             const encerrado = e.status === "encerrado";
             return (
               <li key={e.id} className={juntar("min-w-0 py-2.5", encerrado && "opacity-60")} data-extra={e.id}>
@@ -117,18 +117,24 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-0.5")}>
                   {e.cobranca === "mensal" && (e.inicio ? `Cobra desde ${dataCurta(e.inicio)}, todo dia ${e.dia_vencimento ?? Number(e.inicio.slice(8, 10))}.` : "Ainda não começou a cobrar: defina a data quando entregar.")}
-                  {e.cobranca === "unico" && `Recebido ${dinheiro(unico.pago)} · falta ${dinheiro(unico.aberto)}${unico.proxima ? ` · próxima em ${dataCurta(unico.proxima)}` : ""}.`}
+                  {e.cobranca === "unico" && `Recebido ${dinheiro(unico.pago)} · a receber ${dinheiro(unico.aberto)}${unico.proxima ? ` (próxima em ${dataCurta(unico.proxima)})` : ""}${unico.aLancar > 0 ? ` · falta lançar ${dinheiro(unico.aLancar)}` : ""}.`}
                   {e.cobranca === "comissao" && `Sobre ${e.base_da_comissao || "o resultado do mês"}. ${doExtra.length ? `${doExtra.length} ${doExtra.length === 1 ? "mês lançado" : "meses lançados"}.` : "Nenhum mês lançado ainda."}`}
                   {e.observacao ? ` ${e.observacao}` : ""}
                 </p>
-                {!encerrado && (
-                  <div className="-m-1 mt-1 flex flex-wrap [&>*]:m-1">
+                <div className="-m-1 mt-1 flex flex-wrap [&>*]:m-1">
+                  <button type="button" className={juntar(botao.secundario, "h-8")} aria-expanded={acao?.id === e.id && acao.tipo === "cobrancas"} onClick={() => setAcao(acao?.id === e.id && acao.tipo === "cobrancas" ? null : { tipo: "cobrancas", id: e.id })} data-ver-cobrancas="">
+                    Cobranças ({doExtra.length})
+                  </button>
+                  {!encerrado && <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setAcao({ tipo: "editar", id: e.id })} data-editar-extra="">Editar</button>}
+                  {!encerrado && (<>
                     {e.status === "aguardando" && <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setAcao({ tipo: "iniciar", id: e.id })}>Começar a cobrar</button>}
                     {e.cobranca === "comissao" && <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setAcao({ tipo: "comissao", id: e.id })}>Lançar comissão do mês</button>}
                     <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[13px]")} onClick={() => setAcao({ tipo: "encerrar", id: e.id })}>Encerrar</button>
-                  </div>
-                )}
-                {acao && acao.id === e.id && <AcaoDoExtra extra={e} tipo={acao.tipo} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
+                  </>)}
+                </div>
+                {acao && acao.id === e.id && acao.tipo === "editar" && <EditarExtra extra={e} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
+                {acao && acao.id === e.id && acao.tipo === "cobrancas" && <CobrancasDoExtra extra={e} cobrancas={doExtra} sugestao={e.cobranca === "unico" ? unico.aLancar : 0} aoMudar={atualizar} />}
+                {acao && acao.id === e.id && acao.tipo !== "editar" && acao.tipo !== "cobrancas" && <AcaoDoExtra extra={e} tipo={acao.tipo} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
               </li>
             );
           })}
@@ -196,6 +202,168 @@ function AcaoDoExtra({ extra, tipo, aoFechar, aoMudar }: { extra: Extra; tipo: "
   );
 }
 
+/** Editar o extra: nome, tipo, valor, dia do vencimento, percentual e observação. O que ainda não foi pago acompanha. */
+function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () => void; aoMudar: () => Promise<void> }) {
+  const paraCampo = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
+  const [nome, setNome] = useState(extra.nome);
+  const [categoria, setCategoria] = useState(extra.categoria);
+  const [valor, setValor] = useState(paraCampo(extra.valor));
+  const [percentual, setPercentual] = useState(paraCampo(extra.percentual));
+  const [baseDaComissao, setBaseDaComissao] = useState(extra.base_da_comissao ?? "");
+  const [dia, setDia] = useState(extra.dia_vencimento ? String(extra.dia_vencimento) : "");
+  const [observacao, setObservacao] = useState(extra.observacao ?? "");
+  const [ocupado, setOcupado] = useState(false);
+  const comissao = extra.cobranca === "comissao";
+  const falta = nome.trim().length < 2 ? "Escreva o nome." : comissao ? (numero(percentual) > 0 && numero(percentual) <= 100 ? null : "Diga o percentual.") : numero(valor) > 0 ? null : "Diga o valor.";
+
+  const salvar = async () => {
+    if (ocupado || falta) return;
+    setOcupado(true);
+    try {
+      const { error } = await (supabase as any).rpc("extra_editar", {
+        _id: extra.id,
+        _dados: { nome: nome.trim(), categoria, valor: comissao ? null : numero(valor), percentual: comissao ? numero(percentual) : null, base_da_comissao: baseDaComissao, dia_vencimento: extra.cobranca === "mensal" && Number(dia) >= 1 ? Number(dia) : null, observacao },
+      });
+      if (error) throw error;
+      toast.success(`${nome.trim()} atualizado. O Financeiro já acompanha.`);
+      await aoMudar();
+      aoFechar();
+    } catch (e) {
+      toast.error(mensagemDoErro(e));
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 rounded-md bg-secondary/60 px-3 py-3" data-editar-extra-form="">
+      <GrupoDeCampos colunas={2}>
+        <CampoDeFormulario rotulo="Nome" largo>
+          <input className={campo} value={nome} maxLength={120} onChange={(e) => setNome(e.target.value)} />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Tipo">
+          <select className={campo} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+            {CATEGORIAS.map((c) => <option key={c.valor} value={c.valor}>{c.rotulo}</option>)}
+          </select>
+        </CampoDeFormulario>
+        {comissao ? (
+          <>
+            <CampoDeFormulario rotulo="Percentual (%)">
+              <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={percentual} onChange={(e) => setPercentual(e.target.value)} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Sobre o quê" largo>
+              <input className={campo} value={baseDaComissao} maxLength={160} onChange={(e) => setBaseDaComissao(e.target.value)} />
+            </CampoDeFormulario>
+          </>
+        ) : (
+          <CampoDeFormulario rotulo={extra.cobranca === "mensal" ? "Valor por mês (R$)" : "Valor total (R$)"} apoio={extra.cobranca === "mensal" ? "Vale para o que ainda não foi pago." : "As parcelas você ajusta em Cobranças."}>
+            <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} data-editar-valor="" />
+          </CampoDeFormulario>
+        )}
+        {extra.cobranca === "mensal" && (
+          <CampoDeFormulario rotulo="Dia do vencimento">
+            <input className={juntar(campo, "tabular-nums")} type="number" min={1} max={31} value={dia} onChange={(e) => setDia(e.target.value)} />
+          </CampoDeFormulario>
+        )}
+        <CampoDeFormulario rotulo="Observação" largo>
+          <input className={campo} value={observacao} maxLength={200} onChange={(e) => setObservacao(e.target.value)} />
+        </CampoDeFormulario>
+      </GrupoDeCampos>
+      <div className="-m-1 mt-2 flex flex-wrap items-center [&>*]:m-1">
+        <button type="button" className={juntar(botao.primario, "h-8")} disabled={ocupado || !!falta} onClick={() => void salvar()}>{ocupado ? "Salvando…" : "Salvar"}</button>
+        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={aoFechar}>Cancelar</button>
+        {falta && <span className={juntar(texto.auxiliar, "text-warning")}>{falta}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** As cobranças do extra, uma por linha, todas editáveis: valor, vencimento, pago ou não. E adicionar mais uma. */
+function CobrancasDoExtra({ extra, cobrancas, sugestao, aoMudar }: { extra: Extra; cobrancas: CobrancaDeExtra[]; sugestao: number; aoMudar: () => Promise<void> }) {
+  const [aberta, setAberta] = useState<string | null>(null);
+  const encerrado = extra.status === "encerrado";
+  return (
+    <div className="mt-2 rounded-md bg-secondary/60 px-3 py-2" data-cobrancas-do-extra="">
+      {cobrancas.length === 0 && <p className={texto.auxiliar}>Nenhuma cobrança lançada ainda.</p>}
+      <ul className="min-w-0 text-[13px]">
+        {cobrancas.map((c) => (
+          <li key={c.id} className="min-w-0 py-1" data-cobranca={c.id}>
+            <div className="flex min-w-0 items-baseline">
+              <span className="w-24 shrink-0 tabular-nums text-muted-foreground">{dataCurta(c.due_date)}</span>
+              <span className="mr-2 min-w-0 truncate text-foreground">{(c.description ?? "").replace(`${extra.nome} · `, "") || "cobrança"}</span>
+              <span className="ml-auto shrink-0 tabular-nums text-foreground">{dinheiro(c.amount)}</span>
+              <span className={juntar("ml-2 w-28 shrink-0 text-right", c.status === "paid" ? "text-success" : "text-muted-foreground")}>{c.status === "paid" ? `pago ${dataCurta(c.paid_date).slice(0, 5)}` : "a receber"}</span>
+              <button type="button" className={juntar(botao.discreto, "ml-1 h-7 px-2 text-[13px]")} onClick={() => setAberta(aberta === c.id ? null : c.id)}>Editar</button>
+            </div>
+            {aberta === c.id && <FormDaCobranca extra={extra} cobranca={c} aoFechar={() => setAberta(null)} aoMudar={aoMudar} />}
+          </li>
+        ))}
+      </ul>
+      {!encerrado && extra.cobranca !== "comissao" && (
+        aberta === "nova"
+          ? <FormDaCobranca extra={extra} valorInicial={sugestao} aoFechar={() => setAberta(null)} aoMudar={aoMudar} />
+          : <button type="button" className={juntar(botao.secundario, "mt-1 h-8")} onClick={() => setAberta("nova")} data-nova-cobranca="">{extra.cobranca === "unico" ? "Adicionar parcela" : "Adicionar cobrança"}</button>
+      )}
+    </div>
+  );
+}
+
+function FormDaCobranca({ extra, cobranca, valorInicial, aoFechar, aoMudar }: { extra: Extra; cobranca?: CobrancaDeExtra; valorInicial?: number; aoFechar: () => void; aoMudar: () => Promise<void> }) {
+  const [valor, setValor] = useState(cobranca ? String(cobranca.amount).replace(".", ",") : valorInicial && valorInicial > 0 ? String(valorInicial).replace(".", ",") : "");
+  const [vence, setVence] = useState(cobranca?.due_date ?? somarMeses(hoje(), 1));
+  const [paga, setPaga] = useState(cobranca?.status === "paid");
+  const [pagaEm, setPagaEm] = useState(cobranca?.paid_date ?? hoje());
+  const [ocupado, setOcupado] = useState(false);
+  // A mensalidade de um mês não se apaga por aqui: a rotina do mês criaria de novo. Para parar, encerre o extra.
+  const podeApagar = !!cobranca && !(extra.cobranca === "mensal" && cobranca.competencia);
+
+  const rodar = async (chamada: PromiseLike<{ error: unknown }>, aviso: string) => {
+    if (ocupado) return;
+    setOcupado(true);
+    try {
+      const { error } = await chamada;
+      if (error) throw error;
+      toast.success(aviso);
+      await aoMudar();
+      aoFechar();
+    } catch (e) {
+      toast.error(mensagemDoErro(e));
+    } finally {
+      setOcupado(false);
+    }
+  };
+  const salvar = () => rodar(
+    (supabase as any).rpc("extra_cobranca_salvar", { _dados: { id: cobranca?.id ?? null, extra_id: extra.id, valor: numero(valor), vencimento: vence, paga, paga_em: paga ? pagaEm : null } }),
+    cobranca ? "Cobrança atualizada." : "Cobrança adicionada. O Financeiro já foi atualizado.",
+  );
+
+  return (
+    <div className="mt-1 border-l-2 border-border py-1 pl-3" data-form-da-cobranca="">
+      <GrupoDeCampos colunas={paga ? 4 : 3}>
+        <CampoDeFormulario rotulo="Valor (R$)">
+          <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0,00" />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Vence em">
+          <input className={campo} type="date" value={vence} onChange={(e) => setVence(e.target.value)} />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Pagamento">
+          <SeletorCompacto rotulo="Pagamento" modo="segmentado" larguraTotal opcoes={[{ valor: "nao", rotulo: "Vai pagar" }, { valor: "sim", rotulo: "Já pagou" }]} valor={paga ? "sim" : "nao"} onEscolher={(v) => setPaga(v === "sim")} />
+        </CampoDeFormulario>
+        {paga && (
+          <CampoDeFormulario rotulo="Pago em">
+            <input className={campo} type="date" value={pagaEm} onChange={(e) => setPagaEm(e.target.value)} />
+          </CampoDeFormulario>
+        )}
+      </GrupoDeCampos>
+      <div className="-m-1 mt-2 flex flex-wrap [&>*]:m-1">
+        <button type="button" className={juntar(botao.primario, "h-8")} disabled={ocupado || !(numero(valor) > 0) || !vence || (paga && !pagaEm)} onClick={() => void salvar()}>{ocupado ? "Salvando…" : "Salvar"}</button>
+        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={aoFechar}>Cancelar</button>
+        {podeApagar && <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[13px] text-destructive")} disabled={ocupado} onClick={() => void rodar((supabase as any).rpc("extra_cobranca_apagar", { _id: cobranca!.id }), "Cobrança apagada.")}>Apagar</button>}
+      </div>
+    </div>
+  );
+}
+
 function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { clientId: string; nomeDoCliente?: string; aoFechar: () => void; aoSalvar: () => Promise<void> }) {
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState("outro");
@@ -210,14 +378,15 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
   const [entradaPaga, setEntradaPaga] = useState(true);
   const [entradaEm, setEntradaEm] = useState(hoje());
   const [parcelas, setParcelas] = useState("1");
+  const [restanteDepois, setRestanteDepois] = useState(false);
   const [primeiraEm, setPrimeiraEm] = useState(() => somarMeses(hoje(), 1));
   const [observacao, setObservacao] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   const total = numero(valor);
   const lista = useMemo(
-    () => (cobranca === "unico" && total > 0 ? montarParcelas({ total, entrada: numero(entrada), entradaPaga, entradaEm, parcelas: Number(parcelas) || 1, primeiraEm }) : []),
-    [cobranca, total, entrada, entradaPaga, entradaEm, parcelas, primeiraEm],
+    () => (cobranca === "unico" && total > 0 ? montarParcelas({ total, entrada: numero(entrada), entradaPaga, entradaEm, parcelas: Number(parcelas) || 1, primeiraEm, restanteDepois }) : []),
+    [cobranca, total, entrada, entradaPaga, entradaEm, parcelas, primeiraEm, restanteDepois],
   );
   const falta = conferirExtra({ nome, cobranca, valor: total, percentual: numero(percentual), comecaAgora, inicio, parcelas: lista });
 
@@ -340,6 +509,11 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
               </>
             )}
             {total > numero(entrada) && (
+              <CampoDeFormulario rotulo="O restante" largo apoio={restanteDepois ? "Fica como falta lançar. Você adiciona as parcelas depois, em Cobranças." : undefined}>
+                <SeletorCompacto rotulo="O restante" modo="segmentado" larguraTotal opcoes={[{ valor: "agora", rotulo: "Parcelar agora" }, { valor: "depois", rotulo: "Lanço depois" }]} valor={restanteDepois ? "depois" : "agora"} onEscolher={(v) => setRestanteDepois(v === "depois")} />
+              </CampoDeFormulario>
+            )}
+            {total > numero(entrada) && !restanteDepois && (
               <>
                 <CampoDeFormulario rotulo="Restante em quantas vezes">
                   <input className={juntar(campo, "tabular-nums")} type="number" min={1} max={36} value={parcelas} onChange={(e) => setParcelas(e.target.value)} />

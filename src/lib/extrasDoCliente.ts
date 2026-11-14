@@ -24,7 +24,7 @@ export type Extra = {
   created_at: string;
 };
 
-export type CobrancaDeExtra = { id: string; extra_id: string; amount: number; paid_amount: number | null; status: string; due_date: string; paid_date: string | null; description: string | null };
+export type CobrancaDeExtra = { id: string; extra_id: string; amount: number; paid_amount: number | null; status: string; due_date: string; paid_date: string | null; description: string | null; competencia?: string | null };
 
 export const CATEGORIAS: { valor: string; rotulo: string }[] = [
   { valor: "suporte", rotulo: "Suporte e manutenção" },
@@ -74,14 +74,16 @@ export function montarParcelas(dados: {
   entradaEm: string;
   parcelas: number;
   primeiraEm: string;
+  /** "O restante eu adiciono lá": lança só a entrada agora e as parcelas depois, pela lista de cobranças. */
+  restanteDepois?: boolean;
 }): ParcelaDoExtra[] {
   const total = centavos(dados.total);
   const entrada = Math.min(Math.max(0, centavos(dados.entrada)), total);
   const resto = total - entrada;
-  const n = resto > 0 ? Math.max(1, Math.floor(dados.parcelas) || 1) : 0;
+  const n = resto > 0 && !dados.restanteDepois ? Math.max(1, Math.floor(dados.parcelas) || 1) : 0;
   const lista: ParcelaDoExtra[] = [];
   if (entrada > 0) {
-    lista.push({ valor: entrada / 100, vencimento: dados.entradaEm, paga: dados.entradaPaga, paga_em: dados.entradaPaga ? dados.entradaEm : null, rotulo: n === 0 ? "pagamento único" : "entrada" });
+    lista.push({ valor: entrada / 100, vencimento: dados.entradaEm, paga: dados.entradaPaga, paga_em: dados.entradaPaga ? dados.entradaEm : null, rotulo: resto === 0 ? "pagamento único" : "entrada" });
   }
   const cada = n ? Math.floor(resto / n) : 0;
   for (let i = 0; i < n; i += 1) {
@@ -111,9 +113,8 @@ export function conferirExtra(f: {
     if (f.comecaAgora && !/^\d{4}-\d{2}-\d{2}$/.test(f.inicio)) return "Diga em que dia começa a cobrar.";
     return null;
   }
-  if (f.parcelas.length === 0) return "Diga como o valor vai ser pago.";
   if (f.parcelas.some((p) => !/^\d{4}-\d{2}-\d{2}$/.test(p.vencimento))) return "Preencha as datas do pagamento.";
-  if (centavos(f.parcelas.reduce((s, p) => s + p.valor, 0)) !== centavos(f.valor)) return "As parcelas não somam o valor total.";
+  if (centavos(f.parcelas.reduce((s, p) => s + p.valor, 0)) > centavos(f.valor)) return "As parcelas passam do valor total.";
   return null;
 }
 
@@ -128,13 +129,11 @@ export function resumoDosExtras(extras: Extra[]): { porMes: number; aguardando: 
   };
 }
 
-/** Como está o pagamento de um extra de valor único: quanto já entrou e quanto falta. */
-export function andamentoDoUnico(cobrancas: CobrancaDeExtra[]): { pago: number; aberto: number; proxima: string | null } {
+/** Como está o pagamento de um extra de valor único: quanto já entrou, quanto está agendado e quanto falta lançar. */
+export function andamentoDoUnico(cobrancas: CobrancaDeExtra[], total = 0): { pago: number; aberto: number; proxima: string | null; aLancar: number } {
   const pagas = cobrancas.filter((c) => c.status === "paid");
   const abertas = cobrancas.filter((c) => c.status !== "paid").sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
-  return {
-    pago: Math.round(pagas.reduce((s, c) => s + Number(c.paid_amount ?? c.amount), 0) * 100) / 100,
-    aberto: Math.round(abertas.reduce((s, c) => s + Number(c.amount), 0) * 100) / 100,
-    proxima: abertas[0]?.due_date ?? null,
-  };
+  const pago = Math.round(pagas.reduce((s, c) => s + Number(c.paid_amount ?? c.amount), 0) * 100) / 100;
+  const aberto = Math.round(abertas.reduce((s, c) => s + Number(c.amount), 0) * 100) / 100;
+  return { pago, aberto, proxima: abertas[0]?.due_date ?? null, aLancar: Math.max(0, Math.round((total - pago - aberto) * 100) / 100) };
 }

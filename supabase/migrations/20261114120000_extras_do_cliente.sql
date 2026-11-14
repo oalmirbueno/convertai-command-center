@@ -154,11 +154,14 @@ BEGIN
 
   IF _cobranca = 'unico' THEN
     _total := COALESCE(jsonb_array_length(_dados->'parcelas'), 0);
-    IF _total = 0 THEN RAISE EXCEPTION 'PARCELAS_OBRIGATORIAS: diga como o valor vai ser pago'; END IF;
+    -- O dono pode lançar só a entrada e deixar o restante para depois ("o restante eu adiciono lá"):
+    -- as parcelas não precisam fechar o total, só não podem passar dele.
     IF _total > 60 THEN RAISE EXCEPTION 'PARCELAS_DEMAIS'; END IF;
-    SELECT COALESCE(sum((x->>'valor')::numeric), 0) INTO _soma FROM jsonb_array_elements(_dados->'parcelas') x;
-    IF abs(_soma - _valor) > 0.01 THEN
-      RAISE EXCEPTION 'PARCELAS_NAO_FECHAM: as parcelas somam % e o valor e %', _soma, _valor;
+    IF _total > 0 THEN
+      SELECT COALESCE(sum((x->>'valor')::numeric), 0) INTO _soma FROM jsonb_array_elements(_dados->'parcelas') x;
+    END IF;
+    IF _soma - _valor > 0.01 THEN
+      RAISE EXCEPTION 'PARCELAS_PASSAM_DO_TOTAL: as parcelas somam % e o valor e %', _soma, _valor;
     END IF;
   END IF;
 
@@ -185,7 +188,7 @@ BEGIN
     IF app_private.extras_cobranca_do_mes(_e, _inicio, _paga, NULLIF(_dados->>'primeira_paga_em', '')::date, _inicio) IS NOT NULL THEN
       _criadas := 1;
     END IF;
-  ELSIF _cobranca = 'unico' THEN
+  ELSIF _cobranca = 'unico' AND _total > 0 THEN
     FOR _p IN SELECT * FROM jsonb_array_elements(_dados->'parcelas') LOOP
       _n := _n + 1;
       _paga := COALESCE((_p->>'paga')::boolean, false);
@@ -207,6 +210,118 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.extra_salvar(jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.extra_salvar(jsonb) TO authenticated;
+
+-- Edita o extra. Só muda o que vier em _dados. O que ainda não foi pago acompanha (valor e dia do
+-- mensal); o que já foi pago fica como está. O nome novo vale para todas as cobranças do extra.
+CREATE OR REPLACE FUNCTION public.extra_editar(_id uuid, _dados jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+DECLARE
+  _e public.client_extras%ROWTYPE;
+  _n public.client_extras%ROWTYPE;
+  _hoje date := (now() AT TIME ZONE 'America/Sao_Paulo')::date;
+  _acompanharam integer := 0;
+BEGIN
+  PERFORM app_private.extras_so_admin();
+  SELECT * INTO _e FROM public.client_extras WHERE id = _id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'EXTRA_NAO_ENCONTRADO'; END IF;
+
+  UPDATE public.client_extras SET
+    nome = COALESCE(NULLIF(btrim(COALESCE(_dados->>'nome', '')), ''), nome),
+    categoria = COALESCE(NULLIF(_dados->>'categoria', ''), categoria),
+    valor = CASE WHEN cobranca = 'comissao' THEN valor ELSE COALESCE(NULLIF(_dados->>'valor', '')::numeric, valor) END,
+    percentual = CASE WHEN cobranca = 'comissao' THEN COALESCE(NULLIF(_dados->>'percentual', '')::numeric, percentual) ELSE percentual END,
+    base_da_comissao = CASE WHEN _dados ? 'base_da_comissao' THEN NULLIF(btrim(COALESCE(_dados->>'base_da_comissao', '')), '') ELSE base_da_comissao END,
+    dia_vencimento = COALESCE(NULLIF(_dados->>'dia_vencimento', '')::integer, dia_vencimento),
+    observacao = CASE WHEN _dados ? 'observacao' THEN NULLIF(btrim(COALESCE(_dados->>'observacao', '')), '') ELSE observacao END,
+    updated_at = now()
+  WHERE id = _id RETURNING * INTO _n;
+  IF _n.cobranca <> 'comissao' AND _n.valor <= 0 THEN RAISE EXCEPTION 'VALOR_OBRIGATORIO'; END IF;
+
+  IF _n.nome <> _e.nome THEN
+    UPDATE public.billing SET description = _n.nome || substr(description, length(_e.nome) + 1)
+     WHERE extra_id = _id AND left(description, length(_e.nome)) = _e.nome;
+  END IF;
+  IF _n.cobranca = 'mensal' AND (_n.valor <> _e.valor OR _n.dia_vencimento IS DISTINCT FROM _e.dia_vencimento) THEN
+    UPDATE public.billing SET
+      amount = _n.valor,
+      due_date = CASE WHEN _n.dia_vencimento IS DISTINCT FROM _e.dia_vencimento AND due_date > _hoje
+                      THEN app_private.extras_vencimento(competencia, _n.dia_vencimento) ELSE due_date END
+     WHERE extra_id = _id AND status <> 'paid' AND competencia IS NOT NULL;
+    GET DIAGNOSTICS _acompanharam = ROW_COUNT;
+  END IF;
+  RETURN jsonb_build_object('id', _id, 'cobrancas_atualizadas', _acompanharam);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.extra_editar(uuid, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.extra_editar(uuid, jsonb) TO authenticated;
+
+-- Cria ou edita UMA cobrança de um extra: valor, vencimento, paga ou não e quando.
+--   _dados: { id (edita) | extra_id (cria), valor, vencimento, paga, paga_em, rotulo }
+CREATE OR REPLACE FUNCTION public.extra_cobranca_salvar(_dados jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+DECLARE
+  _id uuid := NULLIF(_dados->>'id', '')::uuid;
+  _valor numeric := NULLIF(_dados->>'valor', '')::numeric;
+  _vence date := NULLIF(_dados->>'vencimento', '')::date;
+  _paga boolean := COALESCE((_dados->>'paga')::boolean, false);
+  _paga_em date := NULLIF(_dados->>'paga_em', '')::date;
+  _rotulo text := NULLIF(btrim(COALESCE(_dados->>'rotulo', '')), '');
+  _e public.client_extras%ROWTYPE;
+BEGIN
+  PERFORM app_private.extras_so_admin();
+  IF _valor IS NULL OR _valor <= 0 THEN RAISE EXCEPTION 'VALOR_OBRIGATORIO'; END IF;
+  IF _vence IS NULL THEN RAISE EXCEPTION 'VENCIMENTO_OBRIGATORIO'; END IF;
+
+  IF _id IS NULL THEN
+    SELECT * INTO _e FROM public.client_extras WHERE id = NULLIF(_dados->>'extra_id', '')::uuid FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'EXTRA_NAO_ENCONTRADO'; END IF;
+    INSERT INTO public.billing (client_id, type, amount, status, due_date, paid_date, paid_amount, description, extra_id)
+    VALUES (_e.client_id, CASE WHEN _e.cobranca = 'unico' THEN 'one_off' ELSE 'extra' END, _valor,
+            CASE WHEN _paga THEN 'paid' ELSE 'pending' END, _vence,
+            CASE WHEN _paga THEN COALESCE(_paga_em, _vence) END,
+            CASE WHEN _paga THEN _valor END,
+            _e.nome || ' · ' || COALESCE(_rotulo, 'parcela'), _e.id)
+    RETURNING id INTO _id;
+  ELSE
+    UPDATE public.billing SET
+      amount = _valor,
+      due_date = _vence,
+      status = CASE WHEN _paga THEN 'paid' ELSE 'pending' END,
+      paid_date = CASE WHEN _paga THEN COALESCE(_paga_em, paid_date, _vence) END,
+      paid_amount = CASE WHEN _paga THEN _valor END
+     WHERE id = _id AND extra_id IS NOT NULL;
+    IF NOT FOUND THEN RAISE EXCEPTION 'COBRANCA_NAO_E_DE_EXTRA'; END IF;
+  END IF;
+  RETURN jsonb_build_object('id', _id);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.extra_cobranca_salvar(jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.extra_cobranca_salvar(jsonb) TO authenticated;
+
+-- Apaga UMA cobrança de extra (lançada errada). Só alcança cobrança ligada a extra.
+CREATE OR REPLACE FUNCTION public.extra_cobranca_apagar(_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+BEGIN
+  PERFORM app_private.extras_so_admin();
+  DELETE FROM public.billing WHERE id = _id AND extra_id IS NOT NULL;
+  IF NOT FOUND THEN RAISE EXCEPTION 'COBRANCA_NAO_E_DE_EXTRA'; END IF;
+  RETURN jsonb_build_object('id', _id, 'apagada', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.extra_cobranca_apagar(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.extra_cobranca_apagar(uuid) TO authenticated;
 
 -- O extra mensal que estava aguardando a entrega começa a valer.
 CREATE OR REPLACE FUNCTION public.extra_iniciar(_id uuid, _inicio date, _primeira_paga boolean DEFAULT false, _paga_em date DEFAULT NULL)

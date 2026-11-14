@@ -50,7 +50,8 @@ describe("o que falta para salvar", () => {
   it("único exige parcelas que fecham; comissão exige percentual", () => {
     const p = [{ valor: 100, vencimento: "2026-12-01", paga: false }];
     expect(conferirExtra({ ...base, cobranca: "unico", valor: 100, parcelas: p })).toBeNull();
-    expect(conferirExtra({ ...base, cobranca: "unico", valor: 150, parcelas: p })).toContain("não somam");
+    expect(conferirExtra({ ...base, cobranca: "unico", valor: 150, parcelas: p })).toBeNull();
+    expect(conferirExtra({ ...base, cobranca: "unico", valor: 50, parcelas: p })).toContain("passam do valor");
     expect(conferirExtra({ ...base, cobranca: "comissao", valor: 0, percentual: 2.5 })).toBeNull();
     expect(conferirExtra({ ...base, cobranca: "comissao", valor: 0, percentual: 0 })).toContain("percentual");
   });
@@ -64,7 +65,11 @@ describe("resumo dos extras do cliente", () => {
   });
   it("valor único mostra quanto entrou, quanto falta e a próxima data", () => {
     const c = (amount: number, status: string, due: string) => ({ id: due, extra_id: "e", amount, paid_amount: status === "paid" ? amount : null, status, due_date: due, paid_date: null, description: null });
-    expect(andamentoDoUnico([c(3000, "paid", "2026-11-13"), c(1750, "pending", "2027-01-13"), c(1750, "pending", "2026-12-13")])).toEqual({ pago: 3000, aberto: 3500, proxima: "2026-12-13" });
+    expect(andamentoDoUnico([c(3000, "paid", "2026-11-13"), c(1750, "pending", "2027-01-13"), c(1750, "pending", "2026-12-13")])).toEqual({ pago: 3000, aberto: 3500, proxima: "2026-12-13", aLancar: 0 });
+    expect(andamentoDoUnico([c(3000, "paid", "2026-11-13")], 6500).aLancar).toBe(3500);
+    const soEntrada = montarParcelas({ total: 6500, entrada: 3000, entradaPaga: true, entradaEm: "2026-11-13", parcelas: 1, primeiraEm: "2026-12-13", restanteDepois: true });
+    expect(soEntrada).toHaveLength(1);
+    expect(soEntrada[0].rotulo).toBe("entrada");
   });
 });
 
@@ -78,7 +83,7 @@ describe("regras no banco", () => {
     expect(MIG).toContain("CREATE UNIQUE INDEX IF NOT EXISTS billing_extra_competencia_uidx");
     expect(MIG.match(/ON CONFLICT \(extra_id, competencia\)/g)?.length).toBe(2);
   });
-  it("só o admin cria, inicia, encerra e lança comissão", () => {
+  it("só o admin cria, edita, inicia, encerra, lança comissão e mexe em cobrança", () => {
     expect(MIG.match(/PERFORM app_private\.extras_so_admin\(\);/g)?.length).toBe(4);
     expect(MIG).toContain("REVOKE ALL ON public.client_extras FROM anon;");
   });
