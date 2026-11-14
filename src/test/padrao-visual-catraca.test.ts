@@ -90,7 +90,7 @@ const pastaSrc = resolve(raiz, "src");
  * Páginas públicas de venda (13/11, pedido do dono): têm visual e copy próprios
  * (h1 da página, parágrafo de venda) e ficam fora da catraca do painel.
  */
-const PAGINAS_PUBLICAS_DE_VENDA = ["pages/EmailLanding.tsx", "pages/EmailPedir.tsx"];
+const PAGINAS_PUBLICAS_DE_VENDA = ["pages/EmailLanding.tsx", "pages/EmailPedir.tsx", "pages/ProdutoLanding.tsx"];
 
 function arquivosDoPainel(): string[] {
   const saida: string[] = [];

@@ -157,9 +157,41 @@ describe("subdomínio de venda", () => {
   it("as imagens são telas reais leves, com medida reservada", () => {
     const cenas = ler("src/components/venda/Cenas.tsx");
     expect(cenas).toContain("width={1800}");
-    expect(cenas).toContain('loading={cedo ? "eager" : "lazy"}');
-    for (const nome of ["painel", "funil", "equipe", "automacoes", "painel-celular"]) {
+    expect(cenas).toContain('loading="lazy"');
+    for (const nome of ["painel", "funil", "equipe", "automacoes", "painel-celular", "homem", "mulher"]) {
       expect(statSync(resolve(raiz, `src/assets/venda/${nome}.webp`)).size, nome).toBeLessThan(120000);
     }
+  });
+});
+
+describe("página no padrão das referências", () => {
+  const pagina = ler("src/pages/ProdutoLanding.tsx");
+  const cenas = ler("src/components/venda/Cenas.tsx");
+
+  it("títulos, botões e listas sem ponto no fim da frase", () => {
+    const frases = pagina.match(/"[^"\n]{12,}"/g) || [];
+    const comPonto = frases.filter((f) => /[a-zà-ú0-9]\."$/i.test(f) && f.indexOf("/") < 0);
+    expect(comPonto).toEqual([]);
+    expect(/<\/strong>\.<\/(h1|h2|Revela)>/.test(pagina)).toBe(false);
+  });
+
+  it("o notebook abre com a rolagem só com transform e opacity, e o celular liga depois", () => {
+    expect(cenas).toContain("rotateX(");
+    expect(cenas).toContain("requestAnimationFrame");
+    expect(cenas).toContain('{ passive: true }');
+    expect(ler("src/components/venda/venda.css")).toContain(".vd-ligado .vd-celular");
+  });
+
+  it("o funil de demonstração tem a seta para quem não consegue arrastar e não grava nada", () => {
+    expect(cenas).toContain("data-avancar-negocio");
+    expect(cenas).toContain('e.pointerType === "touch"');
+    expect(/supabase|fetch\(|localStorage/.test(cenas)).toBe(false);
+  });
+
+  it("quem pede menos movimento vê a versão suave, não a página parada", () => {
+    const css = ler("src/components/venda/venda.css");
+    const bloco = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(bloco).toContain("transition: opacity 500ms ease");
+    expect(/\.vd-rev[^}]*opacity:\s*1/.test(bloco)).toBe(false);
   });
 });
