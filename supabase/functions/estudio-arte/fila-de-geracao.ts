@@ -36,6 +36,8 @@
  * espera e tentativa contada, tentativas esgotadas ou abandono viram erro
  * registrado. A contagem de antes do gerar (versoes_antes) fica na linha
  * enquanto o gerar aberto não foi conferido, inclusive na nova tentativa. O
+ * gerar só roda com as versões lidas e essa contagem guardada de verdade na
+ * linha; sem uma das duas, o passo repete com espera, sem gerar nem cobrar. O
  * status do trabalho deixa de ficar "gerando" quando o lote acaba
  * (statusDoTrabalhoEmProducao).
  */
@@ -92,8 +94,12 @@ export const LIMITES_DA_FILA = {
   ESPERA_MAXIMA_DO_CHUTE_S: 90,
   /** Lote encerrado fora do passo: até quando uma linha fechada sem arte ainda faz o trabalho ser conferido. */
   JANELA_DO_ASSENTO_S: 72 * 60 * 60,
-  /** Lote encerrado fora do passo: trabalhos conferidos por volta. */
+  /** Lote encerrado fora do passo: trabalhos ainda "gerando" mandados ao assento por volta. */
   MAX_ASSENTOS: 50,
+  /** Lote encerrado fora do passo: linhas fechadas lidas por página. */
+  PAGINA_DO_ASSENTO: 300,
+  /** Lote encerrado fora do passo: páginas lidas por volta, no máximo (a janela de 72 h já limita o total). */
+  MAX_PAGINAS_DO_ASSENTO: 20,
 } as const;
 
 /** Sem saldo, cota ou chave: nada mais do lote anda (como o "para tudo" da tela). */
@@ -277,29 +283,47 @@ export interface PassoProcessado {
   gravou: boolean;
 }
 
-/** Roda e grava o passo de um item já pego (com a trava deste token). */
+/** Contagem de versões que serve de base para o gerar: inteiro, zero ou mais. Qualquer outra coisa é leitura que falhou. */
+const contagemValida = (v: unknown): v is number => typeof v === "number" && isFinite(v) && v >= 0 && Math.floor(v) === v;
+
+/**
+ * Roda e grava o passo de um item já pego (com a trava deste token).
+ *
+ * O "gerar" só roda com duas garantias: as versões da lâmina lidas agora e a contagem de antes dele
+ * (versoes_antes) guardada de verdade na linha (já vinha nela, ou este passo gravou e o banco confirmou). É essa
+ * contagem que deixa a retomada reconhecer a arte de um gerar que gravou e morreu antes de fechar o passo. Sem
+ * leitura, ou sem a contagem guardada, o passo não gera e não cobra: repete com espera (trabalho_indisponivel),
+ * com o teto de tentativas, e a contagem que a linha já tinha fica.
+ */
 export async function processarItem(deps: DependenciasDaFila, item: ItemDaFila, token: string): Promise<PassoProcessado> {
   let etapa = item.etapa;
-  let semLeitura = false;
+  // Preenchido = este passo não pode gerar agora (o texto vai para a linha se as tentativas acabarem).
+  let semBase: string | null = null;
   // O item como o passo o deixa: com a contagem que este gerar acabou de guardar (a repetição no gerar a mantém).
   let aberto = item;
   if (etapa === "gerar") {
-    const versoes = await deps.versoes(item).catch((e) => (registrarFalha("estudio-arte: versoes falhou", e), null));
-    if (versoes !== null) {
+    const lidas = await deps.versoes(item).catch((e) => (registrarFalha("estudio-arte: versoes falhou", e), null));
+    const versoes = contagemValida(lidas) ? lidas : null;
+    if (versoes === null) {
+      // Sem saber quantas versões há, não dá para saber se a arte já saiu (gerar aberto) nem deixar o rastro deste gerar.
+      semBase = item.versoes_antes !== null
+        ? "Não foi possível conferir se a arte desta lâmina já tinha saído. Gere de novo em instantes."
+        : "Não foi possível ler o trabalho antes de gerar esta lâmina. Nada foi gerado nem cobrado. Gere de novo em instantes.";
+    } else {
       etapa = etapaNaRetomada(item, versoes);
       // Guarda quantas versões havia antes de gerar. Preenchida = um gerar anterior não fechou: fica a contagem dele.
       if (etapa === "gerar" && item.versoes_antes === null) {
-        await deps.gravar(item, token, { versoes_antes: versoes });
-        aberto = { ...item, versoes_antes: versoes };
+        const guardou = await deps.gravar(item, token, { versoes_antes: versoes })
+          .catch((e) => (registrarFalha("estudio-arte: contagem de antes do gerar não foi gravada", e, { item: item.id }), false));
+        if (guardou) aberto = { ...item, versoes_antes: versoes };
+        // Não guardou (banco falhou, ou a trava já é de outro passo): gerar agora não deixaria rastro para a retomada.
+        else semBase = "Não foi possível registrar o início da geração desta lâmina. Nada foi gerado nem cobrado. Gere de novo em instantes.";
       }
-    } else if (item.versoes_antes !== null) {
-      // Retomada de um gerar que não fechou e o trabalho não pôde ser lido: sem saber se a arte já saiu, não gera (não cobra) às cegas.
-      semLeitura = true;
     }
   }
   let r: ResultadoDoPasso;
-  if (semLeitura) {
-    r = { ok: false, codigo: "trabalho_indisponivel", mensagem: "Não foi possível conferir se a arte desta lâmina já tinha saído. Gere de novo em instantes." };
+  if (semBase !== null) {
+    r = { ok: false, codigo: "trabalho_indisponivel", mensagem: semBase };
   } else {
     try {
       r = await deps.executar(etapa, item);
@@ -519,10 +543,19 @@ export function statusDoTrabalhoEmProducao(o: { ordensDaDirecao: number[]; orden
  * rodando, nem se alguém gravou no meio). Nunca marca erro no trabalho e nunca gera. Linha "feito" não entra:
  * a arte dela foi gravada, e o status já é assentado na gravação da versão e no fecho do passo. Trabalho antigo
  * em "gerando", sem linha fechada na janela, fica como está (a tela já não o mostra como geração ativa).
+ *
+ * O teto por volta (MAX_ASSENTOS) conta só os trabalhos ainda "gerando". Trabalho já assentado não gasta a
+ * cota: as linhas fechadas são lidas em páginas, das mais novas para as mais antigas, até achar MAX_ASSENTOS
+ * pendentes ou a janela acabar. Com o teto na lista de encerrados, 50 trabalhos recentes já assentados
+ * escondiam para sempre o 51º que seguia "gerando".
  */
 export interface DependenciasDoAssento {
-  /** Trabalhos das linhas fechadas sem arte (erro, cancelado) desde este instante, as mais novas primeiro. */
-  encerrados: (desde: string) => Promise<string[]>;
+  /**
+   * Trabalhos das linhas fechadas sem arte (erro, cancelado) desde este instante, as mais novas primeiro: UMA
+   * entrada por linha (pode repetir trabalho), a partir da linha `aPartirDe`, no máximo `quantas`. Menos que
+   * `quantas` = acabou.
+   */
+  encerrados: (desde: string, aPartirDe: number, quantas: number) => Promise<string[]>;
   /** Destes, os que estão com o status "gerando". */
   gerando: (trabalhos: string[]) => Promise<string[]>;
   /** O assento do fim do lote: sem nada na fila, o trabalho sai de "gerando" (pronto ou dirigido). */
@@ -533,14 +566,34 @@ export interface DependenciasDoAssento {
 /** Uma volta: devolve os trabalhos mandados para o assento. Falha num trabalho não para os outros. */
 export async function assentarLotesEncerrados(deps: DependenciasDoAssento): Promise<string[]> {
   const desde = new Date(deps.agora().getTime() - LIMITES_DA_FILA.JANELA_DO_ASSENTO_S * 1000).toISOString();
-  const encerrados: string[] = [];
-  for (const id of await deps.encerrados(desde)) {
-    if (id && encerrados.indexOf(id) < 0) encerrados.push(id);
-    if (encerrados.length >= LIMITES_DA_FILA.MAX_ASSENTOS) break;
+  const teto = LIMITES_DA_FILA.MAX_ASSENTOS;
+  const quantas = LIMITES_DA_FILA.PAGINA_DO_ASSENTO;
+  const vistos: string[] = [];
+  const presos: string[] = [];
+  try {
+    for (let pagina = 0; pagina < LIMITES_DA_FILA.MAX_PAGINAS_DO_ASSENTO && presos.length < teto; pagina++) {
+      const linhas = await deps.encerrados(desde, pagina * quantas, quantas);
+      const novos: string[] = [];
+      for (const id of linhas) {
+        if (!id || vistos.indexOf(id) >= 0) continue;
+        vistos.push(id);
+        novos.push(id);
+      }
+      // O status é lido em grupos do tamanho do teto (a lista de ids vai na consulta); para ao encher o teto de pendentes.
+      for (let i = 0; i < novos.length && presos.length < teto; i += teto) {
+        const grupo = novos.slice(i, i + teto);
+        const gerando = await deps.gerando(grupo);
+        for (const id of grupo) {
+          if (gerando.indexOf(id) >= 0 && presos.length < teto) presos.push(id);
+        }
+      }
+      if (linhas.length < quantas) break;
+    }
+  } catch (e) {
+    // Leitura que falha no meio não joga fora os pendentes já achados; sem nenhum, a falha sobe como antes.
+    if (!presos.length) throw e;
+    registrarFalha("estudio-arte: lotes encerrados lidos só em parte", e, { achados: presos.length });
   }
-  if (!encerrados.length) return [];
-  const gerando = await deps.gerando(encerrados);
-  const presos = encerrados.filter((id) => gerando.indexOf(id) >= 0);
   for (const id of presos) {
     try {
       await deps.assentar(id);

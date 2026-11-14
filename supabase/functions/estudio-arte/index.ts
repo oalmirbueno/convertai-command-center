@@ -11945,12 +11945,16 @@ async function assentarTrabalho(trabalhoId: string): Promise<void> {
 function dependenciasDoAssento(): DependenciasDoAssento {
   const db = servico();
   return {
-    encerrados: async (desde) => {
+    // Uma página por chamada (a regra pagina até achar os pendentes do teto); o id desempata a ordem entre páginas.
+    encerrados: async (desde, aPartirDe, quantas) => {
       const { data, error } = await db.from(TABELA_DA_FILA).select("trabalho_id")
         .in("status", ["erro", "cancelado"])
         .gte("concluido_em", desde)
         .order("concluido_em", { ascending: false })
-        .limit(300);
+        .order("id", { ascending: false })
+        .range(aPartirDe, aPartirDe + quantas - 1);
+      // Página pedida depois do fim (total múltiplo exato da página): o PostgREST pode recusar a faixa. Acabou.
+      if (error && aPartirDe > 0 && (error as { code?: string }).code === "PGRST103") return [];
       if (error) throw erroDaFila(error);
       return ((data ?? []) as { trabalho_id?: unknown }[]).map((l) => (typeof l.trabalho_id === "string" ? l.trabalho_id : ""));
     },

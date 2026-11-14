@@ -31,6 +31,7 @@ import {
   etapaNaRetomada,
   LIMITES_DA_FILA,
   ordensDoPedido,
+  processarItem,
   processarUmPasso,
   proximoPasso,
   statusDoTrabalhoEmProducao,
@@ -227,10 +228,11 @@ class BancoDaFila {
   assento(): DependenciasDoAssento {
     const fechadaEm = (l: Linha) => (typeof l.concluido_em === "string" ? Date.parse(l.concluido_em) : l.concluido_em ?? NaN);
     return {
-      encerrados: async (desde) => this.linhas
+      encerrados: async (desde, aPartirDe, quantas) => this.linhas
         .filter((l) => (l.status === "erro" || l.status === "cancelado") && fechadaEm(l) >= Date.parse(desde))
         .sort((a, b) => fechadaEm(b) - fechadaEm(a))
-        .map((l) => l.trabalho_id),
+        .map((l) => l.trabalho_id)
+        .slice(aPartirDe, aPartirDe + quantas),
       gerando: async (ids) => ids.filter((id) => this.trabalhos[id] && this.trabalhos[id].status === "gerando"),
       assentar: async (id) => this.assentar(id),
       agora: () => new Date(this.relogio),
@@ -698,6 +700,156 @@ describe("vigia: o que ficou preso em rodando (função morta por limite de CPU)
     expect(banco.linhas[0]).toMatchObject({ status: "feito", versoes_antes: null });
   });
 
+  // Re-revisão de 14/11 (P1 residual): o gerar só roda com a leitura das versões válida E com a contagem de antes
+  // dele guardada de verdade na linha. Sem uma das duas, a função que morresse depois de gravar a arte deixava a
+  // retomada sem como reconhecer a geração anterior, e ela gerava (e cobrava) de novo.
+  it("primeira execução sem conseguir ler as versões: não gera, volta para a fila com espera e a contagem segue vazia", async () => {
+    const banco = new BancoDaFila();
+    const chamadas: string[] = [];
+    banco.pedir({ client: "A", trabalho: "T", ordens: [1], usuario: "u1" });
+    const deps = banco.deps("u1", iaDeMentira(banco, chamadas));
+    const semLeitura: DependenciasDaFila = { ...deps, versoes: async () => { throw new Error("banco fora do ar"); } };
+    const r = await processarUmPasso(semLeitura, "t1");
+    expect(chamadas).toEqual([]);
+    expect(banco.versoes["T#1"]).toBeUndefined();
+    expect(r && r.etapa).toBe("gerar");
+    expect(r && r.gravou).toBe(true);
+    expect(r && r.mudanca).toMatchObject({ status: "fila", etapa: "gerar", tentativas: 1, erro_codigo: null, versoes_antes: null, custo_usd: 0 });
+    expect(banco.linhas[0]).toMatchObject({ status: "fila", etapa: "gerar", tentativas: 1, versoes_antes: null, trava_token: null });
+    expect(banco.linhas[0].proxima_em).toBe(banco.relogio + LIMITES_DA_FILA.ESPERA_DA_REPETICAO_S * 1000);
+
+    // A leitura volta: gera UMA vez, com a contagem guardada, e confere.
+    banco.relogio = banco.linhas[0].proxima_em;
+    await rodarAteAcabar(banco, deps);
+    expect(chamadas).toEqual(["gerar:T#1", "conferir:T#1"]);
+    expect(banco.versoes["T#1"]).toBe(1);
+    expect(banco.linhas[0]).toMatchObject({ status: "feito", versoes_antes: null });
+  });
+
+  it("leitura das versões que nunca volta (ou volta torta): para no teto de tentativas com erro registrado, sem gerar nem cobrar", async () => {
+    for (const leitura of [async () => { throw new Error("banco fora do ar"); }, async () => Number.NaN, async () => -1]) {
+      const banco = new BancoDaFila();
+      const chamadas: string[] = [];
+      banco.pedir({ client: "A", trabalho: "T", ordens: [1], usuario: "u1" });
+      const semLeitura: DependenciasDaFila = { ...banco.deps("u1", iaDeMentira(banco, chamadas)), versoes: leitura as DependenciasDaFila["versoes"] };
+      let passos = 0;
+      while (banco.linhas[0].status === "fila" && passos < 10) {
+        banco.relogio = Math.max(banco.relogio, banco.linhas[0].proxima_em);
+        await processarUmPasso(semLeitura, `t${++passos}`);
+      }
+      expect(passos).toBe(LIMITES_DA_FILA.MAX_TENTATIVAS);
+      expect(chamadas).toEqual([]);
+      expect(banco.versoes["T#1"]).toBeUndefined();
+      expect(banco.linhas[0]).toMatchObject({ status: "erro", erro_codigo: "trabalho_indisponivel", versoes_antes: null, custo_usd: 0 });
+    }
+  });
+
+  it("primeira execução em que a contagem não foi guardada (gravar devolve false ou cai): não gera; só gera depois de guardar", async () => {
+    for (const falha of ["false", "excecao"] as const) {
+      const banco = new BancoDaFila();
+      const chamadas: string[] = [];
+      const contagemNoGerar: Array<number | null> = [];
+      banco.pedir({ client: "A", trabalho: "T", ordens: [1], usuario: "u1" });
+      const ia = iaDeMentira(banco, chamadas);
+      const deps = banco.deps("u1", async (etapa, i) => {
+        if (etapa === "gerar") contagemNoGerar.push(banco.linhas[0].versoes_antes);
+        return ia(etapa, i);
+      });
+      let semGuardar = true;
+      const comFalha: DependenciasDaFila = {
+        ...deps,
+        gravar: async (i, token, campos) => {
+          // Só a gravação da contagem falha; o fecho do passo (que leva o status) grava normalmente.
+          if (semGuardar && !("status" in campos)) {
+            if (falha === "excecao") throw new Error("rede caiu");
+            return false;
+          }
+          return deps.gravar(i, token, campos);
+        },
+      };
+      const r = await processarUmPasso(comFalha, "t1");
+      expect(chamadas).toEqual([]);
+      expect(banco.versoes["T#1"]).toBeUndefined();
+      expect(r && r.mudanca).toMatchObject({ status: "fila", etapa: "gerar", tentativas: 1, versoes_antes: null, custo_usd: 0 });
+      expect(banco.linhas[0]).toMatchObject({ status: "fila", etapa: "gerar", versoes_antes: null, trava_token: null });
+      expect(banco.linhas[0].proxima_em).toBe(banco.relogio + LIMITES_DA_FILA.ESPERA_DA_REPETICAO_S * 1000);
+
+      // A gravação volta: o gerar roda com a contagem já na linha.
+      semGuardar = false;
+      banco.relogio = banco.linhas[0].proxima_em;
+      const r2 = await processarUmPasso(comFalha, "t2");
+      expect(r2 && r2.etapa).toBe("gerar");
+      expect(chamadas).toEqual(["gerar:T#1"]);
+      expect(contagemNoGerar).toEqual([0]);
+      expect(banco.linhas[0]).toMatchObject({ status: "fila", etapa: "conferir", versoes_antes: null });
+    }
+  });
+
+  it("passo velho que acorda sem a trava (outro já pegou a linha): a contagem dele não grava, então ele não gera", async () => {
+    const banco = new BancoDaFila();
+    const chamadas: string[] = [];
+    banco.pedir({ client: "A", trabalho: "T", ordens: [1], usuario: "u1" });
+    const deps = banco.deps("u1", iaDeMentira(banco, chamadas));
+    const velho = banco.pegar("velho", "u1") as ItemDaFila;
+    banco.relogio += TRAVA_MS + 1000;
+    const novo = banco.pegar("novo", "u1") as ItemDaFila;
+    const r = await processarItem(deps, velho, "velho");
+    expect(chamadas).toEqual([]);
+    expect(r.gravou).toBe(false);
+    // A linha segue com quem a pegou por último, intacta; ele gera uma vez só.
+    expect(banco.linhas[0]).toMatchObject({ status: "rodando", etapa: "gerar", trava_token: "novo", versoes_antes: null });
+    await processarItem(deps, novo, "novo");
+    expect(chamadas).toEqual(["gerar:T#1"]);
+    expect(banco.versoes["T#1"]).toBe(1);
+  });
+
+  it("re-revisão: leitura inicial que falha ou contagem não guardada, com a função morrendo depois de gravar a arte: nunca gerar duas vezes", async () => {
+    for (const cenario of ["leitura inicial falha", "contagem não guardada"] as const) {
+      // A linha como está no banco (só o que gravou de verdade muda aqui).
+      const linha = item({ versoes_antes: null, trava_token: null });
+      let versoes = 0;
+      let execucao = 1;
+      const acoes: string[] = [];
+      const deps: DependenciasDaFila = {
+        pegar: async () => null,
+        versoes: async () => {
+          if (execucao === 1 && cenario === "leitura inicial falha") throw new Error("rede");
+          return versoes;
+        },
+        gravar: async (_i, _token, campos) => {
+          // Execução 1: a contagem não grava. Execuções 1 e 2: a função morre antes de fechar o passo.
+          if (execucao === 1 && !("status" in campos)) return false;
+          if (execucao <= 2 && "status" in campos) throw new Error("worker interrompido antes de fechar o passo");
+          Object.assign(linha, campos);
+          return true;
+        },
+        executar: async (etapa) => {
+          acoes.push(etapa);
+          if (etapa === "gerar") versoes++; // a arte foi gravada (e cobrada)
+          return { ok: true, corpo: {} };
+        },
+        pararLote: async () => {},
+        agora: () => agora,
+      };
+      // 1: sem leitura válida ou sem a contagem guardada, nada é gerado (antes: gerava aqui, sem deixar rastro).
+      await processarItem(deps, { ...linha }, "a").catch(() => undefined);
+      expect(acoes).toEqual([]);
+      expect(versoes).toBe(0);
+      // 2: gera com a contagem guardada; a arte grava e a função morre antes de fechar o passo.
+      execucao = 2;
+      await processarItem(deps, { ...linha }, "b").catch(() => undefined);
+      expect(acoes).toEqual(["gerar"]);
+      expect(linha).toMatchObject({ etapa: "gerar", versoes_antes: 0 });
+      // 3: a retomada reconhece a arte daquele gerar e confere. Antes saía ["gerar", "gerar"] (duas cobranças).
+      execucao = 3;
+      const r = await processarItem(deps, { ...linha }, "c");
+      expect(r.etapa).toBe("conferir");
+      expect(acoes).toEqual(["gerar", "conferir"]);
+      expect(versoes).toBe(1);
+      expect(linha).toMatchObject({ status: "feito", versoes_antes: null });
+    }
+  });
+
   it("o gerar aberto guarda a contagem enquanto repete no gerar; fechar ou avançar de etapa zera", () => {
     const aberto = item({ versoes_antes: 2 });
     const falha = (codigo: string, extra: Partial<ItemDaFila> = {}) => proximoPasso({ ...aberto, ...extra }, "gerar", { ok: false, codigo, mensagem: "" }, agora).mudanca;
@@ -952,9 +1104,9 @@ describe("fim do lote: o trabalho não fica gerando", () => {
     const lidos: string[][] = [];
     const assentados: string[] = [];
     const deps = (encerrados: string[], gerando: string[]): DependenciasDoAssento => ({
-      encerrados: async (desde) => {
+      encerrados: async (desde, aPartirDe, quantas) => {
         expect(agora.getTime() - Date.parse(desde)).toBe(LIMITES_DA_FILA.JANELA_DO_ASSENTO_S * 1000);
-        return encerrados;
+        return encerrados.slice(aPartirDe, aPartirDe + quantas);
       },
       gerando: async (ids) => (lidos.push(ids), gerando),
       assentar: async (id) => {
@@ -969,9 +1121,83 @@ describe("fim do lote: o trabalho não fica gerando", () => {
     expect(await assentarLotesEncerrados(deps(["a", "quebra", "a", "", "b", "c"], ["c", "quebra", "a", "fora"]))).toEqual(["a", "quebra", "c"]);
     expect(lidos).toEqual([["a", "quebra", "b", "c"]]);
     expect(assentados).toEqual(["a", "c"]);
-    // Teto por volta.
+    // Teto por volta: os mais novos primeiro.
     const muitos = Array.from({ length: LIMITES_DA_FILA.MAX_ASSENTOS + 30 }, (_, i) => `t${i}`);
-    expect(await assentarLotesEncerrados(deps(muitos, muitos))).toHaveLength(LIMITES_DA_FILA.MAX_ASSENTOS);
+    expect(await assentarLotesEncerrados(deps(muitos, muitos))).toEqual(muitos.slice(0, LIMITES_DA_FILA.MAX_ASSENTOS));
+  });
+
+  // Re-revisão de 14/11 (P2 residual): o teto vale para os trabalhos ainda "gerando", não para a lista de encerrados.
+  /** Fila de mentira para o assento: `linhas` é uma entrada por linha fechada (a mais nova primeiro), lida em páginas. */
+  const assentoDeMentira = (linhas: string[], gerando: (id: string) => boolean) => {
+    const paginas: number[] = [];
+    const lidos: string[][] = [];
+    const assentados: string[] = [];
+    const deps: DependenciasDoAssento = {
+      encerrados: async (_desde, aPartirDe, quantas) => (paginas.push(aPartirDe), linhas.slice(aPartirDe, aPartirDe + quantas)),
+      gerando: async (ids) => (lidos.push(ids), ids.filter(gerando)),
+      assentar: async (id) => void assentados.push(id),
+      agora: () => agora,
+    };
+    return { deps, paginas, lidos, assentados };
+  };
+
+  it("50 trabalhos já assentados na janela não tiram a vez do 51º ainda gerando", async () => {
+    const ids = Array.from({ length: LIMITES_DA_FILA.MAX_ASSENTOS + 1 }, (_, i) => `t${i}`);
+    const ultimo = ids[ids.length - 1];
+    const f = assentoDeMentira(ids, (id) => id === ultimo);
+    expect(await assentarLotesEncerrados(f.deps)).toEqual([ultimo]);
+    expect(f.assentados).toEqual([ultimo]);
+    // Chamar de novo não muda a conta: ele continua alcançado enquanto estiver gerando.
+    expect(await assentarLotesEncerrados(f.deps)).toEqual([ultimo]);
+    // O status é lido em grupos do tamanho do teto, nunca a lista inteira de uma vez.
+    expect(f.lidos.every((g) => g.length <= LIMITES_DA_FILA.MAX_ASSENTOS)).toBe(true);
+  });
+
+  it("o pendente depois de centenas de linhas já assentadas é alcançado pela paginação; a leitura para quando o teto de pendentes enche", async () => {
+    const pagina = LIMITES_DA_FILA.PAGINA_DO_ASSENTO;
+    // 700 linhas fechadas de trabalhos já assentados (várias lâminas por trabalho) e, a mais antiga, a do pendente.
+    const assentadas = Array.from({ length: 700 }, (_, i) => `ok${Math.floor(i / 4)}`);
+    const longe = assentoDeMentira([...assentadas, "pendente"], (id) => id === "pendente");
+    expect(await assentarLotesEncerrados(longe.deps)).toEqual(["pendente"]);
+    expect(longe.paginas).toEqual([0, pagina, pagina * 2]);
+    expect(longe.assentados).toEqual(["pendente"]);
+
+    // Teto de pendentes cheio na primeira página: não lê a seguinte, e o que sobrou fica para a próxima volta.
+    const muitos = Array.from({ length: pagina + 40 }, (_, i) => `p${i}`);
+    const cheio = assentoDeMentira(muitos, () => true);
+    expect(await assentarLotesEncerrados(cheio.deps)).toEqual(muitos.slice(0, LIMITES_DA_FILA.MAX_ASSENTOS));
+    expect(cheio.paginas).toEqual([0]);
+    expect(cheio.lidos).toHaveLength(1);
+
+    // Página cheia e a seguinte vazia (total múltiplo exato): termina sem laço.
+    const exato = assentoDeMentira(Array.from({ length: pagina }, (_, i) => `e${i}`), () => false);
+    expect(await assentarLotesEncerrados(exato.deps)).toEqual([]);
+    expect(exato.paginas).toEqual([0, pagina]);
+
+    // Fila que devolve sempre página cheia (nunca acaba): para no teto de páginas.
+    const semFim = assentoDeMentira([], () => false);
+    semFim.deps.encerrados = async (_desde, aPartirDe, quantas) => (semFim.paginas.push(aPartirDe), Array.from({ length: quantas }, () => "mesmo"));
+    expect(await assentarLotesEncerrados(semFim.deps)).toEqual([]);
+    expect(semFim.paginas).toHaveLength(LIMITES_DA_FILA.MAX_PAGINAS_DO_ASSENTO);
+    expect(semFim.lidos).toEqual([["mesmo"]]);
+  });
+
+  it("leitura que falha no meio da paginação: assenta os pendentes já achados; falha logo na primeira leitura sobe", async () => {
+    const pagina = LIMITES_DA_FILA.PAGINA_DO_ASSENTO;
+    const linhas = ["a", ...Array.from({ length: pagina - 1 }, (_, i) => `ok${i}`), "b"];
+    const f = assentoDeMentira(linhas, (id) => id === "a" || id === "b");
+    const ler = f.deps.encerrados;
+    f.deps.encerrados = async (desde, aPartirDe, quantas) => {
+      if (aPartirDe > 0) throw new Error("banco fora do ar");
+      return ler(desde, aPartirDe, quantas);
+    };
+    expect(await assentarLotesEncerrados(f.deps)).toEqual(["a"]);
+    expect(f.assentados).toEqual(["a"]);
+    // Nada lido: a falha sobe (quem chama registra e segue), sem assentar nada.
+    const g = assentoDeMentira(["a"], () => true);
+    g.deps.encerrados = async () => { throw new Error("banco fora do ar"); };
+    await expect(assentarLotesEncerrados(g.deps)).rejects.toThrow("banco fora do ar");
+    expect(g.assentados).toEqual([]);
   });
 
   it("Mesa Ads: status gerando antigo, sem gravação recente, não aparece como geração ativa", () => {
@@ -1001,6 +1227,9 @@ describe("fim do lote: o trabalho não fica gerando", () => {
     const assento = f.slice(f.indexOf("function dependenciasDoAssento("), f.indexOf("async function vigiarAntesDePegar("));
     expect(assento).toContain('.in("status", ["erro", "cancelado"])');
     expect(assento).toContain('.gte("concluido_em", desde)');
+    // Uma página por chamada, em ordem estável: quem aplica o teto (nos pendentes) é a regra, não a consulta.
+    expect(assento).toContain(".range(aPartirDe, aPartirDe + quantas - 1);");
+    expect(assento).not.toContain(".limit(");
     expect(assento).toContain('.in("id", trabalhos).eq("status", "gerando")');
     expect(assento).toContain("assentar: assentarTrabalho,");
     expect(assento).not.toMatch(/\.(update|insert|delete|upsert)\(/);
