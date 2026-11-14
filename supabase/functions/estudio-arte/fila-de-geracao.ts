@@ -27,6 +27,19 @@
  *   (frente T2: a lâmina 2+ espera a âncora tipográfica), 30 s x tentativa nas
  *   falhas de leitura; a vigia do painel chama no máximo a cada 30 s;
  * - correção automática: 1 rodada, e só com "Corrigir sozinho" ligado.
+ *
+ * Vigia (14/11/2026): em 14/11 a função morreu por "CPU Time exceeded" logo
+ * depois de gravar a arte (SKC, lâmina 5) e a linha ficou "rodando" até alguém
+ * chamar a fila de novo. Agora todo processar_fila começa limpando o que ficou
+ * preso, de QUALQUER pessoa (decidirPreso): arte já gravada segue para a
+ * conferência (nunca gera de novo), trava vencida volta para a fila com
+ * espera e tentativa contada, tentativas esgotadas ou abandono viram erro
+ * registrado. A contagem de antes do gerar (versoes_antes) fica na linha
+ * enquanto o gerar aberto não foi conferido, inclusive na nova tentativa. O
+ * gerar só roda com as versões lidas e essa contagem guardada de verdade na
+ * linha; sem uma das duas, o passo repete com espera, sem gerar nem cobrar. O
+ * status do trabalho deixa de ficar "gerando" quando o lote acaba
+ * (statusDoTrabalhoEmProducao).
  */
 
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
@@ -73,6 +86,20 @@ export const LIMITES_DA_FILA = {
   ESPERA_DA_REPETICAO_S: 30,
   RODADAS_AUTOMATICAS: 1,
   MAX_ORDENS: 20,
+  /** Vigia: arte gravada há mais que isto com a linha ainda em "rodando/gerar" = a função morreu depois de gravar. */
+  GRACA_DA_ARTE_S: 60,
+  /** Vigia: trava vencida há mais que isto e ninguém retomou (painel de quem pediu fechado) = abandonado. */
+  ABANDONO_S: 30 * 60,
+  /** Chute com espera (fundo ocupado, nova tentativa): acima disto a retomada fica com a vigia do painel. */
+  ESPERA_MAXIMA_DO_CHUTE_S: 90,
+  /** Lote encerrado fora do passo: até quando uma linha fechada sem arte ainda faz o trabalho ser conferido. */
+  JANELA_DO_ASSENTO_S: 72 * 60 * 60,
+  /** Lote encerrado fora do passo: trabalhos ainda "gerando" mandados ao assento por volta. */
+  MAX_ASSENTOS: 50,
+  /** Lote encerrado fora do passo: linhas fechadas lidas por página. */
+  PAGINA_DO_ASSENTO: 300,
+  /** Lote encerrado fora do passo: páginas lidas por volta, no máximo (a janela de 72 h já limita o total). */
+  MAX_PAGINAS_DO_ASSENTO: 20,
 } as const;
 
 /** Sem saldo, cota ou chave: nada mais do lote anda (como o "para tudo" da tela). */
@@ -104,7 +131,16 @@ export interface MudancaDoItem {
   aviso: string | null;
   concluido_em: string | null;
   atualizado_em: string;
+  /**
+   * Contagem de versões de antes do "gerar". Fica enquanto o gerar segue aberto (nova tentativa ou espera que
+   * continua no gerar); sai (null) quando a linha fecha ou muda de etapa.
+   */
+  versoes_antes: number | null;
 }
+
+/** Texto que a linha leva enquanto espera (a tela mostra "na fila" com este motivo, sem zerar o tempo). */
+export const AVISO_ESPERANDO_A_CAPA = "Esperando a capa";
+export const avisoDeNovaTentativa = (tentativa: number, max: number) => `Nova tentativa (${tentativa} de ${max})`;
 
 const numero = (v: unknown): number => {
   const n = typeof v === "string" ? Number(v) : (v as number);
@@ -145,6 +181,7 @@ export function proximoPasso(item: ItemDaFila, etapa: EtapaDaFila, r: ResultadoD
     aviso: null,
     concluido_em: null,
     atualizado_em: iso,
+    versoes_antes: null,
   };
   const feito = (aviso: string | null = null): MudancaDoItem => ({ ...base, status: "feito", aviso, concluido_em: iso });
   const falhou = (codigo: string, mensagem: string): MudancaDoItem => ({ ...base, status: "erro", erro_codigo: codigo, erro_mensagem: mensagem, concluido_em: iso });
@@ -155,7 +192,11 @@ export function proximoPasso(item: ItemDaFila, etapa: EtapaDaFila, r: ResultadoD
         ? feito("A conferência ficou para depois: a lâmina passou do limite de passos.")
         : falhou("passos_esgotados", "A lâmina passou do limite de passos na fila. Gere de novo.");
     }
-    return { ...base, etapa: proxima, proxima_em: depois(agora, esperaS), ...extra };
+    // Repetição que continua no gerar (leitura que falhou, espera da capa): o gerar aberto não foi conferido,
+    // então a contagem de antes dele fica. Zerar aqui fazia a tentativa seguinte tomar a arte já gravada como
+    // ponto de partida e gerar (e cobrar) de novo.
+    const versoes_antes = etapa === "gerar" && proxima === "gerar" ? item.versoes_antes : null;
+    return { ...base, etapa: proxima, proxima_em: depois(agora, esperaS), versoes_antes, ...extra };
   };
 
   if (r.ok) {
@@ -192,11 +233,14 @@ export function proximoPasso(item: ItemDaFila, etapa: EtapaDaFila, r: ResultadoD
   }
   // Frente T2: a capa do mesmo trabalho ainda está gerando; esta lâmina espera por ela (mesma tipografia).
   if (etapa === "gerar" && erro.codigo === "capa_pendente") {
-    return { mudanca: seguir("gerar", LIMITES_DA_FILA.ESPERA_DA_CAPA_S), pararLote: null };
+    return { mudanca: seguir("gerar", LIMITES_DA_FILA.ESPERA_DA_CAPA_S, { aviso: AVISO_ESPERANDO_A_CAPA }), pararLote: null };
   }
   if (CODIGOS_QUE_REPETEM.indexOf(erro.codigo) >= 0 && item.tentativas + 1 < item.max_tentativas) {
     const tentativas = item.tentativas + 1;
-    return { mudanca: seguir(etapa, LIMITES_DA_FILA.ESPERA_DA_REPETICAO_S * tentativas, { tentativas }), pararLote: null };
+    return {
+      mudanca: seguir(etapa, LIMITES_DA_FILA.ESPERA_DA_REPETICAO_S * tentativas, { tentativas, aviso: avisoDeNovaTentativa(tentativas + 1, item.max_tentativas) }),
+      pararLote: null,
+    };
   }
   const parar = CODIGOS_QUE_PARAM_O_LOTE.indexOf(erro.codigo) >= 0 ? erro.codigo : null;
   return { mudanca: falhou(erro.codigo, erro.mensagem), pararLote: parar };
@@ -206,9 +250,15 @@ export function proximoPasso(item: ItemDaFila, etapa: EtapaDaFila, r: ResultadoD
  * Retomada depois de queda do worker: se a lâmina ganhou versão nova desde
  * que o passo "gerar" começou, a geração terminou (e foi cobrada) antes da
  * queda; segue para a conferência em vez de gerar e cobrar de novo.
+ *
+ * 14/11/2026: não depende mais de `tentativas > 0`. A contagem `versoes_antes`
+ * só existe enquanto um "gerar" está aberto (a linha que fecha ou muda de etapa
+ * a zera; a repetição que continua no gerar a mantém), então versão a mais com
+ * ela preenchida já é a prova de que a arte saiu, mesmo quando a função morreu
+ * na primeira tentativa (SKC, lâmina 5: tentativas 0, arte gravada).
  */
 export function etapaNaRetomada(item: ItemDaFila, versoesAgora: number): EtapaDaFila {
-  if (item.etapa === "gerar" && item.tentativas > 0 && item.versoes_antes !== null && versoesAgora > item.versoes_antes) return "conferir";
+  if (item.etapa === "gerar" && item.versoes_antes !== null && versoesAgora > item.versoes_antes) return "conferir";
   return item.etapa;
 }
 
@@ -233,26 +283,55 @@ export interface PassoProcessado {
   gravou: boolean;
 }
 
-/** Roda e grava o passo de um item já pego (com a trava deste token). */
+/** Contagem de versões que serve de base para o gerar: inteiro, zero ou mais. Qualquer outra coisa é leitura que falhou. */
+const contagemValida = (v: unknown): v is number => typeof v === "number" && isFinite(v) && v >= 0 && Math.floor(v) === v;
+
+/**
+ * Roda e grava o passo de um item já pego (com a trava deste token).
+ *
+ * O "gerar" só roda com duas garantias: as versões da lâmina lidas agora e a contagem de antes dele
+ * (versoes_antes) guardada de verdade na linha (já vinha nela, ou este passo gravou e o banco confirmou). É essa
+ * contagem que deixa a retomada reconhecer a arte de um gerar que gravou e morreu antes de fechar o passo. Sem
+ * leitura, ou sem a contagem guardada, o passo não gera e não cobra: repete com espera (trabalho_indisponivel),
+ * com o teto de tentativas, e a contagem que a linha já tinha fica.
+ */
 export async function processarItem(deps: DependenciasDaFila, item: ItemDaFila, token: string): Promise<PassoProcessado> {
   let etapa = item.etapa;
+  // Preenchido = este passo não pode gerar agora (o texto vai para a linha se as tentativas acabarem).
+  let semBase: string | null = null;
+  // O item como o passo o deixa: com a contagem que este gerar acabou de guardar (a repetição no gerar a mantém).
+  let aberto = item;
   if (etapa === "gerar") {
-    const versoes = await deps.versoes(item).catch((e) => (registrarFalha("estudio-arte: versoes falhou", e), null));
-    if (versoes !== null) {
+    const lidas = await deps.versoes(item).catch((e) => (registrarFalha("estudio-arte: versoes falhou", e), null));
+    const versoes = contagemValida(lidas) ? lidas : null;
+    if (versoes === null) {
+      // Sem saber quantas versões há, não dá para saber se a arte já saiu (gerar aberto) nem deixar o rastro deste gerar.
+      semBase = item.versoes_antes !== null
+        ? "Não foi possível conferir se a arte desta lâmina já tinha saído. Gere de novo em instantes."
+        : "Não foi possível ler o trabalho antes de gerar esta lâmina. Nada foi gerado nem cobrado. Gere de novo em instantes.";
+    } else {
       etapa = etapaNaRetomada(item, versoes);
-      // Guarda quantas versões havia antes de gerar (só na primeira tentativa).
-      if (etapa === "gerar" && (item.tentativas === 0 || item.versoes_antes === null)) {
-        await deps.gravar(item, token, { versoes_antes: versoes });
+      // Guarda quantas versões havia antes de gerar. Preenchida = um gerar anterior não fechou: fica a contagem dele.
+      if (etapa === "gerar" && item.versoes_antes === null) {
+        const guardou = await deps.gravar(item, token, { versoes_antes: versoes })
+          .catch((e) => (registrarFalha("estudio-arte: contagem de antes do gerar não foi gravada", e, { item: item.id }), false));
+        if (guardou) aberto = { ...item, versoes_antes: versoes };
+        // Não guardou (banco falhou, ou a trava já é de outro passo): gerar agora não deixaria rastro para a retomada.
+        else semBase = "Não foi possível registrar o início da geração desta lâmina. Nada foi gerado nem cobrado. Gere de novo em instantes.";
       }
     }
   }
   let r: ResultadoDoPasso;
-  try {
-    r = await deps.executar(etapa, item);
-  } catch (e) {
-    r = { ok: false, codigo: "erro_interno", mensagem: e instanceof Error && e.message ? e.message.slice(0, 300) : "Erro inesperado no estúdio." };
+  if (semBase !== null) {
+    r = { ok: false, codigo: "trabalho_indisponivel", mensagem: semBase };
+  } else {
+    try {
+      r = await deps.executar(etapa, item);
+    } catch (e) {
+      r = { ok: false, codigo: "erro_interno", mensagem: e instanceof Error && e.message ? e.message.slice(0, 300) : "Erro inesperado no estúdio." };
+    }
   }
-  const { mudanca, pararLote } = proximoPasso(item, etapa, r, deps.agora());
+  const { mudanca, pararLote } = proximoPasso(aberto, etapa, r, deps.agora());
   const gravou = await deps.gravar(item, token, mudanca as unknown as Record<string, unknown>);
   if (pararLote) await deps.pararLote(item, pararLote).catch((e) => (registrarFalha("estudio-arte: pararLote falhou", e), undefined));
   return { item, etapa, mudanca, gravou };
@@ -277,4 +356,276 @@ export function ordensDoPedido(pedidas: unknown, daDirecao: number[]): number[] 
     if (saida.length >= LIMITES_DA_FILA.MAX_ORDENS) break;
   }
   return saida;
+}
+
+// ------------------------------------------------------------------ vigia
+//
+// 14/11/2026. O que ficou preso em "rodando" (a função morreu por limite de
+// CPU, o painel de quem pediu fechou) é resolvido aqui, sem gerar nada: a
+// vigia só muda a linha da fila. Roda no começo de todo processar_fila, com a
+// chave de serviço, para as linhas de QUALQUER pessoa (a RPC estudio_fila_pegar
+// só olha as de quem chamou).
+
+/** Linha "rodando" como a vigia lê (com a validade da trava e a hora da última pegada). */
+export interface ItemPreso extends ItemDaFila {
+  trava_ate: string | null;
+  /** A RPC renova na pegada: é a hora em que o passo atual começou. */
+  atualizado_em: string | null;
+}
+
+/** Versões da lâmina no trabalho agora e a hora da mais nova (para saber se a arte saiu neste passo). */
+export interface ArteDaLamina {
+  versoes: number;
+  ultima_em: string | null;
+}
+
+export type AcaoDaVigia = "conferir" | "feito" | "repetir" | "erro";
+
+export interface DecisaoDaVigia {
+  acao: AcaoDaVigia;
+  campos: Record<string, unknown>;
+}
+
+const segundosDesde = (iso: string | null | undefined, agora: Date): number | null => {
+  const t = iso ? Date.parse(iso) : NaN;
+  return isFinite(t) ? (agora.getTime() - t) / 1000 : null;
+};
+
+/** A trava deste passo venceu? "rodando" sem trava também conta (linha órfã). */
+export function travaVencida(item: Pick<ItemPreso, "trava_ate">, agora: Date): boolean {
+  const s = segundosDesde(item.trava_ate, agora);
+  return s === null || s > 0;
+}
+
+/**
+ * Vale ler o trabalho para saber se a arte já saiu? Só no "gerar" aberto
+ * (versoes_antes preenchida) e quando a trava venceu ou o passo já roda há
+ * mais que a folga: passo novo não paga a leitura.
+ */
+export function precisaLerAArte(item: ItemPreso, agora: Date): boolean {
+  if (item.status !== "rodando" || item.etapa !== "gerar" || item.versoes_antes === null) return false;
+  if (travaVencida(item, agora)) return true;
+  const rodando = segundosDesde(item.atualizado_em, agora);
+  return rodando !== null && rodando >= LIMITES_DA_FILA.GRACA_DA_ARTE_S;
+}
+
+/**
+ * O que fazer com uma linha "rodando". Null: está viva (ou ainda na folga), não mexe.
+ *
+ * - arte nova já gravada neste "gerar" (a função morreu depois de gravar): segue
+ *   para a conferência; se ninguém vai conferir (abandonada, passos no teto),
+ *   fecha como feita com aviso. NUNCA volta para gerar.
+ * - trava vencida na conferência ou na correção: a arte existe; repete com
+ *   espera e, no teto ou no abandono, fecha como feita com aviso (não vira erro).
+ * - trava vencida no gerar ou no fundo, sem arte nova: volta para a fila com a
+ *   tentativa contada e espera de 30 s x tentativa; no teto de tentativas ou no
+ *   abandono, erro registrado.
+ * - sem conseguir ler o trabalho (arte null num gerar aberto): não decide.
+ */
+export function decidirPreso(item: ItemPreso, arte: ArteDaLamina | null, agora: Date): DecisaoDaVigia | null {
+  if (item.status !== "rodando") return null;
+  const iso = agora.toISOString();
+  const vencida = travaVencida(item, agora);
+  const vencidaHa = segundosDesde(item.trava_ate, agora);
+  const abandonada = vencida && (vencidaHa === null || vencidaHa >= LIMITES_DA_FILA.ABANDONO_S);
+  const solta = { trava_token: null, trava_ate: null, atualizado_em: iso };
+  const feito = (aviso: string): DecisaoDaVigia => ({
+    acao: "feito",
+    campos: { ...solta, status: "feito", aviso, erro_codigo: null, erro_mensagem: null, versoes_antes: null, concluido_em: iso },
+  });
+  const erro = (codigo: string, mensagem: string): DecisaoDaVigia => ({
+    acao: "erro",
+    campos: { ...solta, status: "erro", erro_codigo: codigo, erro_mensagem: mensagem, concluido_em: iso },
+  });
+  const repetir = (): DecisaoDaVigia => {
+    const tentativas = item.tentativas + 1;
+    return {
+      acao: "repetir",
+      campos: {
+        ...solta,
+        status: "fila",
+        tentativas,
+        proxima_em: depois(agora, LIMITES_DA_FILA.ESPERA_DA_REPETICAO_S * tentativas),
+        aviso: avisoDeNovaTentativa(tentativas + 1, item.max_tentativas),
+      },
+    };
+  };
+
+  const gerarAberto = item.etapa === "gerar" && item.versoes_antes !== null;
+  if (gerarAberto && arte && arte.versoes > (item.versoes_antes as number)) {
+    const idade = segundosDesde(arte.ultima_em, agora);
+    // A função viva grava a linha logo depois da arte: dentro da folga, espera por ela.
+    if (!vencida && !(idade !== null && idade >= LIMITES_DA_FILA.GRACA_DA_ARTE_S)) return null;
+    if (abandonada || item.passos + 1 >= LIMITES_DA_FILA.MAX_PASSOS) {
+      return feito("A arte ficou pronta, mas a função parou antes da conferência (limite do servidor). Confira a lâmina.");
+    }
+    return {
+      acao: "conferir",
+      campos: { ...solta, status: "fila", etapa: "conferir", tentativas: 0, passos: item.passos + 1, proxima_em: iso, aviso: null, versoes_antes: null },
+    };
+  }
+  if (!vencida) return null;
+
+  if (item.etapa === "conferir" || item.etapa === "corrigir") {
+    if (abandonada || item.tentativas + 1 >= item.max_tentativas) {
+      return feito(item.etapa === "conferir" ? "Lâmina pronta, mas a conferência parou no servidor. Confira a lâmina." : "A correção automática parou no servidor. Confira a lâmina.");
+    }
+    return repetir();
+  }
+
+  // Gerar aberto sem leitura do trabalho: sem saber se a arte saiu, não manda gerar de novo (espera a próxima
+  // volta). Abandonada, fecha como erro mais abaixo: erro não gera nada, e a arte, se saiu, está no trabalho.
+  if (gerarAberto && !arte && !abandonada) return null;
+  if (!abandonada && item.tentativas + 1 >= item.max_tentativas) {
+    return erro("tentativas_esgotadas", `A geração desta lâmina parou ${item.max_tentativas} vezes no servidor (limite de processamento) e nenhuma arte nova foi gravada. Gere de novo.`);
+  }
+  if (abandonada) {
+    return erro("abandonado", "A geração desta lâmina parou no servidor e ninguém retomou (o painel de quem pediu ficou fechado). Nenhuma arte nova foi gravada. Gere de novo.");
+  }
+  return repetir();
+}
+
+export interface DependenciasDaVigia {
+  /** Linhas em "rodando" de todas as pessoas (chave de serviço). */
+  presos: () => Promise<ItemPreso[]>;
+  /** Versões da lâmina no trabalho; null quando não deu para ler. */
+  arte: (item: ItemPreso) => Promise<ArteDaLamina | null>;
+  /** Grava só se a linha ainda é a mesma (rodando, mesma trava). Devolve se gravou. */
+  aplicar: (item: ItemPreso, campos: Record<string, unknown>) => Promise<boolean>;
+  agora: () => Date;
+}
+
+export interface LinhaVigiada {
+  item: ItemPreso;
+  acao: AcaoDaVigia;
+}
+
+/** Uma volta da vigia: resolve o que ficou preso. Falha numa linha não para as outras. */
+export async function vigiarFila(deps: DependenciasDaVigia): Promise<LinhaVigiada[]> {
+  const agora = deps.agora();
+  const feitas: LinhaVigiada[] = [];
+  for (const item of await deps.presos()) {
+    try {
+      const arte = precisaLerAArte(item, agora)
+        ? await deps.arte(item).catch((e) => (registrarFalha("estudio-arte: vigia não leu a arte", e, { item: item.id }), null))
+        : null;
+      const d = decidirPreso(item, arte, agora);
+      if (!d) continue;
+      if (await deps.aplicar(item, d.campos)) feitas.push({ item, acao: d.acao });
+    } catch (e) {
+      registrarFalha("estudio-arte: vigia falhou numa linha", e, { item: item.id });
+    }
+  }
+  return feitas;
+}
+
+// ------------------------------------------------------------ fim do lote
+
+/**
+ * Status do trabalho que tem direção e ainda não foi entregue. "gerando" só
+ * enquanto há outra lâmina do trabalho gerando na fila; lote acabado com
+ * lâmina faltando volta para "dirigido" (a tela mostra "5 de 7 com arte"),
+ * em vez de ficar "gerando" para sempre (33 trabalhos assim em 14/11).
+ */
+export function statusDoTrabalhoEmProducao(o: { ordensDaDirecao: number[]; ordensComArte: number[]; geracaoAtiva: boolean }): "pronto" | "gerando" | "dirigido" {
+  const completo = o.ordensDaDirecao.every((ordem) => o.ordensComArte.indexOf(ordem) >= 0);
+  if (completo) return "pronto";
+  return o.geracaoAtiva ? "gerando" : "dirigido";
+}
+
+/**
+ * Lote que acabou FORA do passo. A RPC estudio_fila_pegar fecha linhas sozinha e não diz de quais trabalhos:
+ * pedido há mais de 12 h na fila vira "cancelado" (expirou) e trava vencida com as tentativas no fim vira "erro".
+ * Se era a última lâmina do lote, nenhum passo fechava a linha e o trabalho ficava "gerando".
+ *
+ * Aqui só entram trabalhos com linha fechada SEM arte (erro, cancelado) dentro da janela e que ainda estão
+ * "gerando"; quem decide e grava é o mesmo assento do fim do lote (não mexe se ainda há linha na fila ou
+ * rodando, nem se alguém gravou no meio). Nunca marca erro no trabalho e nunca gera. Linha "feito" não entra:
+ * a arte dela foi gravada, e o status já é assentado na gravação da versão e no fecho do passo. Trabalho antigo
+ * em "gerando", sem linha fechada na janela, fica como está (a tela já não o mostra como geração ativa).
+ *
+ * O teto por volta (MAX_ASSENTOS) conta só os trabalhos ainda "gerando". Trabalho já assentado não gasta a
+ * cota: as linhas fechadas são lidas em páginas, das mais novas para as mais antigas, até achar MAX_ASSENTOS
+ * pendentes ou a janela acabar. Com o teto na lista de encerrados, 50 trabalhos recentes já assentados
+ * escondiam para sempre o 51º que seguia "gerando".
+ */
+export interface DependenciasDoAssento {
+  /**
+   * Trabalhos das linhas fechadas sem arte (erro, cancelado) desde este instante, as mais novas primeiro: UMA
+   * entrada por linha (pode repetir trabalho), a partir da linha `aPartirDe`, no máximo `quantas`. Menos que
+   * `quantas` = acabou.
+   */
+  encerrados: (desde: string, aPartirDe: number, quantas: number) => Promise<string[]>;
+  /** Destes, os que estão com o status "gerando". */
+  gerando: (trabalhos: string[]) => Promise<string[]>;
+  /** O assento do fim do lote: sem nada na fila, o trabalho sai de "gerando" (pronto ou dirigido). */
+  assentar: (trabalhoId: string) => Promise<void>;
+  agora: () => Date;
+}
+
+/** Uma volta: devolve os trabalhos mandados para o assento. Falha num trabalho não para os outros. */
+export async function assentarLotesEncerrados(deps: DependenciasDoAssento): Promise<string[]> {
+  const desde = new Date(deps.agora().getTime() - LIMITES_DA_FILA.JANELA_DO_ASSENTO_S * 1000).toISOString();
+  const teto = LIMITES_DA_FILA.MAX_ASSENTOS;
+  const quantas = LIMITES_DA_FILA.PAGINA_DO_ASSENTO;
+  const vistos: string[] = [];
+  const presos: string[] = [];
+  try {
+    for (let pagina = 0; pagina < LIMITES_DA_FILA.MAX_PAGINAS_DO_ASSENTO && presos.length < teto; pagina++) {
+      const linhas = await deps.encerrados(desde, pagina * quantas, quantas);
+      const novos: string[] = [];
+      for (const id of linhas) {
+        if (!id || vistos.indexOf(id) >= 0) continue;
+        vistos.push(id);
+        novos.push(id);
+      }
+      // O status é lido em grupos do tamanho do teto (a lista de ids vai na consulta); para ao encher o teto de pendentes.
+      for (let i = 0; i < novos.length && presos.length < teto; i += teto) {
+        const grupo = novos.slice(i, i + teto);
+        const gerando = await deps.gerando(grupo);
+        for (const id of grupo) {
+          if (gerando.indexOf(id) >= 0 && presos.length < teto) presos.push(id);
+        }
+      }
+      if (linhas.length < quantas) break;
+    }
+  } catch (e) {
+    // Leitura que falha no meio não joga fora os pendentes já achados; sem nenhum, a falha sobe como antes.
+    if (!presos.length) throw e;
+    registrarFalha("estudio-arte: lotes encerrados lidos só em parte", e, { achados: presos.length });
+  }
+  for (const id of presos) {
+    try {
+      await deps.assentar(id);
+    } catch (e) {
+      registrarFalha("estudio-arte: lote encerrado não assentou", e, { trabalho_id: id });
+    }
+  }
+  return presos;
+}
+
+/** O passo fechou a linha (não vai mais andar sozinha)? */
+export const linhaFechada = (status: StatusDaFila): boolean => status === "feito" || status === "erro" || status === "cancelado";
+
+/**
+ * A capa saiu do gerar (ganhou versão, falhou ou foi cancelada)? As lâminas
+ * que esperavam por ela (capa_pendente) podem andar na hora, sem esperar os
+ * 15 s nem a vigia do painel.
+ */
+export function capaLiberouAsOutras(item: Pick<ItemDaFila, "ordem">, etapa: EtapaDaFila, mudanca: Pick<MudancaDoItem, "status" | "etapa">): boolean {
+  if (item.ordem !== 1 || (etapa !== "gerar" && etapa !== "fundo")) return false;
+  if (linhaFechada(mudanca.status)) return true;
+  return mudanca.etapa === "conferir" || mudanca.etapa === "corrigir";
+}
+
+/**
+ * Espera, em ms, antes do chute que retoma ESTA linha (fundo ocupado, nova
+ * tentativa). Null: sem chute com espera (linha fechada, anda já, espera a
+ * capa, que a própria capa libera, ou espera longa demais, que fica com a vigia).
+ */
+export function esperaDoChute(mudanca: Pick<MudancaDoItem, "status" | "proxima_em" | "aviso">, agora: Date): number | null {
+  if (mudanca.status !== "fila" || mudanca.aviso === AVISO_ESPERANDO_A_CAPA) return null;
+  const ms = Date.parse(mudanca.proxima_em) - agora.getTime();
+  if (!isFinite(ms) || ms <= 0 || ms > LIMITES_DA_FILA.ESPERA_MAXIMA_DO_CHUTE_S * 1000) return null;
+  return ms;
 }

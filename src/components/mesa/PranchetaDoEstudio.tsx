@@ -158,10 +158,12 @@ export function Cronometro({ desde }: { desde: number }) {
 /** O indicador único da lâmina em andamento: a etapa e o tempo, discretos. */
 export function ProgressoDaLamina({ ordem, andamento }: { ordem: number; andamento: AndamentoDaLamina }) {
   const naFila = andamento.etapa === "fila";
+  // 14/11/2026: na fila com motivo (esperando a capa, nova tentativa): o motivo aparece no lugar de "na fila".
+  const rotulo = naFila && andamento.detalhe ? andamento.detalhe.toLocaleLowerCase("pt-BR") : ROTULO_DA_ETAPA[andamento.etapa];
   return (
     <span
       role="status"
-      aria-label={`Lâmina ${ordem}: ${andamento.detalhe && andamento.etapa === "corrigindo" ? textoDoAndamento(andamento).toLocaleLowerCase("pt-BR") : ROTULO_DA_ETAPA[andamento.etapa]}`}
+      aria-label={`Lâmina ${ordem}: ${andamento.detalhe && andamento.etapa === "corrigindo" ? textoDoAndamento(andamento).toLocaleLowerCase("pt-BR") : rotulo}`}
       data-progresso-da-lamina={ordem}
       className="inline-flex h-7 min-w-0 max-w-full items-center rounded-full bg-secondary px-2.5 text-[11px]"
     >
@@ -170,7 +172,7 @@ export function ProgressoDaLamina({ ordem, andamento }: { ordem: number; andamen
       ) : (
         <span className="mr-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden="true" />
       )}
-      <span className={`truncate ${naFila ? "text-muted-foreground" : "font-medium text-foreground"}`}>{ROTULO_DA_ETAPA[andamento.etapa]}</span>
+      <span className={`truncate ${naFila ? "text-muted-foreground" : "font-medium text-foreground"}`}>{rotulo}</span>
       {!naFila && (
         <span className="ml-1 shrink-0 tabular-nums text-muted-foreground">
           <Cronometro desde={andamento.desde} />

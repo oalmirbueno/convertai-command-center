@@ -20,6 +20,7 @@ import PranchetaDoEstudio, {
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "@/components/mesa/autocorrecaoDaLamina";
 import { useEstadoGuardado } from "@/components/mesa/estudioUtil";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
+import { chamarEmSegundoPlano, usePedidosEmSegundoPlano } from "@/lib/mesa/segundoPlano";
 import SeletorDeAreas from "@/components/mesa/SeletorDeAreas";
 import { ultimasVersoes, type CardDaDirecao, type CardGerado, type Trabalho } from "@/components/mesa/useItensDoMes";
 import type { Area } from "@/components/mesa/estudioUtil";
@@ -249,7 +250,10 @@ export default function ArteDoCriativo({
     aoMudar: () => onAtualizar(),
     aoFalhar: (i) => avisarErro(erroDoItem(i), "A arte não foi gerada"),
   });
-  const andamento: Record<number, AndamentoDaLamina> = { ...filaDoServidor.andamento, ...andamentoLocal };
+  // 14/11/2026: ajuste, conferência e correção em segundo plano ficam registrados no trabalho; reabrir o criativo
+  // no meio de um deles traz o indicador de volta pelo banco (mesmo padrão do Estúdio).
+  const pedidos = usePedidosEmSegundoPlano(trabalho.id, onAtualizar);
+  const andamento: Record<number, AndamentoDaLamina> = { ...filaDoServidor.andamento, ...pedidos.andamento, ...andamentoLocal };
   const [selecionado, setSelecionado] = useState<number | null>(null);
   const [painel, setPainel] = useState<PainelDaLamina>("direcao");
   const [versaoVista, setVersaoVista] = useState<number | null>(null);
@@ -307,10 +311,12 @@ export default function ArteDoCriativo({
     else onAtualizar();
   };
 
+  // 14/11/2026: conferência e correção também em segundo plano (202 na hora; a tela acompanha pelo banco). Pelo
+  // caminho direto, a resposta se perdia quando a função parava por limite de CPU, mesmo com o trabalho feito.
   const chamarConferir = (ordem: number, trabalhoId: string = trabalho.id) =>
-    chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
+    chamarEmSegundoPlano<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
   const chamarCorrigir = (ordem: number, pedidoDaEquipe: boolean) =>
-    chamarFuncao<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalho.id, ordem, pedido_da_equipe: pedidoDaEquipe || undefined });
+    chamarEmSegundoPlano<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalho.id, ordem, pedido_da_equipe: pedidoDaEquipe || undefined });
 
   /** Botão "Conferir" da ferramenta Arte: só a conferência, sem corrigir. */
   const conferir = async (ordem: number) => {
@@ -420,7 +426,7 @@ export default function ArteDoCriativo({
       const t = i.trabalho as Trabalho;
       try {
         passo(i.criativo.id, "ajustando");
-        const a = await chamarFuncao<any>("estudio-arte", { acao: "ajustar_card", trabalho_id: t.id, ordem, instrucao: texto, tipo: opcoes.tipo, imagem_id: opcoes.imagem_id });
+        const a = await chamarEmSegundoPlano<any>("estudio-arte", { acao: "ajustar_card", trabalho_id: t.id, ordem, instrucao: texto, tipo: opcoes.tipo, imagem_id: opcoes.imagem_id });
         custo += custoDaResposta(a) || 0;
         passo(i.criativo.id, "conferindo");
         try {
@@ -447,7 +453,8 @@ export default function ArteDoCriativo({
     marcar(ordem, "ajustando");
     let custo = 0;
     try {
-      const a = await chamarFuncao<any>("estudio-arte", {
+      // 14/11/2026: ajuste em segundo plano (202 na hora); a tela acompanha pelo banco (segundoPlano.ts).
+      const a = await chamarEmSegundoPlano<any>("estudio-arte", {
         acao: "ajustar_card",
         trabalho_id: trabalho.id,
         ordem,
