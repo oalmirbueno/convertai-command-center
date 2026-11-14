@@ -87,6 +87,11 @@
   background-size: 279px 279px;
   background-position: calc(50% + 139.5px) 0;
 }
+@media (max-width: 719px) {
+  .el-grade {
+    background-position: 50% 0;
+  }
+}
 .el-brilho {
   position: absolute;
   border-radius: 50%;
@@ -160,7 +165,7 @@
 }
 @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .el-barra-dentro {
-    background: rgba(4, 9, 6, 0.6);
+    background: rgba(4, 9, 6, 0.84);
     -webkit-backdrop-filter: blur(18px) saturate(160%);
     backdrop-filter: blur(18px) saturate(160%);
   }
@@ -180,8 +185,12 @@
   color: var(--el-tinta);
 }
 .el-barra .el-entrar {
+  display: flex;
+  align-items: center;
+  height: 42px;
   margin-right: 14px;
   font-size: 14px;
+  line-height: 1;
   color: var(--el-suave);
 }
 @media (min-width: 1244px) {
@@ -215,6 +224,31 @@
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(0, 255, 106, 0.45), 0 18px 46px -12px rgba(0, 255, 106, 0.75);
   transition: transform 260ms var(--el-curva), opacity 200ms var(--el-curva);
+}
+.el-botao {
+  position: relative;
+  overflow: hidden;
+}
+.el-botao::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46%;
+  height: 100%;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.75) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: translate3d(-140%, 0, 0);
+  animation: el-varre 4.6s var(--el-curva) 1.2s infinite;
+  pointer-events: none;
+}
+@keyframes el-varre {
+  0% {
+    transform: translate3d(-140%, 0, 0);
+  }
+  38%,
+  100% {
+    transform: translate3d(340%, 0, 0);
+  }
 }
 .el-botao:hover {
   transform: translateY(-2px);
@@ -1243,8 +1277,8 @@
   margin-top: 12px;
   padding: 18px 20px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: #0d1510;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 .el-passo:nth-child(2) {
   margin-top: 0;
@@ -1723,14 +1757,14 @@
   margin-top: 10px;
   padding: 0 22px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #0c130f;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 .el-duvidas details:first-child {
   margin-top: 0;
 }
 .el-duvidas details[open] {
-  background: linear-gradient(180deg, rgba(31, 122, 67, 0.55) 0%, rgba(12, 47, 26, 0.55) 100%);
+  background: linear-gradient(180deg, #1a5c36 0%, #0e2f1c 100%);
   box-shadow: inset 0 0 0 1px rgba(0, 255, 106, 0.4);
 }
 .el-duvidas summary {
@@ -1798,6 +1832,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  max-width: 1180px;
+  margin: 0 auto;
   padding: 36px 20px 44px;
   font-size: 14px;
   color: var(--el-fraco);
@@ -1807,6 +1843,10 @@
   color: var(--el-suave);
 }
 @media (min-width: 720px) {
+  .el-rodape {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
   .el-final {
     margin: 0 24px;
     padding: 104px 32px;
@@ -1820,6 +1860,72 @@
   }
 }
 
+/* ------------------------------------------------------------------ faixa de endereços que corre */
+.el-faixa {
+  position: relative;
+  overflow: hidden;
+  margin-top: 56px;
+  padding: 18px 0;
+  border-top: 1px solid var(--el-linha);
+  border-bottom: 1px solid var(--el-linha);
+  background: rgba(4, 9, 6, 0.7);
+}
+.el-faixa-trilho {
+  display: flex;
+  width: max-content;
+  width: -webkit-max-content;
+  animation: el-corre 38s linear infinite;
+}
+.el-faixa span {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-right: 44px;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 17px;
+  white-space: nowrap;
+  color: var(--el-fraco);
+}
+.el-faixa span b {
+  font-weight: 500;
+  color: var(--el-verde);
+}
+.el-faixa span svg {
+  margin-right: 12px;
+  color: var(--el-verde);
+}
+@keyframes el-corre {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+/* A foto do herói respira devagar. */
+.el-pessoa-foto {
+  animation: el-respira 7s ease-in-out infinite alternate;
+}
+@keyframes el-respira {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(0, -8px, 0) scale(1.015);
+  }
+}
+/* O valor dá um pulo curto cada vez que a conta muda. */
+.el-pulo {
+  animation: el-pulo 420ms var(--el-curva) both;
+}
+@keyframes el-pulo {
+  from {
+    opacity: 0.4;
+    transform: translate3d(0, 10px, 0) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ------------------------------------------------------------------ entrada por rolagem */
 /* Só vale quando o JS confirma que dá para observar a rolagem: sem ele, tudo já está visível. */
 .el-anim .el-r {
@@ -1829,6 +1935,87 @@
 }
 .el-anim .el-r.el-in {
   opacity: 1;
+  transform: none;
+}
+.el-anim .el-barras li {
+  opacity: 0;
+  transform: translate3d(36px, 0, 0);
+  transition: opacity 700ms var(--el-curva), transform 700ms var(--el-curva);
+}
+.el-anim .el-in .el-barras li,
+.el-anim .el-in.el-barras li {
+  opacity: 1;
+  transform: none;
+}
+.el-anim .el-in .el-barras li:nth-child(1) {
+  transition-delay: 250ms;
+}
+.el-anim .el-in .el-barras li:nth-child(2) {
+  transition-delay: 400ms;
+}
+.el-anim .el-in .el-barras li:nth-child(3) {
+  transition-delay: 550ms;
+}
+.el-anim .el-in .el-barras li:nth-child(4) {
+  transition-delay: 700ms;
+}
+.el-anim .el-passo,
+.el-anim .el-resultado {
+  opacity: 0;
+  transform: translate3d(30px, 0, 0);
+  transition: opacity 700ms var(--el-curva), transform 700ms var(--el-curva);
+}
+.el-anim .el-in .el-passo,
+.el-anim .el-in .el-resultado {
+  opacity: 1;
+  transform: none;
+}
+.el-anim .el-in .el-passo:nth-child(2) {
+  transition-delay: 200ms;
+}
+.el-anim .el-in .el-passo:nth-child(3) {
+  transition-delay: 500ms;
+}
+.el-anim .el-in .el-passo:nth-child(4) {
+  transition-delay: 800ms;
+}
+.el-anim .el-in .el-passo:nth-child(5) {
+  transition-delay: 1100ms;
+}
+.el-anim .el-in .el-resultado {
+  transition-delay: 1500ms;
+}
+.el-anim .el-passo-marca {
+  transform: scale(0);
+  transition: transform 500ms var(--el-curva);
+}
+.el-anim .el-in .el-passo-marca {
+  transform: scale(1);
+}
+.el-anim .el-in .el-passo:nth-child(2) .el-passo-marca {
+  transition-delay: 300ms;
+}
+.el-anim .el-in .el-passo:nth-child(3) .el-passo-marca {
+  transition-delay: 600ms;
+}
+.el-anim .el-in .el-passo:nth-child(4) .el-passo-marca {
+  transition-delay: 900ms;
+}
+.el-anim .el-in .el-passo:nth-child(5) .el-passo-marca {
+  transition-delay: 1200ms;
+}
+.el-anim .el-retrato img {
+  transform: scale(1.12);
+  transition: transform 1800ms var(--el-curva);
+}
+.el-anim .el-in.el-retrato img {
+  transform: scale(1);
+}
+.el-anim .el-total {
+  transform: translate3d(0, 40px, 0) scale(0.96);
+  transition: transform 1000ms var(--el-curva) 250ms;
+}
+.el-anim .el-in .el-total {
   transform: none;
 }
 .el-anim .el-trilho span {
@@ -1931,9 +2118,12 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .el-brilho,
-  .el-cruz,
-  .el-pessoa-luz {
+  .el-pessoa-luz,
+  .el-pessoa-foto {
     animation: none;
+  }
+  .el-faixa-trilho {
+    animation-duration: 70s;
   }
   .el-flutua-1,
   .el-flutua-2 {
