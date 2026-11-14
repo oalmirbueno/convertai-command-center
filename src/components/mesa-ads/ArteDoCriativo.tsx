@@ -20,6 +20,7 @@ import PranchetaDoEstudio, {
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "@/components/mesa/autocorrecaoDaLamina";
 import { useEstadoGuardado } from "@/components/mesa/estudioUtil";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
+import { chamarEmSegundoPlano } from "@/lib/mesa/segundoPlano";
 import SeletorDeAreas from "@/components/mesa/SeletorDeAreas";
 import { ultimasVersoes, type CardDaDirecao, type CardGerado, type Trabalho } from "@/components/mesa/useItensDoMes";
 import type { Area } from "@/components/mesa/estudioUtil";
@@ -420,7 +421,7 @@ export default function ArteDoCriativo({
       const t = i.trabalho as Trabalho;
       try {
         passo(i.criativo.id, "ajustando");
-        const a = await chamarFuncao<any>("estudio-arte", { acao: "ajustar_card", trabalho_id: t.id, ordem, instrucao: texto, tipo: opcoes.tipo, imagem_id: opcoes.imagem_id });
+        const a = await chamarEmSegundoPlano<any>("estudio-arte", { acao: "ajustar_card", trabalho_id: t.id, ordem, instrucao: texto, tipo: opcoes.tipo, imagem_id: opcoes.imagem_id });
         custo += custoDaResposta(a) || 0;
         passo(i.criativo.id, "conferindo");
         try {
@@ -447,7 +448,8 @@ export default function ArteDoCriativo({
     marcar(ordem, "ajustando");
     let custo = 0;
     try {
-      const a = await chamarFuncao<any>("estudio-arte", {
+      // 14/11/2026: ajuste em segundo plano (202 na hora); a tela acompanha pelo banco (segundoPlano.ts).
+      const a = await chamarEmSegundoPlano<any>("estudio-arte", {
         acao: "ajustar_card",
         trabalho_id: trabalho.id,
         ordem,
