@@ -3,7 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  AlertTriangle, ArrowLeft, CheckCheck, Clock, CornerDownLeft, Loader2, MessageCircle, MonitorSmartphone, Pencil, RefreshCw, RotateCcw, Send, SkipForward, Sparkles,
+  AlertTriangle, CheckCheck, Clock, CornerDownLeft, Loader2, MessageCircle, MonitorSmartphone, Pencil, RefreshCw, RotateCcw, Send, SkipForward, Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -17,7 +17,6 @@ import MensagensAutomaticas from "@/components/central/MensagensAutomaticas";
 import {
   BotaoComIcone,
   CabecalhoDePagina,
-  Carregando,
   EstadoDeErro,
   EstadoVazio,
   JanelaCentral,
@@ -265,8 +264,9 @@ export default function MensagensDaSemana() {
         titulo="Mensagens da semana"
         descricao={`${mensagens.filter((m) => m.situacao === "pronta").length} prontas${vencidas ? ` · ${vencidas} ${vencidas === 1 ? "vencida" : "vencidas"}` : ""}`}
         ajuda="Todas as mensagens dos rituais de segunda, quarta e sexta, de todos os clientes. Edite o texto ou peça o ajuste ao agente, e aprove. No WhatsApp, o Hermes envia no grupo e registra; no portal, a aprovação já publica. Pular registra que esta não vai. Nada sai sem você."
+        voltar={{ para: "/central", rotulo: "Central" }}
+        className="max-sm:[&>div:first-child]:max-w-[calc(100%-96px)] max-sm:[&>div:first-child]:flex-none max-sm:[&>[data-acoes-do-cabecalho]]:justify-end max-sm:[&_h1]:text-[20px]"
         acoes={<>
-          <Link to="/central" className={botao.icone} title="Voltar à Central" aria-label="Voltar à Central"><ArrowLeft className="h-4 w-4" aria-hidden="true" /></Link>
           <button type="button" onClick={() => void atualizar()} className={botao.icone} title="Atualizar" aria-label="Atualizar"><RefreshCw className={juntar("h-4 w-4", (pedidos.isFetching || rascunhos.isFetching) && "animate-spin")} aria-hidden="true" /></button>
           {prontas.length > 1 && (
             <BotaoComIcone
@@ -281,7 +281,17 @@ export default function MensagensDaSemana() {
         </>}
       />
 
-      {carregando ? <Carregando linhas={4} rotulo="Carregando as mensagens da semana" />
+      {carregando ? (
+        // O mesmo espaço dos números e dos cartões que chegam: as Cobranças, embaixo, não pulam.
+        <div aria-busy="true" aria-label="Carregando as mensagens da semana" className={espaco.pagina} data-esqueleto-das-mensagens="">
+          <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => <div key={i} className={juntar("animate-pulse rounded-lg bg-muted motion-reduce:animate-none lg:h-[192px]", i === 0 ? "col-span-2 h-[160px] lg:col-span-1" : "h-[162px]")} />)}
+          </div>
+          <div className={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4")}>
+            {[0, 1, 2].map((i) => <div key={i} className={juntar("h-[440px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none", i > 0 && "max-sm:hidden", i > 1 && "max-xl:hidden")} />)}
+          </div>
+        </div>
+      )
         : erro ? <EstadoDeErro titulo="Não foi possível ler as mensagens." descricao={(erro as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void atualizar()}>Tentar de novo</button>} />
           : mensagens.length === 0 ? <EstadoVazio icone={<CheckCheck className="h-5 w-5" />} titulo="Nenhuma mensagem esperando você esta semana." descricao="Quando um ritual ficar pronto, ele aparece aqui." />
             : <>
@@ -310,7 +320,7 @@ export default function MensagensDaSemana() {
               const pagina = paginas[s.chave] || 1;
               const visiveis = daSecao.slice(0, pagina * POR_PAGINA);
               return (
-                <Secao key={s.chave} titulo={s.titulo} descricao={`${daSecao.length}`} recolher={`mensagens-semana:${s.chave}`} recolhidaDeInicio={s.chave === "aprovada"}>
+                <Secao key={s.chave} titulo={s.titulo} descricao={s.chave === "aprovada" ? `${daSecao.length}` : undefined} recolher={`mensagens-semana:${s.chave}`} recolhidaDeInicio={s.chave === "aprovada"}>
                   <ul className={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4")} aria-label={s.titulo}>
                     {visiveis.map(cartao)}
                   </ul>

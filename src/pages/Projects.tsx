@@ -87,7 +87,7 @@ export default function Projects() {
       <CabecalhoDePagina
         titulo="Projetos"
         ajuda={isClient ? "Seus projetos com a Aceleriq. Toque num projeto para ver o andamento." : "Todos os projetos da agência, com status, andamento e prazo. Clique num projeto para abrir o detalhe."}
-        descricao={isLoading ? undefined : `${filtered.length} ${filtered.length === 1 ? "projeto" : "projetos"}`}
+        descricao={isLoading ? "\u00a0" : `${filtered.length} ${filtered.length === 1 ? "projeto" : "projetos"}`}
         acoes={
           <>
             <SeletorCompacto
@@ -168,7 +168,7 @@ export default function Projects() {
             }
           />
         ) : (
-          <ul aria-label="Projetos" data-tour="projects-list" className={juntar(superficie.painel, "divide-y divide-border/70 overflow-hidden px-2 py-2 sm:px-3")}>
+          <ul aria-label="Projetos" data-tour="projects-list" className={juntar(superficie.painel, "space-y-0.5 overflow-hidden px-2 py-2 sm:px-3")}>
             {filtered.map((p: any) => {
               // Recorrente nao tem "80% pronto": mostra o ritmo do ciclo.
               const view = buildProgressView(p, (tasks || []) as any[]);
@@ -200,9 +200,12 @@ export default function Projects() {
                         )}
                       </div>
                       <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
-                        {[p.client?.company_name || p.client?.full_name, statusLabels[p.status]].filter(Boolean).join(" · ")}
+                        {p.client?.company_name || p.client?.full_name}
+                        {/* O status já aparece na pílula de 1024 px para cima: aqui só quando ela some. */}
+                        {statusLabels[p.status] && <span className="lg:hidden">{p.client?.company_name || p.client?.full_name ? " · " : ""}{statusLabels[p.status]}</span>}
                       </p>
                     </div>
+                    {view.mode === "percent" && <span className="mr-1 shrink-0 text-[13px] font-semibold tabular-nums text-foreground md:hidden" aria-hidden="true">{view.percent}%</span>}
                     <div className="mr-4 hidden w-40 shrink-0 md:block">
                       <p className="mb-1.5 truncate text-right text-[13px] font-semibold tabular-nums text-foreground">
                         {view.mode === "percent" ? `${view.percent}%` : view.label}

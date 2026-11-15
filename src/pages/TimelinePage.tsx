@@ -472,8 +472,9 @@ export default function TimelinePage() {
     <div className="min-w-0">
       <CabecalhoDePagina
         titulo="Timeline"
+        className="max-sm:[&>div:first-child]:flex-none"
         ajuda="Os marcos de cada projeto em ordem, com as tarefas de cada marco. Abra um projeto para ver detalhes, reordenar marcos (arrastando) e criar tarefas."
-        descricao={carregando ? undefined : `${filteredProjects.length} ${filteredProjects.length === 1 ? "projeto" : "projetos"}`}
+        descricao={carregando ? "\u00a0" : `${filteredProjects.length} ${filteredProjects.length === 1 ? "projeto" : "projetos"}`}
         acoes={
           <SeletorCompacto
             rotulo="Projeto"
@@ -485,7 +486,7 @@ export default function TimelinePage() {
             ]}
             valor={filterProject}
             onEscolher={setFilterProject}
-            className="max-w-[240px]"
+            className="max-w-[240px] max-sm:max-w-[calc(100vw-188px)]"
           />
         }
       />
@@ -537,12 +538,14 @@ export default function TimelinePage() {
         const visibleMilestones = milestones.slice(pageIdx, pageIdx + INITIAL_MILESTONES);
         const canGoPrev = pageIdx > 0;
         const canGoNext = pageIdx + INITIAL_MILESTONES < milestones.length;
-        const estado = [
-          typeLabels[project.project_type] || project.project_type,
-          statusProjectLabel[project.status] || project.status,
-          `${project.progress}% concluído`,
-          isAdmin ? `${milestones.length} marcos` : null,
-        ].filter(Boolean).join(" · ");
+        // O andamento já aparece na barra à direita de 640 px para cima: no texto, só no celular.
+        const estado = (
+          <>
+            {[typeLabels[project.project_type] || project.project_type, statusProjectLabel[project.status] || project.status].filter(Boolean).join(" · ")}
+            <span className="sm:hidden">{` · ${project.progress}% concluído`}</span>
+            {isAdmin ? ` · ${milestones.length} ${milestones.length === 1 ? "marco" : "marcos"}` : null}
+          </>
+        );
 
         return (
           <Card

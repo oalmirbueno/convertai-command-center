@@ -1727,11 +1727,14 @@ export default function EditorialCalendar() {
                 // 16/10/2026: no celular sai a linha de números (menos informação).
                 celular ? undefined : (
                 <>
-                  {resumoDoCalendario(
-                    filteredPosts,
-                    canUseTeamData && view === "board" ? tasksForCurrentView.length : undefined,
-                  )}
-                  {canUseTeamData && taskDataLoading && !taskDataError ? " · lendo tarefas do Kanban" : ""}
+                  {/* De 1024 px para cima os mesmos números estão na faixa de cartões logo abaixo: aqui, só quando ela não aparece. */}
+                  <span className={filteredPosts.some((p) => p.publications.length > 0) ? "lg:hidden" : undefined}>
+                    {resumoDoCalendario(
+                      filteredPosts,
+                      canUseTeamData && view === "board" ? tasksForCurrentView.length : undefined,
+                    )}
+                  </span>
+                  {canUseTeamData && taskDataLoading && !taskDataError ? <><span className={filteredPosts.some((p) => p.publications.length > 0) ? "lg:hidden" : undefined}>{" · "}</span>lendo tarefas do Kanban</> : ""}
                 </>
                 )
               }
@@ -1740,20 +1743,19 @@ export default function EditorialCalendar() {
           inicioDaLinha={
             canUseTeamData ? (
               <div className="flex min-w-0 items-center">
-                {/* 16/10/2026: no celular fica só o atalho do Kanban (sem a contagem). */}
-                {!celular && (
-                <span className={juntar(texto.auxiliar, "mr-2 truncate")}>
-                  <span className="font-medium text-violet-500">{productionTasks.length}</span>{" "}
-                  {productionTasks.length === 1 ? "entrega editorial do Kanban" : "entregas editoriais do Kanban"}
-                </span>
-                )}
+                {/* Polimento v4 (15/11/2026): a contagem virou o selo do atalho (o texto inteiro fica na dica). */}
                 <Link
                   to={kanbanHref}
-                  className={botao.icone}
+                  className={juntar(botao.icone, "relative")}
                   aria-label="Abrir Kanban central"
-                  title="Abrir Kanban central"
+                  title={`${productionTasks.length} ${productionTasks.length === 1 ? "entrega editorial do Kanban" : "entregas editoriais do Kanban"} · Abrir Kanban central`}
                 >
                   <SquareKanban className="h-4 w-4" aria-hidden="true" />
+                  {!celular && productionTasks.length > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-violet-600 px-1 text-[10px] font-semibold leading-none tabular-nums text-white" aria-hidden="true">
+                      {productionTasks.length}
+                    </span>
+                  )}
                 </Link>
               </div>
             ) : null
@@ -1821,7 +1823,12 @@ export default function EditorialCalendar() {
           }}
         />
 
-        {!celular && <FaixaDoCalendario posts={filteredPosts} />}
+        {/* Enquanto lê, a faixa de números já tem o lugar dela: o calendário não desce quando ela chega. */}
+        {!celular && (calendarQuery.isLoading ? (
+          <div className="mb-5 hidden min-w-0 grid-cols-4 gap-5 lg:grid" aria-hidden="true" data-esqueleto-da-faixa="">
+            {[0, 1, 2, 3].map((i) => <div key={i} className="h-[181px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />)}
+          </div>
+        ) : <FaixaDoCalendario posts={filteredPosts} />)}
 
         {approvedReadyToSchedule.length > 0 && (
           <div className="ds-accent mb-3 flex min-w-0 items-center rounded-lg px-4 py-3 sm:px-5">
