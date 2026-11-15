@@ -59,6 +59,7 @@ import {
 } from "@/lib/laboratorio/nos";
 import QuadroDoLab from "./QuadroDoLab";
 import Paleta from "./Paleta";
+import { HACHURA, botaoEmCirculo } from "./visual";
 import Inspetor from "./Inspetor";
 import ModoListaDoLab from "./ModoListaDoLab";
 import AgenteDoProjeto from "./AgenteDoProjeto";
@@ -871,14 +872,21 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     >
       {/* Topo: a barra e o Canvas Studio (a altura do canvas acompanha o tamanho daqui). Some no "só o canvas". */}
       <div ref={refDoTopo} className={juntar("min-w-0", soCanvas && "hidden", cheia && "px-3 pt-2", cobre && etapa && "min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3")} data-topo-do-editor="">
-      <div className="mb-2 flex min-w-0 flex-wrap items-center" data-barra-do-editor="">
-        <button type="button" className={juntar(botao.icone, "mr-1")} onClick={onVoltar} aria-label="Voltar aos projetos" title="Voltar aos projetos">
+      {/*
+        Barra do editor (v4, 15/11/2026): uma faixa branca em pílula. À esquerda, voltar em círculo, o nome e o
+        estado do salvar; à direita, exportar, "Rodar tudo" (a única ação cheia: pílula de tinta com o play num
+        círculo verde, como o "Run once" das referências), os painéis em círculos e o "…". No celular vira duas
+        linhas arrumadas (nome em cima, ações embaixo), sem botão caindo sozinho para a linha seguinte.
+      */}
+      <div className="mb-2 flex min-w-0 flex-wrap items-center rounded-[24px] bg-card p-1.5 shadow-card sm:rounded-full" data-barra-do-editor="">
+        <div className="order-1 flex min-w-0 flex-1 items-center">
+        <button type="button" className={juntar(botaoEmCirculo, "mr-1.5")} onClick={onVoltar} aria-label="Voltar aos projetos" title="Voltar aos projetos">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </button>
         <input
           aria-label="Nome do projeto"
           title={nome}
-          className={juntar(campo, "mr-2 h-8 w-auto min-w-[96px] max-w-[260px] flex-1 truncate border-transparent bg-transparent px-1.5 text-[15px] font-semibold hover:border-input")}
+          className={juntar(campo, "mr-2 h-9 w-auto min-w-[96px] max-w-[320px] flex-1 truncate rounded-full border-transparent bg-transparent px-2.5 text-[15px] font-semibold hover:border-input")}
           value={nome}
           onChange={(e) => {
             setNome(e.target.value);
@@ -887,8 +895,8 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
           }}
         />
         {/* Celular (< 640): "Salvo"/"Salvando" só no ícone (nome no title); aviso de erro ou conflito continua com texto. */}
-        <span role="status" className={juntar(texto.auxiliar, "mr-2 inline-flex shrink-0 items-center", (salvar.estado === "erro" || salvar.estado === "conflito") && "text-warning")} data-estado-do-salvar={salvar.estado} title={salvar.erro || rotuloDoSalvar}>
-          {salvar.estado === "salvando" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> : salvar.estado === "salvo" ? <Check className="mr-1 h-3 w-3" aria-hidden="true" /> : null}
+        <span role="status" className={juntar("mr-2 inline-flex h-6 shrink-0 items-center rounded-full px-2 text-[11px] font-medium leading-none", salvar.estado === "erro" || salvar.estado === "conflito" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground")} data-estado-do-salvar={salvar.estado} title={salvar.erro || rotuloDoSalvar}>
+          {salvar.estado === "salvando" ? <Loader2 className="h-3 w-3 animate-spin sm:mr-1" aria-hidden="true" /> : salvar.estado === "salvo" ? <Check className="h-3 w-3 sm:mr-1" aria-hidden="true" /> : null}
           <span className={salvar.estado === "salvo" || salvar.estado === "salvando" ? "sr-only sm:not-sr-only" : undefined}>{rotuloDoSalvar}</span>
         </span>
         {salvar.estado === "conflito" && (
@@ -902,28 +910,32 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
             Tentar salvar
           </button>
         )}
-        {/* No celular o nome ocupa a sobra (sem espaçador); de 640 para cima o espaçador empurra as ações. */}
-        <span className="hidden flex-1 sm:block" />
-        {projeto ? <ExportarProjeto projeto={{ ...projeto, nome, client_id: clienteDoProjeto }} canvas={canvas} execucoes={Object.values(execucoes)} clienteNome={nomeDoCliente(clientes, clienteDoProjeto)} disabled={rodando} /> : null}
-        {/* Celular (< 640): só ícone, nome no title; o nome do projeto fica visível ao lado. */}
-        <button type="button" className={juntar(botao.primario, "h-8 w-8 shrink-0 px-0 sm:w-auto sm:px-3")} onClick={() => void pedirCusto({ tipo: "tudo" })} disabled={!!estimando || rodando || !canvas.nos.length} aria-label="Rodar tudo" title="Rodar tudo (mostra o custo antes)" data-rodar-tudo="">
-          {estimando === "tudo" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" aria-hidden="true" /> : <Play className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />}
-          <span className="hidden sm:inline">Rodar tudo</span>
-        </button>
-        <button type="button" className={juntar(botao.icone, "ml-1", agente && "text-primary")} onClick={() => setAgente(!agente)} aria-label={agente ? "Fechar o agente do projeto" : "Abrir o agente do projeto"} title="Agente do projeto" aria-pressed={agente}>
+        </div>
+        <div className="order-3 mt-1.5 flex w-full min-w-0 items-center border-t border-border/60 pt-1.5 sm:order-2 sm:mt-0 sm:w-auto sm:border-t-0 sm:pt-0">
+        <button type="button" className={juntar(botao.icone, "h-9 w-9", agente && "bg-foreground text-background hover:bg-foreground/85 hover:text-background")} onClick={() => setAgente(!agente)} aria-label={agente ? "Fechar o agente do projeto" : "Abrir o agente do projeto"} title="Agente do projeto" aria-pressed={agente}>
           {agente ? <PanelRightClose className="h-4 w-4" aria-hidden="true" /> : <PanelRightOpen className="h-4 w-4" aria-hidden="true" />}
         </button>
-        <button type="button" className={botao.icone} onClick={() => setLista(!lista)} aria-label={lista ? "Ver o quadro" : "Modo lista"} title={lista ? "Ver o quadro" : "Modo lista"}>
+        <button type="button" className={juntar(botao.icone, "h-9 w-9", lista && "bg-foreground text-background hover:bg-foreground/85 hover:text-background")} onClick={() => setLista(!lista)} aria-label={lista ? "Ver o quadro" : "Modo lista"} title={lista ? "Ver o quadro" : "Modo lista"}>
           {lista ? <Workflow className="h-4 w-4" aria-hidden="true" /> : <LayoutList className="h-4 w-4" aria-hidden="true" />}
         </button>
-        <button type="button" className={botao.icone} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia}>
+        <button type="button" className={juntar(botao.icone, "h-9 w-9")} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia}>
           {cheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
         </button>
         {!lista && !etapa ? (
-          <button type="button" className={botao.icone} onClick={() => setSoCanvas(true)} aria-label="Canvas em tela cheia" title="Canvas em tela cheia: só o quadro, de ponta a ponta (Esc sai)" data-botao-so-canvas="">
+          <button type="button" className={juntar(botao.icone, "h-9 w-9")} onClick={() => setSoCanvas(true)} aria-label="Canvas em tela cheia" title="Canvas em tela cheia: só o quadro, de ponta a ponta (Esc sai)" data-botao-so-canvas="">
             <Fullscreen className="h-4 w-4" aria-hidden="true" />
           </button>
         ) : null}
+        {projeto ? <ExportarProjeto projeto={{ ...projeto, nome, client_id: clienteDoProjeto }} canvas={canvas} execucoes={Object.values(execucoes)} clienteNome={nomeDoCliente(clientes, clienteDoProjeto)} disabled={rodando} /> : null}
+        <span className="flex-1 sm:w-2 sm:flex-none" />
+        <button type="button" className="toque-compacto inline-flex h-9 shrink-0 items-center rounded-full bg-foreground pl-1 pr-4 text-[13px] font-medium text-background transition-colors hover:bg-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50" onClick={() => void pedirCusto({ tipo: "tudo" })} disabled={!!estimando || rodando || !canvas.nos.length} aria-label="Rodar tudo" title="Rodar tudo (mostra o custo antes)" data-rodar-tudo="">
+          <span className="mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">
+            {estimando === "tudo" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+          </span>
+          Rodar tudo
+        </button>
+        </div>
+        <div className="order-2 ml-1 shrink-0 sm:order-3">
         <MenuMais
           rotulo="Mais ações do projeto"
           itens={[
@@ -948,6 +960,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
             { rotulo: "Excluir projeto", icone: <Trash2 className="h-4 w-4" />, perigo: true, aoEscolher: () => setExcluir(true) },
           ]}
         />
+        </div>
       </div>
 
       <FaixaDaCampanha projetoId={projetoId} clienteId={clienteDoProjeto} antesDeChamar={garantirSalvo} aoMudarCanvas={() => void recarregarDaPonte()} />
@@ -982,7 +995,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               <Paleta onPor={(t) => por(t)} />
             </div>
           )}
-          <div className={juntar("relative min-w-0 flex-1 overflow-hidden", !soCanvas && "rounded-md border border-border")} data-area-do-quadro="">
+          <div className={juntar("relative min-w-0 flex-1 overflow-hidden", !soCanvas && "rounded-[26px] border border-border")} data-area-do-quadro="">
             <QuadroDoLab
               canvas={canvas}
               execucoes={execucoes}
@@ -1015,7 +1028,13 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               onNovaExecucao={aoNovaExecucao}
             />
             {!canvas.nos.length && (
-              <p className={juntar(texto.auxiliar, "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center")}>Peça no Canvas Studio acima, toque num ícone da paleta ou fale com o agente do projeto.</p>
+              <div className="pointer-events-none absolute left-1/2 top-1/2 w-[84%] max-w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-[24px] border border-dashed border-border px-6 py-8 text-center" style={HACHURA} data-quadro-vazio="">
+                <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-card" aria-hidden="true">
+                  <Workflow className="h-5 w-5" />
+                </span>
+                <p className="text-[15px] font-semibold leading-5 text-foreground">Quadro vazio</p>
+                <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>Peça no Canvas Studio acima, toque num ícone da paleta ou fale com o agente do projeto.</p>
+              </div>
             )}
             {avisoDoQuadro && (
               <p role="alert" className={juntar(texto.corpo, "absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-md border border-warning/40 bg-background px-3 py-2 text-warning")} data-aviso-do-quadro="">
@@ -1023,13 +1042,13 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               </p>
             )}
             {inspetor && detalhes && (
-              <div className="nowheel nodrag nopan absolute bottom-2 right-2 top-2 z-10 w-[300px] max-w-[85%] overflow-y-auto overscroll-contain rounded-md border border-border bg-background p-3 shadow-card" data-painel-do-inspetor="">
+              <div className="nowheel nodrag nopan absolute bottom-2 right-2 top-2 z-10 w-[320px] max-w-[85%] overflow-y-auto overscroll-contain rounded-[22px] border border-border bg-card p-4 shadow-pop" data-painel-do-inspetor="">
                 {inspetor}
               </div>
             )}
             {soCanvas && (
               // Mini barra flutuante do "só o canvas": sair, abrir o Studio e Rodar tudo.
-              <div className="nowheel nodrag nopan absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center rounded-lg border border-border bg-background p-1 shadow-card" role="toolbar" aria-label="Barra do canvas em tela cheia" data-mini-barra-do-canvas="">
+              <div className="nowheel nodrag nopan absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center rounded-full border border-border bg-popover p-1 shadow-pop" role="toolbar" aria-label="Barra do canvas em tela cheia" data-mini-barra-do-canvas="">
                 <button type="button" className={botao.icone} onClick={sairDoSoCanvas} aria-label="Sair do canvas em tela cheia" title="Sair do canvas em tela cheia (Esc)">
                   <Minimize2 className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -1042,7 +1061,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               </div>
             )}
           </div>
-          {agente && largo && !soCanvas && <div className="ml-3 w-[340px] shrink-0">{painelDoAgente}</div>}
+          {agente && largo && !soCanvas && <div className="ml-2 w-[320px] shrink-0 xl:w-[340px]">{painelDoAgente}</div>}
         </div>
       )}
 

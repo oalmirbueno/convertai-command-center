@@ -41,7 +41,7 @@ export default function RodapeDoNo({ no, execucao, selecionado, ocupado, trava }
   const ultimo = execucao && typeof execucao.custo_usd === "number" ? execucao.custo_usd : null;
   const custo = aguardando ? "Atualizando custo" : est.data ? `≈ ${dinheiro(est.data.total_usd)}` : est.isFetching ? null : ultimo !== null ? `Último ${dinheiro(ultimo)}` : "";
   return (
-    <div className="flex min-w-0 items-center space-x-1.5 border-t border-border px-3 py-2.5" data-rodape-do-no={no.id}>
+    <div className="flex min-w-0 items-center space-x-1.5 px-3 pb-3 pt-1" data-rodape-do-no={no.id}>
       {!noAr ? (
         <label className="mr-2 inline-flex shrink-0 cursor-pointer items-center" title="Automático: roda sozinho quando as entradas ficam prontas (até o teto do projeto; acima, pergunta)">
           <input type="checkbox" className="peer sr-only" checked={auto} onChange={(e) => a.mudarDados(no.id, { auto: e.target.checked })} aria-label="Automático" data-auto-do-no={no.id} />
@@ -56,13 +56,16 @@ export default function RodapeDoNo({ no, execucao, selecionado, ocupado, trava }
       </span>
       <button
         type="button"
-        className={juntar(botao.primario, "h-8 px-3 text-[13px]")}
+        // v4: o verde cheio fica só no "Rodar tudo"; no nó é a pílula de tinta com o play verde (um quadro com dez nós não vira dez botões verdes).
+        className={juntar(botao.secundario, "h-8 border-0 bg-foreground pl-1 pr-3 text-[13px] text-background hover:bg-foreground/85")}
         onClick={() => a.rodar(no.id)}
         disabled={ocupado || !!trava}
         title={trava || (noAr ? "Pedir aprovação (mostra o custo antes)" : "Rodar (mostra o custo antes)")}
         data-rodar-no-rodape={no.id}
       >
-        {ocupado ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Play className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
+        <span className="mr-1.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">
+          {ocupado ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+        </span>
         {noAr ? "Pedir aprovação" : "Rodar"}
       </button>
     </div>

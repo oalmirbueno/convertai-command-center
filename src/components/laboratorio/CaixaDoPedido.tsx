@@ -69,7 +69,7 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
   // pílula com o ícone em círculo e o NOME à vista (antes era só o ícone e ninguém sabia o que era); os de
   // projeto completo levam o círculo de tinta. No celular a fila rola de lado por dentro, numa linha só.
   const atalhos = p.compacta ? (
-    <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Atalhos do Canvas Studio">
+    <div className="scrollbar-hidden flex min-w-0 items-center overflow-x-auto overscroll-x-contain max-sm:w-full sm:flex-wrap sm:overflow-visible" role="group" aria-label="Atalhos do Canvas Studio">
       {p.atalhos.map((a) => {
         const I = a.icone;
         return (
@@ -111,12 +111,12 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
         p.onEnviar();
       }}
     >
-      <div className={juntar(superficie.painel, "min-w-0", p.compacta ? "px-2 py-1.5" : "rounded-[28px] p-4 sm:p-5")}>
+      <div className={juntar(superficie.painel, "min-w-0", p.compacta ? "rounded-[24px] px-3 py-2" : "rounded-[28px] p-4 sm:p-5")}>
         <textarea
           ref={ref}
           aria-label={p.rotulo}
           rows={p.compacta ? 1 : undefined}
-          className={juntar(campoTexto, "resize-none border-0 bg-transparent px-1 focus-visible:ring-0 focus-visible:ring-offset-0", p.compacta ? "min-h-[36px] text-[14px]" : "min-h-[84px] text-[15px] leading-6")}
+          className={juntar(campoTexto, "resize-none border-0 bg-transparent px-1 focus-visible:ring-0 focus-visible:ring-offset-0", p.compacta ? "min-h-[36px] text-[14px] placeholder:truncate max-sm:min-h-[52px]" : "min-h-[84px] text-[15px] leading-6")}
           placeholder={p.placeholder}
           value={p.valor}
           onChange={(e) => p.onMudar(e.target.value)}
@@ -137,7 +137,7 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
             {p.compacta ? atalhos : null}
             {p.extra}
           </div>
-          <button type="submit" className={juntar(botao.primario, "ml-2 shrink-0", p.compacta ? "h-8 w-8 px-0" : "h-11 w-11 bg-foreground px-0 text-background hover:bg-foreground/85")} disabled={p.enviando || !p.valor.trim()} aria-label="Enviar o pedido" title={p.tituloDoEnviar} data-enviar-pedido="">
+          <button type="submit" className={juntar(botao.primario, "ml-2 shrink-0", juntar("bg-foreground px-0 text-background hover:bg-foreground/85", p.compacta ? "h-9 w-9" : "h-11 w-11"))} disabled={p.enviando || !p.valor.trim()} aria-label="Enviar o pedido" title={p.tituloDoEnviar} data-enviar-pedido="">
             {p.enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
