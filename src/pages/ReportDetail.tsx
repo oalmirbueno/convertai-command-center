@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   ArrowLeft, Download, MessageCircle, TrendingUp,
   BarChart3, Target, Zap, Eye, MousePointerClick, Users, DollarSign,
-  Printer, ArrowUpRight, ArrowDownRight,
+  Printer, ArrowUpRight,
   FileText, Activity, Award, CheckCircle2,
   LayoutGrid, ArrowRight, Star, Lightbulb, AlertTriangle,
 } from "lucide-react";
