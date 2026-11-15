@@ -65,16 +65,14 @@ const TETO: Record<NonNullable<StatCardProps["size"]>, { celular: string; tela: 
   hero: { celular: "44px", tela: "64px" },
 };
 
-/** "R$ 5.200,00" vira "R$ 5.200" forte e ",00" apagado (como nas referências). Só em valor de dinheiro. */
-function comCentavosApagados(valor: string): ReactNode {
-  const m = /^(.*R\$\s?[\d.]+)(,\d{2})$/.exec(valor);
-  if (!m) return valor;
-  return (
-    <>
-      {m[1]}
-      <span className="ds-stat-centavos">{m[2]}</span>
-    </>
-  );
+/**
+ * "R$ 5.200,00": o valor em dinheiro sai com os centavos apagados (como nas
+ * referências). O texto continua INTEIRO num nó só (busca, cópia, leitor de
+ * tela e testes leem "R$ 5.200,00"); a cor dos centavos é um degradê recortado
+ * no texto (.ds-stat-dinheiro em index.css).
+ */
+function ehDinheiroComCentavos(valor: string): boolean {
+  return /R\$\s?[\d.]+,\d{2}$/.test(valor);
 }
 
 /**
@@ -128,7 +126,7 @@ export default function StatCard({
   const numero = (
     <span className="ds-stat-caixa block min-w-0 flex-1">
       <span className={juntar("ds-stat-valor text-foreground", !simples && "break-words")} data-cabe={simples ? "" : undefined} data-heroi={size === "hero" ? "" : undefined} style={estiloDoValor} title={typeof value === "string" ? value : undefined}>
-        {typeof value === "string" ? comCentavosApagados(value) : value}
+        {typeof value === "string" && ehDinheiroComCentavos(value) ? <span className="ds-stat-dinheiro">{value}</span> : value}
       </span>
     </span>
   );
