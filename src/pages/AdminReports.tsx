@@ -7,7 +7,6 @@ import { Plus, FileText, Eye, Send, Folder, ChevronRight, Megaphone } from "luci
 import { useNavigate } from "react-router-dom";
 import {
   AreaDeTrabalho,
-  CabecalhoDePagina,
   CampoDeBusca,
   Carregando,
   EstadoDeErro,
@@ -15,12 +14,12 @@ import {
   Painel,
   SeletorCompacto,
   botao,
-  etiqueta,
   foco,
   juntar,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
+import { Avatar, PageHeader, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
 import { groupReports, getClientName, PERIOD_ORDER } from "@/lib/reportGrouping";
 import { recordMemory } from "@/lib/clientMemory";
 
@@ -136,18 +135,18 @@ export default function AdminReports() {
   const filtrando = filtroStatus !== "todos" || !!termo;
 
   return (
-    <div className="min-w-0 space-y-4">
-      <CabecalhoDePagina
-        titulo="Relatórios"
-        descricao={
+    <div className="min-w-0 space-y-6">
+      <PageHeader
+        title="Relatórios"
+        subtitle={
           isLoading && !reports
             ? "Carregando"
             : filtrando
               ? `${filtrados.length} de ${lista.length}`
               : `${lista.length} ${lista.length === 1 ? "relatório" : "relatórios"}${rascunhos ? ` · ${rascunhos} em rascunho` : ""}`
         }
-        ajuda="Relatórios por cliente e por período. O de anúncios nasce em Anúncios, onde os números já estão coletados; o de entrega é criado aqui."
-        acoes={
+        help="Relatórios por cliente e por período. O de anúncios nasce em Anúncios, onde os números já estão coletados; o de entrega é criado aqui."
+        actions={
           <>
             {/* O relatório de anúncios passou a nascer em Anúncios, onde os
                 números já estão coletados; aqui ficaria pedindo a planilha do
@@ -163,6 +162,29 @@ export default function AdminReports() {
           </>
         }
       />
+
+      {/* Os números da lista (os mesmos do filtro de situação), grandes; clicar filtra. */}
+      {lista.length > 0 && (
+        <StatGrid cols={3} label="Resumo dos relatórios">
+          <StatCard variant="ink" label="Relatórios" value={lista.length} icon={<FileText className="h-4 w-4" />} onClick={() => setFiltroStatus("todos")} />
+          <StatCard
+            variant="accent"
+            label="Publicados"
+            value={lista.length - rascunhos}
+            icon={<Send className="h-4 w-4" />}
+            onClick={() => setFiltroStatus("publicados")}
+            chart={<ProgressBar value={lista.length - rascunhos} max={lista.length} label={`${lista.length - rascunhos} de ${lista.length} publicados`} />}
+          />
+          <StatCard
+            className="max-lg:col-span-2"
+            label="Rascunhos"
+            value={rascunhos}
+            icon={<Folder className="h-4 w-4" />}
+            hint={rascunhos ? "Ainda não enviados ao cliente" : "Tudo publicado"}
+            onClick={() => setFiltroStatus("rascunhos")}
+          />
+        </StatGrid>
+      )}
 
       {lista.length > 0 && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
@@ -243,7 +265,7 @@ function GroupedReports({ reports, abrirTudo, metricLabels, formatNumber, format
 
   return (
     <Painel semEspaco>
-      <ul className="divide-y divide-border">
+      <ul className="divide-y divide-border/70 p-2">
         {clients.map((client) => {
           const models = grouped[client];
           const modelKeys = PERIOD_ORDER.filter(p => models[p]);
@@ -255,15 +277,18 @@ function GroupedReports({ reports, abrirTudo, metricLabels, formatNumber, format
                 type="button"
                 onClick={() => toggleClient(client)}
                 aria-expanded={isOpen}
-                className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/30", foco)}
+                className={juntar("flex w-full min-w-0 items-center rounded-lg px-3 py-3.5 text-left transition-colors hover:bg-muted/60", foco)}
               >
-                <ChevronRight className={`mr-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} aria-hidden="true" />
-                <Folder className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{client}</span>
-                <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{totalCount}</span>
+                <Avatar name={client} tone={isOpen ? "ink" : "neutral"} className="mr-3" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold leading-5 text-foreground">{client}</span>
+                  <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>{modelKeys.join(" · ")}</span>
+                </span>
+                <span className="ml-3 inline-flex h-7 min-w-[28px] shrink-0 items-center justify-center rounded-full bg-muted px-2 text-[12px] font-semibold tabular-nums text-foreground">{totalCount}</span>
+                <ChevronRight className={`ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} aria-hidden="true" />
               </button>
               {isOpen && (
-                <div className="pb-2 pl-4 pr-3 sm:pl-10 sm:pr-4">
+                <div className="pb-3 pl-3 pr-3 sm:pl-[60px] sm:pr-4">
                   {modelKeys.map((model) => {
                     const list = models[model];
                     const key = `${client}::${model}`;
@@ -281,7 +306,7 @@ function GroupedReports({ reports, abrirTudo, metricLabels, formatNumber, format
                           <span className={juntar(texto.auxiliar, "ml-1.5 tabular-nums")}>{list.length}</span>
                         </button>
                         {modelOpen && (
-                          <ul className="mb-2 divide-y divide-border border-l border-border pl-3 sm:ml-2">
+                          <ul className="mb-3 divide-y divide-border/70 rounded-md bg-muted/40 px-3 sm:px-4">
                             {list.map((r: any) => {
                               const m = (r.metrics || {}) as Record<string, any>;
                               const visibleMetrics = Object.entries(m)
@@ -289,13 +314,11 @@ function GroupedReports({ reports, abrirTudo, metricLabels, formatNumber, format
                                 .slice(0, 4);
                               const publicado = r.status === "published";
                               return (
-                                <li key={r.id} className="flex min-w-0 items-center py-2.5">
+                                <li key={r.id} className="flex min-w-0 items-center py-3.5">
                                   <button type="button" onClick={() => onView(r.id)} className={juntar("min-w-0 flex-1 rounded-md text-left", foco)}>
                                     <span className="flex min-w-0 items-center">
                                       <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{r.title}</span>
-                                      <span className={juntar(etiqueta, "ml-2", publicado ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
-                                        {publicado ? "Publicado" : "Rascunho"}
-                                      </span>
+                                      <StatusPill tone={publicado ? "success" : "neutral"} className="ml-2">{publicado ? "Publicado" : "Rascunho"}</StatusPill>
                                     </span>
                                     <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
                                       {r.project?.name}
@@ -306,7 +329,7 @@ function GroupedReports({ reports, abrirTudo, metricLabels, formatNumber, format
                                     <dl className="ml-4 hidden shrink-0 lg:flex">
                                       {visibleMetrics.map(([key, val]) => (
                                         <div key={key} className="ml-4 w-[72px] text-right first:ml-0">
-                                          <dd className="text-[13px] tabular-nums text-foreground">
+                                          <dd className="text-[15px] font-semibold tabular-nums text-foreground">
                                             {key === "engagement" || key === "ctr" ? val + "%" : formatNumber(val as number)}
                                           </dd>
                                           <dt className="truncate text-[11px] text-muted-foreground">{metricLabels[key]}</dt>
@@ -318,7 +341,7 @@ function GroupedReports({ reports, abrirTudo, metricLabels, formatNumber, format
                                     <button type="button" onClick={() => onView(r.id)} className={botao.icone} aria-label={`Ver ${r.title}`} title="Ver">
                                       <Eye className="h-4 w-4" aria-hidden="true" />
                                     </button>
-                                    <button type="button" onClick={() => onSend(r)} className={juntar(botao.discreto, "h-8")} aria-label={`Enviar ${r.title} ao cliente`}>
+                                    <button type="button" onClick={() => onSend(r)} className={juntar(publicado ? botao.discreto : botao.primario, "h-8 max-sm:w-8 max-sm:px-0")} aria-label={`Enviar ${r.title} ao cliente`}>
                                       <Send className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                                       <span className="hidden sm:inline">Enviar ao cliente</span>
                                     </button>

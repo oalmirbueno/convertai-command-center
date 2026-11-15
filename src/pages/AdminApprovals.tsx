@@ -47,18 +47,19 @@ import {
   useEstadoDaTela,
   useLargo,
 } from "@/components/sistema";
+import { ProgressBar, StatCard, StatGrid } from "@/components/ds";
 
 const clientApprovalBadge: Record<string, { cls: string; label: string }> = {
-  pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Aguardando cliente" },
-  approved: { cls: "bg-success/10 text-success border-success/20", label: "Aprovado pelo cliente" },
-  rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Cliente pediu ajustes" },
+  pending: { cls: "bg-warning-soft text-warning border-transparent", label: "Aguardando cliente" },
+  approved: { cls: "bg-success-soft text-success border-transparent", label: "Aprovado pelo cliente" },
+  rejected: { cls: "bg-danger-soft text-destructive border-transparent", label: "Cliente pediu ajustes" },
 };
 
 const agencyApprovalBadge: Record<string, { cls: string; label: string }> = {
-  pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Aguardando revisão interna" },
-  approved: { cls: "bg-success/10 text-success border-success/20", label: "Aprovado internamente" },
-  rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Ajustes internos pedidos" },
-  not_requested: { cls: "bg-muted text-muted-foreground border-border", label: "Rascunho interno" },
+  pending: { cls: "bg-warning-soft text-warning border-transparent", label: "Aguardando revisão interna" },
+  approved: { cls: "bg-success-soft text-success border-transparent", label: "Aprovado internamente" },
+  rejected: { cls: "bg-danger-soft text-destructive border-transparent", label: "Ajustes internos pedidos" },
+  not_requested: { cls: "bg-muted text-muted-foreground border-transparent", label: "Rascunho interno" },
 };
 
 const CLIENT_TABS = [
@@ -78,7 +79,7 @@ const AGENCY_TABS = [
 const ABAS_VALIDAS = ["all", "pending", "approved", "rejected"];
 
 /** Selo de estado: pílula pequena com a cor da situação. */
-const selo = "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium";
+const selo = "inline-flex h-6 shrink-0 items-center rounded-full border px-2.5 text-[12px] font-medium leading-none";
 
 function ApprovalThumb({ file }: { file: any }) {
   const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
@@ -104,7 +105,7 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
   const [idx, setIdx] = useState(0);
   if (images.length === 0) return null;
   const current = images[idx];
-  const maxH = small ? "h-36" : "min-h-[260px]";
+  const maxH = small ? "h-48" : "min-h-[260px]";
 
   return (
     <div className="relative group">
@@ -614,7 +615,23 @@ export default function AdminApprovals() {
           }
         />
 
-      <AreaDeTrabalho principalRolavel={false} className="mt-3">
+      {/* Os números da fila aberta (os mesmos do seletor "Situação"), grandes; clicar num deles filtra. Só no computador. */}
+      {!isLoading && approvalFiles.length > 0 && (
+        <StatGrid cols={4} label="Resumo da fila" className="mt-6 hidden lg:grid">
+          {tabs.slice(0, 4).map((t, i) => (
+            <StatCard
+              key={t.id}
+              variant={t.id === "pending" ? "accent" : i === 0 ? "ink" : "default"}
+              label={t.label}
+              value={contagemDaAba(t.id)}
+              onClick={() => setActiveTab(t.id)}
+              chart={t.id !== "all" && approvalFiles.length > 0 ? <ProgressBar value={contagemDaAba(t.id)} max={approvalFiles.length} tone={t.id === "pending" ? "current" : 1} label={`${contagemDaAba(t.id)} de ${approvalFiles.length}`} /> : undefined}
+            />
+          ))}
+        </StatGrid>
+      )}
+
+      <AreaDeTrabalho principalRolavel={false} className="mt-5">
         <div className="shrink-0 border-b border-border">
           <Etapas
             rotulo="Filas de aprovação"
@@ -666,7 +683,7 @@ export default function AdminApprovals() {
             />
           ) : (
             <RegiaoRolavel modo="lg" rotulo="Entregas para aprovar" memoria={`aprovacoes:${queue}:${selectedClient}`}>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:pb-6 lg:pr-1 desk:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:pb-6 lg:pr-1 desk:grid-cols-4">
                 {filtered.map((f: any) => {
                   const badge = queue === "agency"
                     ? agencyApprovalBadge[f.agency_approval_status] || agencyApprovalBadge.not_requested
@@ -699,34 +716,41 @@ export default function AdminApprovals() {
                       }}
                       className={juntar(
                         superficie.painel,
-                        "relative flex h-full cursor-pointer flex-col overflow-hidden transition-colors hover:border-muted-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        selecionando && !aprovavel && "cursor-default opacity-50",
-                        selecionando && marcado && "border-primary",
+                        "relative flex h-full cursor-pointer flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        selecionando && !aprovavel && "cursor-default opacity-50 hover:translate-y-0",
+                        selecionando && marcado && "border-primary ring-2 ring-primary",
                       )}
                     >
                       {selecionando && aprovavel && (
                         <span
                           className={juntar(
-                            "absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border",
-                            marcado ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background",
+                            "absolute left-4 top-4 z-10 flex h-7 w-7 items-center justify-center rounded-full border shadow-card",
+                            marcado ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-card",
                           )}
                           aria-hidden="true"
                         >
                           {marcado && <Check className="h-3.5 w-3.5" />}
                         </span>
                       )}
-                      <CarouselPreview images={images} small />
-                      <div className="flex min-w-0 flex-1 flex-col px-4 py-3">
+                      <div className="p-2 pb-0">
+                        <div className="overflow-hidden rounded-md">
+                          <CarouselPreview images={images} small />
+                        </div>
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col p-5">
                         <div className="flex min-w-0 items-center">
-                          <p className="min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">{f.file_name || "Sem nome"}</p>
+                          <p className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-5 text-foreground">{f.file_name || "Sem nome"}</p>
                           {isCarousel && (
-                            <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>
+                            <span className={juntar(etiqueta, "ml-2 bg-accent-soft text-primary")}>
                               Carrossel · {images.length}
                             </span>
                           )}
                         </div>
                         {meta && <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{meta}</p>}
-                        <span className={juntar(selo, "mt-2 self-start", badge.cls)}>{badge.label}</span>
+                        <span className={juntar(selo, "mt-3 self-start", badge.cls)}>
+                          <span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+                          {badge.label}
+                        </span>
 
                         {f[statusField] === "rejected" && activeFeedback && (
                           <p className="mt-2 line-clamp-3 text-[12px] leading-5 text-muted-foreground">
