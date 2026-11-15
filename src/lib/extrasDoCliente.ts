@@ -47,7 +47,7 @@ export const ATALHOS: { id: string; rotulo: string; nome: string; categoria: str
   { id: "automacao-mensal", rotulo: "Automação: mensal", nome: "Automação · suporte e operação", categoria: "automacao", cobranca: "mensal" },
   { id: "crm", rotulo: "CRM", nome: "CRM", categoria: "crm", cobranca: "mensal" },
   { id: "email", rotulo: "E-mail profissional", nome: "E-mail profissional", categoria: "email", cobranca: "mensal" },
-  { id: "comissao", rotulo: "Comissão", nome: "Comissão sobre resultado", categoria: "outro", cobranca: "comissao" },
+  { id: "comissao", rotulo: "Comissão / variável", nome: "Comissão sobre resultado", categoria: "outro", cobranca: "comissao" },
 ];
 
 const centavos = (n: number) => Math.round(n * 100);
@@ -105,7 +105,8 @@ export function conferirExtra(f: {
 }): string | null {
   if (f.nome.trim().length < 2) return "Escreva o que o cliente está comprando.";
   if (f.cobranca === "comissao") {
-    if (!(f.percentual > 0) || f.percentual > 100) return "Diga o percentual da comissão (entre 0 e 100).";
+    // Variável: o percentual é só um apoio para a conta; pode ficar vazio e o dono lança o valor recebido.
+    if (f.percentual < 0 || f.percentual > 100) return "O percentual fica entre 0 e 100.";
     return null;
   }
   if (!(f.valor > 0)) return "Diga o valor.";

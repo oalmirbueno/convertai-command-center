@@ -53,7 +53,8 @@ describe("o que falta para salvar", () => {
     expect(conferirExtra({ ...base, cobranca: "unico", valor: 150, parcelas: p })).toBeNull();
     expect(conferirExtra({ ...base, cobranca: "unico", valor: 50, parcelas: p })).toContain("passam do valor");
     expect(conferirExtra({ ...base, cobranca: "comissao", valor: 0, percentual: 2.5 })).toBeNull();
-    expect(conferirExtra({ ...base, cobranca: "comissao", valor: 0, percentual: 0 })).toContain("percentual");
+    expect(conferirExtra({ ...base, cobranca: "comissao", valor: 0, percentual: 0 })).toBeNull();
+    expect(conferirExtra({ ...base, cobranca: "comissao", valor: 0, percentual: 120 })).toContain("percentual");
   });
 });
 
@@ -100,7 +101,7 @@ describe("tela", () => {
   it("toda cobrança nasce pelo banco, nunca por insert direto na tela", () => {
     expect(TELA).toContain('rpc("extra_salvar"');
     expect(TELA).toContain('rpc("extra_iniciar"');
-    expect(TELA).toContain('rpc("extra_lancar_comissao"');
+    expect(TELA).toContain("Lançar recebimento");
     expect(TELA).toContain('rpc("extra_encerrar"');
     expect(TELA).not.toMatch(/from\("billing"\)\.(insert|update|delete)/);
   });

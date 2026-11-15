@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, Secao, SeletorCompacto, botao, campo, etiqueta, juntar, texto } from "@/components/sistema";
+import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, MenuMais, Secao, SeletorCompacto, botao, campo, etiqueta, juntar, texto } from "@/components/sistema";
 import {
   ATALHOS,
   CATEGORIAS,
@@ -48,13 +48,18 @@ function mensagemDoErro(e: unknown): string {
 const COBRANCAS: { valor: CobrancaDoExtra; rotulo: string }[] = [
   { valor: "mensal", rotulo: "Todo mês" },
   { valor: "unico", rotulo: "Uma vez" },
-  { valor: "comissao", rotulo: "Comissão" },
+  { valor: "comissao", rotulo: "Variável" },
 ];
+const O_QUE_E: Record<CobrancaDoExtra, string> = {
+  mensal: "Valor fixo por mês. A cobrança de cada mês nasce sozinha.",
+  unico: "Valor fechado, com entrada e parcelas.",
+  comissao: "Comissão ou valor que muda. Você lança quando receber.",
+};
 
 export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }: { clientId: string; nomeDoCliente?: string; mensalidade?: number }) {
   const qc = useQueryClient();
   const [adicionando, setAdicionando] = useState(false);
-  const [acao, setAcao] = useState<{ tipo: "iniciar" | "comissao" | "encerrar" | "editar" | "cobrancas"; id: string } | null>(null);
+  const [acao, setAcao] = useState<{ tipo: "iniciar" | "encerrar" | "editar" | "cobrancas"; id: string; nova?: boolean } | null>(null);
 
   const dados = useQuery({
     queryKey: ["extras-do-cliente", clientId],
@@ -112,29 +117,32 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
                   {e.status === "aguardando" && <span className={juntar(etiqueta, "mr-2 bg-warning/15 text-warning")}>aguardando a entrega</span>}
                   {encerrado && <span className={juntar(etiqueta, "mr-2 bg-secondary text-muted-foreground")}>encerrado em {dataCurta(e.encerrado_em)}</span>}
                   <span className="ml-auto shrink-0 text-[14px] font-semibold tabular-nums text-foreground">
-                    {e.cobranca === "mensal" ? `${dinheiro(e.valor)} por mês` : e.cobranca === "unico" ? dinheiro(e.valor) : `${String(e.percentual).replace(".", ",")}%`}
+                    {e.cobranca === "mensal" ? `${dinheiro(e.valor)} por mês` : e.cobranca === "unico" ? dinheiro(e.valor) : e.percentual ? `${String(e.percentual).replace(".", ",")}%` : "variável"}
                   </span>
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-0.5")}>
                   {e.cobranca === "mensal" && (e.inicio ? `Cobra desde ${dataCurta(e.inicio)}, todo dia ${e.dia_vencimento ?? Number(e.inicio.slice(8, 10))}.` : "Ainda não começou a cobrar: defina a data quando entregar.")}
-                  {e.cobranca === "unico" && `Recebido ${dinheiro(unico.pago)} · a receber ${dinheiro(unico.aberto)}${unico.proxima ? ` (próxima em ${dataCurta(unico.proxima)})` : ""}${unico.aLancar > 0 ? ` · falta lançar ${dinheiro(unico.aLancar)}` : ""}.`}
-                  {e.cobranca === "comissao" && `Sobre ${e.base_da_comissao || "o resultado do mês"}. ${doExtra.length ? `${doExtra.length} ${doExtra.length === 1 ? "mês lançado" : "meses lançados"}.` : "Nenhum mês lançado ainda."}`}
+                  {e.cobranca === "unico" && `Recebido ${dinheiro(unico.pago)} ${unico.aberto > 0 ? ` · a receber ${dinheiro(unico.aberto)}${unico.proxima ? ` (próxima em ${dataCurta(unico.proxima)})` : ""}` : ""}${unico.aLancar > 0 ? ` · falta lançar ${dinheiro(unico.aLancar)}` : ""}.`}
+                  {e.cobranca === "comissao" && `${e.base_da_comissao ? `Sobre ${e.base_da_comissao}. ` : ""}${doExtra.length ? `Recebido ${dinheiro(unico.pago)} em ${doExtra.length} ${doExtra.length === 1 ? "lançamento" : "lançamentos"}${unico.aberto > 0 ? ` · a receber ${dinheiro(unico.aberto)}` : ""}.` : "Nada lançado ainda."}`}
                   {e.observacao ? ` ${e.observacao}` : ""}
                 </p>
-                <div className="-m-1 mt-1 flex flex-wrap [&>*]:m-1">
+                <div className="-m-1 mt-1 flex flex-wrap items-center [&>*]:m-1">
+                  {!encerrado && e.cobranca === "comissao" && <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setAcao({ tipo: "cobrancas", id: e.id, nova: true })} data-lancar-recebimento="">Lançar recebimento</button>}
+                  {!encerrado && e.cobranca === "unico" && unico.aLancar > 0 && <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setAcao({ tipo: "cobrancas", id: e.id, nova: true })}>Adicionar parcela</button>}
                   <button type="button" className={juntar(botao.secundario, "h-8")} aria-expanded={acao?.id === e.id && acao.tipo === "cobrancas"} onClick={() => setAcao(acao?.id === e.id && acao.tipo === "cobrancas" ? null : { tipo: "cobrancas", id: e.id })} data-ver-cobrancas="">
-                    Cobranças ({doExtra.length})
+                    {e.cobranca === "comissao" ? "Lançamentos" : "Cobranças"} ({doExtra.length})
                   </button>
-                  {!encerrado && <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setAcao({ tipo: "editar", id: e.id })} data-editar-extra="">Editar</button>}
                   {!encerrado && (<>
-                    {e.status === "aguardando" && <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setAcao({ tipo: "iniciar", id: e.id })}>Começar a cobrar</button>}
-                    {e.cobranca === "comissao" && <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setAcao({ tipo: "comissao", id: e.id })}>Lançar comissão do mês</button>}
-                    <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[13px]")} onClick={() => setAcao({ tipo: "encerrar", id: e.id })}>Encerrar</button>
+                    {e.status === "aguardando" && <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setAcao({ tipo: "iniciar", id: e.id })}>Começar a cobrar</button>}
+                    <MenuMais rotulo={`Mais ações de ${e.nome}`} itens={[
+                      { rotulo: "Editar", aoEscolher: () => setAcao({ tipo: "editar", id: e.id }) },
+                      { rotulo: "Encerrar", perigo: true, aoEscolher: () => setAcao({ tipo: "encerrar", id: e.id }) },
+                    ]} />
                   </>)}
                 </div>
                 {acao && acao.id === e.id && acao.tipo === "editar" && <EditarExtra extra={e} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
-                {acao && acao.id === e.id && acao.tipo === "cobrancas" && <CobrancasDoExtra extra={e} cobrancas={doExtra} sugestao={e.cobranca === "unico" ? unico.aLancar : 0} aoMudar={atualizar} />}
-                {acao && acao.id === e.id && acao.tipo !== "editar" && acao.tipo !== "cobrancas" && <AcaoDoExtra extra={e} tipo={acao.tipo} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
+                {acao && acao.id === e.id && acao.tipo === "cobrancas" && <CobrancasDoExtra key={acao.nova ? "nova" : "lista"} extra={e} cobrancas={doExtra} sugestao={e.cobranca === "unico" ? unico.aLancar : 0} abrirNova={!!acao.nova} aoMudar={atualizar} />}
+                {acao && acao.id === e.id && (acao.tipo === "iniciar" || acao.tipo === "encerrar") && <AcaoDoExtra extra={e} tipo={acao.tipo} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
               </li>
             );
           })}
@@ -146,12 +154,10 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
 }
 
 /** Começar a cobrar, lançar a comissão do mês ou encerrar: um formulário curto na própria linha. */
-function AcaoDoExtra({ extra, tipo, aoFechar, aoMudar }: { extra: Extra; tipo: "iniciar" | "comissao" | "encerrar"; aoFechar: () => void; aoMudar: () => Promise<void> }) {
+function AcaoDoExtra({ extra, tipo, aoFechar, aoMudar }: { extra: Extra; tipo: "iniciar" | "encerrar"; aoFechar: () => void; aoMudar: () => Promise<void> }) {
   const [data, setData] = useState(hoje());
-  const [base, setBase] = useState("");
   const [paga, setPaga] = useState(false);
   const [ocupado, setOcupado] = useState(false);
-  const valorDaComissao = Math.round(numero(base) * (extra.percentual ?? 0)) / 100;
 
   const confirmar = async () => {
     if (ocupado) return;
@@ -159,12 +165,10 @@ function AcaoDoExtra({ extra, tipo, aoFechar, aoMudar }: { extra: Extra; tipo: "
     try {
       const chamada = tipo === "iniciar"
         ? (supabase as any).rpc("extra_iniciar", { _id: extra.id, _inicio: data, _primeira_paga: paga, _paga_em: paga ? data : null })
-        : tipo === "comissao"
-          ? (supabase as any).rpc("extra_lancar_comissao", { _id: extra.id, _base: numero(base), _mes: data, _vencimento: data, _paga: paga, _paga_em: paga ? data : null })
-          : (supabase as any).rpc("extra_encerrar", { _id: extra.id, _em: data });
+        : (supabase as any).rpc("extra_encerrar", { _id: extra.id, _em: data });
       const { error } = await chamada;
       if (error) throw error;
-      toast.success(tipo === "iniciar" ? `${extra.nome} começou a cobrar.` : tipo === "comissao" ? `Comissão de ${dinheiro(valorDaComissao)} lançada.` : `${extra.nome} encerrado. O que já foi pago continua no histórico.`);
+      toast.success(tipo === "iniciar" ? `${extra.nome} começou a cobrar.` : `${extra.nome} encerrado. O que já foi pago continua no histórico.`);
       await aoMudar();
       aoFechar();
     } catch (e) {
@@ -176,13 +180,8 @@ function AcaoDoExtra({ extra, tipo, aoFechar, aoMudar }: { extra: Extra; tipo: "
 
   return (
     <div className="mt-2 rounded-md bg-secondary/60 px-3 py-3" data-acao-do-extra={tipo}>
-      <GrupoDeCampos colunas={tipo === "comissao" ? 3 : 2}>
-        {tipo === "comissao" && (
-          <CampoDeFormulario rotulo="Resultado do mês (R$)" apoio={numero(base) > 0 ? `Comissão: ${dinheiro(valorDaComissao)}` : `${String(extra.percentual).replace(".", ",")}% sobre este valor`}>
-            <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={base} onChange={(e) => setBase(e.target.value)} placeholder="0,00" />
-          </CampoDeFormulario>
-        )}
-        <CampoDeFormulario rotulo={tipo === "iniciar" ? "Começa a cobrar em" : tipo === "comissao" ? "Vence em" : "Encerra em"}>
+      <GrupoDeCampos colunas={2}>
+        <CampoDeFormulario rotulo={tipo === "iniciar" ? "Começa a cobrar em" : "Encerra em"}>
           <input className={campo} type="date" value={data} onChange={(e) => setData(e.target.value)} />
         </CampoDeFormulario>
         {tipo !== "encerrar" && (
@@ -193,8 +192,8 @@ function AcaoDoExtra({ extra, tipo, aoFechar, aoMudar }: { extra: Extra; tipo: "
       </GrupoDeCampos>
       {tipo === "encerrar" && <p className={juntar(texto.auxiliar, "mt-2")}>O que já foi pago fica no histórico. As cobranças que ainda não venceram saem.</p>}
       <div className="-m-1 mt-2 flex flex-wrap [&>*]:m-1">
-        <button type="button" className={juntar(tipo === "encerrar" ? botao.perigo : botao.primario, "h-8")} disabled={ocupado || !data || (tipo === "comissao" && !(numero(base) > 0))} onClick={() => void confirmar()}>
-          {ocupado ? "Salvando…" : tipo === "iniciar" ? "Começar a cobrar" : tipo === "comissao" ? "Lançar" : "Encerrar extra"}
+        <button type="button" className={juntar(tipo === "encerrar" ? botao.perigo : botao.primario, "h-8")} disabled={ocupado || !data} onClick={() => void confirmar()}>
+          {ocupado ? "Salvando…" : tipo === "iniciar" ? "Começar a cobrar" : "Encerrar extra"}
         </button>
         <button type="button" className={juntar(botao.secundario, "h-8")} onClick={aoFechar}>Cancelar</button>
       </div>
@@ -214,7 +213,7 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
   const [observacao, setObservacao] = useState(extra.observacao ?? "");
   const [ocupado, setOcupado] = useState(false);
   const comissao = extra.cobranca === "comissao";
-  const falta = nome.trim().length < 2 ? "Escreva o nome." : comissao ? (numero(percentual) > 0 && numero(percentual) <= 100 ? null : "Diga o percentual.") : numero(valor) > 0 ? null : "Diga o valor.";
+  const falta = nome.trim().length < 2 ? "Escreva o nome." : comissao ? (numero(percentual) <= 100 ? null : "O percentual vai até 100.") : numero(valor) > 0 ? null : "Diga o valor.";
 
   const salvar = async () => {
     if (ocupado || falta) return;
@@ -222,7 +221,7 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
     try {
       const { error } = await (supabase as any).rpc("extra_editar", {
         _id: extra.id,
-        _dados: { nome: nome.trim(), categoria, valor: comissao ? null : numero(valor), percentual: comissao ? numero(percentual) : null, base_da_comissao: baseDaComissao, dia_vencimento: extra.cobranca === "mensal" && Number(dia) >= 1 ? Number(dia) : null, observacao },
+        _dados: { nome: nome.trim(), categoria, valor: comissao ? null : numero(valor), percentual: comissao && numero(percentual) > 0 ? numero(percentual) : null, base_da_comissao: baseDaComissao, dia_vencimento: extra.cobranca === "mensal" && Number(dia) >= 1 ? Number(dia) : null, observacao },
       });
       if (error) throw error;
       toast.success(`${nome.trim()} atualizado. O Financeiro já acompanha.`);
@@ -279,12 +278,13 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
 }
 
 /** As cobranças do extra, uma por linha, todas editáveis: valor, vencimento, pago ou não. E adicionar mais uma. */
-function CobrancasDoExtra({ extra, cobrancas, sugestao, aoMudar }: { extra: Extra; cobrancas: CobrancaDeExtra[]; sugestao: number; aoMudar: () => Promise<void> }) {
-  const [aberta, setAberta] = useState<string | null>(null);
+function CobrancasDoExtra({ extra, cobrancas, sugestao, abrirNova, aoMudar }: { extra: Extra; cobrancas: CobrancaDeExtra[]; sugestao: number; abrirNova?: boolean; aoMudar: () => Promise<void> }) {
+  const [aberta, setAberta] = useState<string | null>(abrirNova ? "nova" : null);
+  const variavel = extra.cobranca === "comissao";
   const encerrado = extra.status === "encerrado";
   return (
     <div className="mt-2 rounded-md bg-secondary/60 px-3 py-2" data-cobrancas-do-extra="">
-      {cobrancas.length === 0 && <p className={texto.auxiliar}>Nenhuma cobrança lançada ainda.</p>}
+      {cobrancas.length === 0 && aberta !== "nova" && <p className={texto.auxiliar}>Nada lançado ainda.</p>}
       <ul className="min-w-0 text-[13px]">
         {cobrancas.map((c) => (
           <li key={c.id} className="min-w-0 py-1" data-cobranca={c.id}>
@@ -299,10 +299,10 @@ function CobrancasDoExtra({ extra, cobrancas, sugestao, aoMudar }: { extra: Extr
           </li>
         ))}
       </ul>
-      {!encerrado && extra.cobranca !== "comissao" && (
+      {!encerrado && (
         aberta === "nova"
           ? <FormDaCobranca extra={extra} valorInicial={sugestao} aoFechar={() => setAberta(null)} aoMudar={aoMudar} />
-          : <button type="button" className={juntar(botao.secundario, "mt-1 h-8")} onClick={() => setAberta("nova")} data-nova-cobranca="">{extra.cobranca === "unico" ? "Adicionar parcela" : "Adicionar cobrança"}</button>
+          : <button type="button" className={juntar(botao.secundario, "mt-1 h-8")} onClick={() => setAberta("nova")} data-nova-cobranca="">{variavel ? "Lançar recebimento" : extra.cobranca === "unico" ? "Adicionar parcela" : "Adicionar cobrança"}</button>
       )}
     </div>
   );
@@ -310,8 +310,12 @@ function CobrancasDoExtra({ extra, cobrancas, sugestao, aoMudar }: { extra: Extr
 
 function FormDaCobranca({ extra, cobranca, valorInicial, aoFechar, aoMudar }: { extra: Extra; cobranca?: CobrancaDeExtra; valorInicial?: number; aoFechar: () => void; aoMudar: () => Promise<void> }) {
   const [valor, setValor] = useState(cobranca ? String(cobranca.amount).replace(".", ",") : valorInicial && valorInicial > 0 ? String(valorInicial).replace(".", ",") : "");
-  const [vence, setVence] = useState(cobranca?.due_date ?? somarMeses(hoje(), 1));
-  const [paga, setPaga] = useState(cobranca?.status === "paid");
+  // No variável, o normal é lançar o que acabou de entrar: hoje e já pago.
+  const variavel = extra.cobranca === "comissao";
+  const pct = Number(extra.percentual) || 0;
+  const [resultado, setResultado] = useState("");
+  const [vence, setVence] = useState(cobranca?.due_date ?? (variavel ? hoje() : somarMeses(hoje(), 1)));
+  const [paga, setPaga] = useState(cobranca ? cobranca.status === "paid" : variavel);
   const [pagaEm, setPagaEm] = useState(cobranca?.paid_date ?? hoje());
   const [ocupado, setOcupado] = useState(false);
   // A mensalidade de um mês não se apaga por aqui: a rotina do mês criaria de novo. Para parar, encerre o extra.
@@ -333,30 +337,35 @@ function FormDaCobranca({ extra, cobranca, valorInicial, aoFechar, aoMudar }: { 
     }
   };
   const salvar = () => rodar(
-    (supabase as any).rpc("extra_cobranca_salvar", { _dados: { id: cobranca?.id ?? null, extra_id: extra.id, valor: numero(valor), vencimento: vence, paga, paga_em: paga ? pagaEm : null } }),
-    cobranca ? "Cobrança atualizada." : "Cobrança adicionada. O Financeiro já foi atualizado.",
+    (supabase as any).rpc("extra_cobranca_salvar", { _dados: { id: cobranca?.id ?? null, extra_id: extra.id, valor: numero(valor), vencimento: vence, paga, paga_em: paga ? (variavel ? vence : pagaEm) : null, rotulo: variavel ? `${vence.slice(5, 7)}/${vence.slice(0, 4)}` : null } }),
+    cobranca ? "Atualizado." : variavel ? `${dinheiro(numero(valor))} lançado. O Financeiro já foi atualizado.` : "Cobrança adicionada. O Financeiro já foi atualizado.",
   );
 
   return (
     <div className="mt-1 border-l-2 border-border py-1 pl-3" data-form-da-cobranca="">
-      <GrupoDeCampos colunas={paga ? 4 : 3}>
-        <CampoDeFormulario rotulo="Valor (R$)">
-          <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0,00" />
+      <GrupoDeCampos colunas={3}>
+        {variavel && !cobranca && pct > 0 && (
+          <CampoDeFormulario rotulo="Resultado (R$)" apoio={`Opcional: calcula ${String(pct).replace(".", ",")}% para você.`}>
+            <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={resultado} placeholder="0,00" onChange={(e) => { setResultado(e.target.value); const r = numero(e.target.value); if (r > 0) setValor(String(Math.round(r * pct) / 100).replace(".", ",")); }} />
+          </CampoDeFormulario>
+        )}
+        <CampoDeFormulario rotulo={variavel ? "Valor recebido (R$)" : "Valor (R$)"}>
+          <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0,00" data-valor-da-cobranca="" />
         </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Vence em">
+        <CampoDeFormulario rotulo={variavel ? "Data" : "Vence em"}>
           <input className={campo} type="date" value={vence} onChange={(e) => setVence(e.target.value)} />
         </CampoDeFormulario>
         <CampoDeFormulario rotulo="Pagamento">
           <SeletorCompacto rotulo="Pagamento" modo="segmentado" larguraTotal opcoes={[{ valor: "nao", rotulo: "Vai pagar" }, { valor: "sim", rotulo: "Já pagou" }]} valor={paga ? "sim" : "nao"} onEscolher={(v) => setPaga(v === "sim")} />
         </CampoDeFormulario>
-        {paga && (
+        {paga && !variavel && (
           <CampoDeFormulario rotulo="Pago em">
             <input className={campo} type="date" value={pagaEm} onChange={(e) => setPagaEm(e.target.value)} />
           </CampoDeFormulario>
         )}
       </GrupoDeCampos>
       <div className="-m-1 mt-2 flex flex-wrap [&>*]:m-1">
-        <button type="button" className={juntar(botao.primario, "h-8")} disabled={ocupado || !(numero(valor) > 0) || !vence || (paga && !pagaEm)} onClick={() => void salvar()}>{ocupado ? "Salvando…" : "Salvar"}</button>
+        <button type="button" className={juntar(botao.primario, "h-8")} disabled={ocupado || !(numero(valor) > 0) || !vence || (paga && !variavel && !pagaEm)} onClick={() => void salvar()}>{ocupado ? "Salvando…" : "Salvar"}</button>
         <button type="button" className={juntar(botao.secundario, "h-8")} onClick={aoFechar}>Cancelar</button>
         {podeApagar && <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[13px] text-destructive")} disabled={ocupado} onClick={() => void rodar((supabase as any).rpc("extra_cobranca_apagar", { _id: cobranca!.id }), "Cobrança apagada.")}>Apagar</button>}
       </div>
@@ -409,7 +418,7 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
           categoria,
           cobranca,
           valor: cobranca === "comissao" ? 0 : total,
-          percentual: cobranca === "comissao" ? numero(percentual) : null,
+          percentual: cobranca === "comissao" && numero(percentual) > 0 ? numero(percentual) : null,
           base_da_comissao: cobranca === "comissao" ? baseDaComissao : null,
           inicio: cobranca === "mensal" && comecaAgora ? inicio : null,
           primeira_paga: cobranca === "mensal" && comecaAgora && primeiraPaga,
@@ -436,7 +445,7 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
       titulo="Adicionar extra ou produto"
       icone={<PackagePlus className="h-4 w-4" aria-hidden="true" />}
       descricao={nomeDoCliente}
-      ajuda="Todo mês cria a cobrança de cada mês sozinho a partir da data. Uma vez aceita entrada de qualquer valor e o restante em parcelas. Comissão guarda o percentual; a cada mês você lança o resultado e a cobrança sai calculada."
+      ajuda="Todo mês cria a cobrança de cada mês sozinho a partir da data. Uma vez aceita entrada de qualquer valor e o restante em parcelas. Variável é a comissão ou o valor que muda: você lança o que recebeu, quando receber."
       largura="md"
       data-janela-do-extra=""
       rodape={
@@ -458,13 +467,8 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
         <CampoDeFormulario rotulo="O que ele está comprando" obrigatorio largo>
           <input className={campo} value={nome} maxLength={120} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Suporte e manutenção do sistema" />
         </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Como cobra">
+        <CampoDeFormulario rotulo="Como cobra" largo apoio={O_QUE_E[cobranca]}>
           <SeletorCompacto rotulo="Como cobra" modo="segmentado" larguraTotal opcoes={COBRANCAS} valor={cobranca} onEscolher={(v) => setCobranca(v as CobrancaDoExtra)} />
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Tipo">
-          <select className={campo} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-            {CATEGORIAS.map((c) => <option key={c.valor} value={c.valor}>{c.rotulo}</option>)}
-          </select>
         </CampoDeFormulario>
 
         {cobranca !== "comissao" && (
@@ -540,10 +544,10 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
 
         {cobranca === "comissao" && (
           <>
-            <CampoDeFormulario rotulo="Percentual (%)" obrigatorio>
+            <CampoDeFormulario rotulo="Percentual (%)" apoio="Opcional. Sem ele, você lança direto o valor.">
               <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={percentual} onChange={(e) => setPercentual(e.target.value)} placeholder="Ex.: 2,5" />
             </CampoDeFormulario>
-            <CampoDeFormulario rotulo="Sobre o quê" largo apoio="A cada mês você lança o resultado e a cobrança sai calculada.">
+            <CampoDeFormulario rotulo="Sobre o quê" apoio="Opcional.">
               <input className={campo} value={baseDaComissao} maxLength={160} onChange={(e) => setBaseDaComissao(e.target.value)} placeholder="Ex.: valor de consórcio vendido pelo tráfego" />
             </CampoDeFormulario>
           </>
