@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type RefObject } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { CalendarCheck, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import {
   CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, SeletorCompacto, botao, juntar, larguraDaMesa, useAlturaQueCabe,
 } from "@/components/sistema";
@@ -123,6 +123,21 @@ function useAlturaDaEsteira(): { ref: RefObject<HTMLDivElement>; altura: number 
   return { ref, altura: alturaLarga ?? alturaEstreita };
 }
 
+/**
+ * Celular (polimento v4, 15/11/2026): as ações do cabeçalho ganham a largura
+ * toda embaixo do título e quebram em duas linhas (clientes e período em
+ * cima; navegação e atualizar embaixo, ao lado das datas). Antes rolavam
+ * escondidas e o primeiro botão aparecia cortado na borda.
+ */
+const CABECALHO_NO_CELULAR = [
+  "max-sm:flex-wrap",
+  "max-sm:[&>[data-acoes-do-cabecalho]]:mt-2",
+  "max-sm:[&>[data-acoes-do-cabecalho]]:basis-full",
+  "max-sm:[&>[data-acoes-do-cabecalho]]:flex-wrap",
+  "max-sm:[&>[data-acoes-do-cabecalho]]:overflow-visible",
+  "max-sm:[&>[data-acoes-do-cabecalho]>*:first-child]:ml-1",
+].join(" ");
+
 const OPCOES_DO_PERIODO = [
   { valor: "7", rotulo: "1 semana" },
   { valor: "14", rotulo: "2 semanas" },
@@ -185,12 +200,18 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
         opcoes={OPCOES_DO_PERIODO}
         valor={String(quantosDias)}
         onEscolher={(v) => mudarQuantosDias(diasDoPeriodoValido(Number(v)))}
+        className="max-sm:[&_[role=tab]]:px-2.5"
       />
-      <span className="inline-flex items-center" role="group" aria-label="Navegar no período" data-navegacao-do-periodo="">
+      {/* Celular: a navegação desce para a segunda linha, ao lado do período (nada rola escondido nem fica cortado). */}
+      <span className="!m-0 h-0 basis-full sm:hidden" aria-hidden="true" />
+      <span className="inline-flex items-center max-sm:!ml-auto" role="group" aria-label="Navegar no período" data-navegacao-do-periodo="">
         <button type="button" className={botao.icone} onClick={() => andar(-1)} title={duas ? "Duas semanas antes" : "Semana anterior"} aria-label={duas ? "Duas semanas antes" : "Semana anterior"}>
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" className={juntar(botao.secundario, "mx-1 h-8")} onClick={() => setSegunda(semanaAtual)} disabled={segunda === semanaAtual}>Semana atual</button>
+        <button type="button" className={juntar(botao.secundario, "mx-1 h-8 max-sm:w-8 max-sm:px-0")} onClick={() => setSegunda(semanaAtual)} disabled={segunda === semanaAtual} title="Semana atual">
+          <CalendarCheck className="h-4 w-4 sm:hidden" aria-hidden="true" />
+          <span className="max-sm:sr-only">Semana atual</span>
+        </button>
         <button type="button" className={botao.icone} onClick={() => andar(1)} title={duas ? "Próximas duas semanas" : "Próxima semana"} aria-label={duas ? "Próximas duas semanas" : "Próxima semana"}>
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -209,8 +230,9 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
       data-esteira-linha=""
       data-cabe-na-tela={altura !== null ? "sim" : undefined}
     >
-      <div className="shrink-0" data-barra-da-esteira="">
+      <div className="relative shrink-0" data-barra-da-esteira="">
         <CabecalhoDePagina
+          className={CABECALHO_NO_CELULAR}
           titulo="Esteira"
           descricao={rotuloDoPeriodo}
           ajuda={<>
@@ -220,7 +242,7 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
           acoes={barra}
         />
         {/* O cabeçalho esconde a linha de apoio no celular; o período visível precisa aparecer sempre. */}
-        <p className="mt-1 text-[12px] font-medium text-muted-foreground sm:hidden" aria-hidden="true">{rotuloDoPeriodo}</p>
+        <p className="absolute bottom-1 left-0 flex h-8 max-w-[calc(100%-164px)] items-center text-[13px] font-semibold tracking-[-0.01em] text-foreground sm:hidden" aria-hidden="true"><span className="truncate">{rotuloDoPeriodo}</span></p>
       </div>
 
       {!carregando && !erro && !semClientes && visiveis.length > 0 && <ResumoDasEtapas faixas={visiveis} />}
