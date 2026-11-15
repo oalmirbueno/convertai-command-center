@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArchiveRestore, ChevronDown, Eye, FilePlus2, Loader2, PenLine, Send } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, Eye, FilePlus2, FileText, Loader2, PenLine, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import Secao from "@/components/sistema/Secao";
@@ -35,8 +35,8 @@ const dataCurta = (iso?: string | null) => {
 const TOM: Record<DocumentoDaEntrega["status"], string> = {
   pendente: "bg-muted text-muted-foreground",
   gerado: "bg-muted text-foreground",
-  em_aprovacao: "bg-warning/15 text-warning",
-  no_portal: "bg-primary/15 text-primary",
+  em_aprovacao: "bg-warning-soft text-warning",
+  no_portal: "bg-accent-soft text-primary",
 };
 /** Só na linha do celular (a pastilha longa fica do sm para cima e na janela). */
 const STATUS_CURTO: Record<DocumentoDaEntrega["status"], { rotulo: string; cor: string }> = {
@@ -162,9 +162,12 @@ export default function DocumentosDaEntrega({ clientId, className }: { clientId:
     ].filter(Boolean);
     const nome = d.titulo || ROTULO_DO_TIPO_DE_ENTREGA[d.tipo];
     return (
-      <li key={d.id} className={lista.linha} data-documento={d.id}>
+      <li key={d.id} className={juntar(lista.linha, "py-3.5")} data-documento={d.id}>
+        <span aria-hidden="true" className={juntar("mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full", d.status === "no_portal" ? "bg-accent-solid text-on-accent" : d.status === "em_aprovacao" ? "bg-warning-soft text-warning" : "bg-muted text-foreground")}>
+          <FileText className="h-4 w-4" />
+        </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium text-foreground">{nome}</p>
+          <p className="truncate text-[13px] font-medium leading-5 text-foreground">{nome}</p>
           <p className={juntar(texto.auxiliar, "truncate")}>
             <span className={juntar("font-medium sm:hidden", curto.cor)}>
               {curto.rotulo}
@@ -173,7 +176,7 @@ export default function DocumentosDaEntrega({ clientId, className }: { clientId:
             {partes.join(" · ")}
           </p>
         </div>
-        <span className={juntar(etiqueta, "ml-2 hidden rounded-full px-2 py-0.5 sm:inline-flex", TOM[d.status])}>{ROTULO_DO_STATUS_DO_DOCUMENTO[d.status]}</span>
+        <span className={juntar(etiqueta, "ml-2 hidden h-6 rounded-full px-2.5 text-[12px] sm:inline-flex", TOM[d.status])}><span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />{ROTULO_DO_STATUS_DO_DOCUMENTO[d.status]}</span>
         {d.status === "pendente" || !d.file_id ? (
           <BotaoDocumentoDaEntrega pedido={pedidoDoDocumento(d)} statusDoDocumento={d.status} rotulo="Gerar" variante="discreto" className="ml-1 h-8" onGerado={abrirConferir} />
         ) : d.status === "gerado" ? (
