@@ -2395,9 +2395,7 @@ export default function Workspace() {
   const acoesDoCabecalho = (
     <>
       {seletorDeContexto}
-      <button type="button" onClick={() => setNewFolderOpen(true)} className={juntar(botao.secundario, "hidden sm:inline-flex")}>
-        <FolderPlus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Pasta
-      </button>
+      {/* v4 (15/11, passada estrutural): uma ação principal (Enviar); "Nova pasta" mora no "…" em toda largura. */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" aria-label="Mais ações" className={juntar(botao.icone, "h-9 w-9")}>
@@ -2405,7 +2403,7 @@ export default function Workspace() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
-          <DropdownMenuItem className="sm:hidden" onSelect={() => setNewFolderOpen(true)}>
+          <DropdownMenuItem onSelect={() => setNewFolderOpen(true)}>
             <FolderPlus className="mr-2 h-3.5 w-3.5" /> Nova pasta
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setTemplateOpen(true)}>
@@ -2450,7 +2448,7 @@ export default function Workspace() {
         type="button"
         onClick={() => fileInputRef.current?.click()}
         aria-label="Enviar arquivos"
-        className={juntar(botao.primario, "px-2.5 sm:px-3.5")}
+        className={juntar(botao.primario, "px-2.5 max-sm:order-first sm:px-3.5")}
       >
         <Upload className="h-4 w-4" aria-hidden="true" />
         <span className="ml-1.5 hidden sm:inline">Enviar</span>

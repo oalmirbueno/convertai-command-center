@@ -1796,9 +1796,9 @@ export default function AdminCiclo() {
             <TrioDeNumeros
               className="px-1 pt-1"
               itens={[
-                { rotulo: "Etapas feitas", valor: <>{weekTotals.done}<span className="text-muted-foreground">/{weekTotals.total}</span></> },
-                { rotulo: "Pedem ação hoje", valor: situacoes ? leitura.urgentes : "–", tom: situacoes && leitura.urgentes > 0 ? "text-destructive" : "text-foreground", dica: situacoes ? leitura.frase : undefined },
-                { rotulo: "Para acompanhar", valor: situacoes ? leitura.emAtencao : "–", tom: situacoes && leitura.emAtencao > 0 ? "text-warning" : "text-foreground" },
+                { rotulo: "Etapas", valor: <>{weekTotals.done}<span className="text-muted-foreground">/{weekTotals.total}</span></> },
+                { rotulo: "Ação hoje", valor: situacoes ? leitura.urgentes : "–", tom: situacoes && leitura.urgentes > 0 ? "text-destructive" : "text-foreground", dica: situacoes ? leitura.frase : undefined },
+                { rotulo: "Acompanhar", valor: situacoes ? leitura.emAtencao : "–", tom: situacoes && leitura.emAtencao > 0 ? "text-warning" : "text-foreground" },
                 { rotulo: "Fechados", valor: <>{closedClients.length}<span className="text-muted-foreground">/{activeClients.length}</span></> },
               ]}
             />
