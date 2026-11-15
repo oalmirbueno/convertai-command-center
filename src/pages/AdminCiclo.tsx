@@ -145,7 +145,7 @@ export default function AdminCiclo() {
   // verdade, a área de conteúdo começa exatamente onde ele termina, sem número
   // chutado que descole em algum aparelho.
   const headerRef = useRef<HTMLElement | null>(null);
-  const [headerH, setHeaderH] = useState(197);
+  const [headerH, setHeaderH] = useState(137);
   useEffect(() => {
     const node = headerRef.current;
     if (!node) return;
@@ -1492,7 +1492,7 @@ export default function AdminCiclo() {
               return (
                 <div
                   key={frente.nome}
-                  className={juntar("flex min-h-[52px] items-center rounded-2xl px-3 py-2", daVez ? "bg-muted/70" : "")}
+                  className={juntar("flex min-h-[52px] items-center rounded-xl px-3 py-2", daVez ? "bg-muted/70" : "")}
                 >
                   <div className="mr-2 min-w-0 flex-1">
                     <p className="truncate text-[11px] font-medium text-muted-foreground">
@@ -1737,7 +1737,7 @@ export default function AdminCiclo() {
                 key={key}
                 type="button"
                 onClick={() => setDayKey(key)}
-                className={`flex h-12 flex-col items-center justify-center rounded-2xl transition-colors ${
+                className={`flex h-12 flex-col items-center justify-center rounded-xl transition-colors ${
                   isToday ? "bg-accent-soft" : count > 0 ? "bg-muted/70" : "hover:bg-muted/50"
                 }`}
                 aria-label={`Dia ${day.getDate()}: ${count} ${count === 1 ? "marcação" : "marcações"}`}
@@ -1758,7 +1758,8 @@ export default function AdminCiclo() {
           })}
         </div>
 
-        <div className="flex h-8 items-center gap-2 px-3">
+        {/* v4 (15/11, passada estrutural): nas frentes, a barra e a frase repetiam o trio de números logo abaixo; ficam só nos avulsos (que não têm o trio). */}
+        {avulsosAbertos && <div className="flex h-8 items-center gap-2 px-3">
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-all duration-300"
@@ -1768,7 +1769,7 @@ export default function AdminCiclo() {
           <span className="w-16 shrink-0 text-right text-[11px] font-semibold tabular-nums text-muted-foreground">
             {weekTotals.done}/{weekTotals.total}
           </span>
-        </div>
+        </div>}
 
         {/* A leitura da carteira: responde "está tudo certo?" antes de
             alguém abrir cliente por cliente. A barra acima conta etapa
@@ -1776,26 +1777,6 @@ export default function AdminCiclo() {
             pedindo, que é a realidade. */}
         {/* v4 (15/11): a linha fica com a altura reservada desde o começo; quando a leitura chegava,
             o topo crescia e empurrava a lista inteira. */}
-        {!avulsosAbertos && (carregandoClientes || activeClients.length > 0) && (
-          <div className="flex h-7 items-center gap-1.5 px-3 pb-1">
-            {situacoes && activeClients.length > 0 && (
-              <>
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    leitura.urgentes > 0
-                      ? "bg-destructive"
-                      : leitura.emAtencao > 0
-                        ? "bg-warning"
-                        : "bg-success"
-                  }`}
-                />
-                <span className="truncate text-[11px] text-muted-foreground">
-                  {leitura.frase}
-                </span>
-              </>
-            )}
-          </div>
-        )}
       </header>
 
       {/* min-h-0 é o que faz a lista caber de verdade: sem isso o filho de um
@@ -1816,7 +1797,8 @@ export default function AdminCiclo() {
               className="px-1 pt-1"
               itens={[
                 { rotulo: "Etapas feitas", valor: <>{weekTotals.done}<span className="text-muted-foreground">/{weekTotals.total}</span></> },
-                { rotulo: "Pedem ação hoje", valor: situacoes ? leitura.urgentes : "–", tom: situacoes && leitura.urgentes > 0 ? "text-destructive" : "text-foreground" },
+                { rotulo: "Pedem ação hoje", valor: situacoes ? leitura.urgentes : "–", tom: situacoes && leitura.urgentes > 0 ? "text-destructive" : "text-foreground", dica: situacoes ? leitura.frase : undefined },
+                { rotulo: "Para acompanhar", valor: situacoes ? leitura.emAtencao : "–", tom: situacoes && leitura.emAtencao > 0 ? "text-warning" : "text-foreground" },
                 { rotulo: "Fechados", valor: <>{closedClients.length}<span className="text-muted-foreground">/{activeClients.length}</span></> },
               ]}
             />
@@ -1900,6 +1882,8 @@ export default function AdminCiclo() {
                 nivel={3}
                 titulo="O que pede ação hoje"
                 recolher="ciclo-antigo:acoes-do-dia"
+                // v4 (15/11, passada estrutural): começa recolhida (o resumo diz quantas); os cartões logo abaixo já trazem o aviso de cada cliente.
+                recolhidaDeInicio
                 resumo={`${acoes.length} ${acoes.length === 1 ? "ação" : "ações"}`}
                 className="border-b border-border pb-3"
               >
