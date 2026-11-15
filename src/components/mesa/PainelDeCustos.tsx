@@ -316,14 +316,14 @@ export default function PainelDeCustos({
       />
 
       <div className="flex min-w-0 items-center">
-        <div role="group" aria-label="Período" className="min-w-0 flex-1 grid grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:inline-grid sm:flex-none sm:grid-cols-5 sm:rounded-full">
+        <div role="group" aria-label="Período" className="scrollbar-hidden flex min-w-0 flex-1 overflow-x-auto rounded-full bg-muted p-0.5 sm:inline-grid sm:flex-none sm:grid-cols-5 sm:gap-0.5 sm:overflow-visible">
           {PERIODOS.map((p) => (
             <button
               key={p.chave}
               type="button"
               onClick={() => setPeriodo(p.chave)}
               aria-pressed={periodo === p.chave}
-              className={`toque-compacto truncate rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors sm:rounded-full ${
+              className={`toque-compacto shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors sm:shrink sm:truncate ${
                 periodo === p.chave ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >

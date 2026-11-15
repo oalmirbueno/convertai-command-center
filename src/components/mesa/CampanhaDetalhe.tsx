@@ -330,18 +330,25 @@ export default function CampanhaDetalhe({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center">
             {/* Título numa linha (28/09); inteiro no title. */}
-            <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate")} title={campanha.nome}>{campanha.nome}</h2>
+            {/* v4: no celular o nome ocupa a linha (até 2 linhas) e os selos descem para a linha do período. */}
+            <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate max-sm:line-clamp-2 max-sm:whitespace-normal max-sm:text-[20px] max-sm:leading-6")} title={campanha.nome}>{campanha.nome}</h2>
             {tipoDaCampanha(campanha.identidade) && (
-              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
+              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium max-sm:hidden" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
                 {rotuloDoTipo(tipoDaCampanha(campanha.identidade))}
               </span>
             )}
-            <SeloDoEstado estado={campanha.status} />
+            <span className="shrink-0 max-sm:hidden"><SeloDoEstado estado={campanha.status} /></span>
           </div>
           <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
             {periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}
             {itens.length ? ` · ${itens.length} conteúdo(s)` : ""}
             {campanha.custo_usd ? ` · ${usd(Number(campanha.custo_usd))}` : ""}
+          </p>
+          <p className="mt-1 flex min-w-0 flex-wrap items-center sm:hidden">
+            {tipoDaCampanha(campanha.identidade) && (
+              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium">{rotuloDoTipo(tipoDaCampanha(campanha.identidade))}</span>
+            )}
+            <SeloDoEstado estado={campanha.status} />
           </p>
         </div>
         <div className="ml-2 flex shrink-0 items-center">

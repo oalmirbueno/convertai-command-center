@@ -18,7 +18,7 @@ import { FORMATOS_DO_POST, type FormatoDoPost } from "./estudioUtil";
 export type ModoDoEstudioValor = "pautas" | "rapida";
 
 /** Pautas do mês | Arte rápida: segmentado pequeno com o estado ativo bem visível. */
-export function ModoDoEstudio({ modo, onModo, className = "" }: { modo: ModoDoEstudioValor; onModo: (m: ModoDoEstudioValor) => void; className?: string }) {
+export function ModoDoEstudio({ modo, onModo, className = "", curto: sempreCurto = false }: { modo: ModoDoEstudioValor; onModo: (m: ModoDoEstudioValor) => void; className?: string; /** Coluna estreita (Arte rápida): rótulo curto em qualquer largura. */ curto?: boolean }) {
   const opcao = (valor: ModoDoEstudioValor, rotulo: string, curto: string, icone: JSX.Element, dica: string) => {
     const ativa = modo === valor;
     return (
@@ -35,8 +35,7 @@ export function ModoDoEstudio({ modo, onModo, className = "" }: { modo: ModoDoEs
         )}
       >
         <span className="mr-1 inline-flex shrink-0" aria-hidden="true">{icone}</span>
-        <span className="hidden sm:inline">{rotulo}</span>
-        <span className="sm:hidden">{curto}</span>
+        {sempreCurto ? <span>{curto}</span> : <><span className="hidden sm:inline">{rotulo}</span><span className="sm:hidden">{curto}</span></>}
       </button>
     );
   };

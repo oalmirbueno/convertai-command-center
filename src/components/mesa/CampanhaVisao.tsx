@@ -1,17 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { FileDown } from "lucide-react";
 import { toast } from "sonner";
-import { botao, juntar, texto } from "@/components/sistema";
+import { botao, juntar } from "@/components/sistema";
 import { ProgressBar } from "@/components/ds";
 import { NumerosOusados } from "./ousado";
-import { ImagemDaMesa, useMesa } from "./MesaContexto";
-import { periodoCurto, type Campanha } from "./mesaV4Api";
+import { useMesa } from "./MesaContexto";
+import { type Campanha } from "./mesaV4Api";
 import { numerosDaCampanha, resumoDaCampanhaEmHtml, type SituacaoDaPeca } from "./regrasDaCampanha";
 import { PecasPorFase, useAcoesDasPecas } from "./CampanhaPecas";
 import CampanhaAds from "./CampanhaAds";
 import CampanhaCanvas from "./CampanhaCanvas";
 import CampanhaReferenciaPadrao from "./CampanhaReferenciaPadrao";
-import { SeloDoEstado } from "./CampanhaDetalhe";
 
 /**
  * A campanha pronta (21/10/2026): capa com o selo, o título, o período e o estado; os números (peças,
@@ -81,34 +80,22 @@ export default function CampanhaVisao({
 
   return (
     <div className="min-w-0 space-y-5" data-visao-da-campanha="">
-      {/* Capa: selo grande, título, período e estado. */}
-      <div className="flex min-w-0 items-center">
-        <span className="mr-4 flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
-          {campanha.selo_path ? (
-            <ImagemDaMesa caminho={campanha.selo_path} alt={`Selo de ${campanha.nome}`} className="h-full w-full !object-contain p-1" />
-          ) : (
-            <span className="text-[24px] font-semibold" style={paleta.length ? { color: String(paleta[0].hex) } : undefined}>{(campanha.nome || "C").charAt(0).toUpperCase()}</span>
-          )}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className={juntar(texto.tituloSecao, "truncate")} title={campanha.nome}>{campanha.nome}</p>
-          <p className="mt-0.5 flex min-w-0 items-center text-[12px] text-muted-foreground">
-            <span className="mr-2 truncate">{periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}</span>
-            <SeloDoEstado estado={campanha.status} />
-          </p>
+      {/* v4: o selo, o nome, o período e o estado já estão no cabeçalho da campanha logo acima; aqui ficam só a paleta, o conceito e o exportar. */}
+      <div className="flex min-w-0 items-start">
+        <div className="min-w-0 flex-1 space-y-2">
           {paleta.length > 0 && (
-            <span className="mt-1.5 flex" aria-label="Paleta da campanha">
+            <span className="flex" aria-label="Paleta da campanha">
               {paleta.map((c, i) => (
                 <span key={`${c.hex}-${i}`} className="mr-1 inline-block h-4 w-4 rounded-full border border-border" style={{ backgroundColor: c.hex }} title={c.nome || c.hex} />
               ))}
             </span>
           )}
+          {campanha.conceito && <p className="text-[13px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{campanha.conceito}</p>}
         </div>
-        <button type="button" className={juntar(botao.icone, "ml-2")} onClick={exportar} aria-label="Exportar o resumo" title="Exportar o resumo (imprimir ou salvar em PDF)">
+        <button type="button" className={juntar(botao.icone, "ml-2 shrink-0")} onClick={exportar} aria-label="Exportar o resumo" title="Exportar o resumo (imprimir ou salvar em PDF)">
           <FileDown className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      {campanha.conceito && <p className="text-[13px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{campanha.conceito}</p>}
 
       {/* Rodada ousada (15/11/2026): números grandes; as peças no cartão sólido e as prontas com a barra do andamento (prontas sobre peças). */}
       <NumerosOusados
