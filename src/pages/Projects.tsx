@@ -10,10 +10,8 @@ import MeetingToProjectModal from "@/components/admin/MeetingToProjectModal";
 import ProjectView from "@/components/client/ProjectView";
 import {
   AreaDeTrabalho,
-  CabecalhoDePagina,
   Carregando,
   EstadoVazio,
-  RegiaoRolavel,
   SeletorCompacto,
   botao,
   foco,
@@ -22,7 +20,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { Avatar, Chip, Donut, ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
+import { Avatar, Chip, OverflowMenu, PageHeader, ProgressBar, StatTrio, StatusPill, type Tone } from "@/components/ds";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Todos" },
@@ -82,13 +80,28 @@ export default function Projects() {
   };
   const clicavel = isClient || isAdmin;
 
+  const numeros = (
+    <StatTrio
+      label="Projetos em números"
+      items={[
+        { label: "Projetos", value: visiveis.length, hint: filter !== "all" ? `${filtered.length} no filtro` : undefined },
+        { label: "Ativos", value: contagem("active") },
+        { label: "Em revisão", value: contagem("review") },
+        { label: "Concluídos", value: contagem("done") },
+      ]}
+    />
+  );
+
   return (
     <div className="min-w-0">
-      <CabecalhoDePagina
-        titulo="Projetos"
-        ajuda={isClient ? "Seus projetos com a Aceleriq. Toque num projeto para ver o andamento." : "Todos os projetos da agência, com status, andamento e prazo. Clique num projeto para abrir o detalhe."}
-        descricao={isLoading ? "\u00a0" : `${filtered.length} ${filtered.length === 1 ? "projeto" : "projetos"}`}
-        acoes={
+      {/* Cabeçalho como nas referências: sobretítulo, título, números sem cartão e UMA ação verde; o resto no "…". */}
+      <PageHeader
+        eyebrow={isClient ? "Com a Aceleriq" : "Operação"}
+        title="Projetos"
+        help={isClient ? "Seus projetos com a Aceleriq. Toque num projeto para ver o andamento." : "Todos os projetos da agência, com status, andamento e prazo. Clique num projeto para abrir o detalhe."}
+        beside={!isLoading && visiveis.length > 0 ? <div className="ml-6 hidden min-w-0 xl:block">{numeros}</div> : undefined}
+        stats={!isLoading && visiveis.length > 0 ? <div className="xl:hidden">{numeros}</div> : undefined}
+        actions={
           <>
             <SeletorCompacto
               rotulo="Status"
@@ -98,13 +111,10 @@ export default function Projects() {
               onEscolher={setFilter}
             />
             {isAdmin && (
-              <button type="button" onClick={() => setMeetingModalOpen(true)} className={botao.secundario} aria-label="Gerar projeto pela ata">
-                <Sparkles className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Gerar via ata</span>
-              </button>
+              <OverflowMenu label="Mais ações de projetos" items={[{ label: "Gerar via ata", icon: <Sparkles className="h-4 w-4" />, onSelect: () => setMeetingModalOpen(true) }]} />
             )}
             {isAdmin && (
-              <button type="button" onClick={() => setCreateOpen(true)} data-tour="projects-create-btn" className={botao.primario} aria-label="Novo projeto">
+              <button type="button" onClick={() => setCreateOpen(true)} data-tour="projects-create-btn" className={juntar(botao.primario, "font-semibold")} aria-label="Novo projeto">
                 <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Novo projeto</span>
               </button>
@@ -115,43 +125,6 @@ export default function Projects() {
 
       {/* A lista rola sozinha de 1024 px para cima e lembra onde estava. */}
       <AreaDeTrabalho className="mt-6 sm:mt-8" rotuloDoPrincipal="Lista de projetos" memoriaDaRolagem="projetos:lista">
-        {!isLoading && visiveis.length > 0 && (
-          <StatGrid cols={4} className="mb-5 sm:mb-6" label="Projetos em números">
-            <StatCard
-              variant="ink"
-              label="Projetos"
-              value={visiveis.length}
-              hint={filter !== "all" ? `${filtered.length} neste filtro` : "na carteira"}
-              chartPosition="side"
-              chart={
-                <span className="flex justify-end max-sm:hidden">
-                  <Donut
-                    size={72}
-                    thickness={10}
-                    segments={STATUS_OPTIONS.filter((s) => s.value !== "all").map((s, i) => ({ label: s.label, value: contagem(s.value), tone: ((i % 5) + 1) as 1 | 2 | 3 | 4 | 5 }))}
-                  />
-                </span>
-              }
-              onClick={() => setFilter("all")}
-            />
-            <StatCard
-              variant="accent"
-              label="Ativos"
-              value={contagem("active")}
-              hint={`de ${visiveis.length}`}
-              chart={<ProgressBar value={contagem("active")} max={visiveis.length} tone="current" />}
-              onClick={() => setFilter("active")}
-            />
-            <StatCard label="Em revisão" value={contagem("review")} hint={`${contagem("planning")} em planejamento`} onClick={() => setFilter("review")} />
-            <StatCard
-              label="Concluídos"
-              value={contagem("done")}
-              hint={`${contagem("paused")} ${contagem("paused") === 1 ? "pausado" : "pausados"}`}
-              chart={<ProgressBar value={contagem("done")} max={visiveis.length} striped />}
-              onClick={() => setFilter("done")}
-            />
-          </StatGrid>
-        )}
         {isLoading ? (
           <Carregando rotulo="Carregando projetos" linhas={6} />
         ) : filtered.length === 0 ? (
@@ -168,7 +141,7 @@ export default function Projects() {
             }
           />
         ) : (
-          <ul aria-label="Projetos" data-tour="projects-list" className={juntar(superficie.painel, "space-y-0.5 overflow-hidden px-2 py-2 sm:px-3")}>
+          <ul aria-label="Projetos" data-tour="projects-list" className={juntar(superficie.painel, "space-y-1 overflow-hidden p-2 sm:p-3")}>
             {filtered.map((p: any) => {
               // Recorrente nao tem "80% pronto": mostra o ritmo do ciclo.
               const view = buildProgressView(p, (tasks || []) as any[]);
@@ -186,7 +159,7 @@ export default function Projects() {
                         abrir(p);
                       }
                     }}
-                    className={juntar("flex min-w-0 items-center rounded-md px-3 py-4 transition-colors sm:px-4", clicavel && "cursor-pointer hover:bg-muted/60", clicavel && foco)}
+                    className={juntar("flex min-w-0 items-center rounded-md px-3 py-3.5 transition-colors sm:px-4 sm:py-4", clicavel && "cursor-pointer hover:bg-muted/60", clicavel && foco)}
                   >
                     <span className="relative mr-3 shrink-0 sm:mr-4">
                       <Avatar name={p.client?.company_name || p.client?.full_name || p.name} size="md" square />
@@ -212,7 +185,7 @@ export default function Projects() {
                       </p>
                       <ProgressBar value={cycleFillPercent(view)} max={100} height={6} label={view.mode === "percent" ? `${view.percent}% pronto` : view.label} />
                     </div>
-                    {statusLabels[p.status] && <StatusPill tone={statusTone[p.status] || "neutral"} className="mr-4 hidden w-[116px] justify-start lg:inline-flex">{statusLabels[p.status]}</StatusPill>}
+                    {statusLabels[p.status] && <StatusPill plain tone={statusTone[p.status] || "neutral"} className="mr-4 hidden w-[112px] justify-start lg:inline-flex">{statusLabels[p.status]}</StatusPill>}
                     {p.deadline && (
                       <span className={juntar(texto.auxiliar, "hidden shrink-0 items-center tabular-nums sm:flex", isAdmin && "mr-2")}>
                         <Clock className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
