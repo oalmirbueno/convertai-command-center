@@ -2435,31 +2435,33 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             // 16/10/2026 (dono, celular: "muito poluído"): abaixo de 640 px a saudação some e fica só o ritual do dia.
             descricao={<span data-faixa-da-central=""><span className="hidden sm:inline">{greeting}, {(profile?.full_name || "").split(" ")[0] || "time"} · {weekday}, dia</span><span className="sm:hidden">Dia</span> de <span className="font-medium text-primary">{todayRitual.label}</span></span>}
             acoes={
+              /* v4 (15/11, passada estrutural): UMA ação principal (gerar as mensagens do dia), o agente, e o resto no "…". */
               <>
-                <button type="button" onClick={() => void refreshCentral()} aria-label="Atualizar os dados" title={refreshing ? "Atualizando..." : `Dados de ${lastSyncLabel}. Toque para ler de novo`} className={botao.icone}>
-                  <RefreshCw className={`h-[18px] w-[18px] ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-                </button>
-                {activeTab !== "radar" && (
-                  <button type="button" onClick={() => setTelaCheia((v) => !v)} aria-pressed={telaCheia} aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"} title={telaCheia ? "Sair da tela cheia" : "Tela cheia"} className={juntar(botao.icone, "max-sm:hidden")}>
-                    {telaCheia ? <Minimize2 className="h-[18px] w-[18px]" aria-hidden="true" /> : <Maximize2 className="h-[18px] w-[18px]" aria-hidden="true" />}
-                  </button>
-                )}
                 <AgenteDaCentral />
-                {profile?.role === "admin" && (
-                  <Link to="/central/mensagens" className={juntar(botao.icone, "relative", mensagensProntas > 0 && "text-primary")} aria-label={`Mensagens da semana${mensagensProntas ? `: ${mensagensProntas} prontas` : ""}`} title={mensagensProntas ? `Mensagens da semana: ${mensagensProntas} prontas para aprovar` : "Mensagens da semana"} data-atalho-mensagens="">
+                {profile?.role === "admin" && mensagensProntas > 0 && (
+                  <Link to="/central/mensagens" className={juntar(botao.icone, "relative text-primary")} aria-label={`Mensagens da semana: ${mensagensProntas} prontas`} title={`Mensagens da semana: ${mensagensProntas} prontas para aprovar`} data-atalho-mensagens="">
                     <MessagesSquare className="h-[18px] w-[18px]" aria-hidden="true" />
-                    {mensagensProntas > 0 && <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none tabular-nums text-primary-foreground" aria-hidden="true">{mensagensProntas}</span>}
+                    <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none tabular-nums text-primary-foreground" aria-hidden="true">{mensagensProntas}</span>
                   </Link>
                 )}
+                <MenuMais
+                  rotulo="Mais ações da Central"
+                  itens={[
+                    { rotulo: refreshing ? "Atualizando…" : "Atualizar os dados", icone: <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />, dica: `Dados de ${lastSyncLabel}`, aoEscolher: () => void refreshCentral() },
+                    activeTab !== "radar" && { rotulo: telaCheia ? "Sair da tela cheia" : "Tela cheia", icone: telaCheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => setTelaCheia((v) => !v) },
+                    profile?.role === "admin" && { rotulo: "Mensagens da semana", icone: <MessagesSquare className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => navigate("/central/mensagens") },
+                  ]}
+                />
                 <button
                   type="button"
                   data-tour="central-gerador"
                   aria-label="Gerar mensagens de hoje"
                   title="Gerar mensagens de hoje"
                   onClick={() => { setGenClientId(reviewClientId || "__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
-                  className={juntar(botao.icone, "text-primary")}
+                  className={juntar(botao.primario, "ml-1 h-10 shrink-0 rounded-full px-4 text-[13px] font-semibold max-sm:h-9 max-sm:w-9 max-sm:px-0")}
                 >
-                  <Sparkles className="h-[18px] w-[18px]" aria-hidden="true" />
+                  <Sparkles className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                  <span className="max-sm:sr-only">Gerar mensagens</span>
                 </button>
               </>
             }
@@ -2498,7 +2500,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           { chave: "pagamentos", valor: financialAlerts, rotulo: financialAlerts === 1 ? "pagamento vencido" : "pagamentos vencidos", icone: <BadgeDollarSign className="h-3.5 w-3.5" />, cor: "text-destructive", tab: "carteira" },
           { chave: "rascunhos", valor: draftReports.length, rotulo: draftReports.length === 1 ? "rascunho na fila" : "rascunhos na fila", icone: <FileText className="h-3.5 w-3.5" />, cor: "text-primary", tab: "fila" },
           { chave: "oportunidades", valor: opportunities.length, rotulo: opportunities.length === 1 ? "oportunidade" : "oportunidades", icone: <Lightbulb className="h-3.5 w-3.5" />, cor: "text-info", tab: "radar" },
-        ].filter((n) => n.valor > 0);
+        // v4 (15/11, passada estrutural): a ficha some na aba que já mostra aquele número (achados, saúde, fila, radar); só aponta para as OUTRAS abas.
+        // Rascunhos e oportunidades já são o contador da própria aba (Fila, Radar): não repetem aqui.
+        ].filter((n) => n.valor > 0 && n.tab !== activeTab && n.tab === "carteira");
         // 16/10/2026 (dono, celular: "cara de aplicativo"): abaixo de 640 px a linha das abas gruda no
         // topo da área (a raiz se estende até a borda para o fundo cobrir o que rola por baixo) e só os
         // dois números mais importantes ficam à vista; o resto aparece do celular deitado para cima.
