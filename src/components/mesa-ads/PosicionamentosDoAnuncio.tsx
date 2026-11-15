@@ -190,7 +190,7 @@ export default function PosicionamentosDoAnuncio(props: Props) {
               type="button"
               aria-pressed={so === p.id}
               onClick={() => setSo(p.id)}
-              className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] ${so === p.id ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}
+              className={`mb-1 mr-1 rounded-full border px-2.5 py-1 text-[11px] ${so === p.id ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}
             >
               {p.rotulo}
             </button>

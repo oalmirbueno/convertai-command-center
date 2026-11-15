@@ -116,7 +116,7 @@ function LinhaDoSom({
       <div className="ml-2 min-w-0 flex-1">
         <div className="flex min-w-0 items-center">
           <span className={juntar(texto.corpo, "min-w-0 truncate")} title={som.titulo}>{som.titulo}</span>
-          {som.escolhida && <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>na campanha</span>}
+          {som.escolhida && <span className={juntar(etiqueta, "ml-2 bg-accent-soft text-primary")}>na campanha</span>}
           <span className={juntar(texto.auxiliar, "ml-auto shrink-0 pl-2 tabular-nums")}>{duracaoCurta(som.duracao_s)}</span>
         </div>
         <Onda som={som} progresso={progresso} tocando={tocando} onPular={onPular} />

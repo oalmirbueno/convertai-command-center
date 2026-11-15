@@ -214,15 +214,15 @@ export default function Lancador({
                       role="menuitem"
                       data-opcao={o.chave}
                       onClick={() => escolher(o.chave)}
-                      className={juntar("flex w-full min-w-0 items-center rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted", foco)}
+                      className={juntar("flex w-full min-w-0 items-center rounded-md px-2.5 py-2.5 text-left transition-colors hover:bg-muted", foco)}
                     >
-                      <IconeDaOpcao className={juntar("mr-2.5 h-4 w-4 shrink-0", o.chave === "agente" ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+                      <span aria-hidden="true" className={juntar("mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full", o.chave === "agente" ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground")}><IconeDaOpcao className="h-4 w-4" aria-hidden="true" /></span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{o.rotulo}</span>
                         <span className="block truncate text-[12px] leading-4 text-muted-foreground">{o.detalhe}</span>
                       </span>
                       {o.atalho && (
-                        <kbd className="ml-2 hidden shrink-0 rounded-sm bg-muted px-1.5 font-mono text-[11px] leading-5 text-muted-foreground md:inline">{o.atalho}</kbd>
+                        <kbd className="ml-2 hidden shrink-0 rounded-full bg-muted px-2 font-mono text-[11px] leading-5 text-muted-foreground md:inline">{o.atalho}</kbd>
                       )}
                     </button>
                   </li>
@@ -283,7 +283,7 @@ export default function Lancador({
                 {ATALHOS_DO_PAINEL.filter((a) => podeUsarAgente || a.teclas !== ATALHO_DO_AGENTE).map((a) => (
                   <li key={a.teclas} className="flex min-w-0 items-center justify-between text-[12px]">
                     <span className="mr-2 min-w-0 truncate text-foreground">{a.o_que}</span>
-                    <kbd className="shrink-0 rounded-sm bg-muted px-1.5 font-mono text-[11px] leading-5 text-muted-foreground">{a.teclas}</kbd>
+                    <kbd className="shrink-0 rounded-full bg-muted px-2 font-mono text-[11px] leading-5 text-muted-foreground">{a.teclas}</kbd>
                   </li>
                 ))}
               </ul>

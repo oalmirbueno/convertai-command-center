@@ -142,7 +142,7 @@ export function CartaoCompacto({ a, acao }: { a: AnuncioDoResultado; acao?: Reac
         </dl>
         <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
           {a.criativo && (
-            <span className="mb-0.5 mr-2 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary" title={a.criativo.origem === "mesma_peca" ? "Mesma arte de um anúncio ligado" : "Ligado ao criativo da Mesa Ads"}>
+            <span className="mb-0.5 mr-2 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary" title={a.criativo.origem === "mesma_peca" ? "Mesma arte de um anúncio ligado" : "Ligado ao criativo da Mesa Ads"}>
               <Link2 className="mr-1 h-3 w-3 shrink-0" />
               <span className="truncate">{a.criativo.nome}</span>
             </span>
@@ -183,7 +183,7 @@ export function CartaoDaPeca({ p }: { p: PecaAgrupada }) {
         </dl>
         <p className={`mt-1 text-[11px] ${p.indice !== null && p.indice < 1 ? "text-success" : p.indice !== null && p.indice > 1.2 ? "text-destructive" : "text-muted-foreground"}`}>{textoDoIndice(p.indice)}</p>
         {p.criativo && (
-          <span className="mt-1 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+          <span className="mt-1 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">
             <Link2 className="mr-1 h-3 w-3 shrink-0" />
             <span className="truncate">Criativo da Mesa Ads</span>
           </span>

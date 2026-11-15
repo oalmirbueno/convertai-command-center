@@ -127,7 +127,7 @@ function CartaoDaReferencia({ r, onAbrir, onEstrela }: { r: ReferenciaAds; onAbr
           <Miniatura r={r} />
         </div>
         {r.destaque && (
-          <span className="absolute left-2 top-2 inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-foreground">
+          <span className="absolute left-2 top-2 inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground">
             <Star className="mr-1 h-3 w-3 fill-warning text-warning" /> Destaque
           </span>
         )}

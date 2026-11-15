@@ -126,7 +126,7 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
           {conectadas.map((c, i) => (
             <li key={`c-${i}`} className="flex min-w-0 items-center text-[13px]">
               <span className="min-w-0 truncate">{c.endereco || "Conta conectada"}</span>
-              <span className={juntar(etiqueta, "ml-2 bg-success/15 text-success")}>conectada</span>
+              <span className={juntar(etiqueta, "ml-2 bg-success-soft text-success")}>conectada</span>
             </li>
           ))}
           {adicionadas.map((c) => (

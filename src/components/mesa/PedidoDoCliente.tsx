@@ -175,7 +175,7 @@ export default function PedidoDoCliente({
         </span>
         {entendendo && !entendido && <Loader2 className="ml-2 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-label="Entendendo o pedido" />}
         {entendido && (
-          <span className="ml-2 shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[11px]" title={`Entendido pelo Jev (confiança ${Math.round(entendido.confianca * 100)}%)`}>
+          <span className="ml-2 shrink-0 rounded-full bg-warning/15 px-2.5 py-1 text-[11px]" title={`Entendido pelo Jev (confiança ${Math.round(entendido.confianca * 100)}%)`}>
             {ROTULO_DO_TIPO[entendido.tipo]}
           </span>
         )}

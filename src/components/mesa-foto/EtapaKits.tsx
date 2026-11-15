@@ -182,7 +182,7 @@ function FonteDoKit({
   const papel = PAPEIS_DA_REF.find((p) => p.valor === refDoKit.papel);
   return (
     <li className="flex min-w-0 items-start rounded-lg border border-border bg-background p-2" data-ref={refDoKit.imagem_id}>
-      <div className="w-12 shrink-0">{foto ? <MiniaturaDaFoto foto={foto} /> : <div className="h-12 w-12 animate-pulse rounded-lg bg-muted" />}</div>
+      <div className="w-12 shrink-0">{foto ? <MiniaturaDaFoto foto={foto} /> : <div className="h-12 w-12 animate-pulse rounded-full bg-muted" />}</div>
       <div className="ml-2.5 min-w-0 flex-1 space-y-1.5">
         <div className="flex min-w-0 flex-wrap items-center">
           <Select value={refDoKit.papel} onValueChange={(v) => onMudar({ ...refDoKit, papel: v as PapelDaRef })}>
@@ -229,7 +229,7 @@ function FonteDoKit({
             type="button"
             onClick={onFrente}
             aria-pressed={frente}
-            className={juntarClasses(botao.icone, "mr-1", frente && "bg-primary/10 text-primary")}
+            className={juntarClasses(botao.icone, "mr-1", frente && "bg-accent-soft text-primary")}
             aria-label={frente ? "Frente do assunto" : "Marcar como frente"}
             title={`${frente ? "Frente do assunto" : "Marcar como frente"}: a frente comercial do assunto; os ângulos contam a partir dela`}
           >
@@ -463,7 +463,7 @@ export default function EtapaKits() {
                       aria-current={ativo ? "true" : undefined}
                       className={`flex w-full min-w-0 items-center rounded-md border p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${ativo ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
                     >
-                      <span className="w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-lg bg-muted" />}</span>
+                      <span className="w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-full bg-muted" />}</span>
                       <span className="ml-2 min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium">{k.nome}</span>
                         <span className="block truncate text-[11px] text-muted-foreground">

@@ -377,7 +377,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
               <ul className="mt-1.5 space-y-1.5">
                 {l.aprendizados.map((a, k) => (
                   <li key={k} className="min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]">
-                    <span className={`mr-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>{a.tipo}</span>
+                    <span className={`mr-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-danger-soft text-destructive" : "bg-success-soft text-success"}`}>{a.tipo}</span>
                     <span className="mr-1 text-[11px] text-muted-foreground">{a.canal === "organico" ? "orgânico" : "anúncios"}:</span>
                     {a.texto}
                   </li>

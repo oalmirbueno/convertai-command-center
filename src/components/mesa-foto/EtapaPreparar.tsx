@@ -206,7 +206,7 @@ export default function EtapaPreparar() {
           <div className="mt-3 flex min-w-0 flex-wrap items-center">
             <button
               type="button"
-              className={juntar(botao.icone, "mb-1.5 mr-2", marcando && "bg-primary/10 text-primary")}
+              className={juntar(botao.icone, "mb-1.5 mr-2", marcando && "bg-accent-soft text-primary")}
               onClick={() => {
                 setMarcando(!marcando);
                 if (!marcando && vista === "depois") setVista("lado");

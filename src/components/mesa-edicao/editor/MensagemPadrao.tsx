@@ -54,7 +54,7 @@ export default function MensagemPadrao({ m }: { m: MensagemPadraoDoEditor }) {
         </p>
         <div className="flex flex-wrap">
           {m.estilos.map((e) => (
-            <span key={e.nome} className={juntar("mb-1 mr-1 rounded-full px-2 py-0.5 text-[11px]", e.ligado ? "bg-primary/15 text-foreground" : "bg-muted text-muted-foreground")}>
+            <span key={e.nome} className={juntar("mb-1 mr-1 rounded-full px-2.5 py-1 text-[11px]", e.ligado ? "bg-primary/15 text-foreground" : "bg-muted text-muted-foreground")}>
               {e.ligado && <Check className="-mt-0.5 mr-0.5 inline h-3 w-3" />}
               {e.nome}
             </span>

@@ -168,7 +168,7 @@ export function EscolherCartao({
       dados={{ "data-escolher-cartao": aba }}
       cabeca={
         <>
-          <h3 className="truncate text-[13px] font-semibold">{titulo}</h3>
+          <h3 className="truncate text-[15px] font-semibold">{titulo}</h3>
           <p className="text-[11px] leading-snug text-zinc-400">{trocando ? tipo.dica : "Escolha pela foto. O cartão entra já ligado ao Resultado."}</p>
         </>
       }

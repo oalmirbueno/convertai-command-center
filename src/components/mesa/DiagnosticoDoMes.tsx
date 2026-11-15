@@ -226,7 +226,7 @@ function ListaDePontos({ itens, tom }: { itens: Ponto[]; tom: "bom" | "ruim" }) 
 
 const ROTULO_PRIORIDADE: Record<Recomendacao["prioridade"], string> = { alta: "alta", media: "média", baixa: "baixa" };
 const COR_PRIORIDADE: Record<Recomendacao["prioridade"], string> = {
-  alta: "bg-primary/10 text-primary",
+  alta: "bg-accent-soft text-primary",
   media: "bg-muted text-foreground",
   baixa: "bg-muted text-muted-foreground",
 };
@@ -324,15 +324,15 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
         aria-controls={idDoCorpo}
         className="flex w-full min-w-0 items-start rounded-lg px-4 py-3.5 text-left transition-colors hover:bg-muted/40"
       >
-        <span className="mr-3 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <span className="mr-3 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary">
           <Compass className="h-4 w-4" />
         </span>
         <span className="block min-w-0 flex-1">
           <span className="flex flex-wrap items-center">
             <span className="mr-2 text-[12px] font-medium text-muted-foreground">Diagnóstico do mês</span>
-            {d && d.origem === "frentes" && <span className="mr-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">resumo das frentes</span>}
+            {d && d.origem === "frentes" && <span className="mr-2 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">resumo das frentes</span>}
             {pesquisando && (
-              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" /> pesquisando o mês
               </span>
             )}
@@ -341,7 +341,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
           {chips.length > 0 && (
             <span className="mt-2 flex flex-wrap">
               {chips.map((c) => (
-                <span key={c} className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">{c}</span>
+                <span key={c} className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px]">{c}</span>
               ))}
             </span>
           )}

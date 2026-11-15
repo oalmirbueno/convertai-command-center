@@ -236,7 +236,7 @@ export default function GeracoesRecentes({ arquivos, taskId, criativoId, pedidos
                   {envios.find((e) => e.erro) ? ` · ${(envios.find((e) => e.erro) as Envio).erro}` : ""}
                 </p>
               </div>
-              <span className={juntar(etiqueta, "mr-1", (p.estado as string) === "erro" ? "bg-destructive/10 text-destructive" : (p.estado as string) === "pronto" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{ROTULO[p.estado as string] || p.estado}</span>
+              <span className={juntar(etiqueta, "mr-1", (p.estado as string) === "erro" ? "bg-danger-soft text-destructive" : (p.estado as string) === "pronto" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{ROTULO[p.estado as string] || p.estado}</span>
               {ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0 && (
                 <button type="button" className={botao.icone} disabled={!!conferindo} onClick={() => void conferir(p.id)} aria-label={`Conferir ${alvo.titulo || "pedido"}`} title={(p.estado as string) === "baixando" ? "Baixar de novo" : "Conferir"}>
                   {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}

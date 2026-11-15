@@ -281,7 +281,7 @@ export default function EstudioDeNomes({
                 title={t.explica}
                 aria-pressed={on}
                 onClick={() => setTecnicas(on ? tecnicas.filter((x) => x !== t.valor) : tecnicas.concat([t.valor]))}
-                className={juntar("m-1 inline-flex h-8 items-center rounded-md border px-2.5 text-[12px] transition-colors", on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted", foco)}
+                className={juntar("m-1 inline-flex h-8 items-center rounded-md border px-2.5 text-[12px] transition-colors", on ? "border-primary bg-accent-soft text-primary" : "border-border text-muted-foreground hover:bg-muted", foco)}
               >
                 {on && <Check className="mr-1 h-3.5 w-3.5" />}
                 {t.rotulo}
@@ -487,7 +487,7 @@ function LinhaDoNome({ c, finalista, escolhido, travado = false, onFinalista, on
         <span className="flex min-w-0 flex-wrap items-center">
           <span className={juntar(texto.tituloSecao, "mr-2 truncate")}>{c.nome}</span>
           <span className={juntar(etiqueta, "mr-1.5 bg-muted text-muted-foreground")}>{rotuloDaTecnica(c.tecnica)}</span>
-          <span className={juntar(etiqueta, "mr-1.5 tabular-nums", c.nota === null ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary")} title="Nota do Jev contra os critérios, com o ajuste do domínio">
+          <span className={juntar(etiqueta, "mr-1.5 tabular-nums", c.nota === null ? "bg-muted text-muted-foreground" : "bg-accent-soft text-primary")} title="Nota do Jev contra os critérios, com o ajuste do domínio">
             {c.nota === null ? "sem nota" : `nota ${Math.round(c.nota * 100)}`}
           </span>
           {escolhido && <Pastilha tom="bom">Escolhido</Pastilha>}

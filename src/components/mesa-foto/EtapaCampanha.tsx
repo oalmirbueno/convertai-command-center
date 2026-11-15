@@ -493,7 +493,7 @@ export default function EtapaCampanha() {
               recolher={false}
               dica="O diretor monta as fotos (cena, luz, ação). Planejar não gera imagem: depois de planejar, Gerar todas mostra o total antes. Cada foto se aprova, refaz ou usa no próprio resultado."
               acao={
-                <button className={juntar(botao.icone, "disabled:opacity-50", (arsenal) && "bg-primary/10 text-primary")} type="button" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="" aria-label="Arsenal" title="Arsenal">
+                <button className={juntar(botao.icone, "disabled:opacity-50", (arsenal) && "bg-accent-soft text-primary")} type="button" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="" aria-label="Arsenal" title="Arsenal">
                   <BookImage className="h-4 w-4" aria-hidden="true" />
                 </button>
               }

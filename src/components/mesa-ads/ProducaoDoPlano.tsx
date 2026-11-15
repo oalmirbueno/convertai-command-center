@@ -306,7 +306,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
                 onClick={() => setFormatosEscolhidos(null)}
                 className={juntar(
                   "mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors",
-                  !formatosEscolhidos ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground",
+                  !formatosEscolhidos ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground",
                   foco,
                 )}
               >
@@ -323,7 +323,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
                     onClick={() => alternarFormato(f.valor)}
                     className={juntar(
                       "mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors",
-                      ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground",
+                      ativo ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground",
                       foco,
                     )}
                   >

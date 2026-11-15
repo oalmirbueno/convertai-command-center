@@ -351,7 +351,7 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
       {verFontes && (
         <ul className="flex min-w-0 flex-wrap">
           {fontesLidas.map((f) => (
-            <li key={f} className="mb-1 mr-1 min-w-0 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground" title={f}>
+            <li key={f} className="mb-1 mr-1 min-w-0 max-w-full truncate rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground" title={f}>
               {f}
             </li>
           ))}
@@ -519,7 +519,7 @@ function BarraDeCompletude({ itens }: { itens: ItemDoChecklist[] }) {
   return (
     <div className="flex min-w-0 flex-1 items-center" title={`Completude do contexto: ${feitos} de ${itens.length} itens completos`}>
       <div
-        className="h-1.5 min-w-[32px] max-w-[160px] flex-1 overflow-hidden rounded-full bg-muted"
+        className="h-2 min-w-[32px] max-w-[160px] flex-1 overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}

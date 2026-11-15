@@ -874,7 +874,7 @@ function AbaDoBanco({
               onClick={() => setTag(tag === t ? null : t)}
               aria-pressed={tag === t}
               className={`mb-1.5 mr-1.5 max-w-full truncate rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
-                tag === t ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
+                tag === t ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground"
               }`}
             >
               {t}

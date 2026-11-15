@@ -445,7 +445,7 @@ function FaixaDeClones({
                   aria-label={`Abrir ${c.nome}`}
                   className={juntar("flex w-full min-w-0 items-center rounded-md px-1.5 py-1 text-left transition-colors", ativo ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-muted", foco)}
                 >
-                  <span className="relative mr-2 block h-10 w-10 shrink-0 overflow-hidden rounded-md bg-muted" data-clone={c.id}>
+                  <span className="relative mr-2 block h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted" data-clone={c.id}>
                     {c.capa_url ? (
                       <img src={c.capa_url} alt={c.nome} className="h-full w-full object-cover" loading="lazy" />
                     ) : (

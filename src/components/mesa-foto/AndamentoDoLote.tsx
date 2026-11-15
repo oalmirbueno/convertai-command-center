@@ -123,7 +123,7 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
           </button>
         )}
       </div>
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
         <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
       <ul className="mt-2 flex min-w-0 flex-wrap">
@@ -131,7 +131,7 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
           <li
             key={i.tomada_id}
             title={i.erro || undefined}
-            className={`mb-1 mr-1 inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] ${
+            className={`mb-1 mr-1 inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[11px] ${
               i.estado === "feita"
                 ? "border-success/40 text-success"
                 : i.estado === "falhou"

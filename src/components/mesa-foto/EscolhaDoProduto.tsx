@@ -126,7 +126,7 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
                   className={juntar("flex w-full min-w-0 items-center rounded-md p-1.5 text-left hover:bg-muted", ativo && "bg-primary/[0.06]", foco)}
                   data-produto-opcao={String(k.id)}
                 >
-                  <span className="mr-2 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-md bg-muted" />}</span>
+                  <span className="mr-2 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-full bg-muted" />}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] font-medium">{nomeDoKit(k)}</span>
                     <span className="block truncate text-[11px] text-muted-foreground">

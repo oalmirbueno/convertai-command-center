@@ -29,7 +29,7 @@ export const BOTAO = "inline-flex h-7 shrink-0 items-center rounded-lg border bo
 export const BOTAO_ICONE = "nodrag toque-compacto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-zinc-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 /** Pílula de escolha sobre fundo preto (ligada ou não). */
 export const pilula = (ligada: boolean) =>
-  `mb-1 mr-1 inline-flex h-7 max-w-full items-center truncate rounded-full border px-2.5 text-[12px] transition-colors ${ligada ? "border-emerald-400/70 bg-emerald-400/15 text-white" : "border-white/10 bg-white/5 text-zinc-400 hover:text-white"}`;
+  `mb-1 mr-1 inline-flex h-8 max-w-full items-center truncate rounded-full border px-3.5 text-[12px] font-medium transition-colors ${ligada ? "border-emerald-400/70 bg-emerald-400/15 text-white" : "border-white/10 bg-white/5 text-zinc-400 hover:text-white"}`;
 /** Rótulo pequeno de seção nos painéis pretos. */
 export const ROTULO = "mb-1.5 text-[11px] font-semibold text-zinc-400";
 /** Campo de texto sobre fundo preto. */

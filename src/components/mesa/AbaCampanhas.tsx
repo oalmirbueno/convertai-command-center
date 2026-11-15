@@ -89,7 +89,7 @@ function ItemDaLista({
         </span>
         {progresso && (
           <span className="mt-1 flex min-w-0 items-center" title={`${progresso.prontas} de ${progresso.total} peças prontas`} data-progresso={`${progresso.prontas}/${progresso.total}`}>
-            <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+            <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
               <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round((progresso.prontas / progresso.total) * 100)}%` }} />
             </span>
             <span className="ml-1.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">{progresso.prontas}/{progresso.total}</span>
@@ -124,7 +124,7 @@ function EstadoVazio({
   return (
     <div className="mx-auto w-full min-w-0 max-w-2xl py-6 sm:py-10">
       <div className="text-center">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
           <Megaphone className="h-5 w-5 text-primary" />
         </span>
         {/* Só o título; o que é uma campanha fica no "?" (28/09). */}

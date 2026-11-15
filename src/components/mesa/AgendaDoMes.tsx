@@ -926,7 +926,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
         <div className="flex min-w-0 flex-wrap items-center border-b border-border px-3 py-2.5">
           <p className="mr-3 min-w-0 text-[13px] font-medium">
             Selecionados
-            <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-normal text-muted-foreground">{escolhidos.length}</span>
+            <span className="ml-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] font-normal text-muted-foreground">{escolhidos.length}</span>
           </p>
           {escolhidos.length > 0 && (
             <div className="ml-auto flex flex-wrap items-center">

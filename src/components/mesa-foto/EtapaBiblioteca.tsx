@@ -447,7 +447,7 @@ function Alternar({ ligado, onAlternar, icone, children }: { ligado: boolean; on
       onClick={onAlternar}
       className={juntar(
         "toque-compacto mb-1 mr-1.5 inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[12px]",
-        ligado ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        ligado ? "bg-accent-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       {icone}

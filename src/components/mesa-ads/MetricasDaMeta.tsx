@@ -189,7 +189,7 @@ export function GraficoNoTempo({
           const dica = `${f.rotulo}: ${inteiro(v)} ${rotuloDaMedida.toLowerCase()} · ${brl(f.gasto)} investidos${v > 0 ? ` · ${brl(f.gasto / v)} cada` : ""}`;
           return (
             <div key={f.indice} className="flex h-full min-w-0 flex-1 items-end px-0.5 sm:px-1" title={dica} aria-label={dica} data-faixa={f.indice} data-valor={v}>
-              <div className={juntar("w-full rounded-full", emDestaque(f.indice) ? "bg-primary" : "bg-foreground/15")} style={{ height: `${altura}px` }} />
+              <div className={juntar("w-full rounded-full", emDestaque(f.indice) ? "bg-primary" : "bg-primary/35")} style={{ height: `${altura}px` }} />
             </div>
           );
         })}

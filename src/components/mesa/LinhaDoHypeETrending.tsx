@@ -24,7 +24,7 @@ export const GRADE_DA_LINHA_JUNTANDO = "grid min-w-0 grid-cols-[16px_40px_minmax
 /** Bloco de calendário (dia grande, mês curto) ou um ícone, sempre do mesmo tamanho. */
 export function BlocoDaLinha({ dia, mes, icone, destaque = false }: { dia?: string; mes?: string; icone?: ReactNode; destaque?: boolean }) {
   return (
-    <span className={juntar("flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md", destaque ? "bg-primary/10 text-primary" : "bg-muted text-foreground")} aria-hidden="true" data-bloco="">
+    <span className={juntar("flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md", destaque ? "bg-accent-soft text-primary" : "bg-muted text-foreground")} aria-hidden="true" data-bloco="">
       {icone ? <span className="text-muted-foreground">{icone}</span> : (
         <>
           <span className="text-[15px] font-semibold leading-4 tabular-nums">{dia}</span>
@@ -81,7 +81,7 @@ export function AcoesDeCriar({ titulo, rotuloDoConteudo = "Criar conteúdo", par
   const rotuloDoBotao = armado ? `${rotuloDoConteudo}: clique de novo para confirmar${custo}` : `${rotuloDoConteudo}${custo}`;
   return (
     <span className="inline-flex items-center" data-acoes-de-criar="">
-      <button type="button" className={juntar(botao.icone, armado ? "bg-primary/10 text-primary" : "")} onClick={(e) => { e.stopPropagation(); void criarConteudo(); }} disabled={rodando} aria-label={rotuloDoConteudo} title={rotuloDoBotao} data-criar-conteudo="">
+      <button type="button" className={juntar(botao.icone, armado ? "bg-accent-soft text-primary" : "")} onClick={(e) => { e.stopPropagation(); void criarConteudo(); }} disabled={rodando} aria-label={rotuloDoConteudo} title={rotuloDoBotao} data-criar-conteudo="">
         {rodando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FilePlus2 className="h-4 w-4" aria-hidden="true" />}
       </button>
       <button type="button" className={botao.icone} onClick={(e) => { e.stopPropagation(); onCampanha(); }} aria-label="Criar campanha" title={`Criar campanha com "${titulo}"`} data-criar-campanha="">
@@ -179,7 +179,7 @@ export default function LinhaDoHypeETrending({
         {aberto && detalhes && <div className="mt-2 min-w-0 cursor-auto space-y-1.5 pb-1 text-[12px] leading-5 [overflow-wrap:anywhere]" onClick={(e) => e.stopPropagation()}>{detalhes}</div>}
       </div>
       <span className="flex items-center justify-end" data-meta="">
-        {selo && <span className={juntar(texto.etiqueta, "whitespace-nowrap rounded px-1.5", selo === "agora" ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")} data-selo={selo}>{ROTULO_DO_SELO[selo]}</span>}
+        {selo && <span className={juntar(texto.etiqueta, "whitespace-nowrap rounded px-1.5", selo === "agora" ? "bg-primary text-primary-foreground" : "bg-accent-soft text-primary")} data-selo={selo}>{ROTULO_DO_SELO[selo]}</span>}
         {n !== null && <span className={juntar(texto.etiqueta, "ml-2 w-6 text-right tabular-nums text-muted-foreground")} title={rotuloDaNota} data-nota="">{n.toLocaleString("pt-BR")}</span>}
       </span>
       <span className="flex justify-end" onClick={(e) => e.stopPropagation()} data-acoes="">{criar}</span>

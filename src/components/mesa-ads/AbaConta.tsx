@@ -287,7 +287,7 @@ function PainelDaAnalise({
       <div className="flex min-w-0 items-start">
         <Sparkles className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[13px] font-semibold">Leitura do estrategista</h3>
+          <h3 className="truncate text-[15px] font-semibold">Leitura do estrategista</h3>
           {quando && <p className="truncate text-[11px] text-muted-foreground" title="Os números vêm da conta; a leitura, do estrategista.">Feita {dataEHora(quando)}</p>}
         </div>
       </div>
@@ -336,8 +336,8 @@ function PainelDaAnalise({
                 <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
                 {t.hipotese && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{t.hipotese}</p>}
                 <div className="mt-auto flex min-w-0 flex-wrap items-center pt-2">
-                  {t.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]">{humanizar(t.estilo_visual)}</span>}
-                  {t.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(t.objetivo)}</span>}
+                  {t.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[11px]">{humanizar(t.estilo_visual)}</span>}
+                  {t.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(t.objetivo)}</span>}
                   <span className="mb-1 ml-auto">
                     <BotaoComCusto
                       rotulo="Criar plano deste teste"

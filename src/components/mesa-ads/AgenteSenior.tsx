@@ -209,7 +209,7 @@ export function EstrategiaNaTela({
           <ul className="min-w-0 space-y-1" aria-label="Diagnóstico">
             {e.diagnostico.map((d, k) => (
               <li key={k} className="min-w-0 text-[12px] leading-snug">
-                <span className={`mr-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${d.gravidade === "alta" ? "bg-destructive/10 text-destructive" : d.gravidade === "media" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>
+                <span className={`mr-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${d.gravidade === "alta" ? "bg-danger-soft text-destructive" : d.gravidade === "media" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>
                   {ROTULO_DA_GRAVIDADE[d.gravidade]}
                 </span>
                 <span className="font-medium">{d.titulo}</span>
@@ -252,7 +252,7 @@ export function EstrategiaNaTela({
               <div className="min-w-0">
                 <p className="text-[12px] font-semibold text-primary">Reestruturação recomendada</p>
                 <p className="mt-1 text-[12px] leading-snug">
-                  {re.objetivo && <span className="mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(re.objetivo)}</span>}
+                  {re.objetivo && <span className="mr-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(re.objetivo)}</span>}
                   {re.evento_otimizacao && <span className="text-muted-foreground">Otimizar para {re.evento_otimizacao}. </span>}
                   <span className="text-muted-foreground">Verba diária total: {re.verba_total_diaria_brl !== null ? brl(re.verba_total_diaria_brl) : "sem base para definir"}.</span>
                 </p>
@@ -655,7 +655,7 @@ export default function AgenteSenior({
                   type="button"
                   onClick={() => setTexto(a.texto)}
                   title={a.texto}
-                  className={juntar("mb-1 mr-1 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground", foco)}
+                  className={juntar("mb-1 mr-1 max-w-full truncate rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground", foco)}
                 >
                   {a.rotulo}
                 </button>

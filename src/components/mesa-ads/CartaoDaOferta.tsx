@@ -46,7 +46,7 @@ function Lista({ itens }: { itens: string[] }) {
 
 const STATUS: Record<StatusDaOferta, { rotulo: string; tom: string }> = {
   rascunho: { rotulo: "Proposta", tom: "bg-muted text-muted-foreground" },
-  escolhida: { rotulo: "Escolhida", tom: "bg-success/10 text-success" },
+  escolhida: { rotulo: "Escolhida", tom: "bg-success-soft text-success" },
   arquivada: { rotulo: "Arquivada", tom: "bg-muted text-muted-foreground" },
 };
 
@@ -284,7 +284,7 @@ export default function CartaoDaOferta({
             </span>
           )}
           {onLapidar && !arquivada && (
-            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (doContexto) && "bg-primary/10 text-primary")} type="button" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar." aria-label="Lapidar com o agente">
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (doContexto) && "bg-accent-soft text-primary")} type="button" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar." aria-label="Lapidar com o agente">
               <Sparkles className="h-4 w-4" aria-hidden="true" />
             </button>
           )}

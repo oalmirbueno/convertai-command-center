@@ -158,7 +158,7 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
           <p className="flex min-w-0 items-center text-[13px] font-medium">
             <span className="truncate">{arquivo.nome}</span>
             {variantes.length > 0 && <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")} title={variantes.map(rotuloDaVariante).join(", ")}>+{variantes.length}</span>}
-            {jaTem && <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>Com SRT</span>}
+            {jaTem && <span className={juntar(etiqueta, "ml-2 bg-accent-soft text-primary")}>Com SRT</span>}
           </p>
           <p className={juntar(texto.auxiliar, "truncate")}>{antes ? `Antes: ${antes.nome}` : detalhes}</p>
         </div>

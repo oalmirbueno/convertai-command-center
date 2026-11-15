@@ -548,7 +548,7 @@ function EntradaDeFotos({ lado, onArquivos, andamento, onLink }: { lado: LadoDaF
         <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={!!andamento} onClick={() => void colar()} title="Ou aperte Ctrl+V em qualquer lugar da tela" aria-label="Colar">
           <ClipboardPaste className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50", (comLink) && "bg-primary/10 text-primary")} type="button" aria-expanded={comLink} onClick={() => setComLink(!comLink)} aria-label="Link" title="Link">
+        <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50", (comLink) && "bg-accent-soft text-primary")} type="button" aria-expanded={comLink} onClick={() => setComLink(!comLink)} aria-label="Link" title="Link">
           <Link2 className="h-4 w-4" aria-hidden="true" />
         </button>
         <AjudaRecolhida className="mb-1" rotulo="Como subir fotos">

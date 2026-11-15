@@ -77,7 +77,7 @@ export default function AbaResultados() {
           a={a}
           acao={
             criativoId ? (
-              <button className={juntar(botao.icone, "disabled:opacity-50", (aberto) && "bg-primary/10 text-primary")} type="button" onClick={() => { setRegistrando(aberto ? null : a.ad_id); setTextoDoAprendizado(""); }} aria-label="Aprendizado do criativo" title="Aprendizado do criativo">
+              <button className={juntar(botao.icone, "disabled:opacity-50", (aberto) && "bg-accent-soft text-primary")} type="button" onClick={() => { setRegistrando(aberto ? null : a.ad_id); setTextoDoAprendizado(""); }} aria-label="Aprendizado do criativo" title="Aprendizado do criativo">
                 <BookmarkCheck className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : undefined

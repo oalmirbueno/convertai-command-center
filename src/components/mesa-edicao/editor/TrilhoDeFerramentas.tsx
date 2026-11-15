@@ -103,7 +103,7 @@ export default function TrilhoDeFerramentas({ ferramentas, valor, onEscolher }: 
                   data-ferramenta={f.valor}
                   className={juntar(
                     "flex h-11 w-full flex-col items-center justify-center gap-0.5 rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    ativo && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                    ativo && "bg-accent-soft text-primary hover:bg-primary/15 hover:text-primary",
                   )}
                 >
                   <Icone className="h-[18px] w-[18px]" />

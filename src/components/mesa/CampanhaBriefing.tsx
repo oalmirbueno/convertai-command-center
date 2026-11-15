@@ -153,7 +153,7 @@ export function FormularioDoBriefing({
                   aria-pressed={marcado}
                   disabled={desabilitado}
                   onClick={() => mudar({ canais: marcado ? (valor.canais || []).filter((x) => x !== c) : (valor.canais || []).concat([c]) })}
-                  className={`mb-1.5 mr-1.5 inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition-colors ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/50"}`}
+                  className={`mb-1.5 mr-1.5 inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors ${marcado ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background hover:border-primary/50"}`}
                 >
                   {c}
                 </button>

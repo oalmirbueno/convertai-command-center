@@ -454,7 +454,7 @@ function LinhaDoMes({
       <div className="flex min-w-0 flex-wrap items-center">
         <p className="mr-2 text-[13px] font-medium capitalize">{rotuloDoMes(estado.mes)}</p>
         <span
-          className={`mr-2 rounded-full px-2 py-0.5 text-[11px] ${
+          className={`mr-2 rounded-full px-2.5 py-1 text-[11px] ${
             f === "gravado"
               ? "bg-success text-white"
               : f === "erro"

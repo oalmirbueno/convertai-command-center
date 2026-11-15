@@ -391,7 +391,7 @@ export default function EstudioRostoDaReferencia({
                     setComo(novo);
                     salvarComo(novo);
                   }}
-                  className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50 ${ligada ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}
+                  className={`mb-1 mr-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors disabled:opacity-50 ${ligada ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
                   data-compacto
                 >
                   {s}

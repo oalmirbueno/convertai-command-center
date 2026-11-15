@@ -134,7 +134,7 @@ function Galeria({ imagens, r }: { imagens: ImagemDaGaleria[]; r: ReferenciaAds 
             <button type="button" aria-label="Próxima imagem" onClick={() => ir(1)} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-card hover:bg-muted">
               <ChevronRight className="h-4 w-4" />
             </button>
-            <span className="absolute bottom-2 right-2 rounded-full border border-border bg-background px-2 py-0.5 text-[11px] tabular-nums text-foreground">
+            <span className="absolute bottom-2 right-2 rounded-full border border-border bg-background px-2.5 py-1 text-[11px] tabular-nums text-foreground">
               {Math.min(i, total - 1) + 1} de {total}
             </span>
           </>
@@ -441,8 +441,8 @@ export default function JanelaDaReferencia({
                 <div className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
                   {r && <SeloDeEvidencia valor={r.evidencia} className="mb-1 mr-2" />}
                   {r && <span className="mb-1 mr-2">{daAgencia ? "Biblioteca da agência" : rotuloDaOrigem(r.origem)}</span>}
-                  {nicho && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">{nicho}</span>}
-                  {estilo && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">{humanizar(estilo)}</span>}
+                  {nicho && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px]">{nicho}</span>}
+                  {estilo && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px]">{humanizar(estilo)}</span>}
                   {detalhe.isFetching && (
                     <span className="mb-1 inline-flex items-center text-[12px]">
                       <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> buscando imagens e dados

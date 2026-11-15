@@ -116,7 +116,7 @@ function LinhaDoPost({ post, aberto, onAbrir }: { post: PostDeFotos; aberto: boo
             {dataCurta(post.item ? post.item.due_date : null)} · {post.cards.length ? `${post.cards.length} ${post.cards.length === 1 ? "foto" : "fotos"}` : "sem fotos"}
           </span>
         </span>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
       </button>
     </li>
   );
@@ -524,7 +524,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
       titulo={estudio ? "" : <span className="block truncate">{post.item ? post.item.title : "Post de fotos"}</span>}
       recolher={estudio ? false : `mesa-foto:agenda:post:${post.id}`}
       resumo={estado.rotulo}
-      acao={estudio ? undefined : <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
+      acao={estudio ? undefined : <span className={`rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
     >
       <div className="min-w-0 space-y-4" data-post-aberto={post.id}>
         <p className="text-[12px] text-muted-foreground">

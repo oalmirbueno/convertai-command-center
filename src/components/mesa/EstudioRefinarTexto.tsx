@@ -107,8 +107,8 @@ export default function EstudioRefinarTexto({
                   type="button"
                   aria-pressed={marcado}
                   onClick={() => alternar(o.id)}
-                  className={`mb-1 mr-1.5 h-7 rounded-full border px-2.5 text-[12px] transition-colors ${
-                    marcado ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  className={`mb-1 mr-1.5 h-8 rounded-full border px-3.5 text-[12px] font-medium transition-colors ${
+                    marcado ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                   }`}
                 >
                   {o.rotulo}

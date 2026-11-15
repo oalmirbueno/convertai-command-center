@@ -120,12 +120,12 @@ export default function EtapaInicio({ projetoAberto, contexto, onAbrir }: { proj
             role="radio"
             aria-checked={modo === o.valor}
             onClick={() => setModo(o.valor)}
-            className={juntar(superficie.painel, "flex min-w-0 items-center p-4 text-left transition-colors hover:border-primary/50", modo === o.valor && "border-primary", foco)}
+            className={juntar(superficie.painel, modo === o.valor && superficie.destaque, "flex min-w-0 flex-col items-start p-5 text-left transition-transform duration-200 hover:-translate-y-0.5 sm:p-6", foco)}
             data-modo={o.valor}
           >
-            <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">{o.icone}</span>
-            <span className="min-w-0">
-              <span className={juntar(texto.tituloSecao, "block truncate")}>{ROTULO_DO_MODO[o.valor]}</span>
+            <span className={juntar("mb-5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full", modo === o.valor ? "bg-foreground/10 text-foreground" : "bg-accent-soft text-primary")}>{o.icone}</span>
+            <span className="block w-full min-w-0">
+              <span className={juntar(texto.tituloSecao, "block truncate text-[20px] leading-7")}>{ROTULO_DO_MODO[o.valor]}</span>
               <span className={juntar(texto.auxiliar, "block truncate")}>{o.detalhe}</span>
             </span>
           </button>

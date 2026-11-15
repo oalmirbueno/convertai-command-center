@@ -179,12 +179,12 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
       type="button"
       onClick={onToggle}
       aria-pressed={marcado}
-      className={juntar(superficie.painel, "relative flex min-w-0 flex-col space-y-2 p-4 text-left transition-colors", marcado ? "border-primary ring-1 ring-primary" : "hover:border-primary/50")}
+      className={juntar(superficie.painel, "relative flex min-w-0 flex-col space-y-2.5 p-5 text-left transition-colors", marcado ? "border-primary ring-1 ring-primary" : "hover:border-foreground/20")}
     >
-      <span className={`absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full border ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
+      <span className={`absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full border ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
         {marcado && <Check className="h-3 w-3" />}
       </span>
-      <p className="pr-7 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{tema.tema}</p>
+      <p className="pr-8 text-[15px] font-semibold leading-snug tracking-[-0.01em] [overflow-wrap:anywhere]">{tema.tema}</p>
       <p className="text-[11px] text-muted-foreground">
         {[tema.pilar, tema.fase ? `fase ${tema.fase}` : null, tema.objetivo].filter(Boolean).join(" · ")}
       </p>
@@ -194,8 +194,8 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
       {tema.por_que && <p className="text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{tema.por_que}</p>}
       {(aderencia !== null || potencial !== null) && (
         <div className="mt-auto flex flex-wrap pt-1">
-          {aderencia !== null && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">Aderência {aderencia}%</span>}
-          {potencial !== null && <span className="mb-1 rounded-full bg-muted px-2 py-0.5 text-[11px]">Salvar e compartilhar {potencial}%</span>}
+          {aderencia !== null && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px]">Aderência {aderencia}%</span>}
+          {potencial !== null && <span className="mb-1 rounded-full bg-muted px-2.5 py-1 text-[11px]">Salvar e compartilhar {potencial}%</span>}
         </div>
       )}
     </button>

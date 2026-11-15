@@ -403,7 +403,7 @@ function LinhaDaArte({
         </span>
       </button>
       <span className="ml-3 flex shrink-0 flex-col items-end">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+        <span className={`rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
         {entregue && pub?.status !== "published" && (
           <button
             type="button"

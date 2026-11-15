@@ -58,7 +58,7 @@ export default function EscolhaDeFormatos({
               data-opcao={o.id}
               className={juntar(
                 "toque-compacto mb-1 mr-1.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-                ligado ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                ligado ? "border-primary bg-accent-soft text-primary" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
               )}
             >
               <Icone className="h-4 w-4" aria-hidden="true" />

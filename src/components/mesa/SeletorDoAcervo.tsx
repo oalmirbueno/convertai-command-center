@@ -189,7 +189,7 @@ export default function SeletorDoAcervo({
               type="button"
               onClick={() => setCategoria(c)}
               className={`mb-1.5 mr-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                categoria === c ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                categoria === c ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-card text-muted-foreground hover:text-foreground"
               }`}
             >
               {c === "todas" ? "Todas" : ROTULO_DA_CATEGORIA[c] || c}

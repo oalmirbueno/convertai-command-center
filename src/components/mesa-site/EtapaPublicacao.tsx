@@ -341,7 +341,7 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor, onIrPara }: { 
 
           {/* 2. Endereço: o padrão (Vercel) ou um domínio próprio, com o DNS do registrador. */}
           <div className="min-w-0" data-endereco-do-site={modoDoEndereco}>
-            <h3 className="mb-2 text-[13px] font-semibold leading-5 text-foreground">Endereço</h3>
+            <h3 className="mb-2 text-[15px] font-semibold leading-5 text-foreground">Endereço</h3>
             <SeletorCompacto
               rotulo="Endereço do site"
               opcoes={[
@@ -427,7 +427,7 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor, onIrPara }: { 
 
           {/* 3. No ar: o link, a última publicação, a versão que sobe e a conferência no navegador. */}
           <div className="min-w-0" data-no-ar-da-publicacao="">
-            <h3 className="mb-2 text-[13px] font-semibold leading-5 text-foreground">No ar</h3>
+            <h3 className="mb-2 text-[15px] font-semibold leading-5 text-foreground">No ar</h3>
             {e && e.deploy_url && (
               <a className={juntar(texto.corpo, "block min-w-0 truncate text-primary underline")} href={enderecoNoAr || e.deploy_url} target="_blank" rel="noopener noreferrer" data-no-ar="">
                 {enderecoNoAr || e.deploy_url}

@@ -312,7 +312,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
                           </span>
                         </span>
                       </button>
-                      {doPlano.some((a) => a.nivel === "erro") && <span className={juntar(etiqueta, "mr-1 bg-destructive/10 text-destructive")}>{doPlano.filter((a) => a.nivel === "erro").length}</span>}
+                      {doPlano.some((a) => a.nivel === "erro") && <span className={juntar(etiqueta, "mr-1 bg-danger-soft text-destructive")}>{doPlano.filter((a) => a.nivel === "erro").length}</span>}
                       {p.escolhido && <CheckCircle2 className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" aria-label="Com resultado escolhido" />}
                       <span className="mr-1 text-[12px] tabular-nums text-muted-foreground">{custo === null ? "Sem cotação" : textoDoCusto({ usd: custo, incerto: !!(m && m.preco && m.preco.incerto) })}</span>
                     </div>

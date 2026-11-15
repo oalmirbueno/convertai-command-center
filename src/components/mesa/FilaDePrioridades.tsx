@@ -60,7 +60,7 @@ const ICONE: Record<TipoDeAcao, typeof Send> = {
 };
 
 const NIVEL: Record<Nivel, { rotulo: string; barra: string; selo: string; ponto: string; tom: Tone }> = {
-  agora: { rotulo: "Agora", barra: "bg-destructive", selo: "bg-destructive/10 text-destructive", ponto: "bg-destructive", tom: "danger" },
+  agora: { rotulo: "Agora", barra: "bg-destructive", selo: "bg-danger-soft text-destructive", ponto: "bg-destructive", tom: "danger" },
   semana: { rotulo: "Esta semana", barra: "bg-warning", selo: "bg-warning/15 text-foreground", ponto: "bg-warning", tom: "warning" },
   depois: { rotulo: "Depois", barra: "bg-border", selo: "bg-muted text-muted-foreground", ponto: "bg-muted-foreground/60", tom: "neutral" },
 };

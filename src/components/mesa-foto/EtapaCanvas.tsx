@@ -1078,7 +1078,7 @@ function Quadro({
         <Background id="fina" variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#c4c7ce" />
         {/* 02/10: zoom, enquadrar e tela cheia moram na barra do quadro (BarraDoQuadro), no alto. */}
       </ReactFlow>
-      <p className="pointer-events-none absolute bottom-2 left-1/2 z-[4] hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5 text-[11px] text-zinc-500 md:block" data-ajuda-do-quadro="">
+      <p className="pointer-events-none absolute bottom-2 left-1/2 z-[4] hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-white/70 px-2.5 py-1 text-[11px] text-zinc-500 md:block" data-ajuda-do-quadro="">
         Rolar move o quadro. Ctrl/Cmd + rolar ou pinça: zoom. Nos painéis, rola só o painel.
       </p>
     </div>
@@ -2091,7 +2091,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
             rotuloDoFechar="Fechar os modelos prontos"
             onFechar={() => setProntosAbertos(false)}
             cabeca={
-              <h3 className="flex items-center truncate text-[13px] font-semibold">
+              <h3 className="flex items-center truncate text-[15px] font-semibold">
                 <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-emerald-300" /> Modelos prontos
               </h3>
             }

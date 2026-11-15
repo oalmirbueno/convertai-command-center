@@ -75,7 +75,7 @@ export default function DepoisDeAprovar({ fotos, onFeito, className = "" }: { fo
       {opcoes.map((o, i) => {
         const Icone = o.icone;
         return (
-          <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50", (i === 0) && "bg-primary/10 text-primary")} key={o.acao} type="button" title={o.dica} onClick={() => executar(o.acao)} data-proxima-acao={o.acao} aria-label={o.rotulo}>
+          <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50", (i === 0) && "bg-accent-soft text-primary")} key={o.acao} type="button" title={o.dica} onClick={() => executar(o.acao)} data-proxima-acao={o.acao} aria-label={o.rotulo}>
             <Icone className="h-4 w-4" aria-hidden="true" />
           </button>
         );

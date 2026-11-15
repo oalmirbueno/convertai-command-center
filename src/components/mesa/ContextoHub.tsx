@@ -79,7 +79,7 @@ export function SeloDoScore({ score, rotulo = "Score", className = "" }: { score
   const cor = COR_DA_FAIXA[faixaDoScore(score)];
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${cor.fundo} ${cor.texto}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tabular-nums ${cor.fundo} ${cor.texto}`}
       title={`${rotulo}: ${score} de 100`}
       aria-label={`${rotulo}: ${score} de 100`}
     >
@@ -92,7 +92,7 @@ export function SeloDoScore({ score, rotulo = "Score", className = "" }: { score
 export function BarraDoScore({ score }: { score: number }) {
   const cor = COR_DA_FAIXA[faixaDoScore(score)];
   return (
-    <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}>
+    <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}>
       <div className={`h-full rounded-full transition-all ${cor.barra}`} style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
     </div>
   );

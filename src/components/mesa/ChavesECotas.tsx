@@ -291,8 +291,8 @@ export default function ChavesECotas({
                 // Um provedor é uma coisa só: o cartão sólido do sistema.
                 <section key={provedor} className={juntar(superficie.painel, "space-y-3 p-4")}>
                   <div className="flex min-w-0 items-center justify-between">
-                    <h3 className="mr-2 min-w-0 truncate text-[13px] font-semibold">{nomeDoProvedor(provedor)}</h3>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${ativa ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}`}>
+                    <h3 className="mr-2 min-w-0 truncate text-[15px] font-semibold">{nomeDoProvedor(provedor)}</h3>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${ativa ? "bg-success-soft text-success" : "bg-secondary text-muted-foreground"}`}>
                       {ativa ? "chave própria" : lista.data.usar_chave_agencia ? "usa a da agência" : "bloqueado"}
                     </span>
                   </div>
@@ -311,7 +311,7 @@ export default function ChavesECotas({
                         </div>
                       </div>
                       {usoPct !== null && (
-                        <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                        <div className="h-2 overflow-hidden rounded-full bg-secondary">
                           <div className={`h-full ${usoPct >= 90 ? "bg-destructive" : "bg-primary"}`} style={{ width: `${usoPct}%` }} />
                         </div>
                       )}

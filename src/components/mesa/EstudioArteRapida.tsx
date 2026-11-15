@@ -615,7 +615,7 @@ function PedidoDaArteRapida({
                   onClick={() => setModoDoPost(m)}
                   className={juntar(
                     "mb-1 mr-1.5 h-8 rounded-full border px-3 text-[12px] transition-colors",
-                    modoDoPost === m ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50",
+                    modoDoPost === m ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-foreground hover:border-primary/50",
                   )}
                 >
                   {ROTULO_DO_MODO_DO_POST[m]}

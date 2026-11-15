@@ -96,7 +96,7 @@ function Escolhas<T extends SugestaoDeBio | SugestaoDeNome>({
             )}
           >
             <span className="flex min-w-0 items-center">
-              {doJev === s.id && <span className={juntar(etiqueta, "mr-1.5 bg-success/15 text-success")}>Escolha do Jev{typeof probabilidades[s.id] === "number" ? ` ${Math.round(probabilidades[s.id] * 100)}%` : ""}</span>}
+              {doJev === s.id && <span className={juntar(etiqueta, "mr-1.5 bg-success-soft text-success")}>Escolha do Jev{typeof probabilidades[s.id] === "number" ? ` ${Math.round(probabilidades[s.id] * 100)}%` : ""}</span>}
               <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">{s.caracteres}</span>
             </span>
             <span className="mt-0.5 block whitespace-pre-line text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{s.texto}</span>

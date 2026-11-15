@@ -32,7 +32,7 @@ function Passo({ feito, atual, titulo, detalhe }: { feito: boolean; atual: boole
     <li className="flex items-start">
       <span
         className={`mr-2.5 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
-          feito ? "border-success bg-success/10 text-success" : atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
+          feito ? "border-success bg-success-soft text-success" : atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
         }`}
       >
         {feito ? <Check className="h-3 w-3" /> : null}

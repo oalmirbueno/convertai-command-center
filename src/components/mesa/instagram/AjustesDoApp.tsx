@@ -70,7 +70,7 @@ function Grupo({
                     <label htmlFor={id} className={juntar("min-w-0 truncate text-[13px] font-medium leading-5 text-foreground", feito ? "text-muted-foreground line-through" : "")}>
                       {a.titulo}
                     </label>
-                    {a.mudou && <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>adaptado</span>}
+                    {a.mudou && <span className={juntar(etiqueta, "ml-1.5 bg-accent-soft text-primary")}>adaptado</span>}
                     {a.depende_do_tipo && <span className={juntar(etiqueta, "ml-1.5 bg-warning/15 text-warning")}>depende do tipo</span>}
                     {!a.aplica && <span className={juntar(etiqueta, "ml-1.5 bg-muted text-muted-foreground")}>não se aplica</span>}
                     <AjudaRecolhida className="ml-1 shrink-0" rotulo={`Por que: ${a.titulo}`} titulo={a.titulo}>
@@ -198,7 +198,7 @@ export default function AjustesDoApp({
           </span>
           <span className={juntar(texto.auxiliar, "tabular-nums")}>{pct}%</span>
         </div>
-        <div className="mt-1 h-1.5 min-w-0 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Ajustes feitos" aria-valuemin={0} aria-valuemax={progresso.total} aria-valuenow={progresso.feitos}>
+        <div className="mt-1 h-2 min-w-0 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Ajustes feitos" aria-valuemin={0} aria-valuemax={progresso.total} aria-valuenow={progresso.feitos}>
           <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
         </div>
       </div>

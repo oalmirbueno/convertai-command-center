@@ -30,7 +30,7 @@ import {
  */
 
 const VEREDITO: Record<string, { rotulo: string; classe: string }> = {
-  reprovada: { rotulo: "Produto mudou", classe: "bg-destructive/10 text-destructive" },
+  reprovada: { rotulo: "Produto mudou", classe: "bg-danger-soft text-destructive" },
   produto_ok: { rotulo: "Produto conferido", classe: "bg-success/15 text-foreground" },
   nao_determinavel: { rotulo: "Não deu para saber", classe: "bg-warning/15 text-foreground" },
   sem_conferencia: { rotulo: "Sem conferência", classe: "bg-muted text-muted-foreground" },

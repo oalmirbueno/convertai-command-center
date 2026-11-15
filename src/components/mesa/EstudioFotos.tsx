@@ -342,7 +342,7 @@ function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f
             onClick={() => setFiltro(f.valor)}
             aria-pressed={filtroReal === f.valor}
             className={`mb-1.5 mr-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
-              filtroReal === f.valor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+              filtroReal === f.valor ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-card text-muted-foreground hover:text-foreground"
             }`}
           >
             {f.rotulo} {fotos.data ? contagem(f.valor) : ""}

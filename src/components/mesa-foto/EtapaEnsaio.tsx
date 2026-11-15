@@ -113,7 +113,7 @@ function ResumoDoKit({ kit }: { kit: KitDeFoto }) {
           const f = todas.find((x) => x.id === r.imagem_id);
           return (
             <div key={`${r.imagem_id}-${r.papel}`} className="mb-1 mr-1 w-12" title={rotuloDoPapel(r.papel)}>
-              {f ? <MiniaturaDaFoto foto={f} selo={false} /> : <div className="h-12 w-12 rounded-lg bg-muted" />}
+              {f ? <MiniaturaDaFoto foto={f} selo={false} /> : <div className="h-12 w-12 rounded-full bg-muted" />}
               <span className="block truncate text-center text-[11px] text-muted-foreground">{rotuloDoPapel(r.papel)}</span>
             </div>
           );
@@ -230,7 +230,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                     type="button"
                     aria-pressed={dentro}
                     onClick={() => setTiposEscolhidos((l) => (dentro ? l.filter((x) => x !== t.valor) : l.concat([t.valor])))}
-                    className={`mb-1.5 mr-1.5 h-7 max-w-full truncate rounded-full border px-2.5 text-[12px] ${dentro ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+                    className={`mb-1.5 mr-1.5 h-8 max-w-full truncate rounded-full border px-3.5 text-[12px] font-medium ${dentro ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
                   >
                     {t.rotulo}
                   </button>
@@ -291,7 +291,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                         type="button"
                         aria-pressed={dentro}
                         onClick={() => setFora((l) => (dentro ? l.concat([t.id]) : l.filter((x) => x !== t.id)))}
-                        className={`mb-1.5 mr-1.5 h-7 max-w-full truncate rounded-full border px-2.5 text-[12px] ${dentro ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground line-through"}`}
+                        className={`mb-1.5 mr-1.5 h-8 max-w-full truncate rounded-full border px-3.5 text-[12px] font-medium ${dentro ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground line-through"}`}
                       >
                         {t.nome}
                       </button>
@@ -311,7 +311,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
             titulo="Montar"
             dica="O diretor monta as fotos com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes."
             acao={
-              <button className={juntar(botao.icone, "disabled:opacity-50", (arsenal) && "bg-primary/10 text-primary")} type="button" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="" aria-label="Arsenal" title="Arsenal">
+              <button className={juntar(botao.icone, "disabled:opacity-50", (arsenal) && "bg-accent-soft text-primary")} type="button" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="" aria-label="Arsenal" title="Arsenal">
                 <BookImage className="h-4 w-4" aria-hidden="true" />
               </button>
             }
@@ -367,7 +367,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                   type="button"
                   aria-pressed={formatos.indexOf(f.valor) >= 0}
                   onClick={() => alternarFormato(f.valor)}
-                  className={`mb-1.5 mr-1.5 h-7 rounded-full border px-2.5 text-[12px] ${formatos.indexOf(f.valor) >= 0 ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
+                  className={`mb-1.5 mr-1.5 h-8 rounded-full border px-3.5 text-[12px] font-medium ${formatos.indexOf(f.valor) >= 0 ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background"}`}
                 >
                   {f.rotulo}
                 </button>
@@ -451,7 +451,7 @@ function SeletorDeCamera({
           type="button"
           aria-pressed={!camera}
           onClick={() => onMudar(null)}
-          className={`mb-1.5 mr-1.5 h-7 rounded-full border px-2.5 text-[12px] ${!camera ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
+          className={`mb-1.5 mr-1.5 h-8 rounded-full border px-3.5 text-[12px] font-medium ${!camera ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background"}`}
         >
           Câmera do plano
         </button>

@@ -49,7 +49,7 @@ import { emAndamento, executarCampanha, useExecucao } from "./execucaoDaCampanha
 export function EscolhaDoTipo({ valor, onValor, desabilitado }: { valor: TipoDeCampanha | ""; onValor: (v: TipoDeCampanha | "") => void; desabilitado?: boolean }) {
   const pilula = (ativa: boolean) =>
     `mb-1.5 mr-1.5 inline-flex h-8 shrink-0 items-center rounded-full border px-3 text-[12px] transition-colors ${
-      ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
+      ativa ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-foreground hover:border-primary/50"
     }`;
   return (
     <div className="min-w-0">

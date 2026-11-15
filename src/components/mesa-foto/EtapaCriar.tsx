@@ -128,7 +128,7 @@ export default function EtapaCriar() {
 
       {kit && (
         <div className="flex min-w-0 items-center" data-produto-aberto="">
-          <span className="mr-2.5 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-md bg-muted" />}</span>
+          <span className="mr-2.5 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-full bg-muted" />}</span>
           <div className="mr-2 min-w-0 flex-1">
             <div className="flex min-w-0 items-center">
               <p className="min-w-0 truncate text-[13px] font-semibold">

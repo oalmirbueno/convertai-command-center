@@ -243,7 +243,7 @@ export function SeloDaSerie({ card, total, refsDoConjunto }: { card: CardDaDirec
   if (!selo) return null;
   return (
     <span
-      className="mb-1 mr-3 inline-flex min-w-0 max-w-full items-center rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[11px] text-muted-foreground"
+      className="mb-1 mr-3 inline-flex min-w-0 max-w-full items-center rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground"
       data-selo="serie"
       title={selo.tipo === "capa"
         ? "Da lâmina 2 em diante, a capa gerada vai junto. Esta lâmina herda a identidade dela (fundo, fontes, cores, grafismos), sem repetir o que é só da capa."

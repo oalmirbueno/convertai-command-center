@@ -68,7 +68,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
                   setLimite(PASSO);
                 }}
                 className={juntar(
-                  "mb-1 mr-1 inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition-colors",
+                  "mb-1 mr-1 inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors",
                   filtro === o.valor ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground",
                   foco,
                 )}
@@ -85,7 +85,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
         </label>
       </div>
       {carregando ? (
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4" aria-busy="true">
+        <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4" aria-busy="true">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="aspect-square animate-pulse rounded-md bg-muted" />
           ))}

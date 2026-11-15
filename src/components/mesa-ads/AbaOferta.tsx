@@ -147,7 +147,7 @@ function SelecaoEmPilulas<T extends string>({
             aria-checked={ativa}
             onClick={() => onMudar(ativa ? "" : o.valor)}
             className={`mb-1.5 mr-1.5 max-w-full truncate rounded-full border px-2.5 py-1 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
+              ativa ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground"
             }`}
           >
             {o.rotulo}

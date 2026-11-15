@@ -104,7 +104,7 @@ function Rejeitar({ onRejeitar, ocupado }: { onRejeitar: (motivo: string) => voi
     <div className="w-full min-w-0 space-y-1.5 rounded-md border border-destructive/30 p-2" data-rejeitar="">
       <div className="flex min-w-0 flex-wrap">
         {MOTIVOS_RAPIDOS.map((m) => (
-          <button key={m} type="button" onClick={() => setMotivo(m)} className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] ${motivo === m ? "border-destructive text-destructive" : "border-border text-muted-foreground"}`}>
+          <button key={m} type="button" onClick={() => setMotivo(m)} className={`mb-1 mr-1 rounded-full border px-2.5 py-1 text-[11px] ${motivo === m ? "border-destructive text-destructive" : "border-border text-muted-foreground"}`}>
             {m}
           </button>
         ))}

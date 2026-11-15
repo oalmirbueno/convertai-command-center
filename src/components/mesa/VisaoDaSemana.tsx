@@ -65,7 +65,7 @@ function CartaoDoHype({
 
   return (
     // Item de grade (cartão com função): o cartão sólido do sistema.
-    <article className={juntar("flex min-w-0 flex-col p-4", superficie.painel, marcado ? "border-primary" : "")} data-cartao-da-semana={item.chave} data-juntado={marcado ? "" : undefined}>
+    <article className={juntar("flex min-w-0 flex-col p-5", superficie.painel, marcado ? "border-primary" : "")} data-cartao-da-semana={item.chave} data-juntado={marcado ? "" : undefined}>
       <div className="flex min-w-0 items-start">
         {juntando && (
           <span className="mr-2 flex h-5 items-center">
@@ -73,9 +73,9 @@ function CartaoDoHype({
           </span>
         )}
         {/* Título numa linha (28/09); inteiro no title. */}
-        <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug" title={hype.titulo}>{hype.titulo}</h3>
+        <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug" title={hype.titulo}>{hype.titulo}</h3>
         {nota !== null && (
-          <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${corDaNota(nota)}`} title="Quanto serve a este cliente, de 0 a 10">
+          <span className={`ml-2 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold tabular-nums ${corDaNota(nota)}`} title="Quanto serve a este cliente, de 0 a 10">
             {nota.toLocaleString("pt-BR")}
           </span>
         )}

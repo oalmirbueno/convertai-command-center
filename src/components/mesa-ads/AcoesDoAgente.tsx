@@ -365,7 +365,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
       <p className="flex min-w-0 flex-wrap items-center text-[13px] font-semibold">
         <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
         {feitosSozinho.length && estado === "aberta" ? `Já fiz ${feitosSozinho.length} · o resto espera você` : `Ações propostas · ${atual.itens.length}`}
-        {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning">Modo ensaio</span>}
+        {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning">Modo ensaio</span>}
       </p>
       {atual.resumo && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{atual.resumo}</p>}
       {ensaio && estado === "aberta" && (
@@ -462,7 +462,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
       )}
       <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
         {estado === "aberta" && resolvidoSozinho ? (
-          <span className={juntar("mb-1 mr-2 inline-flex items-center rounded-full px-2.5 py-1 text-[12px]", falhasSozinho.length && !feitosSozinho.length ? "bg-destructive/10 text-destructive" : "bg-success/15")} data-resolvido={falhasSozinho.length ? (feitosSozinho.length ? "em-parte" : "nao-feito") : "feito"}>
+          <span className={juntar("mb-1 mr-2 inline-flex items-center rounded-full px-2.5 py-1 text-[12px]", falhasSozinho.length && !feitosSozinho.length ? "bg-danger-soft text-destructive" : "bg-success/15")} data-resolvido={falhasSozinho.length ? (feitosSozinho.length ? "em-parte" : "nao-feito") : "feito"}>
             {falhasSozinho.length && !feitosSozinho.length ? <X className="mr-1 h-3 w-3" /> : <Check className="mr-1 h-3 w-3" />}
             {falhasSozinho.length ? (feitosSozinho.length ? `Feito em parte: ${feitosSozinho.length} feito, ${falhasSozinho.length} não deu` : "Não feito: o motivo está no item") : "Feito e conferido na Meta"}
           </span>

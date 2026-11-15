@@ -189,7 +189,7 @@ export function PainelDeSom({ ctx }: { ctx: ContextoDoPainel }) {
           <li key={k} className="flex min-w-0 items-center py-1.5 text-[13px]">
             <Music className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate">{p.fontes[k].nome}</span>
-            {trilhaAtual === k ? <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>trilha</span> : (
+            {trilhaAtual === k ? <span className={juntar(etiqueta, "bg-accent-soft text-primary")}>trilha</span> : (
               <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => usarComoTrilha(k)}>
                 Usar
               </button>
