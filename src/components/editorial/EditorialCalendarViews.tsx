@@ -145,6 +145,13 @@ const statusLabels: Record<string, string> = {
 // Antes tudo que nao estivesse agendado/publicado saia cinza, entao rascunho,
 // producao e pronto ficavam identicos no calendario. Classes literais para o
 // Tailwind nao purgar.
+/**
+ * Zona vazia hachurada (referências: listras diagonais finas para "vazio" e
+ * "solte aqui"), no lugar da caixa tracejada com texto cinza.
+ */
+const HACHURA =
+  "bg-[repeating-linear-gradient(135deg,hsl(var(--foreground)/0.06)_0px,hsl(var(--foreground)/0.06)_2px,transparent_2px,transparent_8px)]";
+
 const stageClasses: Record<string, string> = {
   draft: "border-border bg-card text-foreground",
   production: "border-transparent bg-violet-500/20 text-foreground",
@@ -418,7 +425,7 @@ function ContentDirection({
         )}
         title={`Tema: ${normalizedTheme}`}
       >
-        <span className="font-normal text-muted-foreground">Tema:</span>{" "}
+        <span className="sr-only">Tema:</span>{" "}
         {normalizedTheme}
       </p>
       <p
@@ -428,7 +435,7 @@ function ContentDirection({
         )}
         title={`Contexto: ${normalizedContext}`}
       >
-        <span>Contexto:</span>{" "}
+        <span className="sr-only">Contexto:</span>{" "}
         {normalizedContext}
       </p>
     </div>
@@ -695,7 +702,8 @@ function PublicationPill({
       // Arrasta pelo cartão inteiro; o clique continua abrindo o conteúdo.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group relative min-h-11 w-full rounded-[14px] border text-left transition-colors hover:border-foreground/30",
+        "group relative w-full rounded-[14px] border text-left transition-colors hover:border-foreground/30",
+        compact ? "min-h-9" : "min-h-11",
         stageClasses[stage] || stageClasses.draft,
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
@@ -707,38 +715,42 @@ function PublicationPill({
         onClick={onClick}
         aria-label={`Tema: ${item.post.post.title}. Contexto: ${context || "não informado"}. ${platform}, ${time}, ${status}`}
         className={cn(
-          "block min-h-11 w-full rounded-[14px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50",
-          compact ? "px-2 py-1.5" : "p-3",
-          draggable && !moving && "pr-7",
+          "block w-full rounded-[14px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50",
+          compact ? "min-h-9 px-1.5 py-1" : "min-h-11 p-3",
+          draggable && !moving && !compact && "pr-7",
         )}
       >
       {compact ? (
         <>
-          <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
-            {/* Miniatura da arte direto no calendário mensal. */}
-            <EditorialFileThumbnail
-              post={item.post}
-              publication={item.publication}
-              className="h-7 w-7 shrink-0 rounded-full"
-            />
+          <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4">
+            {/* Miniatura da arte direto no calendário mensal; o ponto da rede fica no canto dela. */}
+            <span className="relative shrink-0">
+              <EditorialFileThumbnail
+                post={item.post}
+                publication={item.publication}
+                className="h-7 w-7 rounded-full"
+              />
+              <span
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card",
+                  platformDots[publication.platform] ||
+                    "bg-muted-foreground",
+                )}
+                title={platform}
+              />
+            </span>
             <span
-              className={cn(
-                "h-2 w-2 shrink-0 rounded-full",
-                platformDots[publication.platform] ||
-                  "bg-muted-foreground",
-              )}
-            />
-            <span
-              className="truncate font-medium"
+              className="min-w-0 flex-1 truncate font-medium tracking-[-0.01em]"
               title={`Tema: ${item.post.post.title}`}
             >
               <span className="sr-only">Tema:</span>{" "}
               {item.post.post.title}
             </span>
-            <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">{time}</span>
+            <span className="shrink-0 text-[11px] tabular-nums opacity-70">{time}</span>
           </div>
+          {/* Polimento v4: o contexto sai da célula do mês (fica na dica e na ficha); o bloco é uma linha só. */}
           <p
-            className="mt-0.5 truncate text-[11px] text-muted-foreground"
+            className="sr-only"
             title={`Contexto: ${context || "Não informado"}`}
           >
             <span className="sr-only">Contexto:</span>{" "}
@@ -753,25 +765,25 @@ function PublicationPill({
             className="h-10 w-10"
           />
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5 text-[11px] opacity-80">
-            <span
-              className={cn(
-                "h-2 w-2 shrink-0 rounded-full",
-                platformDots[publication.platform] ||
-                  "bg-muted-foreground",
-              )}
-            />
-            <span className="truncate font-medium">
-              {platform}
-              {account?.handle ? ` · ${account.handle}` : ""}
-            </span>
-            <span className="ml-auto shrink-0 tabular-nums">{time}</span>
-            </div>
             <ContentDirection
               theme={item.post.post.title}
               context={context}
-              className="mt-1"
             />
+            {/* Hora em destaque e a rede ao lado (antes "Inst…" cortado em cima do título). */}
+            <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px]">
+              <span className="shrink-0 font-semibold tabular-nums">{time}</span>
+              <span
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
+                  platformDots[publication.platform] ||
+                    "bg-muted-foreground",
+                )}
+              />
+              <span className="truncate opacity-70">
+                {platform}
+                {account?.handle ? ` · ${account.handle}` : ""}
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -779,7 +791,8 @@ function PublicationPill({
       {draggable && !moving && (
         <button
           type="button"
-          className="toque-compacto absolute inset-y-0 right-0 inline-flex w-7 touch-none cursor-grab items-center justify-center rounded-r-[14px] text-muted-foreground opacity-40 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 group-hover:opacity-80 active:cursor-grabbing"
+          data-alca-compacta={compact ? "" : undefined}
+          className="toque-compacto absolute inset-y-0 right-0 inline-flex w-7 touch-none cursor-grab items-center justify-center rounded-r-[14px] text-muted-foreground opacity-40 transition-opacity data-[alca-compacta]:w-5 data-[alca-compacta]:bg-card data-[alca-compacta]:opacity-0 data-[alca-compacta]:focus-visible:opacity-100 data-[alca-compacta]:group-hover:opacity-100 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 group-hover:opacity-80 active:cursor-grabbing"
           {...listeners}
           {...attributes}
           aria-label={`Mover ${item.post.post.title} no calendário`}
@@ -841,22 +854,22 @@ function AnchoredPostPill({
         "group flex w-full items-center gap-1.5 rounded-[14px] border text-left text-foreground transition-colors hover:border-primary/50",
         cor.borda,
         cor.fundo,
-        compact ? "px-2 py-1.5" : "p-3",
+        compact ? "min-h-9 px-1.5 py-1" : "p-3",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
     >
       <EditorialFileThumbnail
         post={post}
-        className={compact ? "h-6 w-6 shrink-0" : "h-10 w-10 shrink-0"}
+        className={compact ? "h-7 w-7 shrink-0 rounded-full" : "h-10 w-10 shrink-0"}
       />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1">
+      <span className={cn("min-w-0 flex-1", compact && "flex items-center gap-1.5")}>
+        <span className={cn("flex items-center gap-1", compact && "order-2 shrink-0")}>
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cor.ponto)} />
-          <span className={cn("truncate text-[11px] font-semibold", cor.texto)}>
+          <span className={cn("truncate text-[11px] font-semibold", cor.texto, compact && "sr-only")}>
             {nomeEtapa}
           </span>
         </span>
-        <span className={cn("block truncate font-medium", compact ? "text-[11px]" : "text-[12px]")}>
+        <span className={cn("block truncate font-medium", compact ? "min-w-0 flex-1 text-[12px] leading-4 tracking-[-0.01em]" : "text-[12px]")}>
           {post.post.title}
         </span>
         {!compact && (
@@ -901,45 +914,45 @@ function TaskSchedulePill({
       aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban. Prazo em ${dueDateLabel}. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}.${descricaoDaArteDoEstudio(arte)}`}
       className={cn(
         "group w-full rounded-[14px] border border-dashed border-violet-500/40 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/60 hover:bg-violet-500/15",
-        compact ? "px-2 py-1.5" : "p-3",
+        compact ? "min-h-9 px-1.5 py-1" : "p-3",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
     >
       {compact ? (
         <>
-          <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
+          <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4">
             {arte ? (
               <MiniaturaDaArteDoEstudio
                 arte={arte}
                 className="h-7 w-7 shrink-0 rounded-full"
               />
             ) : (
-              <Palette
-                className="h-3.5 w-3.5 shrink-0 text-violet-500"
-                aria-hidden="true"
-              />
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/15" aria-hidden="true">
+                <Palette className="h-3.5 w-3.5 text-violet-600 dark:text-violet-300" />
+              </span>
             )}
             <span
-              className="min-w-0 truncate font-medium"
+              className="min-w-0 flex-1 truncate font-medium tracking-[-0.01em]"
               title={`Tema: ${task.title}`}
             >
               <span className="sr-only">Tema:</span>{" "}
               {task.title}
             </span>
             <span
-              className="ml-auto shrink-0 text-[11px] text-violet-500"
+              className="shrink-0 text-[11px] font-medium text-violet-700 dark:text-violet-300"
               title={`Prazo do Kanban · ${deliveryType}`}
             >
-              Prazo · {deliveryType}
+              <span className="sr-only">Prazo · {deliveryType}</span>
+              <span aria-hidden="true">Prazo</span>
             </span>
           </div>
           {arte ? (
-            <p className="mt-0.5 flex min-w-0">
+            <p className="mt-0.5 flex min-w-0 pl-[34px]">
               <SeloDaArteDoEstudio arte={arte} compact />
             </p>
           ) : (
             <p
-              className="mt-0.5 truncate text-[11px] text-muted-foreground"
+              className="sr-only"
               title={`Contexto: ${context || "Não informado"}`}
             >
               <span className="sr-only">Contexto:</span>{" "}
@@ -1573,12 +1586,13 @@ function MonthView({
                   canDrop={canCreate || canEdit || canPublish}
                   className={cn(
                     // Cada dia é um ladrilho; fora do mês fica sem fundo e hoje ganha o verde com o contorno sólido.
-                    "group min-h-[164px] rounded-[18px] bg-muted/50 p-2.5",
+                    "group min-h-[148px] rounded-[18px] p-2",
+                    dayCount > 0 ? "bg-muted/70" : "bg-muted/30",
                     !isSameMonth(day, anchorDate) && "bg-transparent",
                     key === todayKey && "bg-accent-soft ring-2 ring-inset ring-accent-solid",
                   )}
                 >
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-1.5 flex items-center justify-between pl-1">
                     <span
                       className={cn(
                         "inline-flex h-8 min-w-[32px] items-center justify-center rounded-full text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums",
@@ -1594,7 +1608,7 @@ function MonthView({
                     </span>
                     <div className="flex items-center gap-1.5">
                       {dayCount > 0 && (
-                        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-foreground px-2 text-[11px] font-semibold tabular-nums text-background">
+                        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-foreground/10 px-2 text-[11px] font-semibold tabular-nums text-foreground" title={`${dayCount} ${dayCount === 1 ? "item" : "itens"} neste dia`}>
                           {dayCount}
                         </span>
                       )}
@@ -1610,7 +1624,7 @@ function MonthView({
                       )}
                     </div>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {visibleItems.map((item) => (
                       <PublicationPill
                         key={item.publication.publication.id}
@@ -1842,10 +1856,21 @@ function WeekView({
                       onClick={() => onSelectPost(item.post)}
                     />
                   ))}
-                  {dayItems.length === 0 && dayTasks.length === 0 && (
-                    <p className="rounded-[14px] border border-dashed border-border py-8 text-center text-[11px] text-muted-foreground/70">
-                      Solte aqui
-                    </p>
+                  {dayItems.length === 0 && dayTasks.length === 0 && dayAnchored.length === 0 && (
+                    <div className={cn("flex min-h-[132px] flex-col items-center justify-center rounded-[14px] px-2 text-center", HACHURA)}>
+                      {canCreate && (
+                        <button
+                          type="button"
+                          onClick={() => onCreateOnDate(key)}
+                          className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-card text-foreground shadow-card transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+                          aria-label={`Criar conteúdo em ${key} (dia vazio)`}
+                          title="Criar conteúdo neste dia"
+                        >
+                          <Plus className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                      <p className="text-[11px] font-medium text-muted-foreground">Solte aqui</p>
+                    </div>
                   )}
                 </div>
               </DroppableDay>
@@ -2298,8 +2323,8 @@ function BoardColumn({
           />
         ))}
         {posts.length === 0 && tasks.length === 0 && (
-          <div className="flex min-h-28 items-center justify-center rounded-[18px] border border-dashed border-border px-4 text-center">
-            <p className="text-[11px] leading-4 text-muted-foreground/70">
+          <div className={cn("flex min-h-28 items-center justify-center rounded-[18px] px-4 text-center", HACHURA)}>
+            <p className="text-[11px] font-medium leading-4 text-muted-foreground">
               {celular
                 ? "Nada nesta etapa"
                 : isWritable

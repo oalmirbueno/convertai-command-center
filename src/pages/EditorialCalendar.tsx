@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +25,7 @@ import {
   SquareKanban,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ProgressBar, StatCard, StatGrid } from "@/components/ds";
+import { MiniBars } from "@/components/ds";
 import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import {
@@ -42,6 +42,7 @@ import {
   EstadoDeErro,
   botao,
   juntar,
+  superficie,
   texto,
 } from "@/components/sistema";
 import { useParametrosLembrados } from "@/components/editorial/useParametrosLembrados";
@@ -298,10 +299,66 @@ function resumoDoCalendario(
 }
 
 /**
- * Faixa de números do período (rodada ousada, 15/11/2026): o total de conteúdos
- * em número grande e as publicações por estado numa barra só. Conta o mesmo
- * que a linha do cabeçalho (resumoDoCalendario); não lê nada novo. Sem
- * publicação, não desenha.
+ * Anel de progresso em volta do ícone (referências: o KPI com meta mostra a
+ * fatia no próprio ícone). Só desenho: o número e o rótulo ficam ao lado.
+ */
+function AnelDoNumero({ valor, total, children }: { valor: number; total: number; children: ReactNode }) {
+  const raio = 20;
+  const volta = 2 * Math.PI * raio;
+  const fatia = total > 0 ? Math.max(0, Math.min(1, valor / total)) : 0;
+  return (
+    <span className="relative inline-flex h-12 w-12 shrink-0 items-center justify-center" aria-hidden="true">
+      <svg viewBox="0 0 48 48" className="absolute inset-0 h-full w-full -rotate-90">
+        <circle cx="24" cy="24" r={raio} fill="none" strokeWidth="4" className="stroke-current opacity-[0.14]" />
+        {fatia > 0 && <circle cx="24" cy="24" r={raio} fill="none" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${fatia * volta} ${volta}`} className="stroke-current" />}
+      </svg>
+      <span className="text-foreground">{children}</span>
+    </span>
+  );
+}
+
+/** Um número da faixa: anel com ícone, rótulo pequeno, número grande e, se houver, um minigráfico à direita. */
+function NumeroDaFaixa({
+  tipo = "default", rotulo, valor, total, apoio, icone, grafico,
+}: {
+  tipo?: "default" | "accent" | "ink";
+  rotulo: string;
+  valor: number;
+  /** Com total, o anel mostra a fatia (valor de total). */
+  total?: number;
+  apoio?: string;
+  icone: ReactNode;
+  grafico?: ReactNode;
+}) {
+  return (
+    <div
+      className={juntar(superficie.painel, tipo === "accent" && superficie.destaque, tipo === "ink" && superficie.tinta, "flex h-[88px] min-w-0 items-center px-4 xl:px-5")}
+      data-stat-card={tipo}
+      title={total !== undefined ? `${valor} de ${total} publicações` : undefined}
+    >
+      <span className={tipo === "default" ? "text-primary" : "text-foreground"}>
+        <AnelDoNumero valor={total !== undefined ? valor : 0} total={total ?? 0}>{icone}</AnelDoNumero>
+      </span>
+      <div className="ml-3 min-w-0 flex-1">
+        <p className="truncate text-[12px] font-medium leading-4 text-muted-foreground">{rotulo}</p>
+        <p className="mt-0.5 flex min-w-0 items-baseline">
+          <span className="text-[28px] font-semibold leading-8 tracking-[-0.035em] tabular-nums text-foreground">{valor}</span>
+          {apoio && <span className="ml-2 min-w-0 truncate text-[12px] leading-4 text-muted-foreground">{apoio}</span>}
+        </p>
+      </div>
+      {grafico && <span className="ml-3 hidden w-[84px] shrink-0 text-foreground xl:block">{grafico}</span>}
+    </div>
+  );
+}
+
+const DIAS_DA_FAIXA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+/**
+ * Faixa de números do período (rodada ousada, 15/11/2026; polimento v4 no
+ * mesmo dia): baixa (88 px, antes 181 com mais da metade vazia) e preenchida.
+ * O total de conteúdos com as publicações por dia da semana em barras; cada
+ * estado com a fatia dele no anel do ícone. Conta o mesmo que a linha do
+ * cabeçalho (resumoDoCalendario); não lê nada novo. Sem publicação, não desenha.
  */
 function FaixaDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
   const publications = posts.flatMap((post) => post.publications.map(({ publication }) => publication));
@@ -312,16 +369,29 @@ function FaixaDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
   const falhas = contar("failed");
   const outros = publications.length - agendados - publicados - falhas;
   const total = publications.length;
-  const fatia = (n: number) => <ProgressBar value={n} max={total} height={6} label={`${n} de ${total} publicações`} />;
+  // Publicações com data, por dia da semana (segunda primeiro).
+  const porDia = [0, 0, 0, 0, 0, 0, 0];
+  for (const publication of publications) {
+    const quando = publication.scheduled_at ? new Date(publication.scheduled_at) : null;
+    if (quando && Number.isFinite(quando.getTime())) porDia[(quando.getDay() + 6) % 7] += 1;
+  }
+  const temDatas = porDia.some((n) => n > 0);
   return (
-    <div className="mb-5 hidden min-w-0 lg:block" data-faixa-do-calendario="" role="group" aria-label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}>
-      <StatGrid cols={falhas > 0 ? 5 : 4} className={falhas > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4"}>
-        <StatCard variant="ink" label={posts.length === 1 ? "Conteúdo" : "Conteúdos"} value={posts.length} deltaLabel={`${total} ${total === 1 ? "publicação" : "publicações"}`} icon={<CalendarDays className="h-4 w-4" />} />
-        <StatCard variant="accent" label="Publicados" value={publicados} chartPosition="side" chart={fatia(publicados)} icon={<CheckCircle2 className="h-4 w-4" />} />
-        <StatCard label="Agendados" value={agendados} chartPosition="side" chart={fatia(agendados)} icon={<CalendarClock className="h-4 w-4" />} />
-        <StatCard label="Em preparo" value={outros} chartPosition="side" chart={fatia(outros)} icon={<PenLine className="h-4 w-4" />} />
-        {falhas > 0 && <StatCard label="Falhas" value={falhas} chartPosition="side" chart={fatia(falhas)} icon={<AlertTriangle className="h-4 w-4" />} />}
-      </StatGrid>
+    <div className="mb-4 hidden min-w-0 lg:block" data-faixa-do-calendario="" role="group" aria-label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}>
+      <div className={juntar("grid min-w-0 gap-3", falhas > 0 ? "grid-cols-5" : "grid-cols-4")}>
+        <NumeroDaFaixa
+          tipo="ink"
+          rotulo={posts.length === 1 ? "Conteúdo" : "Conteúdos"}
+          valor={posts.length}
+          apoio={`${total} ${total === 1 ? "publicação" : "publicações"}`}
+          icone={<CalendarDays className="h-4 w-4" />}
+          grafico={temDatas ? <MiniBars values={porDia} labels={DIAS_DA_FAIXA} highlightIndex={(new Date().getDay() + 6) % 7} height={40} tone="current" label="Publicações por dia da semana" /> : undefined}
+        />
+        <NumeroDaFaixa tipo="accent" rotulo="Publicados" valor={publicados} total={total} icone={<CheckCircle2 className="h-4 w-4" />} />
+        <NumeroDaFaixa rotulo="Agendados" valor={agendados} total={total} icone={<CalendarClock className="h-4 w-4" />} />
+        <NumeroDaFaixa rotulo="Em preparo" valor={outros} total={total} icone={<PenLine className="h-4 w-4" />} />
+        {falhas > 0 && <NumeroDaFaixa rotulo="Falhas" valor={falhas} total={total} icone={<AlertTriangle className="h-4 w-4" />} />}
+      </div>
     </div>
   );
 }
@@ -1825,8 +1895,8 @@ export default function EditorialCalendar() {
 
         {/* Enquanto lê, a faixa de números já tem o lugar dela: o calendário não desce quando ela chega. */}
         {!celular && (calendarQuery.isLoading ? (
-          <div className="mb-5 hidden min-w-0 grid-cols-4 gap-5 lg:grid" aria-hidden="true" data-esqueleto-da-faixa="">
-            {[0, 1, 2, 3].map((i) => <div key={i} className="h-[181px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />)}
+          <div className="mb-4 hidden min-w-0 grid-cols-4 gap-3 lg:grid" aria-hidden="true" data-esqueleto-da-faixa="">
+            {[0, 1, 2, 3].map((i) => <div key={i} className="h-[88px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />)}
           </div>
         ) : <FaixaDoCalendario posts={filteredPosts} />)}
 

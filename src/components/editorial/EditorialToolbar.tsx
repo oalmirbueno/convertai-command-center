@@ -193,7 +193,8 @@ function FilterSelect({
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
         className={juntar(
-          "h-9 w-full min-w-0 bg-background text-[13px]",
+          // Polimento v4: o filtro é pílula, como a busca e os botões ao lado (antes, caixa de canto reto).
+          "h-9 w-full min-w-0 rounded-full bg-card px-3.5 text-[13px]",
           className,
         )}
         aria-label={label}
@@ -542,8 +543,15 @@ export default function EditorialToolbar({
             >
               <ChevronRight className="h-4 w-4" />
             </button>
-            <h2 className={juntar(texto.tituloSecao, "ml-3 min-w-0 truncate first-letter:uppercase")}>
-              {title}
+            {/* A semana por extenso não cabe ao lado da busca e era cortada ("09 de nov. – 15 de"): abaixo de 1700 px vai a forma curta, inteira. */}
+            <h2 className={juntar(texto.tituloSecao, "ml-3 min-w-0 truncate first-letter:uppercase")} title={title}>
+              {view === "week" && tituloCurto ? (
+                <>
+                  <span className="sr-only">{title}</span>
+                  <span aria-hidden="true" className="whitespace-nowrap min-[1700px]:hidden">{tituloCurto}</span>
+                  <span aria-hidden="true" className="hidden min-[1700px]:inline">{title}</span>
+                </>
+              ) : title}
             </h2>
           </div>
         ) : (
