@@ -30,7 +30,7 @@ function Avatar({ nome, claro = false }: { nome: string; claro?: boolean }) {
 
 function Arte({ caminho, proporcao }: { caminho: string | null; proporcao: number }) {
   return (
-    <div className="relative w-full bg-secondary" style={{ paddingBottom: `${proporcao * 100}%` }}>
+    <div className="relative w-full bg-muted" style={{ paddingBottom: `${proporcao * 100}%` }}>
       <div className="absolute inset-0">
         {caminho ? (
           <ImagemDaMesa caminho={caminho} alt="Arte do anúncio" className="h-full w-full" />
@@ -72,7 +72,7 @@ function FeedInstagram({ copy, caminho, formato, nome }: Props) {
   const { visivel, cortado } = textoVisivel(copy.texto_principal || "");
   const proporcao = f.valor === "stories_9x16" ? 1.25 : f.altura / f.largura;
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-background text-foreground" aria-label="Prévia no feed">
+    <div className="overflow-hidden rounded-lg border border-border bg-background text-foreground" aria-label="Prévia no feed">
       <div className="flex items-center px-2.5 py-1.5">
         <Avatar nome={nome} />
         <span className="min-w-0 flex-1">
@@ -101,7 +101,7 @@ function FeedInstagram({ copy, caminho, formato, nome }: Props) {
 function Stories({ copy, caminho, formato, nome }: Props) {
   return (
     <TelaVertical caminho={caminho} formato={formato}>
-      <div className="absolute inset-x-2 top-1.5 h-[2px] rounded bg-white/40"><div className="h-full w-1/3 rounded bg-white" /></div>
+      <div className="absolute inset-x-2 top-1.5 h-[2px] rounded-sm bg-white/40"><div className="h-full w-1/3 rounded-sm bg-white" /></div>
       <div className="absolute inset-x-2 top-3 flex items-center">
         <Avatar nome={nome} claro />
         <span className="min-w-0">
@@ -139,7 +139,7 @@ function FeedFacebook({ copy, caminho, formato, nome }: Props) {
   const { visivel, cortado } = textoVisivel(copy.texto_principal || "");
   const proporcao = f.valor === "stories_9x16" ? 1.25 : f.altura / f.largura;
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-background text-foreground" aria-label="Prévia no feed do Facebook">
+    <div className="overflow-hidden rounded-lg border border-border bg-background text-foreground" aria-label="Prévia no feed do Facebook">
       <div className="flex items-center px-2.5 py-1.5">
         <Avatar nome={nome} />
         <span className="min-w-0 flex-1">
@@ -158,7 +158,7 @@ function FeedFacebook({ copy, caminho, formato, nome }: Props) {
           <span className="block truncate text-[11px] font-semibold">{copy.titulo || <span className="font-normal text-muted-foreground">Título</span>}</span>
           {copy.descricao && <span className="block truncate text-[11px] text-muted-foreground">{copy.descricao}</span>}
         </span>
-        <span className="ml-2 shrink-0 rounded bg-secondary px-2 py-1 text-[11px] font-medium">{rotuloDoCta(copy.cta_meta) || "CTA"}</span>
+        <span className="ml-2 shrink-0 rounded-sm bg-muted px-2 py-1 text-[11px] font-medium">{rotuloDoCta(copy.cta_meta) || "CTA"}</span>
       </div>
       <div className="flex items-center justify-around border-t border-border py-1 text-[11px] text-muted-foreground">
         <span className="flex items-center"><ThumbsUp className="mr-1 h-3 w-3" />Curtir</span>
@@ -190,7 +190,7 @@ export default function PosicionamentosDoAnuncio(props: Props) {
               type="button"
               aria-pressed={so === p.id}
               onClick={() => setSo(p.id)}
-              className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] ${so === p.id ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-secondary"}`}
+              className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] ${so === p.id ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}
             >
               {p.rotulo}
             </button>

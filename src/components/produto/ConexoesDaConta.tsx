@@ -147,7 +147,7 @@ export default function ConexoesDaConta() {
                 data-destino={d.valor}
                 className={juntar(superficie.painel, "flex min-w-0 items-center p-3 text-left transition-colors", destino === d.valor ? "border-primary" : "hover:border-muted-foreground/40")}
               >
-                <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", destino === d.valor ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")}>{d.icone}</span>
+                <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", destino === d.valor ? "bg-primary text-primary-foreground" : "bg-accent-soft text-primary")}>{d.icone}</span>
                 <span className="min-w-0 flex-1">
                   <span className={juntar(texto.corpo, "block truncate font-medium")}>{d.rotulo}</span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>{d.linha}</span>

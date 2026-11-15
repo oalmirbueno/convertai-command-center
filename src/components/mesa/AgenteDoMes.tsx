@@ -892,7 +892,7 @@ function CartaoDoPlano({ plano, destaque, onEsquecer }: { plano: PlanoCombinado;
     <li className={juntar(estiloDeLista.linha, "block px-3", destaque && estiloDeLista.destaque)}>
       <button type="button" onClick={() => setAberto((v) => !v)} className="flex w-full min-w-0 items-center text-left" aria-expanded={aberto}>
         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold capitalize">{nomeDoMes(plano.mes)}</span>
-        <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
+        <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} />
       </button>
       {aberto && (
         <>
@@ -1151,7 +1151,7 @@ export default function AgenteDoMes({
           chave={{ clientId, agente: "estrategista", referenciaTipo: "agente_do_mes" }}
           aoTrocar={() => void queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) })}
         />
-        <div role="tablist" aria-label="O que fazer com o agente" className="mt-2 flex w-full shrink-0 rounded-lg bg-muted p-0.5 sm:mt-0 sm:w-auto">
+        <div role="tablist" aria-label="O que fazer com o agente" className="mt-2 flex w-full shrink-0 rounded-full bg-muted p-0.5 sm:mt-0 sm:w-auto">
           {(
             [
               { valor: "planejar", rotulo: "Planejar o mês", Icone: MessagesSquare },
@@ -1164,7 +1164,7 @@ export default function AgenteDoMes({
               role="tab"
               aria-selected={modo === m.valor}
               onClick={() => trocarModo(m.valor)}
-              className={`inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-md px-3 text-[13px] font-medium sm:flex-none ${
+              className={`toque-compacto inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-full px-3.5 text-[13px] font-medium transition-colors sm:flex-none ${
                 modo === m.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -1200,7 +1200,7 @@ export default function AgenteDoMes({
             >
               {planoDoMes ? <Check className="mr-1 h-3 w-3" /> : null}
               {planoDoMes ? "Plano combinado" : "Nada combinado ainda"}
-              <ChevronDown className={`ml-0.5 h-3 w-3 transition-transform ${planoAberto ? "rotate-180" : ""}`} />
+              <ChevronDown className={`ml-0.5 h-3 w-3 transition-transform duration-200 ${planoAberto ? "rotate-180" : ""}`} />
             </button>
           </div>
           {planoAberto && (
@@ -1370,7 +1370,7 @@ export default function AgenteDoMes({
               />
             )}
             <ZonaDeAnexos anexos={arquivos.comoAnexos()} rotulo="Solte os arquivos aqui">
-              <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
+              <div className="rounded-lg border border-border bg-background p-2 focus-within:border-primary/60">
                 {ajustando && (
                   <div className="mb-1.5 flex min-w-0 items-center rounded-md bg-muted px-2 py-1 text-[12px]">
                     <span className="min-w-0 flex-1 truncate">

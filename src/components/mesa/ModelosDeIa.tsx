@@ -499,7 +499,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
                     {m.tipo === "texto" && <CapacidadesDoModelo m={m} />}
                   </p>
                 </div>
-                <Switch checked={m.ativo} disabled={salvando === m.id} onCheckedChange={(v) => void alternarAtivo(m, v)} aria-label={`Ativar ${nomeDoModelo(m)}`} />
+                <Switch className="toque-compacto" checked={m.ativo} disabled={salvando === m.id} onCheckedChange={(v) => void alternarAtivo(m, v)} aria-label={`Ativar ${nomeDoModelo(m)}`} />
                 </div>
               </li>
             );

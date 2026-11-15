@@ -56,7 +56,7 @@ export default function BotaoDoEstilo({
     <span className={juntar("inline-flex min-w-0 items-center", className)} data-botao-do-estilo="">
       <button
         type="button"
-        className={compacto ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground" : juntar(botao.barra, "h-10 md:h-8")}
+        className={compacto ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground" : juntar(botao.barra, "h-10 md:h-8")}
         onClick={() => setAberto(true)}
         aria-label="Abrir o agente de estilo do cliente"
         title={compacto ? "Abrir o agente de estilo do cliente" : "Estilo do cliente"}

@@ -63,7 +63,7 @@ export function BarraDoQuadro(p: PropsDaBarraDoQuadro) {
   const semCaixa = "Escolha uma caixa no quadro";
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center" style={{ paddingLeft: 72, paddingRight: Math.max(72, p.folgaDireita || 0) }} data-barra-do-quadro-raiz="">
-      <div ref={roda} role="toolbar" aria-label="Caixas do quadro" className={`${PAINEL} ${FLUTUANTE} pointer-events-auto flex max-w-full items-center overflow-x-auto rounded-xl p-1 scrollbar-hidden`}>
+      <div ref={roda} role="toolbar" aria-label="Caixas do quadro" className={`${PAINEL} ${FLUTUANTE} pointer-events-auto flex max-w-full items-center overflow-x-auto rounded-lg p-1 scrollbar-hidden`}>
         <Botao dado="nova" rotulo="Nova caixa" icone={<Plus className="h-4 w-4" />} onClick={p.onNova} dica="Outra caixa de resultado neste quadro" />
         <Botao dado="duplicar" rotulo="Duplicar" icone={<Copy className="h-3.5 w-3.5" />} onClick={p.onDuplicar} desativado={!p.temCaixa} dica={p.temCaixa ? "Mesmas entradas e ajustes, sem as fotos" : semCaixa} />
         <Botao

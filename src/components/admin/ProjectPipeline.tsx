@@ -112,27 +112,27 @@ export function ProjectPipelineChecklist({ projectId, projectName, pipeline }: {
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+        <p className="text-[12px] font-medium leading-4 text-muted-foreground">
           Pipeline Audiovisual
-          <span className="ml-1 text-[10px] normal-case tracking-normal text-muted-foreground/70">(opcional)</span>
+          <span className="ml-1 text-[11px] font-normal text-muted-foreground/70">(opcional)</span>
         </p>
         {state.enabled ? (
-          <span className="text-[10px] font-mono text-muted-foreground">
+          <span className="text-[11px] tabular-nums text-muted-foreground">
             {progress.done}/{progress.total} · {progress.pct}%
           </span>
         ) : (
           <button
             onClick={() => toggleEnabled(true)}
-            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+            className="toque-compacto flex h-6 items-center gap-1 text-[11px] font-medium px-2.5 rounded-full border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
           >
-            <Plus className="w-2.5 h-2.5" /> ativar
+            <Plus className="w-3 h-3" /> ativar
           </button>
         )}
       </div>
 
       {state.enabled && (
         <>
-          <div className="h-1 rounded-full bg-secondary overflow-hidden">
+          <div className="h-1 rounded-full bg-muted overflow-hidden">
             <div
               className="h-full bg-primary transition-all"
               style={{ width: `${progress.pct}%` }}
@@ -150,14 +150,14 @@ export function ProjectPipelineChecklist({ projectId, projectName, pipeline }: {
                   onClick={() => toggleStage(s.key)}
                   disabled={busy}
                   className={cn(
-                    "group flex items-center gap-2 px-2.5 py-2 rounded-lg border text-left transition-all",
+                    "group flex items-center gap-2 px-2.5 py-2 rounded-md border text-left transition-colors",
                     done
-                      ? "bg-primary/10 border-primary/40 text-foreground"
-                      : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+                      ? "bg-accent-soft border-transparent text-foreground"
+                      : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
                   )}
                 >
                   <div className={cn(
-                    "w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-colors",
+                    "w-5 h-5 rounded-full flex items-center justify-center shrink-0 border transition-colors",
                     done ? "bg-primary border-primary text-primary-foreground" : "border-border"
                   )}>
                     {done ? <Check className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
@@ -170,7 +170,7 @@ export function ProjectPipelineChecklist({ projectId, projectName, pipeline }: {
 
           <button
             onClick={() => toggleEnabled(false)}
-            className="text-[10px] text-muted-foreground/70 hover:text-destructive transition-colors"
+            className="text-[11px] text-muted-foreground/70 hover:text-destructive transition-colors"
           >
             desativar pipeline
           </button>

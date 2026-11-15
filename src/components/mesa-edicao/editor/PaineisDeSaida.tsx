@@ -167,7 +167,7 @@ export function PainelDeCapitulos({ ctx }: { ctx: ContextoDoPainel }) {
                     {tempoFino(v.tempo_s)}
                   </button>
                   <span className="min-w-0 flex-1 truncate">{v.rotulo.replace(/^Viral \d+: /, "")}</span>
-                  {v.nota !== null && <span className={juntar(etiqueta, "ml-1 bg-rose-500/10 text-rose-600 dark:text-rose-400")}>{Math.round((v.nota || 0) * 100)}</span>}
+                  {v.nota !== null && <span className={juntar(etiqueta, "ml-1 bg-danger-soft text-destructive")}>{Math.round((v.nota || 0) * 100)}</span>}
                 </div>
                 <div className="mt-1 flex items-center">
                   <span className={juntar(texto.auxiliar, "mr-auto")}>{v.fim_s ? `${Math.round(v.fim_s - v.tempo_s)} s` : ""}</span>

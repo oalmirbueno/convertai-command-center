@@ -211,7 +211,7 @@ function LeituraDaLogo() {
         <div className="-m-1 mb-2 flex min-w-0 flex-wrap" data-cores-da-logo="">
           {cores.map((c) => (
             <span key={String(c.hex)} className={juntar(texto.auxiliar, "m-1 inline-flex items-center tabular-nums")}>
-              <span className="mr-1.5 inline-block h-5 w-5 rounded border border-border" style={{ background: String(c.hex) }} />
+              <span className="mr-1.5 inline-block h-5 w-5 rounded-full border border-border" style={{ background: String(c.hex) }} />
               {String(c.hex)} · {Math.round((Number(c.parte) || 0) * 100)}%
             </span>
           ))}

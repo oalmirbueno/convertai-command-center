@@ -81,7 +81,7 @@ export function MenuDaPropostaNoCelular({
   const acoes = itensDoMenu(p, onPedir).filter(Boolean) as ItemDoMenu[];
   const comuns = acoes.filter((i) => !i.perigo);
   const perigosos = acoes.filter((i) => i.perigo);
-  const item = "min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]";
+  const item = "min-h-8 cursor-pointer rounded-sm px-2 py-1.5 text-[13px]";
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>

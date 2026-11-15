@@ -195,7 +195,7 @@ function Grupo({ titulo, icone, ajuda, destaque, id, children }: { titulo: strin
       aria-label={titulo}
     >
       <div className={juntar("flex min-w-0 items-center", recolhido ? "" : "mb-2")}>
-        <h3 className="min-w-0 flex-1">
+        <h3 className="flex min-w-0 flex-1">
           <TituloRecolhivel
             titulo={
               <span className="inline-flex min-w-0 items-center">
@@ -226,7 +226,7 @@ function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura, o
         <span className="mr-1.5 shrink-0">{rotulo}</span>
         <SeloDaFoto foto={foto} compacto />
       </p>
-      <button type="button" className="block w-full cursor-zoom-in rounded focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Ampliar ${rotulo}: ${foto.nome}`} onClick={onAmpliar}>
+      <button type="button" className="block w-full cursor-zoom-in rounded-sm focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Ampliar ${rotulo}: ${foto.nome}`} onClick={onAmpliar}>
       <Moldura proporcao={p} className="border border-border">
         <ImagemDaMesa
           caminho={foto.storage_path}
@@ -406,7 +406,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
               {atual.nome}
             </p>
             {temDepois && (
-              <div role="group" aria-label="Como comparar" className="mb-1 mr-2 grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
+              <div role="group" aria-label="Como comparar" className="mb-1 mr-2 grid grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5">
                 {(
                   [
                     { v: "depois", r: "Depois" },
@@ -414,7 +414,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
                     { v: "antes", r: "Antes" },
                   ] as { v: Vista; r: string }[]
                 ).map((o) => (
-                  <button key={o.v} type="button" aria-pressed={vista === o.v} onClick={() => setVista(o.v)} className={juntar("rounded px-2 py-1 text-[12px]", foco, vista === o.v ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
+                  <button key={o.v} type="button" aria-pressed={vista === o.v} onClick={() => setVista(o.v)} className={juntar("rounded-full px-2 py-1 text-[12px]", foco, vista === o.v ? "bg-card font-medium shadow-card" : "text-muted-foreground")}>
                     {o.r}
                   </button>
                 ))}
@@ -520,9 +520,9 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
           </Grupo>
 
           <Grupo id="formato" titulo="Formato do post" icone={<Crop className="h-4 w-4" />} destaque={destaque === "formato"} ajuda="A moldura na foto mostra o recorte que vai ao ar (o centro da foto). O arquivo original não é cortado.">
-            <div role="radiogroup" aria-label="Formato do post" className="grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
+            <div role="radiogroup" aria-label="Formato do post" className="grid grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5">
               {FORMATOS_DO_POST_DE_FOTOS.map((f) => (
-                <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded px-1.5 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
+                <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded-full px-1.5 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-card" : "text-muted-foreground")}>
                   {ROTULO_DO_FORMATO_DE_FOTOS[f]}
                 </button>
               ))}

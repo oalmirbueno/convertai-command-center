@@ -96,7 +96,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
               type="button"
               onClick={() => setAberta(!aberta)}
               aria-expanded={aberta}
-              className={juntar("inline-flex min-w-0 items-center rounded text-[13px] font-semibold text-foreground", foco)}
+              className={juntar("inline-flex min-w-0 items-center rounded-sm text-[13px] font-semibold text-foreground", foco)}
               data-alternar-esteira=""
             >
               {aberta ? <ChevronDown className="mr-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="mr-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}

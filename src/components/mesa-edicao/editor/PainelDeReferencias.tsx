@@ -173,7 +173,7 @@ function Referencia({
   return (
     <li className="py-2.5" data-referencia={r.id}>
       <div className="flex min-w-0 items-start">
-        {r.miniatura ? <img src={r.miniatura} alt="" className="mr-2 h-10 w-16 shrink-0 rounded object-cover" /> : <Film className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+        {r.miniatura ? <img src={r.miniatura} alt="" className="mr-2 h-10 w-16 shrink-0 rounded-sm object-cover" /> : <Film className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-medium" title={r.nome}>
             {r.nome}
@@ -199,7 +199,7 @@ function Referencia({
             aria-checked={r.fidelidade === f.valor}
             title={f.dica}
             onClick={() => r.fidelidade !== f.valor && mudar({ ...r, fidelidade: f.valor as Fidelidade }, "Fidelidade")}
-            className={juntar("h-6 min-w-0 truncate rounded px-1 text-[11px]", r.fidelidade === f.valor ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            className={juntar("h-6 min-w-0 truncate rounded-sm px-1 text-[11px]", r.fidelidade === f.valor ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
           >
             {f.rotulo}
           </button>

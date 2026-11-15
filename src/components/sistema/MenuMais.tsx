@@ -66,7 +66,7 @@ export default function MenuMais({
         align={alinhar}
         sideOffset={6}
         onCloseAutoFocus={semDevolverFoco ? (e) => e.preventDefault() : undefined}
-        className="min-w-[180px] max-w-[calc(100vw-24px)] p-1"
+        className="min-w-[188px] max-w-[calc(100vw-24px)] p-1.5"
       >
         {ordenados.map((item, i) => {
           const traco = i > 0 && (item.separadorAntes || (item.perigo && i === comuns.length));
@@ -77,7 +77,7 @@ export default function MenuMais({
                 disabled={item.desativado}
                 title={item.dica}
                 onSelect={() => item.aoEscolher()}
-                className={juntar("min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]", item.perigo && "text-destructive focus:text-destructive")}
+                className={juntar("min-h-8 cursor-pointer rounded-sm px-2.5 py-1.5 text-[13px]", item.perigo && "text-destructive focus:text-destructive")}
               >
                 {item.icone && (
                   <span className={juntar("mr-2 inline-flex shrink-0", item.perigo ? "text-destructive" : "text-muted-foreground")} aria-hidden="true">

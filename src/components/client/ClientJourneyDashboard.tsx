@@ -30,7 +30,6 @@ import {
   Carregando,
   EstadoDeErro,
   EstadoVazio,
-  Painel,
   Secao,
   botao,
   campoTexto,
@@ -42,6 +41,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
+import { Card, StatCard, StatGrid } from "@/components/ds";
 import CircularProgress from "./CircularProgress";
 import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
 import { FadeUp, StaggerContainer } from "./motion";
@@ -268,7 +268,7 @@ export default function ClientJourneyDashboard({
           apoio: latestReport.highlights ? semAsterisco(latestReport.highlights) : undefined,
           para: "/onde-estamos",
           icone: Newspaper,
-          tomDoIcone: "bg-primary/15 text-primary",
+          tomDoIcone: "bg-accent-soft text-primary",
         }
       : {
           chave: "novidade",
@@ -279,7 +279,7 @@ export default function ClientJourneyDashboard({
           apoio: "Ver o retrato completo",
           para: "/onde-estamos",
           icone: Newspaper,
-          tomDoIcone: "bg-primary/15 text-primary",
+          tomDoIcone: "bg-accent-soft text-primary",
         };
   const proximaEtapa = upcomingMilestones[0] || null;
   const cartaoProximo: CartaoDoCelular | null = nextPublication
@@ -290,7 +290,7 @@ export default function ClientJourneyDashboard({
         apoio: nextPublication.platform ? platformLabel[nextPublication.platform] || nextPublication.platform : undefined,
         para: "/calendario",
         icone: Send,
-        tomDoIcone: "bg-sky-500/15 text-sky-500",
+        tomDoIcone: "bg-info-soft text-info",
       }
     : proximaEtapa
       ? {
@@ -300,7 +300,7 @@ export default function ClientJourneyDashboard({
           apoio: `${proximaEtapa.project?.name || "Projeto"} · previsão ${formatDateShort(proximaEtapa.target_date)}`,
           para: "/onde-estamos",
           icone: CalendarDays,
-          tomDoIcone: "bg-sky-500/15 text-sky-500",
+          tomDoIcone: "bg-info-soft text-info",
         }
       : latestReport?.next_steps
         ? {
@@ -309,7 +309,7 @@ export default function ClientJourneyDashboard({
             titulo: semAsterisco(latestReport.next_steps),
             para: "/onde-estamos",
             icone: CalendarDays,
-            tomDoIcone: "bg-sky-500/15 text-sky-500",
+            tomDoIcone: "bg-info-soft text-info",
           }
         : null;
 
@@ -349,18 +349,18 @@ export default function ClientJourneyDashboard({
             ) : undefined
           }
         />
-        <nav aria-label="Atalhos" className="-ml-2 mt-2 grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:gap-0 sm:[&>*+*]:ml-1">
+        <nav aria-label="Atalhos" className="mt-3 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-0 sm:[&>*]:mb-1 sm:[&>*]:mr-2">
           {ATALHOS.map((atalho) => (
             <button
               key={atalho.to}
               type="button"
               onClick={() => navigate(atalho.to)}
               className={juntar(
-                "flex h-11 min-w-0 touch-manipulation items-center justify-center rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:h-10 sm:justify-start",
+                "flex h-10 min-w-0 touch-manipulation items-center justify-center rounded-full border border-border bg-card px-2 text-[12px] font-medium text-foreground shadow-card transition-colors hover:bg-muted sm:h-9 sm:px-3.5 sm:text-[13px]",
                 foco,
               )}
             >
-              <atalho.icon className="mr-1.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <atalho.icon className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <span className="truncate">{atalho.label}</span>
             </button>
           ))}
@@ -381,9 +381,9 @@ export default function ClientJourneyDashboard({
           <button
             type="button"
             onClick={() => navigate("/financeiro")}
-            className={juntar("flex w-full min-w-0 items-center rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-left transition-colors hover:border-red-500/70", foco)}
+            className={juntar("flex w-full min-w-0 items-center rounded-lg bg-danger-soft px-4 py-3.5 text-left transition-opacity hover:opacity-90 sm:px-5", foco)}
           >
-            <CalendarDays className="mr-3 h-5 w-5 shrink-0 text-red-500" aria-hidden="true" />
+            <CalendarDays className="mr-3 h-5 w-5 shrink-0 text-destructive" aria-hidden="true" />
             <span className="min-w-0 flex-1">
               <span className="block text-[14px] font-semibold leading-5 text-foreground">
                 Pagamento em atraso: {dinheiro(overdueAmount)}
@@ -392,7 +392,7 @@ export default function ClientJourneyDashboard({
                 Regularize para manter as entregas sem pausa. Toque para ver os detalhes.
               </span>
             </span>
-            <ArrowUpRight className="ml-3 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
+            <ArrowUpRight className="ml-3 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
           </button>
         </FadeUp>
       )}
@@ -402,9 +402,9 @@ export default function ClientJourneyDashboard({
           <button
             type="button"
             onClick={() => navigate("/financeiro")}
-            className={juntar("flex w-full min-w-0 items-center rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-left transition-colors hover:border-sky-500/60", foco)}
+            className={juntar("flex w-full min-w-0 items-center rounded-lg bg-info-soft px-4 py-3.5 text-left transition-opacity hover:opacity-90 sm:px-5", foco)}
           >
-            <Repeat className="mr-3 h-5 w-5 shrink-0 text-sky-500" aria-hidden="true" />
+            <Repeat className="mr-3 h-5 w-5 shrink-0 text-info" aria-hidden="true" />
             <span className="min-w-0 flex-1">
               <span className="block text-[14px] font-semibold leading-5 text-foreground">
                 {renewalDays === 0
@@ -416,7 +416,7 @@ export default function ClientJourneyDashboard({
                 Garanta a continuidade dos resultados. Toque para ver os detalhes.
               </span>
             </span>
-            <ArrowUpRight className="ml-3 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
+            <ArrowUpRight className="ml-3 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
           </button>
         </FadeUp>
       )}
@@ -432,12 +432,14 @@ export default function ClientJourneyDashboard({
       {/* 3 · Ação necessária: o que precisa aprovar (o destaque da tela) */}
       {pendingFiles.length > 0 && (
         <FadeUp>
-          <section aria-label="Aprovações pendentes" className="min-w-0 rounded-lg border border-amber-500/40 bg-amber-500/[0.04]">
+          <section aria-label="Aprovações pendentes" className={juntar(superficie.painel, "min-w-0 overflow-hidden")}>
             {/* No celular (16/10/2026): cartão grande, botão na largura toda e sem a lista. */}
-            <div className="flex min-w-0 flex-wrap items-center px-4 py-4 sm:flex-nowrap sm:py-3">
-              <FileCheck className="mr-3 h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
+            <div className="flex min-w-0 flex-wrap items-center px-4 py-4 sm:flex-nowrap sm:px-5">
+              <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning" aria-hidden="true">
+                <FileCheck className="h-5 w-5" />
+              </span>
               <div className="flex min-w-0 flex-1 items-center sm:mr-3">
-                <h2 className={juntar(texto.tituloSecao, "min-w-0 text-[14px]")}>
+                <h2 className={juntar(texto.tituloSecao, "min-w-0")}>
                   {pendingFiles.length === 1
                     ? "1 entrega aguarda a sua aprovação"
                     : `${pendingFiles.length} entregas aguardam a sua aprovação`}
@@ -449,20 +451,20 @@ export default function ClientJourneyDashboard({
               <button
                 type="button"
                 onClick={() => navigate("/aprovacoes")}
-                className={juntar(botao.primario, "mt-3 h-11 w-full bg-amber-500 text-[14px] text-white hover:bg-amber-500/90 sm:mt-0 sm:h-9 sm:w-auto sm:text-[13px]")}
+                className={juntar(botao.primario, "mt-3 h-11 w-full text-[14px] sm:mt-0 sm:h-9 sm:w-auto sm:text-[13px]")}
               >
                 Aprovar agora
               </button>
             </div>
-            <ul className="hidden divide-y divide-amber-500/15 border-t border-amber-500/20 sm:block">
+            <ul className="hidden divide-y divide-border/60 border-t border-border/60 sm:block">
               {pendingFiles.slice(0, 3).map((file: any) => (
-                <li key={file.id} className={juntar(texto.auxiliar, "truncate px-4 py-2 leading-5")}>
+                <li key={file.id} className={juntar(texto.auxiliar, "truncate px-5 py-2.5 leading-5")}>
                   <span className="font-medium text-foreground">{file.file_name}</span>
                   {file.project?.name ? ` · ${file.project.name}` : ""}
                 </li>
               ))}
               {pendingFiles.length > 3 && (
-                <li className={juntar(texto.auxiliar, "px-4 py-2")}>e mais {pendingFiles.length - 3} na área de Aprovações</li>
+                <li className={juntar(texto.auxiliar, "px-5 py-2.5")}>e mais {pendingFiles.length - 3} na área de Aprovações</li>
               )}
             </ul>
           </section>
@@ -479,9 +481,9 @@ export default function ClientJourneyDashboard({
                 key={cartao.chave}
                 type="button"
                 onClick={() => navigate(cartao.para)}
-                className={juntar("flex w-full min-w-0 items-center rounded-xl border border-border bg-card px-4 py-4 text-left transition-colors active:bg-muted/40", foco)}
+                className={juntar(superficie.painel, "flex w-full min-w-0 items-center px-4 py-4 text-left transition-colors active:bg-muted/40", foco)}
               >
-                <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", cartao.tomDoIcone)}>
+                <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full", cartao.tomDoIcone)}>
                   <cartao.icone className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -497,10 +499,10 @@ export default function ClientJourneyDashboard({
             type="button"
             onClick={() => setMaisDetalhes(!maisDetalhes)}
             aria-expanded={maisDetalhes}
-            className={juntar("flex h-11 w-full min-w-0 items-center justify-center rounded-lg text-[13px] font-medium text-muted-foreground transition-colors active:bg-muted", foco)}
+            className={juntar("flex h-11 w-full min-w-0 items-center justify-center rounded-full text-[13px] font-medium text-muted-foreground transition-colors active:bg-muted", foco)}
           >
             {maisDetalhes ? "Menos detalhes" : "Mais detalhes"}
-            <ChevronDown className={juntar("ml-1.5 h-4 w-4 transition-transform", maisDetalhes && "rotate-180")} aria-hidden="true" />
+            <ChevronDown className={juntar("ml-1.5 h-4 w-4 transition-transform duration-200", maisDetalhes && "rotate-180")} aria-hidden="true" />
           </button>
         </FadeUp>
       )}
@@ -508,31 +510,34 @@ export default function ClientJourneyDashboard({
       {/* 4 · Números gerais: uma faixa só, sem um cartão por número */}
       {!recolhidoNoCelular && (
       <FadeUp>
-        <FaixaDeNumeros
-          rotulo="Resumo"
-          itens={[
-            {
-              rotulo: "Frentes ativas",
-              valor: activeProjects.length,
-              apoio: doneProjects.length ? `${doneProjects.length} concluída(s)` : "Nenhuma concluída",
-              corDoValor: "text-primary",
-            },
-            { rotulo: "Etapas concluídas", valor: completedMilestonesCount, apoio: `${totalMilestones} etapa(s) no total`, corDoValor: "text-sky-500" },
-            {
-              rotulo: "Entregas liberadas",
-              valor: totalFiles,
-              apoio: approvedFiles ? `${approvedFiles} aprovada(s)` : "Aguardando decisões",
-              corDoValor: "text-emerald-500",
-            },
-            {
-              rotulo: "Aprovações pendentes",
-              valor: pendingFiles.length,
-              apoio: pendingFiles.length ? "Ação necessária" : "Nenhuma pendência",
-              corDoValor: pendingFiles.length ? "text-amber-500" : "text-foreground",
-              para: pendingFiles.length ? "/aprovacoes" : undefined,
-            },
-          ]}
-        />
+        <StatGrid cols={4} label="Resumo">
+          <StatCard
+            tone="accent"
+            label="Frentes ativas"
+            value={activeProjects.length}
+            hint={doneProjects.length ? `${doneProjects.length} concluída(s)` : "Nenhuma concluída"}
+            icon={<Briefcase className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Etapas concluídas"
+            value={completedMilestonesCount}
+            hint={`${totalMilestones} etapa(s) no total`}
+            icon={<CheckCircle2 className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Entregas liberadas"
+            value={totalFiles}
+            hint={approvedFiles ? `${approvedFiles} aprovada(s)` : "Aguardando decisões"}
+            icon={<PackageCheck className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Aprovações pendentes"
+            value={pendingFiles.length}
+            hint={pendingFiles.length ? <span className="text-warning">Ação necessária</span> : "Nenhuma pendência"}
+            icon={<FileCheck className="h-4 w-4" />}
+            to={pendingFiles.length ? "/aprovacoes" : undefined}
+          />
+        </StatGrid>
       </FadeUp>
       )}
 
@@ -563,10 +568,10 @@ export default function ClientJourneyDashboard({
                 {
                   rotulo: "Aguardando aprovação",
                   valor: pendingFiles.length,
-                  corDoValor: pendingFiles.length > 0 ? "text-amber-500" : "text-muted-foreground",
+                  corDoValor: pendingFiles.length > 0 ? "text-warning" : "text-muted-foreground",
                 },
-                { rotulo: "Programados", valor: scheduled.length, corDoValor: "text-sky-500" },
-                { rotulo: "Publicados no mês", valor: publishedThisMonth.length, corDoValor: "text-emerald-500" },
+                { rotulo: "Programados", valor: scheduled.length },
+                { rotulo: "Publicados no mês", valor: publishedThisMonth.length },
                 { rotulo: "Publicados no total", valor: published.length },
               ]}
             />
@@ -641,7 +646,7 @@ export default function ClientJourneyDashboard({
             <button
               type="button"
               onClick={() => navigate("/onde-estamos")}
-              className={juntar("group block w-full min-w-0 rounded-lg border border-primary/25 bg-primary/[0.04] px-4 py-3 text-left transition-colors hover:border-primary/40", foco)}
+              className={juntar(superficie.painel, "group block w-full min-w-0 px-4 py-4 text-left transition-colors hover:border-primary/40 sm:px-5", foco)}
             >
               <span className={juntar(texto.corpo, "block")}>
                 {deliveredFiles.length > 0
@@ -660,17 +665,19 @@ export default function ClientJourneyDashboard({
             <button
               type="button"
               onClick={() => navigate("/onde-estamos")}
-              className={juntar("group block w-full min-w-0 rounded-lg border border-primary/25 bg-primary/[0.04] text-left transition-colors hover:border-primary/40", foco)}
+              className={juntar(superficie.painel, "group block w-full min-w-0 text-left transition-colors hover:border-primary/40", foco)}
             >
-              <span className="flex min-w-0 items-center border-b border-primary/15 px-4 py-2.5">
-                <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{latestReport.title}</span>
+              <span className="flex min-w-0 items-center border-b border-border/60 px-4 py-3 sm:px-5">
+                <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary" aria-hidden="true">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-[22px] text-foreground">{latestReport.title}</span>
                 <ArrowUpRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
               </span>
-              <span className="block space-y-3 px-4 py-3">
+              <span className="block space-y-3 px-4 py-4 sm:px-5">
                 {latestReport.highlights && (
                   <span className="block">
-                    <span className={juntar(texto.rotulo, "block text-primary")}>O que estamos fazendo</span>
+                    <span className={juntar(texto.rotulo, "block")}>O que estamos fazendo</span>
                     <span className={juntar(texto.corpo, "mt-0.5 line-clamp-2 block")}>{latestReport.highlights}</span>
                   </span>
                 )}
@@ -683,7 +690,7 @@ export default function ClientJourneyDashboard({
                   const demais = e.blocos.slice(1).map((b) => b.titulo.replace(/[:*]/g, "").trim());
                   return (
                     <span className="block">
-                      <span className={juntar(texto.rotulo, "block text-primary")}>Resultado explicado</span>
+                      <span className={juntar(texto.rotulo, "block")}>Resultado explicado</span>
                       <span className={juntar(texto.corpo, "mt-0.5 block text-muted-foreground", e.blocos.length > 0 ? "" : "line-clamp-4 whitespace-pre-line")}>{resumo}</span>
                       {demais.length > 0 && (
                         <span className={juntar(texto.auxiliar, "mt-1 block")}>Também nesta atualização: {demais.join(" · ")}.</span>
@@ -693,7 +700,7 @@ export default function ClientJourneyDashboard({
                 })()}
                 {latestReport.next_steps && (
                   <span className="block">
-                    <span className={juntar(texto.rotulo, "block text-primary")}>Próxima etapa</span>
+                    <span className={juntar(texto.rotulo, "block")}>Próxima etapa</span>
                     <span className={juntar(texto.corpo, "mt-0.5 block text-muted-foreground")}>{primeiraFrase(String(latestReport.next_steps).replace(/\*/g, ""))}</span>
                   </span>
                 )}
@@ -709,11 +716,11 @@ export default function ClientJourneyDashboard({
           Listas curtas (até 6): a página rola, nada de caixa com rolagem própria. */}
       {!recolhidoNoCelular && (
       <FadeUp>
-        <div className={juntar("grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5", projetosComPrazo.length > 0 && "lg:grid-cols-2")}>
+        <div className={juntar("grid min-w-0 grid-cols-1 gap-4", projetosComPrazo.length > 0 && "lg:grid-cols-2")}>
           {projetosComPrazo.length > 0 && (
-            <Secao
-              titulo="Projetos com prazo"
-              descricao={`${closedProjects.length} ativo(s)${doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}`}
+            <Card
+              title="Projetos com prazo"
+              subtitle={`${closedProjects.length} ativo(s)${doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}`}
             >
               <ul className={juntar(lista.aberta, lista.divisoria)}>
                 {projetosComPrazo.map((project: any) => {
@@ -749,12 +756,12 @@ export default function ClientJourneyDashboard({
                   );
                 })}
               </ul>
-            </Secao>
+            </Card>
           )}
-          <Secao
-            titulo="Entregas recentes"
-            descricao={deliveredFiles.length > 0 ? `${deliveredFiles.length} liberada(s)` : undefined}
-            acao={
+          <Card
+            title="Entregas recentes"
+            subtitle={deliveredFiles.length > 0 ? `${deliveredFiles.length} liberada(s)` : undefined}
+            action={
               deliveredFiles.length > 0 ? (
                 <button type="button" onClick={() => navigate("/documentos")} className={botao.discreto} aria-label="Ver todas as entregas em Documentos">
                   <span className="hidden sm:inline">Ver todas</span>
@@ -769,7 +776,7 @@ export default function ClientJourneyDashboard({
               <ul className={juntar(lista.aberta, lista.divisoria)}>
                 {deliveredFiles.slice(0, 6).map((file: any) => (
                   <li key={file.id} className="flex min-w-0 items-center px-2 py-2.5">
-                    <PackageCheck className="mr-3 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                    <PackageCheck className="mr-3 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{file.file_name}</span>
                       <span className={juntar(texto.auxiliar, "block truncate")}>
@@ -780,7 +787,7 @@ export default function ClientJourneyDashboard({
                 ))}
               </ul>
             )}
-          </Secao>
+          </Card>
         </div>
       </FadeUp>
       )}
@@ -788,11 +795,11 @@ export default function ClientJourneyDashboard({
       {/* 9 · Frentes recorrentes + diário à esquerda; agenda e próximas entregas à direita */}
       {!recolhidoNoCelular && (
       <FadeUp>
-        <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 lg:grid-cols-3">
-          <div className="min-w-0 space-y-6 lg:col-span-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="min-w-0 space-y-4 lg:col-span-2">
             {/* Frentes recorrentes: ciclo mensal, sem porcentagem eterna */}
             {recurringFronts.length > 0 && (
-              <Secao titulo="Frentes recorrentes" descricao="Ciclo mensal">
+              <Card title="Frentes recorrentes" subtitle="Ciclo mensal">
                 <ul className={juntar(lista.aberta, lista.divisoria)}>
                   {recurringFronts.map((project: any) => {
                     const projectDeliveredMonth = monthDelivered.filter((f: any) => f.project_id === project.id).length;
@@ -817,7 +824,7 @@ export default function ClientJourneyDashboard({
                               {projectStatusLabel[project.status] || project.status}
                               {" · "}
                               {projectDeliveredMonth} entrega(s) liberada(s) neste mês
-                              {projectPending > 0 && <span className="text-amber-500"> · {projectPending} aguardando sua aprovação</span>}
+                              {projectPending > 0 && <span className="text-warning"> · {projectPending} aguardando sua aprovação</span>}
                               {nextPublication && ` · Próxima publicação ${formatDateShort(nextPublication.scheduled_at)}`}
                             </span>
                           </span>
@@ -827,7 +834,7 @@ export default function ClientJourneyDashboard({
                     );
                   })}
                 </ul>
-              </Secao>
+              </Card>
             )}
 
             {clientId && <ProjectJournal clientId={clientId} canWrite={false} />}
@@ -841,12 +848,12 @@ export default function ClientJourneyDashboard({
             )}
           </div>
 
-          <div className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-4">
             {/* Quando será postado: agenda das publicações confirmadas */}
             {(scheduled.length > 0 || published.length > 0) && (
-              <Secao
-                titulo="Quando será postado"
-                acao={
+              <Card
+                title="Quando será postado"
+                action={
                   <button type="button" onClick={() => navigate("/calendario")} className={botao.discreto} aria-label="Ver calendário">
                     <CalendarDays className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -861,7 +868,7 @@ export default function ClientJourneyDashboard({
                       .slice(0, 5)
                       .map((publication: any) => (
                         <li key={publication.id} className="flex min-w-0 items-center px-2 py-2.5">
-                          <Send className="mr-3 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
+                          <Send className="mr-3 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{dataEHora(publication.scheduled_at)}</span>
                             <span className={juntar(texto.auxiliar, "block truncate")}>
@@ -880,7 +887,7 @@ export default function ClientJourneyDashboard({
                           href={publication.permalink}
                           target="_blank"
                           rel="noreferrer"
-                          className={juntar("flex min-w-0 items-center rounded-lg px-2 py-2.5 text-[12px] text-emerald-500 no-underline transition-colors hover:bg-muted/40", foco)}
+                          className={juntar("flex min-w-0 items-center rounded-lg px-2 py-2.5 text-[12px] text-success no-underline transition-colors hover:bg-muted/40", foco)}
                         >
                           <CheckCircle2 className="mr-3 h-4 w-4 shrink-0" aria-hidden="true" />
                           <span className="min-w-0 flex-1 truncate">Publicado · ver no {platformLabel[publication.platform] || "perfil"}</span>
@@ -889,12 +896,12 @@ export default function ClientJourneyDashboard({
                       </li>
                     ))}
                 </ul>
-              </Secao>
+              </Card>
             )}
 
             {/* Próximas entregas (etapas com data) */}
             {upcomingMilestones.length > 0 && (
-              <Secao titulo="Próximas entregas">
+              <Card title="Próximas entregas">
                 <ul className={juntar(lista.aberta, lista.divisoria)}>
                   {upcomingMilestones.map((milestone: any) => (
                     <li key={milestone.id} className="min-w-0 px-2 py-2.5">
@@ -905,7 +912,7 @@ export default function ClientJourneyDashboard({
                     </li>
                   ))}
                 </ul>
-              </Secao>
+              </Card>
             )}
           </div>
         </div>
@@ -915,11 +922,11 @@ export default function ClientJourneyDashboard({
       {/* 10 · Pulso Aceleriq: avaliação rápida da experiência (formulário em destaque) */}
       {showPulse && (
         <FadeUp>
-          <Painel
+          <Card
             as="section"
             aria-label="Avaliação da experiência"
-            titulo="Como está sendo a experiência com a Aceleriq?"
-            ajuda="Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo."
+            title="Como está sendo a experiência com a Aceleriq?"
+            help="Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo."
           >
             <div className="flex min-w-0 flex-wrap items-center">
               <div role="radiogroup" aria-label="Nota de 1 a 5" className="mr-3 inline-grid grid-cols-5 gap-2">
@@ -932,11 +939,11 @@ export default function ClientJourneyDashboard({
                     onClick={() => setPulseScore(score)}
                     aria-label={`Nota ${score}`}
                     className={juntar(
-                      "flex h-10 w-10 items-center justify-center rounded-md border text-[15px] font-semibold transition-colors",
+                      "flex h-10 w-10 items-center justify-center rounded-full border text-[15px] font-semibold transition-colors",
                       foco,
                       pulseScore === score
                         ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-transparent text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
                     )}
                   >
                     {score}
@@ -962,7 +969,7 @@ export default function ClientJourneyDashboard({
                 </BarraDeAcoes>
               </div>
             )}
-          </Painel>
+          </Card>
         </FadeUp>
       )}
 
@@ -971,7 +978,7 @@ export default function ClientJourneyDashboard({
       <FadeUp>
         <div className={juntar(superficie.divisoria, "flex min-w-0 flex-wrap items-center pt-4 text-[12px] text-muted-foreground [&>*]:mr-5 [&>*]:mb-1")}>
           <span className="flex items-center font-medium text-foreground">
-            <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-emerald-500" aria-hidden="true" />
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-success" aria-hidden="true" />
             Evolução acumulada
           </span>
           <span><span className="font-semibold tabular-nums text-foreground">{totalFiles}</span> entregas liberadas</span>

@@ -445,7 +445,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
           {/* Garantias do Plano Diretor */}
           {(!hasToolsExpense || proLaboreRows.length === 0) && (
             <Secao divisoria titulo="Sugestões do Plano Diretor">
-              <ul className="divide-y divide-border">
+              <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-5")}>
                 {!hasToolsExpense && (
                   <li className="flex min-w-0 flex-wrap items-center py-2.5">
                     <Wrench className="mr-2.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
@@ -516,8 +516,8 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                 descricao="Eles passam a contar no fluxo de caixa assim que entram."
               />
             ) : (
-              <RegiaoRolavel memoria="financeiro:custos:lista" rotulo="Custos recorrentes" className="lg:max-h-[70vh]">
-                <ul className="divide-y divide-border">
+              <RegiaoRolavel memoria="financeiro:custos:lista" rotulo="Custos recorrentes" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden")} className="lg:max-h-[70vh]">
+                <ul className="divide-y divide-border/60 [&>li]:px-4 sm:[&>li]:px-5">
                   {recurringExpenses.map((e: any) => {
                     // O vencimento em destaque, com o atraso dito em dias:
                     // "vence dia 10" não avisa nada em dia 23.
@@ -540,8 +540,8 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                               title="Alterar a data de vencimento"
                               className={juntar(
                                 "inline-flex h-5 items-center rounded px-1.5 text-[11px] font-medium tabular-nums transition-colors",
-                                dias < 0 ? "bg-destructive/15 text-destructive hover:bg-destructive/25"
-                                  : dias <= 3 ? "bg-warning/15 text-warning hover:bg-warning/25"
+                                dias < 0 ? "bg-danger-soft text-destructive hover:bg-destructive/25"
+                                  : dias <= 3 ? "bg-warning-soft text-warning hover:bg-warning/25"
                                     : "bg-muted text-muted-foreground hover:text-foreground",
                               )}
                             >
@@ -598,8 +598,8 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
               veio ver. */}
           {historico.length > 0 && (
             <Secao divisoria titulo="Histórico de pagamentos" descricao={`${historico.length} ${historico.length === 1 ? "pagamento" : "pagamentos"}`}>
-              <RegiaoRolavel memoria="financeiro:custos:historico" rotulo="Histórico de pagamentos" className="lg:max-h-[360px]">
-                <ul className="divide-y divide-border">
+              <RegiaoRolavel memoria="financeiro:custos:historico" rotulo="Histórico de pagamentos" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden")} className="lg:max-h-[360px]">
+                <ul className="divide-y divide-border/60 [&>li]:px-4 sm:[&>li]:px-5">
                   {historico.map((h: any) => (
                     <li key={h.id} className="flex min-w-0 flex-wrap items-center py-2">
                       <span className="mr-3 min-w-0 flex-1 basis-40 truncate text-[13px] text-foreground">{h.description}</span>

@@ -250,7 +250,7 @@ export default function AjustesDoMockup({
                         aria-pressed={ligado}
                         title={p.rotulo}
                         onClick={() => mudar({ posicaoX: p.x, posicaoY: p.y })}
-                        className={juntar("toque-compacto h-7 w-7 rounded border border-border", ligado ? "bg-primary" : "bg-transparent hover:bg-muted")}
+                        className={juntar("toque-compacto h-7 w-7 rounded-sm border border-border", ligado ? "bg-primary" : "bg-transparent hover:bg-muted")}
                       />
                     );
                   })}

@@ -174,7 +174,7 @@ function anexosDoAprendizado(d: unknown): unknown[] {
 
 /** Classes do painel: gaveta em tela cheia no celular, coluna fixa à direita no computador (abaixo da barra do topo). */
 export const CLASSES_DO_PAINEL_DO_AGENTE =
-  "fixed inset-0 z-[70] flex flex-col bg-card pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pb-0 md:inset-auto md:right-3 md:bottom-3 md:top-[calc(env(safe-area-inset-top)+76px)] md:z-[45] md:w-[420px] md:rounded-lg md:border md:border-border md:shadow-xl";
+  "fixed inset-0 z-[70] flex flex-col bg-card pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pb-0 md:inset-auto md:right-3 md:bottom-3 md:top-[calc(env(safe-area-inset-top)+76px)] md:z-[45] md:w-[420px] md:rounded-lg md:border md:border-border md:shadow-pop";
 
 export default function VoiceAssistant({
   aberto,
@@ -1547,7 +1547,7 @@ export default function VoiceAssistant({
                           <Sparkles className="mr-1.5 h-3 w-3 text-primary" />
                           <p className="text-[11px] font-medium text-primary">Plano do agente</p>
                           {aiConfidence !== null && (
-                            <span className="ml-auto font-mono text-[11px] text-muted-foreground">{Math.round(aiConfidence * 100)}% de certeza</span>
+                            <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">{Math.round(aiConfidence * 100)}% de certeza</span>
                           )}
                         </div>
                         <p className="text-[13px] leading-relaxed text-foreground">{aiNarrative}</p>
@@ -1606,7 +1606,7 @@ export default function VoiceAssistant({
                             ? "Criar projeto (vídeo)"
                             : null;
                       return (
-                        <div className={`rounded-lg border p-3 ${isUnknown ? "border-amber-500/40 bg-amber-500/5" : "border-primary/40 bg-primary/5"}`}>
+                        <div className={`rounded-lg border p-3 ${isUnknown ? "border-transparent bg-warning-soft" : "border-transparent bg-accent-soft"}`}>
                           <p className="mb-1 text-[11px] font-medium text-muted-foreground">
                             {isUnknown ? "Posso confirmar antes de fazer?" : "Entendi assim"}
                           </p>
@@ -1698,7 +1698,7 @@ export default function VoiceAssistant({
                               </p>
                             )}
                             {ctx.warning && (
-                              <p className="mt-1.5 text-[11px] text-amber-500">{ctx.warning}</p>
+                              <p className="mt-1.5 text-[11px] text-warning">{ctx.warning}</p>
                             )}
                           </div>
                         ))}
@@ -1928,11 +1928,11 @@ export default function VoiceAssistant({
                         </div>
                         <div>
                           <span className="text-muted-foreground">Início:</span>{" "}
-                          <span className="text-foreground font-mono">{scopePreview.startDate}</span>
+                          <span className="text-foreground tabular-nums">{scopePreview.startDate}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Entrega:</span>{" "}
-                          <span className="text-foreground font-mono">{scopePreview.endDate}</span>
+                          <span className="text-foreground tabular-nums">{scopePreview.endDate}</span>
                         </div>
                       </div>
                       <p className="text-[11px] text-muted-foreground whitespace-pre-line pt-1 border-t border-border">

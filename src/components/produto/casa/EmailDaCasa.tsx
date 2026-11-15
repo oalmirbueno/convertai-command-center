@@ -109,8 +109,8 @@ export default function EmailDaCasa() {
                       <span className={juntar(texto.corpo, "block truncate font-medium")}>{d.dominio}</span>
                       <span className={juntar(texto.auxiliar, "block truncate")}>{nomeDaConta(d.conta_id)} · {ROTULO_DO_PROVEDOR[d.provedor]} · {feitas} de {total} etapas</span>
                     </span>
-                    {pedidasAqui > 0 && <span className={juntar(etiqueta, "ml-2 bg-warning/10 text-warning")}>{pedidasAqui} pedida{pedidasAqui === 1 ? "" : "s"}</span>}
-                    <span className={juntar(etiqueta, "ml-2", d.estado === "concluido" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{ROTULO_DO_ESTADO_DO_DOMINIO[d.estado]}</span>
+                    {pedidasAqui > 0 && <span className={juntar(etiqueta, "ml-2 bg-warning-soft text-warning")}>{pedidasAqui} pedida{pedidasAqui === 1 ? "" : "s"}</span>}
+                    <span className={juntar(etiqueta, "ml-2", d.estado === "concluido" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{ROTULO_DO_ESTADO_DO_DOMINIO[d.estado]}</span>
                   </button>
                 </li>
               );

@@ -403,7 +403,7 @@ export function JanelaDaAprovada({
               <ul className="space-y-1">
                 {lista.map((p) => (
                   <li key={p.id}>
-                    <label className="flex min-h-8 cursor-pointer items-center rounded-md px-1 hover:bg-muted">
+                    <label className="flex min-h-8 cursor-pointer items-center rounded-full px-2 hover:bg-muted">
                       <input
                         type="checkbox"
                         className="mr-2 h-4 w-4 shrink-0 accent-primary"

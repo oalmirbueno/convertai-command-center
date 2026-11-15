@@ -174,7 +174,7 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
                   </span>
                 </button>
                 {doRascunho ? (
-                  <span className={juntar(etiqueta, "mr-1 bg-amber-500/15 text-amber-700 dark:text-amber-400")}>rascunho</span>
+                  <span className={juntar(etiqueta, "mr-1 bg-warning-soft text-warning")}>rascunho</span>
                 ) : n === 0 || (salva && salvas[0] && salvas[0].trabalho_id === t.id) ? (
                   <span className={juntar(etiqueta, "mr-1 bg-primary/10 text-primary")}>{salva ? "salva" : "atual"}</span>
                 ) : null}

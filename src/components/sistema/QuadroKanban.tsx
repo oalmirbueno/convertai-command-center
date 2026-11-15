@@ -16,7 +16,7 @@ import { foco, juntar, texto } from "./estilos";
 /** O cartão: mesma moldura, mesmo arrasto e o mesmo aviso nos dois funis. */
 export const classesDoCartao = (arrastando: boolean, alerta = false) =>
   juntar(
-    "w-full cursor-grab rounded-md border bg-card p-2.5 text-left transition-colors active:cursor-grabbing max-sm:rounded-lg max-sm:p-3",
+    "w-full cursor-grab rounded-md border bg-card p-3 text-left shadow-card transition-colors active:cursor-grabbing max-sm:p-3",
     foco,
     arrastando && "opacity-40",
     alerta ? "border-warning/50" : "border-border hover:border-muted-foreground/30",
@@ -57,7 +57,7 @@ export default function QuadroKanban({
       </div>
       <DragOverlay dropAnimation={null}>
         {fantasma && (
-          <div className="w-[230px] rotate-2 rounded-md border border-primary bg-card p-2.5 shadow-sm">
+          <div className="w-[230px] rotate-2 rounded-md border border-primary bg-card p-3 shadow-pop">
             <p className="truncate text-[13px] font-medium text-foreground">{fantasma.titulo}</p>
             {fantasma.apoio && <p className={juntar(texto.auxiliar, "truncate")}>{fantasma.apoio}</p>}
           </div>
@@ -91,20 +91,20 @@ export function ColunaDoQuadro({
       data-coluna-do-quadro={id}
       className={juntar(
         visivelNoCelular ? "flex" : "hidden",
-        "min-h-[12rem] w-full min-w-0 flex-col rounded-lg border p-1.5 transition-colors sm:flex sm:w-[260px] sm:shrink-0 lg:min-h-0 lg:w-auto lg:min-w-[232px] lg:flex-1 lg:basis-0",
-        "max-sm:min-h-0 max-sm:p-0",
+        "min-h-[12rem] w-full min-w-0 flex-col rounded-lg border p-2 transition-colors sm:flex sm:w-[260px] sm:shrink-0 sm:bg-muted/50 lg:min-h-0 lg:w-auto lg:min-w-[232px] lg:flex-1 lg:basis-0",
+        "max-sm:min-h-0 max-sm:border-0 max-sm:p-0",
         isOver ? "border-primary bg-primary/[0.06]" : arrastandoAlgo ? "border-dashed border-border" : "border-transparent",
       )}
     >
       {/* No celular o nome e a contagem já estão nas Etapas logo acima. */}
-      <div className="hidden h-7 shrink-0 items-center px-1 sm:flex">
+      <div className="hidden h-7 shrink-0 items-center px-1.5 sm:flex">
         <h3 title={ajuda} className={juntar(texto.rotulo, "min-w-0 truncate text-foreground")}>{rotulo}</h3>
-        <span className="ml-2 shrink-0 text-[11px] tabular-nums text-muted-foreground">{contagem}</span>
+        <span className="ml-2 inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-card px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{contagem}</span>
       </div>
-      <p className={juntar(texto.auxiliar, "shrink-0 truncate px-1 tabular-nums max-sm:hidden")}>{resumo}</p>
+      <p className={juntar(texto.auxiliar, "shrink-0 truncate px-1.5 tabular-nums max-sm:hidden")}>{resumo}</p>
       {contagem === 0 && <p className={juntar(texto.auxiliar, "py-8 text-center sm:hidden")}>{vazio || "Nada nesta etapa."}</p>}
       {/* lg:pb-12: só existe no fim da rolagem, para o botão flutuante do painel não cobrir o último cartão. */}
-      <RegiaoRolavel rotulo={`${rotulo}: lista`} memoria={memoria} className="mt-2 space-y-1.5 lg:pb-12 lg:pr-1 max-sm:mt-0 max-sm:space-y-2">
+      <RegiaoRolavel rotulo={`${rotulo}: lista`} memoria={memoria} className="mt-2 space-y-2 lg:pb-12 lg:pr-1 max-sm:mt-0 max-sm:space-y-2">
         {children}
       </RegiaoRolavel>
     </section>

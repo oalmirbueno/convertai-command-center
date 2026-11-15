@@ -175,7 +175,7 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
       {/* Spotlight ring glow */}
       {targetRect && !isCentered && (
         <div
-          className="absolute rounded-xl pointer-events-none"
+          className="absolute rounded-lg pointer-events-none"
           style={{
             left: targetRect.left - spotlightPad,
             top: targetRect.top - spotlightPad,
@@ -191,16 +191,16 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
       <div
         ref={tooltipRef}
         className={cn(
-          superficie.painel, "z-[10000] w-[340px] sm:w-[380px] shadow-2xl animate-in fade-in zoom-in-95 duration-200",
+          superficie.painel, "z-[10000] w-[340px] max-w-[calc(100vw-24px)] sm:w-[380px] shadow-pop animate-in fade-in zoom-in-95 duration-200",
           isCentered && "w-[90vw] max-w-[420px]"
         )}
         style={{ ...tooltipStyle, pointerEvents: "auto" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+        <div className="flex items-center justify-between px-5 pt-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-primary/15">
-              <span className="text-[11px] font-bold text-primary">{currentStep + 1}</span>
+            <div className="w-6 h-6 rounded-full flex items-center justify-center bg-accent-soft">
+              <span className="text-[11px] font-semibold tabular-nums text-primary">{currentStep + 1}</span>
             </div>
             <span className="text-[11px] text-muted-foreground">
               Passo {currentStep + 1} de {steps.length}
@@ -208,7 +208,7 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
           </div>
           <button
             onClick={handleSkip}
-            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors bg-transparent border-none cursor-pointer"
+            className="toque-compacto -mr-2 flex h-7 items-center gap-1 rounded-full px-2 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors bg-transparent border-none cursor-pointer"
           >
             <SkipForward className="w-3 h-3" />
             Pular tour
@@ -216,14 +216,14 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
         </div>
 
         {/* Content */}
-        <div className="px-5 py-4 space-y-2">
-          <h3 className="text-[15px] font-semibold text-foreground">{step.title}</h3>
-          <p className="text-[13px] leading-relaxed text-muted-foreground">{step.description}</p>
+        <div className="px-5 py-3.5 space-y-1.5">
+          <h3 className="text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground">{step.title}</h3>
+          <p className="text-[13px] leading-5 text-muted-foreground">{step.description}</p>
         </div>
 
         {/* Progress bar */}
         <div className="px-5">
-          <div className="h-1 rounded-full bg-secondary overflow-hidden">
+          <div className="h-1 rounded-full bg-muted overflow-hidden">
             <div
               className="h-full rounded-full bg-primary transition-all duration-300"
               style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
@@ -237,8 +237,8 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
             onClick={handlePrev}
             disabled={isFirst}
             className={cn(
-              "flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] transition-colors bg-transparent border border-border cursor-pointer",
-              isFirst ? "opacity-30 cursor-not-allowed" : "text-muted-foreground hover:text-foreground"
+              "toque-compacto flex h-8 items-center gap-1 px-3 rounded-full text-[12px] font-medium transition-colors bg-transparent border border-border cursor-pointer",
+              isFirst ? "opacity-30 cursor-not-allowed" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <ChevronLeft className="w-3 h-3" />
@@ -246,7 +246,7 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
           </button>
           <button
             onClick={handleNext}
-            className="flex items-center gap-1 px-4 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+            className="toque-compacto flex h-8 items-center gap-1 px-4 rounded-full border-none text-[12px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
           >
             {isLast ? "Concluir" : "Próximo"}
             {!isLast && <ChevronRight className="w-3 h-3" />}

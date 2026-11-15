@@ -226,7 +226,7 @@ export default function EstudioRostoDaReferencia({
         <AjudaRecolhida rotulo="O que faz o Rosto">{AJUDA_DO_ROSTO}</AjudaRecolhida>
         {salvando && <Loader2 className="ml-1 h-3 w-3 shrink-0 animate-spin" aria-label="Salvando o rosto" />}
       </div>
-      <div role="radiogroup" aria-label="Rosto da pessoa da arte" className="grid grid-cols-4 gap-0.5 rounded-md border border-border bg-background p-0.5">
+      <div role="radiogroup" aria-label="Rosto da pessoa da arte" className="grid grid-cols-4 gap-0.5 rounded-full bg-muted p-0.5">
         {OPCOES_DO_ROSTO.map((o) => {
           const marcada = o.valor === fonte;
           return (
@@ -238,7 +238,7 @@ export default function EstudioRostoDaReferencia({
               title={o.dica}
               disabled={bloqueado || salvando}
               onClick={() => escolherFonte(o.valor)}
-              className={`h-6 min-w-0 truncate rounded px-1 text-[11px] transition-colors disabled:opacity-50 ${marcada ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`toque-compacto h-6 min-w-0 truncate rounded-full px-1.5 text-[11px] transition-colors disabled:opacity-50 ${marcada ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               {o.rotulo}
             </button>
@@ -404,7 +404,7 @@ export default function EstudioRostoDaReferencia({
 
       {salvo && fonte !== "nenhum" && (
         <label className="mt-1.5 flex min-w-0 items-center text-[12px] text-foreground">
-          <Switch
+          <Switch className="toque-compacto"
             checked={!!salvo.destacar}
             disabled={bloqueado || salvando}
             onCheckedChange={(v) => void gravar({ ...salvo, destacar: v === true })}

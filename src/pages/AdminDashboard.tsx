@@ -1,4 +1,5 @@
-import { superficie } from "@/components/sistema/estilos";
+import type { ReactNode } from "react";
+import { Card, CardSurface, Chip, EmptyState, PageHeader, PillTabs, StatCard, StatGrid, StatusDot } from "@/components/ds";
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -60,6 +61,19 @@ const parseAppDate = (value?: string | null) => {
   }
   return new Date(value);
 };
+
+/** Título de um bloco do Dashboard: ícone pequeno num círculo suave, título curto e, à direita, o controle do bloco. */
+function TituloDoBloco({ icone, acao, children }: { icone?: ReactNode; acao?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="mb-3 flex min-w-0 items-center justify-between">
+      <h2 className="flex min-w-0 items-center text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground">
+        {icone && <span aria-hidden="true" className="mr-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">{icone}</span>}
+        <span className="truncate">{children}</span>
+      </h2>
+      {acao && <div className="ml-3 shrink-0">{acao}</div>}
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
   const { profile } = useAuth();
@@ -318,39 +332,39 @@ export default function AdminDashboard() {
     { label: "Upload", icon: Upload, action: () => navigate("/arquivos") },
   ]);
 
+  const iconesDosNumeros = [Briefcase, Users, ClipboardList, CheckCircle2];
+  const iconesDoFinanceiro = [
+    <TrendingUp key="r" className="h-4 w-4 text-success" />,
+    <Clock key="p" className="h-4 w-4 text-warning" />,
+    <CreditCard key="v" className="h-4 w-4 text-muted-foreground" />,
+    <AlertTriangle key="a" className="h-4 w-4 text-destructive" />,
+  ];
+  const linha = "flex min-w-0 items-center gap-3 rounded-md px-2 py-2.5 transition-colors";
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      <h1 className="heading-page">Dashboard</h1>
+    <div className="min-w-0 space-y-6 animate-fade-in sm:space-y-7">
+      <PageHeader title="Dashboard" />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children" data-tour="dash-stats">
-        {stats.map((s) => (
-          <div key={s.label} className={`${superficie.painel} p-5 hover:border-muted-foreground/30 transition-colors`}>
-            <p className="label-sm">{s.label}</p>
-            <p className="font-mono font-light text-[28px] leading-none text-foreground mt-2">{s.value}</p>
-            <div className={`h-0.5 w-8 ${s.color} rounded-full mt-3 opacity-60`} />
-          </div>
-        ))}
+      <div data-tour="dash-stats">
+        <StatGrid cols={4} label="Resumo da operação">
+          {stats.map((s, i) => {
+            const Icone = iconesDosNumeros[i] || Briefcase;
+            return <StatCard key={s.label} label={s.label} value={s.value} tone={i === 0 ? "accent" : "default"} icon={<Icone className="h-4 w-4" />} />;
+          })}
+        </StatGrid>
       </div>
 
       {/* Finance Stats - admin only */}
       {isAdmin && (
-      <div>
-        <p className="label-sm mb-3 flex items-center gap-2">
-          <DollarSign className="w-3.5 h-3.5 text-success" />
-          Financeiro
-        </p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
-          {financeStats.map((s) => (
-            <div key={s.label} className={`${superficie.painel} p-5 hover:border-muted-foreground/30 transition-colors cursor-pointer`} onClick={() => navigate("/financeiro")}>
-              <p className="label-sm">{s.label}</p>
-              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{s.value}</p>
-              {(s as any).sub && <p className="text-[10px] text-muted-foreground mt-1.5">{(s as any).sub}</p>}
-              <div className={`h-0.5 w-8 ${s.color} rounded-full mt-3 opacity-60`} />
-            </div>
+      <section className="min-w-0">
+        <TituloDoBloco icone={<DollarSign className="h-3.5 w-3.5" />}>Financeiro</TituloDoBloco>
+        <StatGrid cols={4} label="Financeiro do mês">
+          {financeStats.map((s, i) => (
+            <StatCard key={s.label} label={s.label} value={s.value} hint={(s as any).sub} icon={iconesDoFinanceiro[i]} onClick={() => navigate("/financeiro")} />
           ))}
-        </div>
-      </div>
+        </StatGrid>
+      </section>
       )}
 
       {/* Second Brain live pulse - admin only */}
@@ -358,34 +372,15 @@ export default function AdminDashboard() {
 
       {/* Individual Project Payments - admin only */}
       {isAdmin && (projectPayments || []).length > 0 && (
-        <div>
-          <p className="label-sm mb-3 flex items-center gap-2">
-            <Briefcase className="w-3.5 h-3.5 text-primary" />
-            Projetos Individuais
-          </p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children mb-4">
-            <div className={`${superficie.painel} p-5`}>
-              <p className="label-sm">Total Contratado</p>
-              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualTotal)}</p>
-              <div className="h-0.5 w-8 bg-primary rounded-full mt-3 opacity-60" />
-            </div>
-            <div className={`${superficie.painel} p-5`}>
-              <p className="label-sm">Recebido</p>
-              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualPaid)}</p>
-              <div className="h-0.5 w-8 bg-success rounded-full mt-3 opacity-60" />
-            </div>
-            <div className={`${superficie.painel} p-5`}>
-              <p className="label-sm">Pendente</p>
-              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualPending)}</p>
-              <div className="h-0.5 w-8 bg-warning rounded-full mt-3 opacity-60" />
-            </div>
-            <div className={`${superficie.painel} p-5`}>
-              <p className="label-sm">Atrasado</p>
-              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualOverdue)}</p>
-              <div className="h-0.5 w-8 bg-destructive rounded-full mt-3 opacity-60" />
-            </div>
-          </div>
-          <div className="space-y-1">
+        <section className="min-w-0">
+          <TituloDoBloco icone={<Briefcase className="h-3.5 w-3.5" />}>Projetos individuais</TituloDoBloco>
+          <StatGrid cols={4} label="Projetos individuais" className="mb-4">
+            <StatCard label="Total contratado" value={fmt(individualTotal)} />
+            <StatCard label="Recebido" value={fmt(individualPaid)} icon={<TrendingUp className="h-4 w-4 text-success" />} />
+            <StatCard label="Pendente" value={fmt(individualPending)} icon={<Clock className="h-4 w-4 text-warning" />} />
+            <StatCard label="Atrasado" value={fmt(individualOverdue)} icon={<AlertTriangle className="h-4 w-4 text-destructive" />} />
+          </StatGrid>
+          <CardSurface className="divide-y divide-border/60 px-3 py-1 sm:px-4">
             {(projectPayments || []).map((pp: any) => {
               const paid = (pp.installments || [])
                 .filter((i: any) => i.status === "paid" || i.status === "partial")
@@ -393,91 +388,81 @@ export default function AdminDashboard() {
               const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
               const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
               return (
-                <div key={pp.id} className={`${superficie.painel} px-5 py-3 flex items-center gap-4 hover:border-muted-foreground/30 transition-colors`}>
+                <div key={pp.id} className="flex min-w-0 items-center gap-4 px-1 py-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
-                    <p className="text-[11px] text-muted-foreground">{pp.client?.company_name || pp.client?.full_name}</p>
+                    <p className="truncate text-[13px] font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
+                    <p className="truncate text-[12px] text-muted-foreground">{pp.client?.company_name || pp.client?.full_name}</p>
                   </div>
                   <div className="w-24 hidden sm:block">
                     <Progress value={pct} className="h-1.5" />
-                    <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pct}%</p>
+                    <p className="mt-1 text-right text-[11px] tabular-nums text-muted-foreground">{pct}%</p>
                   </div>
                   <div className="text-right hidden md:block">
-                    <p className="text-xs font-mono text-success">{fmt(paid)}</p>
-                    <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
+                    <p className="text-[13px] font-medium tabular-nums text-success">{fmt(paid)}</p>
+                    <p className="text-[11px] tabular-nums text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
                   </div>
                   {hasOverdue && <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />}
                 </div>
               );
             })}
-          </div>
-        </div>
+          </CardSurface>
+        </section>
       )}
 
       {(isAdmin || isTeam) && (wallets || []).length > 0 && (
-        <div>
-          <p className="label-sm mb-3 flex items-center gap-2">
-            <Wallet className="w-3.5 h-3.5 text-info" />
-            Ads Wallet
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr stagger-children">
+        <section className="min-w-0">
+          <TituloDoBloco icone={<Wallet className="h-3.5 w-3.5" />}>Ads Wallet</TituloDoBloco>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
             {(wallets || []).map((w: any) => (
-              <div
+              <StatCard
                 key={w.id}
-                className={`${superficie.painel} p-5 h-full flex flex-col hover:border-muted-foreground/30 transition-colors cursor-pointer`}
+                label={w.client?.company_name || w.client?.full_name}
+                value={fmt(Number(w.balance))}
+                hint={<Chip tone={Number(w.balance) < 100 ? "warning" : "neutral"} dot={Number(w.balance) < 100}>{w.platform}</Chip>}
                 onClick={() => navigate("/financeiro")}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[13px] text-muted-foreground truncate">{w.client?.company_name || w.client?.full_name}</p>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{w.platform}</span>
-                </div>
-                <p className="font-mono font-light text-[22px] leading-none text-foreground mb-3">{fmt(Number(w.balance))}</p>
-                <div className={`h-0.5 w-8 rounded-full mt-auto opacity-60 ${Number(w.balance) < 100 ? "bg-warning" : "bg-info"}`} />
-              </div>
+              />
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Quick Actions */}
-      <div className="flex flex-wrap gap-2" data-tour="dash-quick-actions">
-        {quickActions.map((a) => (
+      <div className="-m-1 flex flex-wrap" data-tour="dash-quick-actions">
+        {quickActions.map((a, i) => (
           <button
             key={a.label}
             onClick={a.action}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent"
+            className={`m-1 inline-flex h-9 cursor-pointer items-center rounded-full px-4 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              i === 0 && isAdmin ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border bg-card text-foreground hover:bg-muted"
+            }`}
           >
-            <a.icon className="w-3.5 h-3.5" />
+            <a.icon className="mr-2 h-3.5 w-3.5" />
             {a.label}
           </button>
         ))}
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <p className="label-sm">Projetos Ativos</p>
-          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
-            {BRAND_FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setBrandFilter(f.value)}
-                className={`text-[11px] px-3 py-1 rounded-md transition-colors cursor-pointer border-none ${
-                  brandFilter === f.value
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground bg-transparent"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <section className="min-w-0">
+        <TituloDoBloco
+          acao={
+            <PillTabs
+              label="Filtrar por marca"
+              variant="soft"
+              size="sm"
+              value={brandFilter}
+              onChange={(v) => setBrandFilter(v as BrandFilter)}
+              tabs={BRAND_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
+            />
+          }
+        >
+          Projetos ativos
+        </TituloDoBloco>
         {loadingProjects ? (
-          <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
+          <div className="py-8 text-center text-[13px] text-muted-foreground">Carregando...</div>
         ) : filteredProjects.length === 0 ? (
-          <div className="text-sm text-muted-foreground py-8 text-center">Nenhum projeto encontrado.</div>
+          <EmptyState icon={<Briefcase className="h-5 w-5" />} title="Nenhum projeto encontrado." />
         ) : (
-          <div className="space-y-0.5 stagger-children">
+          <CardSurface className="divide-y divide-border/60 px-2 py-1 sm:px-3">
             {filteredProjects.map((p: any) => {
               const isHovered = hoveredProject === p.id;
               const showMenu = menuProject === p.id;
@@ -485,7 +470,7 @@ export default function AdminDashboard() {
               return (
                 <div
                   key={p.id}
-                  className={`bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors relative ${showMenu ? "z-50" : ""}`}
+                  className={`relative cursor-pointer rounded-md px-2 py-3.5 transition-colors hover:bg-muted/40 sm:px-3 ${showMenu ? "z-50" : ""}`}
                   onClick={() => setDrawerProject(p)}
                   onMouseEnter={() => setHoveredProject(p.id)}
                   onMouseLeave={() => { setHoveredProject(null); setMenuProject(null); }}
@@ -494,14 +479,14 @@ export default function AdminDashboard() {
                     <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-foreground">{p.name}</span>
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{p.project_type?.replace("_", " ")}</span>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{getProjectBrand(p.project_type)}</span>
+                        <span className="text-[13px] font-medium text-foreground">{p.name}</span>
+                        <Chip>{p.project_type?.replace("_", " ")}</Chip>
+                        <Chip tone="accent">{getProjectBrand(p.project_type)}</Chip>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-xs text-muted-foreground">{p.client?.company_name || p.client?.full_name}</p>
+                        <p className="text-[12px] text-muted-foreground">{p.client?.company_name || p.client?.full_name}</p>
                         {projectTeam.length > 0 && (
-                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                             <Users className="w-3 h-3" />
                             {projectTeam.map(m => m.name.split(" ")[0]).join(", ")}
                           </span>
@@ -509,15 +494,15 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     <div className="w-32 hidden md:block">
-                      <div className="h-[3px] rounded-full bg-secondary overflow-hidden">
+                      <div className="h-1 rounded-full bg-muted overflow-hidden">
                         <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${p.progress}%` }} />
                       </div>
                       <div className="flex items-center justify-end gap-2 mt-1">
                         <PipelineBar pipeline={p.pipeline} />
-                        <p className="text-xs font-mono text-muted-foreground">{p.progress}%</p>
+                        <p className="text-[12px] tabular-nums text-muted-foreground">{p.progress}%</p>
                       </div>
                     </div>
-                    <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <div className="hidden sm:flex items-center gap-1.5 text-[12px] text-muted-foreground">
                       <Clock className="w-3 h-3" />
                       {formatDate(p.deadline)}
                     </div>
@@ -526,7 +511,7 @@ export default function AdminDashboard() {
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuProject(showMenu ? null : p.id); }}
                       aria-label="Ações do projeto"
-                      className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1 rounded hover:bg-secondary"
+                      className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
@@ -534,9 +519,9 @@ export default function AdminDashboard() {
                   </div>
 
                   {isAdmin && showMenu && (
-                    <div className="absolute right-4 top-full z-50 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="absolute right-4 top-full z-50 w-52 rounded-lg border border-border bg-popover p-2 shadow-pop animate-in fade-in zoom-in-95 duration-150">
                       <button onClick={(e) => { e.stopPropagation(); setEditProject(p); setMenuProject(null); }}
-                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors cursor-pointer bg-transparent border-none text-left">
+                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-[13px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer bg-transparent border-none text-left">
                         <Edit3 className="w-3.5 h-3.5" /> Editar
                       </button>
                       <div className="px-3 py-2">
@@ -544,7 +529,7 @@ export default function AdminDashboard() {
                         <div className="flex flex-wrap gap-1">
                           {STATUS_OPTIONS.map((s) => (
                             <button key={s.value} onClick={(e) => { e.stopPropagation(); handleStatusChange(p.id, s.value); }}
-                              className={`text-[10px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${p.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
+                              className={`text-[11px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${p.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
                               {s.label}
                             </button>
                           ))}
@@ -555,162 +540,137 @@ export default function AdminDashboard() {
                         <Slider defaultValue={[p.progress]} max={100} step={5} onValueCommit={(val) => handleProgressChange(p.id, val[0])} className="w-full" />
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteProject(p.id); }}
-                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none text-left">
+                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none text-left">
                         <Trash2 className="w-3.5 h-3.5" /> Excluir
                       </button>
                     </div>
                   )}
 
                   {isHovered && !showMenu && p.description && (
-                    <div className="mt-3 pt-3 border-t border-border flex items-center justify-between animate-fade-in">
-                      <p className="text-xs text-muted-foreground">{p.description}</p>
-                      <button className="text-xs text-primary hover:underline">Abrir</button>
+                    <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between animate-fade-in">
+                      <p className="text-[12px] text-muted-foreground">{p.description}</p>
+                      <button className="text-[12px] font-medium text-primary hover:underline">Abrir</button>
                     </div>
                   )}
                 </div>
               );
             })}
-          </div>
+          </CardSurface>
         )}
-      </div>
+      </section>
 
       {/* Alerts Row: Clients renewal + Stalled Projects */}
       {isAdmin && (clientsRenewalAlert.length > 0 || stalledProjects.length > 0) && (
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
           {clientsRenewalAlert.length > 0 && (
-            <div className={`${superficie.painel} p-5`}>
-              <p className="label-sm mb-4 flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-warning" />
-                Clientes com Vencimento Próximo
-              </p>
-              <div className="space-y-0">
-                {clientsRenewalAlert.map((c: any, i: number) => {
+            <Card title="Clientes com vencimento próximo" collapsible={false}>
+              <div className="-mx-2">
+                {clientsRenewalAlert.map((c: any) => {
                   const renewal = new Date(c.plan_renewal_date + "T00:00:00");
                   const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
                   const isExpired = diffDays < 0;
                   return (
-                    <div key={c.id}>
-                      {i > 0 && <div className="border-t border-border" />}
-                      <div className="flex items-center gap-3 py-3 cursor-pointer hover:bg-secondary/30 rounded-lg px-1"
-                        onClick={() => navigate("/clientes")}>
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isExpired ? "bg-destructive" : "bg-warning"}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] text-foreground">{c.company_name || c.full_name}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {c.plan_name && `${c.plan_name} · `}
-                            {c.plan_value && `${fmt(Number(c.plan_value))} · `}
-                            <span className={isExpired ? "text-destructive font-medium" : "text-warning"}>
-                              {isExpired ? `Vencido há ${Math.abs(diffDays)}d` : diffDays === 0 ? "Vence hoje" : `Vence em ${diffDays}d`}
-                            </span>
-                          </p>
-                        </div>
+                    <div key={c.id} className={`${linha} cursor-pointer hover:bg-muted/40`} onClick={() => navigate("/clientes")}>
+                      <StatusDot tone={isExpired ? "danger" : "warning"} />
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-[13px] text-foreground">{c.company_name || c.full_name}</p>
+                        <p className="truncate text-[12px] text-muted-foreground">
+                          {c.plan_name && `${c.plan_name} · `}
+                          {c.plan_value && `${fmt(Number(c.plan_value))}`}
+                        </p>
                       </div>
+                      <Chip tone={isExpired ? "danger" : "warning"}>
+                        {isExpired ? `Vencido há ${Math.abs(diffDays)}d` : diffDays === 0 ? "Vence hoje" : `Vence em ${diffDays}d`}
+                      </Chip>
                     </div>
                   );
                 })}
               </div>
-            </div>
+            </Card>
           )}
 
           {stalledProjects.length > 0 && (
-            <div className={`${superficie.painel} p-5`}>
-              <p className="label-sm mb-4 flex items-center gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground" />
-                Projetos sem Progresso Recente
-              </p>
-              <div className="space-y-0">
-                {stalledProjects.map((p: any, i: number) => {
+            <Card title="Projetos sem progresso recente" collapsible={false}>
+              <div className="-mx-2">
+                {stalledProjects.map((p: any) => {
                   const daysSince = Math.floor((now.getTime() - new Date(p.updated_at || p.created_at).getTime()) / 86400000);
                   return (
-                    <div key={p.id}>
-                      {i > 0 && <div className="border-t border-border" />}
-                      <div className="flex items-center gap-3 py-3 cursor-pointer hover:bg-secondary/30 rounded-lg px-1"
-                        onClick={() => setDrawerProject(p)}>
-                        <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted-foreground" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] text-foreground">{p.name}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {p.client?.company_name || p.client?.full_name} · {p.progress}% · Parado há {daysSince}d
-                          </p>
-                        </div>
+                    <div key={p.id} className={`${linha} cursor-pointer hover:bg-muted/40`} onClick={() => setDrawerProject(p)}>
+                      <StatusDot />
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-[13px] text-foreground">{p.name}</p>
+                        <p className="truncate text-[12px] text-muted-foreground">
+                          {p.client?.company_name || p.client?.full_name} · {p.progress}%
+                        </p>
                       </div>
+                      <Chip>Parado há {daysSince}d</Chip>
                     </div>
                   );
                 })}
               </div>
-            </div>
+            </Card>
           )}
         </div>
       )}
 
       {/* Updates + Urgent Tasks */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className={`${superficie.painel} p-5`}>
-          {/* O feed lê as DUAS fontes: os updates de projeto e a memória dos
-              clientes (ritual, entrega, avulso, decisão, relatório). Antes só
-              a primeira aparecia, e o painel mostrava menos movimento do que
-              houve. */}
-          <p className="label-sm mb-4">Atualizações Recentes</p>
+      <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
+        {/* O feed lê as DUAS fontes: os updates de projeto e a memória dos
+            clientes (ritual, entrega, avulso, decisão, relatório). Antes só
+            a primeira aparecia, e o painel mostrava menos movimento do que
+            houve. */}
+        <Card title="Atualizações recentes" collapsible={false}>
           {loadingActivity ? (
-            <div className="text-sm text-muted-foreground py-4 text-center">Carregando...</div>
+            <div className="py-4 text-center text-[13px] text-muted-foreground">Carregando...</div>
           ) : (activity || []).length === 0 ? (
-            <div className="text-sm text-muted-foreground py-4 text-center">Nenhuma atualização.</div>
+            <EmptyState compact title="Nenhuma atualização." />
           ) : (
-          <div className="space-y-0">
-              {(activity || []).map((entrada, i: number) => (
-                <div key={entrada.id}>
-                  {i > 0 && <div className="border-t border-border" />}
-                  {/* items-start + min-w-0 + break-words: no celular a linha
-                      longa quebrava desalinhada do ponto colorido. */}
-                  <div
-                    className="flex items-start gap-3 py-3 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors px-1"
-                    onClick={() => {
-                      if (entrada.origin === "entrega") navigate("/relatorios");
-                      else if (entrada.origin === "avulso" || entrada.origin === "ciclo") navigate("/ciclo");
-                      else if (entrada.origin === "ritual") navigate("/central");
-                      else if (entrada.projectId) navigate("/projetos");
-                    }}
-                  >
-                    <div className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
-                    <div className="min-w-0 flex-1">
-                      <p className="break-words text-[13px] leading-snug text-foreground">{entrada.message}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        <span className="mr-1.5 inline-block rounded bg-secondary px-1 py-px text-[10px] font-medium">{entrada.originLabel}</span>
-                        {new Date(entrada.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
+            <div className="-mx-2">
+              {(activity || []).map((entrada) => (
+                /* items-start + min-w-0 + quebra de palavra: no celular a linha
+                   longa quebrava desalinhada do ponto colorido. */
+                <div
+                  key={entrada.id}
+                  className="flex min-w-0 cursor-pointer items-start gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-muted/40"
+                  onClick={() => {
+                    if (entrada.origin === "entrega") navigate("/relatorios");
+                    else if (entrada.origin === "avulso" || entrada.origin === "ciclo") navigate("/ciclo");
+                    else if (entrada.origin === "ritual") navigate("/central");
+                    else if (entrada.projectId) navigate("/projetos");
+                  }}
+                >
+                  <div className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-[13px] leading-snug text-foreground">{entrada.message}</p>
+                    <p className="mt-1 flex items-center text-[12px] text-muted-foreground">
+                      <Chip className="mr-2">{entrada.originLabel}</Chip>
+                      {new Date(entrada.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </p>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </Card>
 
-        <div className={`${superficie.painel} p-5`}>
-          <p className="label-sm mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-warning" />
-            Tarefas Urgentes
-          </p>
+        <Card title="Tarefas urgentes" collapsible={false}>
           {urgentTasks.length === 0 ? (
-            <div className="text-sm text-muted-foreground py-4 text-center">Nenhuma tarefa urgente.</div>
+            <EmptyState compact title="Nenhuma tarefa urgente." />
           ) : (
-            <div className="space-y-0">
-              {urgentTasks.map((t: any, i: number) => (
-                <div key={t.id}>
-                  {i > 0 && <div className="border-t border-border" />}
-                  <div className="flex items-center gap-3 py-3">
-                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.priority === "urgent" ? "bg-destructive" : "bg-warning"}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-foreground">{t.title}</p>
-                      <p className="text-[11px] text-muted-foreground">{t.project?.name}</p>
-                    </div>
-                    <span className="text-[10px] font-mono text-muted-foreground">{t.due_date ? new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : ""}</span>
+            <div className="-mx-2">
+              {urgentTasks.map((t: any) => (
+                <div key={t.id} className={linha}>
+                  <StatusDot tone={t.priority === "urgent" ? "danger" : "warning"} />
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-[13px] text-foreground">{t.title}</p>
+                    <p className="truncate text-[12px] text-muted-foreground">{t.project?.name}</p>
                   </div>
+                  <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">{t.due_date ? new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : ""}</span>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       <CreateProjectModal open={createProjectOpen || !!editProject} onClose={() => { setCreateProjectOpen(false); setEditProject(null); }} editProject={editProject} />

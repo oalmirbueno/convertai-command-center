@@ -27,17 +27,17 @@ export const corDoTom: Record<Tom, string> = {
 /** Fundo suave + cor para etiquetas de estado. */
 export const fundoDoTom: Record<Tom, string> = {
   neutro: "bg-muted text-foreground",
-  sucesso: "bg-success/15 text-success",
-  perigo: "bg-destructive/15 text-destructive",
-  aviso: "bg-warning/15 text-warning",
-  info: "bg-info/15 text-info",
-  primario: "bg-primary/15 text-primary",
+  sucesso: "bg-success-soft text-success",
+  perigo: "bg-danger-soft text-destructive",
+  aviso: "bg-warning-soft text-warning",
+  info: "bg-info-soft text-info",
+  primario: "bg-accent-soft text-primary",
   apagado: "bg-muted text-muted-foreground",
 };
 
 /** Botão pequeno de ação de linha (32 px), para listas densas. */
 export const botaoDeLinha = juntar(
-  "inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-border bg-transparent px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-border bg-card px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50",
   foco,
 );
 
@@ -101,14 +101,14 @@ export function Kpi({
 }) {
   const naGrade = useContext(DentroDaGrade);
   // Na grade: célula com traço fino (a grade é a superfície). Sozinho: poço ou cartão.
-  const casca = naGrade ? "border-l border-t border-border px-4 py-3" : juntar(emPoco ? superficie.poco : superficie.painel, "px-3.5 py-3");
+  const casca = naGrade ? "border-l border-t border-border px-4 py-3.5 sm:px-5 sm:py-4" : juntar(emPoco ? superficie.poco : superficie.painel, "p-4");
   return (
     <div className={juntar(casca, "flex min-w-0 flex-col", className)}>
       <div className="flex min-w-0 items-center">
         <p className={juntar(texto.rotulo, "min-w-0 truncate")}>{rotulo}</p>
         {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
       </div>
-      <div className={juntar("mt-1 min-w-0 truncate text-[20px] font-semibold leading-7 tabular-nums", corDoTom[tom])}>{valor}</div>
+      <div className={juntar("mt-1 min-w-0 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums sm:text-[24px] sm:leading-8", corDoTom[tom])}>{valor}</div>
       {apoio && (
         <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={typeof apoio === "string" ? apoio : undefined}>
           {apoio}
@@ -138,10 +138,10 @@ export function TituloRecolhivel({
       onClick={onAlternar}
       aria-expanded={aberto}
       aria-controls={controla}
-      className={juntar("-ml-0.5 inline-flex min-w-0 items-center rounded text-left", foco)}
+      className={juntar("-ml-1.5 inline-flex min-w-0 items-center rounded-full py-0.5 pl-1.5 pr-3 text-left transition-colors hover:bg-muted", foco)}
     >
       <ChevronDown
-        className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", !aberto && "-rotate-90")}
+        className={juntar("mr-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", !aberto && "-rotate-90")}
         aria-hidden="true"
       />
       <span className="min-w-0 truncate">{children}</span>
@@ -151,7 +151,7 @@ export function TituloRecolhivel({
 
 /** Etiqueta de estado (Pago, Pendente, Atrasado). */
 export function Etiqueta({ tom = "apagado", className = "", children }: { tom?: Tom; className?: string; children: ReactNode }) {
-  return <span className={juntar("inline-flex min-h-[20px] shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium leading-4 tabular-nums", fundoDoTom[tom], className)}>{children}</span>;
+  return <span className={juntar("inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-medium leading-none tabular-nums", fundoDoTom[tom], className)}>{children}</span>;
 }
 
 /** Pé dos diálogos: botões à direita, o primário por último. */

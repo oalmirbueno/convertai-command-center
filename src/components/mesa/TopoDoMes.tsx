@@ -141,10 +141,11 @@ export default function TopoDoMes({
       <header className="flex min-w-0 items-start">
         <div className="min-w-0 flex-1">
         <h2 className={juntar(texto.tituloPagina, "truncate")} data-mes-do-topo="">{nome.charAt(0).toUpperCase() + nome.slice(1)}</h2>
-        <p className={juntar(texto.corpo, "mt-0.5 truncate text-muted-foreground")} data-nicho-do-topo="">
-          {nicho ? <><span className="font-medium text-foreground">{nicho}</span> · </> : null}{clientName}
+        {/* 14/11/2026 (dono: "uma linha de estado no máximo"): nicho, cliente e resumo numa linha só; o resto fica no title. */}
+        <p className={juntar(texto.auxiliar, "mt-1 truncate")} title={[nicho, clientName, resumo].filter(Boolean).join(" · ")}>
+          <span data-nicho-do-topo="">{nicho ? <><span className="font-medium text-foreground">{nicho}</span> · </> : null}{clientName}</span>
+          {resumo ? <> · <span data-resumo-do-mes="">{resumo}</span></> : <span data-resumo-do-mes="" />}
         </p>
-        <p className={juntar(texto.auxiliar, "mt-0.5")} data-resumo-do-mes="">{resumo}</p>
         </div>
         {/* Ações do mês só em ícone (nome no title); o primário da aba é o Agente do mês que flutua. */}
         <div className="ml-2 flex shrink-0 items-center" aria-label="Ações do mês" role="group">
@@ -169,7 +170,7 @@ export default function TopoDoMes({
           <ul className={juntar(lista.aberta, lista.divisoria, "mt-1")}>
             {sugestoes.map((s) => (
               <li key={s.chave} className={juntar(lista.linha, "py-2")} data-sugestao={s.fonte}>
-                <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground" aria-hidden="true">{ICONE_DA_FONTE[s.fonte]}</span>
+                <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">{ICONE_DA_FONTE[s.fonte]}</span>
                 <div className="min-w-0 flex-1">
                   <p className={juntar(texto.corpo, "line-clamp-2 sm:line-clamp-1")} title={s.texto}>{s.texto}</p>
                   <p className={texto.auxiliar}>de {ROTULO_DA_FONTE[s.fonte]}</p>

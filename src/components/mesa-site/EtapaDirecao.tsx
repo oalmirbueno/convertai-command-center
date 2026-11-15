@@ -195,7 +195,7 @@ export default function EtapaDirecao({ site }: { site: LinhaDoSite; onIrPara?: (
                 <div className="flex min-w-0 items-center">
                   <span className={juntar(texto.auxiliar, "mr-2")}>Cores das referências</span>
                   {dnaSalvo.cores_das_referencias.slice(0, 8).map((c: string) => (
-                    <span key={c} className="mr-1 inline-block h-4 w-4 rounded-sm border border-border" style={{ background: c }} title={c} />
+                    <span key={c} className="mr-1 inline-block h-4 w-4 rounded-full border border-border" style={{ background: c }} title={c} />
                   ))}
                 </div>
               )}

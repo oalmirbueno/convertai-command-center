@@ -169,7 +169,7 @@ export default function ImportarSite({ aberta, onMudar, marcaId, onImportado }: 
                   <p className={texto.auxiliar}>{`${analise.ignorados.total} ficam de fora (dependências, cache ou build): ${analise.ignorados.exemplos.join(", ")}`}</p>
                 )}
                 {analise.avisos.map((a) => (
-                  <p key={a} className={juntar(texto.auxiliar, "text-amber-700 dark:text-amber-400")}>{a}</p>
+                  <p key={a} className={juntar(texto.auxiliar, "text-warning")}>{a}</p>
                 ))}
                 <label className="block min-w-0">
                   <span className={texto.rotulo}>Nome do site na Mesa</span>

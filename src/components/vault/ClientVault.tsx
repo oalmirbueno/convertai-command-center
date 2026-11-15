@@ -23,6 +23,7 @@ import {
   campo,
   campoTexto,
   juntar,
+  superficie,
   texto,
 } from "@/components/sistema";
 
@@ -77,7 +78,7 @@ function GrupoDoCofre({ clientId, categoria, total, children }: { clientId: stri
     <section className="min-w-0" aria-label={Meta.plural}>
       <CabecalhoDeSecao
         nivel={3}
-        className="mb-1"
+        className="mb-2"
         icone={<Meta.icon className={`h-3.5 w-3.5 ${Meta.color}`} />}
         titulo={
           <>
@@ -251,12 +252,12 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
               if (!list || list.length === 0) return null;
               return (
                 <GrupoDoCofre key={cat} clientId={clientId} categoria={cat} total={list.length}>
-                  <ul className="divide-y divide-border border-y border-border">
+                  <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-4 sm:px-5")}>
                     {list.map((it) => {
                       const fav = it.icon_url || faviconFor(it.url);
                       const isRevealed = !!revealed[it.id];
                       return (
-                        <li key={it.id} className="min-w-0 py-3">
+                        <li key={it.id} className="min-w-0 py-3.5">
                           <div className="flex min-w-0 items-start">
                             <div className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                               {fav ? (

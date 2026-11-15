@@ -58,7 +58,7 @@ export function SeletorDeFormato({
   compacto?: boolean;
 }) {
   return (
-    <div className={`grid grid-cols-4 gap-0.5 rounded-lg border border-border bg-background p-0.5 ${compacto ? "" : "w-full"}`} role="radiogroup" aria-label="Formato do post">
+    <div className={`grid grid-cols-4 gap-0.5 rounded-lg bg-muted p-0.5 ${compacto ? "" : "w-full"}`} role="radiogroup" aria-label="Formato do post">
       {FORMATOS_DO_POST.map((f) => {
         const ativo = valor === f.valor;
         // Miniatura do quadro na proporção (altura fixa de 14 px, largura pela proporção).
@@ -73,15 +73,15 @@ export function SeletorDeFormato({
             onClick={() => onMudar(f.valor)}
             title={`${f.rotulo} (${f.tamanho}): ${f.dica}`}
             data-formato={f.valor}
-            className={`flex min-w-[52px] flex-col items-center justify-center rounded-md px-1.5 leading-tight transition-colors disabled:opacity-50 ${compacto ? "h-10" : "h-12"} ${
-              ativo ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className={`toque-compacto flex min-w-[52px] flex-col items-center justify-center rounded-md px-1.5 leading-tight transition-colors disabled:opacity-50 ${compacto ? "h-10" : "h-12"} ${
+              ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <span className="flex items-center">
-              <span className={`mr-1 inline-block rounded-[2px] border ${ativo ? "border-primary-foreground" : "border-current"}`} style={{ width: largura, height: 14 }} aria-hidden />
+              <span className={`mr-1 inline-block rounded-[2px] border ${ativo ? "border-primary" : "border-current"}`} style={{ width: largura, height: 14 }} aria-hidden />
               <span className={`text-[12px] tabular-nums ${ativo ? "font-medium" : ""}`}>{f.rotulo}</span>
             </span>
-            {!compacto && <span className={`mt-0.5 text-[11px] tabular-nums ${ativo ? "text-primary-foreground/80" : ""}`}>{f.tamanho}</span>}
+            {!compacto && <span className={`mt-0.5 text-[11px] tabular-nums ${ativo ? "text-muted-foreground" : ""}`}>{f.tamanho}</span>}
           </button>
         );
       })}
@@ -140,7 +140,7 @@ export default function EstudioPreparar({
   };
 
   return (
-    <section className="mx-auto w-full max-w-[560px] rounded-xl border border-border bg-background p-4 sm:p-5">
+    <section className="mx-auto w-full max-w-[560px] rounded-lg border border-border bg-background p-4 sm:p-5">
       <div className="flex items-center">
         <Sparkles className="mr-2 h-4 w-4 shrink-0 text-primary" />
         <h3 className="text-[15px] font-semibold">Preparar a direção</h3>
@@ -195,7 +195,7 @@ export default function EstudioPreparar({
           )}
 
           <label className="flex cursor-pointer items-start rounded-md border border-border px-3 py-2.5">
-            <Switch checked={continuo && formato === "feed_4x5"} onCheckedChange={setContinuo} disabled={formato !== "feed_4x5"} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
+            <Switch checked={continuo && formato === "feed_4x5"} onCheckedChange={setContinuo} disabled={formato !== "feed_4x5"} className="toque-compacto mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
             <span className="min-w-0">
               <span className="block text-[13px] font-medium">Carrossel contínuo</span>
               <span className="block text-[12px] leading-snug text-muted-foreground">

@@ -105,7 +105,7 @@ export default function EvidenciaVisual({ url, nome = "Comprovação", compacto 
         {p.imagem && <span className="block truncate px-2 py-1 text-[11px] text-muted-foreground">{titulo}</span>}
       </button>
     ) : (
-    <button type="button" onClick={abrir} className="group block w-full overflow-hidden rounded-xl border border-border bg-background text-left hover:border-primary/60" aria-label={`Ver ${titulo}`}>
+    <button type="button" onClick={abrir} className="group block w-full overflow-hidden rounded-lg border border-border bg-background text-left hover:border-primary/60" aria-label={`Ver ${titulo}`}>
       {p.imagem && <img src={p.href} loading="lazy" referrerPolicy="no-referrer" alt={titulo} className="max-h-[400px] w-full object-contain" />}
       <span className="flex items-center gap-2 px-3 py-2 text-[13px] leading-5"><FileText className="h-4 w-4 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate">{titulo}</span><Expand className="h-4 w-4 text-muted-foreground" /></span>
     </button>

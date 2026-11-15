@@ -119,7 +119,7 @@ function CartaoDoHype({
       <div className="mt-auto flex items-center justify-between pt-2.5">
         <button type="button" onClick={() => setDetalhes((v) => !v)} aria-expanded={detalhes} className="toque-compacto inline-flex items-center text-[12px] font-medium text-primary hover:underline">
           {detalhes ? "Menos" : "Como usar"}
-          <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${detalhes ? "rotate-180" : ""}`} aria-hidden="true" />
+          <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform duration-200 ${detalhes ? "rotate-180" : ""}`} aria-hidden="true" />
         </button>
         <AcoesDeCriar titulo={hype.titulo} rotuloDoConteudo={temPauta ? "Usar a pauta" : "Criar conteúdo"} partes={() => partesDoPedido(catalogo, 0)} executar={criarConteudo} onCampanha={onCriarCampanha} />
       </div>

@@ -13,7 +13,7 @@ export type SituacaoDoCriativo = "sem_arte" | "gerando" | "conferindo" | "corrig
 export type EtapaDoLote = "fila" | "gerando" | "conferindo" | "corrigindo";
 
 export const SITUACOES: { valor: SituacaoDoCriativo; rotulo: string; tom: string }[] = [
-  { valor: "sem_arte", rotulo: "Sem arte", tom: "bg-secondary text-muted-foreground" },
+  { valor: "sem_arte", rotulo: "Sem arte", tom: "bg-muted text-muted-foreground" },
   { valor: "gerando", rotulo: "Gerando", tom: "bg-info/10 text-info" },
   { valor: "conferindo", rotulo: "Conferindo", tom: "bg-info/10 text-info" },
   { valor: "corrigindo", rotulo: "Corrigindo", tom: "bg-warning/15 text-warning" },

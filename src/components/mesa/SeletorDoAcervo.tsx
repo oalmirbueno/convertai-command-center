@@ -168,7 +168,7 @@ export default function SeletorDoAcervo({
   }, [filtradas, categorias]);
 
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-background p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-background p-3">
       <div className="flex items-center justify-between">
         <p className="text-[13px] font-semibold">{titulo}</p>
         {onFechar && (

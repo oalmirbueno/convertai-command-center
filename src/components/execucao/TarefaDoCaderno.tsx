@@ -70,7 +70,7 @@ export default function TarefaDoCaderno({ linkId }: { linkId: string }) {
     </label>
   );
   return <div className="mx-auto max-w-3xl space-y-6">
-    <section className="rounded-xl bg-card p-4">
+    <section className="rounded-lg bg-card p-4">
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-[15px] font-semibold">{tarefa.data?.title}</h3>
         <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{feitos.length} de {itens.length} etapas</span>
@@ -85,7 +85,7 @@ export default function TarefaDoCaderno({ linkId }: { linkId: string }) {
     {depois.length > 0 && <section className="space-y-0.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground"><ArrowRight className="h-3.5 w-3.5" />Depois</h4>{depois.map(i => <Linha key={i.id} i={i} />)}</section>}
     {feitos.length > 0 && <section className="space-y-0.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium text-success"><CheckCircle2 className="h-3.5 w-3.5" />Feito</h4>{feitos.map(i => <Linha key={i.id} i={i} />)}</section>}
     <form className="flex gap-2" onSubmit={e => { e.preventDefault(); if (item.trim()) salvar.mutate({ tipo: "adicionar" }); }}><input aria-label="Novo item do checklist" value={item} onChange={e => setItem(e.target.value)} className={campo + " flex-1"} placeholder="Adicionar uma etapa" maxLength={500} /><button className={botao.secundario} disabled={!item.trim() || salvar.isPending || lista.isPending || !!lista.error}>Adicionar</button></form>
-    <details className="rounded-xl bg-card p-4">
+    <details className="rounded-lg bg-card p-4">
       <summary className="cursor-pointer text-[13px] font-medium">Descrição e critérios da tarefa</summary>
       <div className="mt-3 space-y-3">
         <textarea aria-label="Descrição da tarefa" className={campoTexto + " min-h-32 w-full"} value={descricao ?? tarefa.data?.description ?? ""} onChange={e => setDescricao(e.target.value)} placeholder="O que será entregue e quais são os critérios de conclusão?" />

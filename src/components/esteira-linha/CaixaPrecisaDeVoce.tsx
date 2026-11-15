@@ -52,7 +52,7 @@ export default function CaixaPrecisaDeVoce({ pedidos, carregando, incompleta }: 
   return (
     <section
       aria-labelledby="precisa-de-voce-titulo"
-      className="shrink-0 rounded-md border border-warning/40 bg-warning/5"
+      className="shrink-0 rounded-lg bg-warning-soft"
       data-precisa-de-voce={pedidos.length}
       data-aviso-recolhido={aberta ? undefined : "sim"}
     >
@@ -62,26 +62,26 @@ export default function CaixaPrecisaDeVoce({ pedidos, carregando, incompleta }: 
           onClick={alternar}
           aria-expanded={aberta}
           aria-controls="precisa-de-voce-lista"
-          className={juntar("toque-compacto flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-1.5 text-left", foco)}
+          className={juntar("toque-compacto flex min-h-10 w-full items-center gap-2 rounded-lg px-3.5 py-2 text-left", foco)}
           data-alternar-aviso=""
         >
-          <span className={juntar(etiqueta, "bg-warning/15 text-warning")} aria-hidden="true">{pedidos.length}</span>
+          <span className={juntar(etiqueta, "min-w-[20px] justify-center bg-card px-1.5 text-warning")} aria-hidden="true">{pedidos.length}</span>
           <span className="min-w-0 flex-1 truncate">
             <span className="sr-only">Precisa de você: </span>
             {contadorDoPrecisaDeVoce(pedidos.length)}
             {incompleta && <span className={juntar(texto.auxiliar, "ml-2")}>(parte da lista não pôde ser lida)</span>}
           </span>
-          <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", aberta && "rotate-180")} aria-hidden="true" />
+          <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", aberta && "rotate-180")} aria-hidden="true" />
         </button>
       </h2>
       {aberta && (
         <ul
           id="precisa-de-voce-lista"
-          className={juntar("mx-2 mb-2 divide-y divide-border rounded-md border border-border bg-background", CLASSES_DA_LISTA_DO_AVISO)}
+          className={juntar("mx-2 mb-2 divide-y divide-border/60 rounded-md bg-card", CLASSES_DA_LISTA_DO_AVISO)}
           data-rolagem-do-aviso=""
         >
           {pedidos.map((p) => (
-            <li key={p.chave} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5 px-3 py-2" data-pedido-do-dono={p.chave} data-tipo={p.tipo}>
+            <li key={p.chave} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3.5 py-2.5" data-pedido-do-dono={p.chave} data-tipo={p.tipo}>
               <div className="min-w-0 flex-1 basis-64">
                 <p className="flex flex-wrap items-center gap-1.5">
                   <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{ROTULO_DO_TIPO[p.tipo]}</span>

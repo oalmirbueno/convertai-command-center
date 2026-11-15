@@ -339,7 +339,7 @@ export default function EtapaSistema() {
                   setSugeridas(sugeridas.filter((x) => x !== h));
                 }}
               >
-                <span className="mr-1.5 inline-block h-4 w-4 rounded border border-border" style={{ background: h }} /> {h}
+                <span className="mr-1.5 inline-block h-4 w-4 rounded-full border border-border" style={{ background: h }} /> {h}
               </button>
             ))}
           </div>

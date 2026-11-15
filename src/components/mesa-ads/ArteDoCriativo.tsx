@@ -198,7 +198,7 @@ function PreviaNoFormato({
       </div>
       <div className="mx-auto w-full" style={{ maxWidth: larguraMaxima }}>
         <div
-          className="relative w-full overflow-hidden rounded-lg border border-border bg-secondary shadow-sm"
+          className="relative w-full overflow-hidden rounded-lg border border-border bg-muted shadow-card"
           style={{ paddingBottom: `${(f.altura / f.largura) * 100}%` }}
           data-proporcao={f.curto}
         >
@@ -537,7 +537,7 @@ export default function ArteDoCriativo({
 
   if (!cards.length) {
     return (
-      <div className="rounded-xl border border-dashed border-border p-8 text-center">
+      <div className="rounded-lg border border-dashed border-border p-8 text-center">
         <p className="text-[13px] font-medium">A direção de arte deste criativo ainda não chegou</p>
         <p className="mt-1 text-[12px] text-muted-foreground">
           {trabalho.status === "erro" ? "A última tentativa terminou com erro. Produza o criativo de novo pelo plano." : "O diretor está montando. A tela atualiza sozinha em instantes."}
@@ -579,7 +579,7 @@ export default function ArteDoCriativo({
         />
         {!configRecolhida && (
           <div className="mt-2 flex min-w-0 flex-wrap items-center">
-            <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="radiogroup" aria-label="Qualidade da arte">
+            <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5" role="radiogroup" aria-label="Qualidade da arte">
               {QUALIDADES.map((q) => {
                 const ativa = qualidade === q.valor;
                 return (
@@ -590,10 +590,10 @@ export default function ArteDoCriativo({
                     aria-checked={ativa}
                     disabled={algoGerando}
                     onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
-                    className={`flex h-9 min-w-[66px] flex-col items-center justify-center rounded-md px-2 leading-tight ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                    className={`flex h-9 min-w-[66px] flex-col items-center justify-center rounded-md px-2 leading-tight transition-colors ${ativa ? "bg-card font-medium text-foreground shadow-card" : "text-muted-foreground hover:text-foreground"}`}
                   >
                     <span className="text-[12px]">{q.rotulo}</span>
-                    <span className={`text-[11px] tabular-nums ${ativa ? "text-primary-foreground/80" : ""}`}>{precoDe(q.valor) || "sem preço"}</span>
+                    <span className={`text-[11px] tabular-nums ${ativa ? "text-primary" : ""}`}>{precoDe(q.valor) || "sem preço"}</span>
                   </button>
                 );
               })}
@@ -661,7 +661,7 @@ export default function ArteDoCriativo({
             const e = andamentoIrmaos[i.criativo.id];
             const rotulo =
               e === "fila" ? "na fila" : e === "ajustando" ? "ajustando" : e === "conferindo" ? "conferindo" : e === "feito" ? "feito" : e === "sem_arte" ? "sem arte ainda" : "falhou";
-            const tom = e === "feito" ? "bg-success/10 text-success" : e === "erro" ? "bg-destructive/10 text-destructive" : e === "sem_arte" ? "bg-secondary text-muted-foreground" : "bg-primary/10 text-primary";
+            const tom = e === "feito" ? "bg-success/10 text-success" : e === "erro" ? "bg-destructive/10 text-destructive" : e === "sem_arte" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary";
             return (
               <span key={i.criativo.id} data-irmao={e} className={`mb-1 mr-1.5 mt-1 inline-flex h-6 items-center rounded-full px-2 text-[11px] ${tom}`}>
                 {formatoDe(i.criativo.formato).rotulo}: {rotulo}
@@ -742,7 +742,7 @@ export default function ArteDoCriativo({
                   onClick={() => setFerramenta(t.valor)}
                   title={t.rotulo}
                   aria-label={t.rotulo}
-                  className={`mr-1 inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-md px-1 text-[12px] ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  className={`mr-1 inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-full px-1 text-[12px] transition-colors ${ativa ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                 >
                   <Icone className="h-4 w-4 shrink-0" />
                 </button>

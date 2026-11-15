@@ -285,7 +285,7 @@ function CartaoRecolhivel({
       <div className={juntar("flex min-w-0 flex-wrap items-center justify-between", recolhido ? "" : "mb-2.5")}>
         <div className="mr-2 flex min-w-0 flex-1 items-center">
           {/* O título continua heading (h3), como no Cartao sem recolher: quem navega por títulos acha o bloco. */}
-          <h3 className="min-w-0">
+          <h3 className="flex min-w-0">
             <TituloRecolhivel titulo={titulo} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
           </h3>
           {dica && !recolhido && <AjudaRecolhida className="ml-1.5">{dica}</AjudaRecolhida>}
@@ -369,7 +369,7 @@ export function SeloCurto({ foto }: { foto: Pick<FotoDoAcervo, "gerada" | "deriv
   }
   if (classe === "gerada") {
     return (
-      <span className="mb-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-medium text-primary" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
+      <span className="mb-1 inline-flex items-center whitespace-nowrap rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-medium text-primary" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
         a aprovar
       </span>
     );

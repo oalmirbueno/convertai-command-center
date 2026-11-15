@@ -355,7 +355,7 @@ function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f
         )}
         {fotos.isError && <p className="rounded-lg bg-destructive/10 p-2.5 text-[12px]">{textoDoErro(fotos.error)}</p>}
         {fotos.data && !lista.length && (
-          <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] leading-relaxed text-muted-foreground">
+          <p className="rounded-lg bg-muted/50 px-3 py-4 text-center text-[12px] leading-relaxed text-muted-foreground">
             Nenhuma foto feita na Mesa Foto ainda.{" "}
             <Link className="font-medium text-foreground hover:underline" to={`/mesa-foto?client=${clientId}`}>Abrir a Mesa Foto</Link>
           </p>
@@ -858,7 +858,7 @@ export default function EstudioFotos({
                 </div>
                 <div className="ml-2.5 min-w-0 flex-1">
                   <div className="flex min-w-0 items-center">
-                    <div className="grid grid-cols-2 gap-0.5 rounded-md border border-border p-0.5" role="radiogroup" aria-label={`Papel da foto ${i + 1}`}>
+                    <div className="grid grid-cols-2 gap-0.5 rounded-full bg-muted p-0.5" role="radiogroup" aria-label={`Papel da foto ${i + 1}`}>
                       {(["fundo", "elemento"] as const).map((p) => (
                         <button
                           key={p}
@@ -867,7 +867,7 @@ export default function EstudioFotos({
                           aria-checked={f.papel === p}
                           title={DICA_DO_PAPEL[p]}
                           onClick={() => mudarPapel(i, p)}
-                          className={`h-6 rounded px-2 text-[11px] transition-colors ${f.papel === p ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                          className={`toque-compacto h-6 rounded-full px-2.5 text-[11px] transition-colors ${f.papel === p ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                         >
                           {ROTULO_DO_PAPEL[p]}
                         </button>
@@ -893,7 +893,7 @@ export default function EstudioFotos({
                       onClick={() => remover(i)}
                       aria-label={`Remover a foto ${i + 1}`}
                       title="Tirar da lâmina"
-                      className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-destructive"
+                      className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-destructive"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -985,7 +985,7 @@ export default function EstudioFotos({
 
       {/* Trazer a foto: Acervo | Mesa Foto | Subir. */}
       <section aria-label="Trazer foto" className="space-y-2.5">
-        <div role="tablist" aria-label="De onde vem a foto" className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-background p-1">
+        <div role="tablist" aria-label="De onde vem a foto" className="grid grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5">
           {ABAS_DAS_FOTOS.map((a) => {
             const Icone = a.icone;
             return (
@@ -998,7 +998,7 @@ export default function EstudioFotos({
                 // 16/10/2026: aba só com o ícone; o nome vai no title e no leitor de tela.
                 aria-label={a.rotulo}
                 title={a.rotulo}
-                className={`flex h-8 min-w-0 items-center justify-center rounded-md px-1 transition-colors ${aba === a.valor ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                className={`toque-compacto flex h-8 min-w-0 items-center justify-center rounded-full px-1 transition-colors ${aba === a.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
                 <Icone className="h-4 w-4 shrink-0" aria-hidden="true" />
               </button>

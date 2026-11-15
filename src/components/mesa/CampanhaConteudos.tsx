@@ -221,7 +221,7 @@ function LinhaDoConteudo({
                     <SelectItem value="carrossel">Carrossel</SelectItem>
                   </SelectContent>
                 </Select>
-                <button type="button" onClick={() => setEditando((v) => !v)} aria-pressed={editando} aria-label={editando ? "Fechar edição" : "Editar"} title={editando ? "Fechar edição" : "Editar"} className="toque-compacto mb-1 mr-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-primary hover:bg-muted">
+                <button type="button" onClick={() => setEditando((v) => !v)} aria-pressed={editando} aria-label={editando ? "Fechar edição" : "Editar"} title={editando ? "Fechar edição" : "Editar"} className="toque-compacto mb-1 mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full text-primary hover:bg-muted">
                   {editando ? <X className="h-3.5 w-3.5" aria-hidden="true" /> : <Pencil className="h-3.5 w-3.5" aria-hidden="true" />}
                 </button>
               </>
@@ -233,14 +233,14 @@ function LinhaDoConteudo({
                 aria-expanded={aberto}
                 aria-label={aberto ? "Fechar roteiro" : "Ver roteiro"}
                 title={aberto ? "Fechar roteiro" : "Ver roteiro"}
-                className="toque-compacto mb-1 mr-2 inline-flex h-7 items-center rounded-md px-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="toque-compacto mb-1 mr-2 inline-flex h-7 items-center rounded-full px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
-                <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
+                <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
               </button>
             )}
             {naAgenda && onAbrir && (
-              <button type="button" onClick={() => onAbrir(item.task_id as string, mesDaData(item.data))} className="toque-compacto mb-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-primary hover:bg-muted" aria-label="Abrir no Estúdio" title="Abrir no Estúdio">
+              <button type="button" onClick={() => onAbrir(item.task_id as string, mesDaData(item.data))} className="toque-compacto mb-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-primary hover:bg-muted" aria-label="Abrir no Estúdio" title="Abrir no Estúdio">
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
@@ -481,7 +481,7 @@ export default function CampanhaConteudos({
             <button
               type="button"
               onClick={() => onAbrirNoEstudio(primeiroNaAgenda.task_id as string, mesDaData(primeiroNaAgenda.data))}
-              className="toque-compacto mb-1 ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md text-primary hover:bg-background"
+              className="toque-compacto mb-1 ml-auto inline-flex h-8 w-8 items-center justify-center rounded-full text-primary hover:bg-background"
               aria-label="Abrir no Estúdio"
               title="Abrir no Estúdio"
             >

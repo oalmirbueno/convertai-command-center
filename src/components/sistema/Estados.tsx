@@ -26,7 +26,7 @@ export function EstadoVazio({
 }) {
   if (compacto) {
     return (
-      <div className={juntar("flex min-w-0 flex-wrap items-center rounded-md border border-dashed border-border px-3 py-3", className)}>
+      <div className={juntar("flex min-w-0 flex-wrap items-center rounded-md bg-muted/50 px-3.5 py-3", className)}>
         <p className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 leading-5")}>
           <span className="font-medium text-foreground">{titulo}</span>
           {descricao ? <> {descricao}</> : null}
@@ -38,7 +38,7 @@ export function EstadoVazio({
   return (
     <div className={juntar("flex min-w-0 flex-col items-center px-4 py-12 text-center", className)} data-estado="vazio">
       {icone && (
-        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground" aria-hidden="true">
+        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
           {icone}
         </div>
       )}
@@ -102,7 +102,7 @@ export function EstadoDeErro({
   className?: string;
 }) {
   return (
-    <div role="alert" className={juntar("flex min-w-0 items-start rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5", className)}>
+    <div role="alert" className={juntar("flex min-w-0 items-start rounded-md border border-destructive/20 bg-danger-soft px-3.5 py-3", className)}>
       <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
       <div className="mr-3 min-w-0 flex-1">
         <p className="text-[13px] font-medium text-foreground">{titulo}</p>

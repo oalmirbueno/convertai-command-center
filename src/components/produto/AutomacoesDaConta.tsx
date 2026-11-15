@@ -227,7 +227,7 @@ export default function AutomacoesDaConta({ estado }: { estado: EstadoDoProduto 
           <ul className={juntar(lista.aberta, lista.divisoria)} data-lista-de-automacoes="">
             {itens.map((a) => (
               <li key={a.id} className={lista.linha} data-automacao={a.id} data-ativa={a.ativa ? "sim" : "nao"}>
-                <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", a.ativa ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{ICONE_DA_ACAO[a.acao]}</span>
+                <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", a.ativa ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{ICONE_DA_ACAO[a.acao]}</span>
                 <span className="min-w-0 flex-1">
                   <span className={juntar(texto.corpo, "block truncate font-medium", !a.ativa && "text-muted-foreground")}>{a.nome}</span>
                   <span className={juntar(texto.corpo, "block text-muted-foreground")} data-frase="">{fraseDaAutomacao(a, nomes, equipe)}</span>
@@ -256,7 +256,7 @@ export default function AutomacoesDaConta({ estado }: { estado: EstadoDoProduto 
                     />
                   </>
                 ) : (
-                  <span className={juntar(etiqueta, "ml-3", a.ativa ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{a.ativa ? "Ligada" : "Desligada"}</span>
+                  <span className={juntar(etiqueta, "ml-3", a.ativa ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{a.ativa ? "Ligada" : "Desligada"}</span>
                 )}
               </li>
             ))}
@@ -277,7 +277,7 @@ export default function AutomacoesDaConta({ estado }: { estado: EstadoDoProduto 
           <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1" data-receitas="">
             {receitas.map((receita) => (
               <li key={receita.id} className={juntar(superficie.painel, "flex min-w-0 items-center p-3")} data-receita={receita.id}>
-                <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">{ICONE_DA_ACAO[receita.acao]}</span>
+                <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-primary">{ICONE_DA_ACAO[receita.acao]}</span>
                 <span className="min-w-0 flex-1">
                   <span className={juntar(texto.corpo, "block truncate font-medium")}>{receita.nome}</span>
                   <span className={juntar(texto.auxiliar, "block")} title={receita.linha}>{fraseDaAutomacao(receita, nomes, equipe)}</span>

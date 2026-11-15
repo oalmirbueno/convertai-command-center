@@ -128,7 +128,7 @@ function FichaAberta({ m }: { m: FichaDoModelo }) {
           ))}
         </ul>
       )}
-      {m.cuidados.length > 0 && <p className="text-[12px] leading-5 text-amber-700 [overflow-wrap:anywhere] dark:text-amber-400">Cuidados: {m.cuidados.join(" ")}</p>}
+      {m.cuidados.length > 0 && <p className="text-[12px] leading-5 text-warning [overflow-wrap:anywhere]">Cuidados: {m.cuidados.join(" ")}</p>}
     </div>
   );
 }

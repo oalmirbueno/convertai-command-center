@@ -53,10 +53,10 @@ function Seta({ valor, bomQuandoSobe }: { valor: number | null; bomQuandoSobe: b
 
 function Kpi({ rotulo, valor, variacao, bomQuandoSobe = true, dica }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string }) {
   return (
-    <div className={juntar(superficie.painel, "min-w-0 px-3 py-2")} title={dica}>
-      <dt className="truncate text-[11px] text-muted-foreground">{rotulo}</dt>
-      <dd className="mt-0.5 flex min-w-0 items-baseline">
-        <span className="truncate text-[15px] font-semibold tabular-nums">{valor}</span>
+    <div className={juntar(superficie.painel, "min-w-0 px-4 py-3")} title={dica}>
+      <dt className="truncate text-[12px] text-muted-foreground">{rotulo}</dt>
+      <dd className="mt-1 flex min-w-0 items-baseline">
+        <span className="truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums">{valor}</span>
         {variacao !== undefined && <Seta valor={variacao} bomQuandoSobe={bomQuandoSobe} />}
       </dd>
     </div>
@@ -69,7 +69,7 @@ export function ResumoDaConta({ totais, extras }: { totais: MetricasDaConta; ext
   const v = (k: keyof Comparacao) => (c ? c[k] : null);
   return (
     <section aria-label="Resumo do período" className="min-w-0">
-      <dl className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
+      <dl className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
         <Kpi rotulo="Investimento" valor={brl(totais.gasto)} variacao={v("gasto_pct")} dica="Quanto a Meta cobrou no período." />
         <Kpi rotulo={extras.resultado_rotulo} valor={inteiro(totais.resultados)} variacao={v("resultados_pct")} dica="O resultado que conta para o objetivo das campanhas com mais investimento." />
         <Kpi rotulo="Custo por resultado" valor={brl(totais.custo_por_resultado)} variacao={v("custo_por_resultado_pct")} bomQuandoSobe={false} />
@@ -99,7 +99,7 @@ export function SaldosDasContas({ contas }: { contas: SaldoDaConta[] }) {
           <p className="flex min-w-0 items-center text-[13px] font-semibold">
             <Wallet className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="min-w-0 flex-1 truncate">{c.nome || `Conta ${c.numero}`}</span>
-            {c.status && <span className="ml-2 shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-normal text-muted-foreground">{c.status}</span>}
+            {c.status && <span className="ml-2 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-normal text-muted-foreground">{c.status}</span>}
           </p>
           <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] sm:grid-cols-4">
             <div className="min-w-0">
@@ -203,7 +203,7 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
       {aberto && q.isLoading && <div className="mt-3 h-24 animate-pulse rounded-lg bg-muted/60" aria-busy="true" />}
       {d && (
         <div className="mt-3 min-w-0 space-y-3">
-          <dl className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
+          <dl className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
             <Kpi rotulo="Alcance somado (aprox.)" valor={inteiro(d.somado.alcance_aprox)} dica={d.somado.explicacao} />
             <Kpi rotulo="Interações somadas" valor={inteiro(d.somado.interacoes)} dica={d.somado.explicacao} />
             <Kpi rotulo="Seguidores" valor={inteiro(d.organico.seguidores)} variacao={null} dica={d.organico.seguidores_variacao !== null ? `Variação no período: ${d.organico.seguidores_variacao > 0 ? "+" : ""}${d.organico.seguidores_variacao}` : undefined} />
@@ -237,7 +237,7 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
               <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6">
                 {d.organico.melhores.map((p) => (
                   <a key={p.id} href={p.link || undefined} target="_blank" rel="noreferrer" className="block min-w-0" title={p.legenda}>
-                    <div className="relative w-full overflow-hidden rounded-lg border border-border bg-secondary/40" style={{ paddingTop: "100%" }}>
+                    <div className="relative w-full overflow-hidden rounded-lg border border-border bg-muted/40" style={{ paddingTop: "100%" }}>
                       <div className="absolute inset-0">
                         <Foto src={p.imagem_url} alt={p.legenda || "Post"} className="h-full w-full" />
                       </div>
@@ -271,7 +271,7 @@ function ListaDeItens({ titulo, tom, itens, porItem, vazio }: { titulo: string; 
         <ul className="mt-1.5 space-y-2">
           {itens.slice(0, 8).map((i) => (
             <li key={`${i.canal}-${i.id}`} className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-2 text-[12px] leading-snug">
-              <div className="relative w-10 overflow-hidden rounded border border-border bg-secondary/40" style={{ paddingTop: "100%" }}>
+              <div className="relative w-10 overflow-hidden rounded-sm border border-border bg-muted/40" style={{ paddingTop: "100%" }}>
                 <div className="absolute inset-0">
                   <Foto src={i.imagem_url} alt={i.nome} className="h-full w-full" />
                 </div>
@@ -392,7 +392,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
               <ul className="mt-1.5 space-y-1.5">
                 {l.aprendizados.map((a, k) => (
                   <li key={k} className="min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]">
-                    <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>{a.tipo}</span>
+                    <span className={`mr-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>{a.tipo}</span>
                     <span className="mr-1 text-[11px] text-muted-foreground">{a.canal === "organico" ? "orgânico" : "anúncios"}:</span>
                     {a.texto}
                   </li>

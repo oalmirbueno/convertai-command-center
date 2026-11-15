@@ -31,7 +31,7 @@ function LinhaDaCor({ papel, rotulo, dados, ocupado, onEscolher }: { papel: Pape
   return (
     <div className="min-w-0 py-1.5" data-cor-da-previa={papel}>
       <div className="flex min-w-0 items-center">
-        <span aria-hidden="true" className="mr-2 inline-block h-4 w-4 shrink-0 rounded border border-border" style={{ background: atual }} />
+        <span aria-hidden="true" className="mr-2 inline-block h-4 w-4 shrink-0 rounded-full border border-border" style={{ background: atual }} />
         <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{rotulo}</span>
         {ajustada ? (
           <button type="button" className={juntar(botao.discreto, "h-7 px-1.5 text-[12px]")} disabled={ocupado} onClick={() => onEscolher(papel, null)} title="Voltar para a cor da marca">
@@ -43,7 +43,7 @@ function LinhaDaCor({ papel, rotulo, dados, ocupado, onEscolher }: { papel: Pape
       </div>
       <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
         {paleta.map((h) => (
-          <button key={h} type="button" className={juntar("toque-compacto mb-1 mr-1 h-6 w-6 shrink-0 rounded border", h.toLowerCase() === atual.toLowerCase() ? "border-foreground" : "border-border")} style={{ background: h }} aria-label={`Usar ${h}`} title={h} disabled={ocupado} onClick={() => onEscolher(papel, h.toLowerCase())} />
+          <button key={h} type="button" className={juntar("toque-compacto mb-1 mr-1 h-6 w-6 shrink-0 rounded-sm border", h.toLowerCase() === atual.toLowerCase() ? "border-foreground" : "border-border")} style={{ background: h }} aria-label={`Usar ${h}`} title={h} disabled={ocupado} onClick={() => onEscolher(papel, h.toLowerCase())} />
         ))}
         <input value={digitado} onChange={(e) => setDigitado(e.target.value)} onBlur={aplicar} onKeyDown={(e) => e.key === "Enter" && aplicar()} className={juntar(campo, "mb-1 h-7 w-[92px] px-2 text-[12px]")} aria-label={`Código da ${rotulo.toLowerCase()}`} maxLength={7} spellCheck={false} disabled={ocupado} />
       </div>
@@ -181,7 +181,7 @@ export default function LateralDaPrevia({
         <TituloRecolhivel titulo="Edições" recolhido={edicoesRecolhidas} onAlternar={() => setEdicoesRecolhidas(!edicoesRecolhidas)} resumo={abertas.length ? `${abertas.length} para desfazer` : "nenhuma"} />
         {!edicoesRecolhidas && (
           <div className="mt-1 min-w-0">
-            {avisoDoHistorico && <p className={juntar(texto.auxiliar, "mb-1 whitespace-normal text-amber-700 dark:text-amber-400")}>{avisoDoHistorico}</p>}
+            {avisoDoHistorico && <p className={juntar(texto.auxiliar, "mb-1 whitespace-normal text-warning")}>{avisoDoHistorico}</p>}
             {!edicoes.length && !avisoDoHistorico && <p className={texto.auxiliar}>Clique num texto, numa imagem ou numa seção da prévia com Editar ligado.</p>}
             <ul className={lista.aberta}>
               {edicoes.slice(0, 15).map((e) => (

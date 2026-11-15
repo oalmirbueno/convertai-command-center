@@ -75,7 +75,7 @@ export function CartaoTipografico({ r, grande = false, className = "" }: { r: Re
       <p className={`truncate font-medium text-primary ${grande ? "text-[11px]" : "text-[11px]"}`}>
         {[nicho, estilo ? humanizar(estilo) : ""].filter(Boolean).join(" · ") || rotuloDaOrigem(r.origem)}
       </p>
-      <p className={`font-serif font-semibold leading-tight text-foreground [overflow-wrap:anywhere] ${grande ? "text-[24px]" : "line-clamp-5 text-[15px]"}`}>
+      <p className={`tracking-[-0.01em] font-semibold leading-tight text-foreground [overflow-wrap:anywhere] ${grande ? "text-[24px]" : "line-clamp-5 text-[15px]"}`}>
         {"“"}
         {gancho}
         {"”"}
@@ -124,14 +124,14 @@ function Galeria({ imagens, r }: { imagens: ImagemDaGaleria[]; r: ReferenciaAds 
         if (e.key === "ArrowLeft") ir(-1);
       }}
     >
-      <div className="relative h-[44vh] overflow-hidden rounded-lg border border-border bg-secondary/40 sm:h-[56vh]">
+      <div className="relative h-[44vh] overflow-hidden rounded-lg border border-border bg-muted/40 sm:h-[56vh]">
         <Foto key={atual.url} src={atual.url} alt={atual.legenda || r.titulo} contain className="h-full w-full" />
         {total > 1 && (
           <>
-            <button type="button" aria-label="Imagem anterior" onClick={() => ir(-1)} className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-secondary">
+            <button type="button" aria-label="Imagem anterior" onClick={() => ir(-1)} className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-card hover:bg-muted">
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <button type="button" aria-label="Próxima imagem" onClick={() => ir(1)} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-secondary">
+            <button type="button" aria-label="Próxima imagem" onClick={() => ir(1)} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-card hover:bg-muted">
               <ChevronRight className="h-4 w-4" />
             </button>
             <span className="absolute bottom-2 right-2 rounded-full border border-border bg-background px-2 py-0.5 text-[11px] tabular-nums text-foreground">
@@ -198,9 +198,9 @@ export function Indicadores({ m, className = "" }: { m: MetricasDaConta; classNa
   return (
     <dl className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${className}`}>
       {visiveis.map((k) => (
-        <div key={k.chave} className={juntar(superficie.painel, "min-w-0 px-3 py-2")}>
-          <dt className="truncate text-[11px] text-muted-foreground">{k.rotulo}</dt>
-          <dd className="mt-0.5 truncate text-[15px] font-semibold tabular-nums">{k.formato(m[k.chave])}</dd>
+        <div key={k.chave} className={juntar(superficie.painel, "min-w-0 px-4 py-3")}>
+          <dt className="truncate text-[12px] text-muted-foreground">{k.rotulo}</dt>
+          <dd className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums">{k.formato(m[k.chave])}</dd>
         </div>
       ))}
     </dl>
@@ -441,8 +441,8 @@ export default function JanelaDaReferencia({
                 <div className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
                   {r && <SeloDeEvidencia valor={r.evidencia} className="mb-1 mr-2" />}
                   {r && <span className="mb-1 mr-2">{daAgencia ? "Biblioteca da agência" : rotuloDaOrigem(r.origem)}</span>}
-                  {nicho && <span className="mb-1 mr-1.5 rounded-full bg-secondary px-2 py-0.5 text-[11px]">{nicho}</span>}
-                  {estilo && <span className="mb-1 mr-1.5 rounded-full bg-secondary px-2 py-0.5 text-[11px]">{humanizar(estilo)}</span>}
+                  {nicho && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">{nicho}</span>}
+                  {estilo && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">{humanizar(estilo)}</span>}
                   {detalhe.isFetching && (
                     <span className="mb-1 inline-flex items-center text-[12px]">
                       <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> buscando imagens e dados
@@ -547,7 +547,7 @@ export default function JanelaDaReferencia({
                     value={evidencia}
                     disabled={daAgencia}
                     onChange={(e) => setEvidencia(e.target.value as Evidencia)}
-                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px]"
+                    className="h-9 w-full rounded-md border border-input bg-card px-2 text-[13px]"
                   >
                     {ESCALA_DE_EVIDENCIA.filter((e) => evidenciasPossiveis.indexOf(e.valor) >= 0).map((e) => (
                       <option key={e.valor} value={e.valor}>

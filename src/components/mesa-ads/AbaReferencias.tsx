@@ -95,7 +95,7 @@ function Miniatura({ r }: { r: ReferenciaAds }) {
     dominio = "";
   }
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center bg-secondary/60 px-3 text-center">
+    <div className="flex h-full w-full flex-col items-center justify-center bg-muted/60 px-3 text-center">
       <Link2 className="h-5 w-5 text-muted-foreground" />
       <span className="mt-1.5 text-[11px] font-medium text-foreground/80">{rotuloDaOrigem(r.origem)}</span>
       {dominio && <span className="mt-0.5 max-w-full truncate text-[11px] text-muted-foreground">{dominio}</span>}
@@ -146,7 +146,7 @@ function CartaoDaReferencia({ r, onAbrir, onEstrela }: { r: ReferenciaAds; onAbr
             aria-pressed={r.destaque}
             aria-label={r.destaque ? "Tirar o destaque" : "Destacar para o plano"}
             title={daAgencia ? "Biblioteca da agência: só leitura" : r.destaque ? "Em destaque: o estrategista usa no plano" : "Destacar para o plano"}
-            className="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-secondary disabled:opacity-40"
+            className="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-muted disabled:opacity-40"
           >
             <Star className={`h-3.5 w-3.5 ${r.destaque ? "fill-warning text-warning" : "text-muted-foreground"}`} />
           </button>
@@ -353,7 +353,7 @@ export default function AbaReferencias() {
     setDeQuem("todas");
   };
 
-  const seletor = `h-9 min-w-0 max-w-[220px] rounded-md border border-input bg-background px-2 text-[13px] text-foreground ${foco}`;
+  const seletor = `h-9 min-w-0 max-w-[220px] rounded-md border border-input bg-card px-2 text-[13px] text-foreground ${foco}`;
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Referências" memoriaDaRolagem={`mesa-ads:referencias:${clientId}`}>
@@ -505,7 +505,7 @@ export default function AbaReferencias() {
                           href={l.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={juntar("flex min-h-8 items-center rounded px-2 py-1.5 text-[13px] text-foreground hover:bg-muted", foco)}
+                          className={juntar("flex min-h-8 items-center rounded-sm px-2 py-1.5 text-[13px] text-foreground hover:bg-muted", foco)}
                         >
                           <span className="min-w-0 flex-1 truncate">{l.rotulo}</span>
                           <ExternalLink className="ml-2 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />

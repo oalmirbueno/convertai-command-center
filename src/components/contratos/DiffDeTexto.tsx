@@ -14,11 +14,11 @@ export function PartesDoDiff({ partes, className }: { partes: ParteDoDiff[]; cla
         p.tipo === "igual" ? (
           <span key={i}>{p.texto}</span>
         ) : p.tipo === "saiu" ? (
-          <del key={i} className="rounded-sm bg-destructive/10 text-destructive line-through" data-saiu="">
+          <del key={i} className="rounded-sm bg-danger-soft text-destructive line-through" data-saiu="">
             {p.texto}
           </del>
         ) : (
-          <ins key={i} className="rounded-sm bg-success/15 text-success no-underline" data-entrou="">
+          <ins key={i} className="rounded-sm bg-success-soft text-success no-underline" data-entrou="">
             {p.texto}
           </ins>
         ),

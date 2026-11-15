@@ -82,7 +82,7 @@ export default function HistoricoDoAgente({ chave, aoTrocar, className }: { chav
       <button
         type="button"
         onClick={() => setAberto(true)}
-        className={juntar("flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground", className)}
+        className={juntar("flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground", className)}
         title="Histórico das conversas"
         aria-label="Histórico das conversas"
         data-historico-do-agente=""
@@ -221,7 +221,7 @@ function JanelaDoHistorico({ chave, aoFechar, aoTrocar }: { chave: ChaveDaConver
                   {termo && achados.data?.get(c.id) && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">…{achados.data.get(c.id)}…</span>}
                 </button>
                 {!c.arquivada_em && (
-                  <button type="button" onClick={() => arquivar.mutate(c.id)} title="Arquivar" aria-label={`Arquivar ${c.titulo || "conversa"}`} className="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground group-hover:flex">
+                  <button type="button" onClick={() => arquivar.mutate(c.id)} title="Arquivar" aria-label={`Arquivar ${c.titulo || "conversa"}`} className="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground group-hover:flex">
                     <Archive className="h-3.5 w-3.5" />
                   </button>
                 )}
@@ -229,7 +229,7 @@ function JanelaDoHistorico({ chave, aoFechar, aoTrocar }: { chave: ChaveDaConver
             ))}
           </div>
         </div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl border border-border">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-border">
           {!escolhida ? (
             <p className="m-auto px-4 py-8 text-center text-[13px] text-muted-foreground">Escolha uma conversa para ver as mensagens e os arquivos.</p>
           ) : (
@@ -243,7 +243,7 @@ function JanelaDoHistorico({ chave, aoFechar, aoTrocar }: { chave: ChaveDaConver
                 ) : (
                   <>
                     <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{escolhida.titulo || "Conversa sem título"}</p>
-                    <button type="button" onClick={() => setNome(escolhida.titulo || "")} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Renomear" aria-label="Renomear a conversa"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => setNome(escolhida.titulo || "")} className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" title="Renomear" aria-label="Renomear a conversa"><Pencil className="h-3.5 w-3.5" /></button>
                     {escolhida.id !== ativa?.id && (
                       <button type="button" onClick={() => continuar.mutate(escolhida.id)} disabled={continuar.isPending} className={juntar(botao.secundario, "h-8 px-3 text-[12px]")}>
                         <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" />Continuar esta
@@ -264,9 +264,9 @@ function JanelaDoHistorico({ chave, aoFechar, aoTrocar }: { chave: ChaveDaConver
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
                 {mensagens.isLoading ? <Carregando linhas={3} rotulo="Carregando as mensagens" /> : (mensagens.data || []).filter((m) => m.conteudo).map((m) => (
                   m.papel === "usuario" ? (
-                    <div key={m.id} className="ml-8 rounded-xl rounded-br-md bg-primary/10 px-3 py-2 text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere]">{m.conteudo}</div>
+                    <div key={m.id} className="ml-8 rounded-lg rounded-br-md bg-primary/10 px-3 py-2 text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere]">{m.conteudo}</div>
                   ) : m.papel === "agente" ? (
-                    <div key={m.id} className="mr-8 rounded-xl rounded-bl-md bg-muted/60 px-3 py-2"><TextoDoAgente texto={m.conteudo} clientId={chave.clientId} /></div>
+                    <div key={m.id} className="mr-8 rounded-lg rounded-bl-md bg-muted/60 px-3 py-2"><TextoDoAgente texto={m.conteudo} clientId={chave.clientId} /></div>
                   ) : (
                     <p key={m.id} className="text-center text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{m.conteudo}</p>
                   )

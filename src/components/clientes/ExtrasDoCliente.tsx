@@ -114,7 +114,7 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
                 <div className="flex min-w-0 flex-wrap items-baseline">
                   <span className="mr-2 min-w-0 text-[14px] font-medium text-foreground">{e.nome}</span>
                   <span className={juntar(etiqueta, "mr-2 bg-secondary text-muted-foreground")}>{nomeDaCategoria(e.categoria)}</span>
-                  {e.status === "aguardando" && <span className={juntar(etiqueta, "mr-2 bg-warning/15 text-warning")}>aguardando a entrega</span>}
+                  {e.status === "aguardando" && <span className={juntar(etiqueta, "mr-2 bg-warning-soft text-warning")}>aguardando a entrega</span>}
                   {encerrado && <span className={juntar(etiqueta, "mr-2 bg-secondary text-muted-foreground")}>encerrado em {dataCurta(e.encerrado_em)}</span>}
                   <span className="ml-auto shrink-0 text-[14px] font-semibold tabular-nums text-foreground">
                     {e.cobranca === "mensal" ? `${dinheiro(e.valor)} por mês` : e.cobranca === "unico" ? dinheiro(e.valor) : e.percentual ? `${String(e.percentual).replace(".", ",")}%` : "variável"}

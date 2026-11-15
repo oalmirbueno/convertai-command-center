@@ -241,7 +241,7 @@ export default function AgendaComercial({
                         aria-hidden="true"
                         className={juntar(
                           "mt-0.5 w-full truncate rounded px-1 text-[11px] font-medium leading-4 tabular-nums",
-                          temAtraso ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary",
+                          temAtraso ? "bg-warning-soft text-warning" : "bg-accent-soft text-primary",
                         )}
                       >
                         {abertas.length}

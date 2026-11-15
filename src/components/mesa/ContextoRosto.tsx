@@ -161,7 +161,7 @@ export default function ContextoRosto() {
                   </span>
                 </p>
                 <label className="mt-1.5 flex items-center text-[11px] text-muted-foreground">
-                  <Switch checked={r.ativa} onCheckedChange={(v) => void alternar(r, v)} className="mr-1.5 scale-75" />
+                  <Switch checked={r.ativa} onCheckedChange={(v) => void alternar(r, v)} className="toque-compacto mr-1.5 scale-75" />
                   {r.ativa ? "em uso" : "fora"}
                 </label>
               </div>

@@ -34,7 +34,7 @@ function gravar(lista: Lugar[]) {
 }
 
 const BOTAO =
-  "toque-compacto inline-flex h-8 min-w-0 items-center rounded-lg px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "toque-compacto inline-flex h-8 min-w-0 items-center rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * `compacto` (topo do celular, 16/10/2026): só a seta de voltar, sem a lista

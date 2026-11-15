@@ -112,7 +112,7 @@ export default function TaskChecklistTemplatePicker({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[12px] leading-4 font-semibold text-foreground">{tpl.title}</p>
-                    <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+                    <span className="text-[11px] tabular-nums text-muted-foreground shrink-0">
                       {tpl.items.length} itens
                     </span>
                   </div>

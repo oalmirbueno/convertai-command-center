@@ -21,7 +21,7 @@ import {
   etiqueta,
   foco,
   juntar,
-  lista,
+  superficie,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
@@ -191,7 +191,7 @@ export default function ClientRequests() {
       ) : visiveis.length === 0 ? (
         <EstadoVazio compacto titulo="Nenhum pedido neste filtro." />
       ) : (
-        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Seus pedidos">
+        <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")} aria-label="Seus pedidos">
           {visiveis.map((r: any) => {
             const status = statusBadge[r.status] || statusBadge.new;
             const prio = priorityBadge[r.priority] || priorityBadge.normal;
@@ -201,7 +201,7 @@ export default function ClientRequests() {
                   <button
                     type="button"
                     onClick={() => setPedidoAberto(r)}
-                    className={juntar("flex min-h-[56px] w-full min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors active:bg-muted/40", foco)}
+                    className={juntar("flex min-h-[56px] w-full min-w-0 items-center rounded-md px-2 py-3 text-left transition-colors active:bg-muted/40", foco)}
                   >
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center">

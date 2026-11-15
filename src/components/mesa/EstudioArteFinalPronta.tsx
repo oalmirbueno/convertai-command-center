@@ -123,7 +123,7 @@ export default function EstudioArteFinalPronta({
     <section
       aria-label="Arte final da lâmina"
       data-arte-final-pronta=""
-      className="min-w-0 rounded-md border border-dashed border-border p-2.5"
+      className="min-w-0 rounded-md bg-muted/50 p-3"
     >
       <div className="flex min-w-0 items-center">
         <FileCheck2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />

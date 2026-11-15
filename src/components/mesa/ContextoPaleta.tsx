@@ -88,7 +88,7 @@ export function PaletaDaMarca({ paleta, carregando = false }: { paleta: CorDoKit
     return (
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-[104px] animate-pulse rounded-xl bg-muted" />
+          <div key={i} className="h-[104px] animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
     );

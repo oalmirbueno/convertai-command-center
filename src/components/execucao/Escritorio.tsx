@@ -239,7 +239,7 @@ export default function Escritorio({
         const aberta = estaAberta(area, urgencia);
         const larga = aberta && doGrupo.length > 2;
         return (
-        <section key={area} aria-label={area} className={juntar("min-w-0 rounded-xl border border-border p-3", larga && "lg:col-span-2 2xl:col-span-3")}>
+        <section key={area} aria-label={area} className={juntar("min-w-0 rounded-lg border border-border p-3", larga && "lg:col-span-2 2xl:col-span-3")}>
           {/* O nome da área, discreto: separa sem competir com a lista. O
               título recolhe pelo componente do sistema (setinha + título); a
               contagem fica à vista nos dois estados. */}

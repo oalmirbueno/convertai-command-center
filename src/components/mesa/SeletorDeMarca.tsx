@@ -49,7 +49,7 @@ export default function SeletorDeMarca({
       role="radiogroup"
       aria-label="Marca do cliente"
       title="Marca: logo, cores, referências e itens do mês só desta marca"
-      className={`flex h-8 min-w-0 shrink-0 items-center rounded-lg bg-muted p-0.5 ${className}`}
+      className={`flex h-8 min-w-0 shrink-0 items-center rounded-full bg-muted p-0.5 ${className}`}
     >
       {marcas.map((m) => {
         const ativa = m.id === valor;
@@ -62,7 +62,7 @@ export default function SeletorDeMarca({
             onClick={() => {
               if (!ativa) onEscolher(m.id);
             }}
-            className={`h-7 min-w-0 max-w-[140px] truncate rounded-md px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            className={`toque-compacto h-7 min-w-0 max-w-[140px] truncate rounded-full px-3 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               ativa ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >

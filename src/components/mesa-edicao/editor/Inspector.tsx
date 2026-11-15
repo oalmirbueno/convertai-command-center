@@ -494,7 +494,7 @@ function ParametrosDaPecaNoClipe({ c, mudar }: { c: ClipeDoProjeto; mudar: Mudar
           return (
             <label key={p.chave} className="flex min-w-0 items-center">
               <span className={juntar(texto.rotulo, "mr-2")}>{p.rotulo}</span>
-              <input type="color" className="h-7 w-10 cursor-pointer rounded border border-border bg-transparent" defaultValue={typeof atual === "string" ? atual : "#ffffff"} key={chave} onBlur={(ev) => gravar(p.chave, ev.target.value)} aria-label={p.rotulo} />
+              <input type="color" className="h-7 w-10 cursor-pointer rounded-sm border border-border bg-transparent" defaultValue={typeof atual === "string" ? atual : "#ffffff"} key={chave} onBlur={(ev) => gravar(p.chave, ev.target.value)} aria-label={p.rotulo} />
             </label>
           );
         if (p.tipo === "lista")
@@ -539,9 +539,9 @@ function FundoDaCena({ c, mudar }: { c: ClipeDoProjeto; mudar: Mudar }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center border-t border-border pt-3" data-fundo-da-cena="">
       <span className={juntar(texto.rotulo, "mr-2")}>Fundo</span>
-      <input type="color" className="mr-3 h-7 w-10 cursor-pointer rounded border border-border bg-transparent" defaultValue={String(e.fundo)} key={`${c.id}:f:${String(e.fundo)}`} onBlur={(ev) => ev.target.value !== e.fundo && cor("fundo", ev.target.value)} aria-label="Cor do fundo" />
+      <input type="color" className="mr-3 h-7 w-10 cursor-pointer rounded-sm border border-border bg-transparent" defaultValue={String(e.fundo)} key={`${c.id}:f:${String(e.fundo)}`} onBlur={(ev) => ev.target.value !== e.fundo && cor("fundo", ev.target.value)} aria-label="Cor do fundo" />
       <span className={juntar(texto.rotulo, "mr-2")}>Degradê</span>
-      <input type="color" className="mr-2 h-7 w-10 cursor-pointer rounded border border-border bg-transparent" defaultValue={typeof e.fundo2 === "string" ? e.fundo2 : String(e.fundo)} key={`${c.id}:f2:${String(e.fundo2)}`} onBlur={(ev) => ev.target.value !== e.fundo2 && ev.target.value !== e.fundo && cor("fundo2", ev.target.value)} aria-label="Segunda cor do degradê" />
+      <input type="color" className="mr-2 h-7 w-10 cursor-pointer rounded-sm border border-border bg-transparent" defaultValue={typeof e.fundo2 === "string" ? e.fundo2 : String(e.fundo)} key={`${c.id}:f2:${String(e.fundo2)}`} onBlur={(ev) => ev.target.value !== e.fundo2 && ev.target.value !== e.fundo && cor("fundo2", ev.target.value)} aria-label="Segunda cor do degradê" />
       {typeof e.fundo2 === "string" && (
         <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => cor("fundo2", "")}>
           Sem degradê

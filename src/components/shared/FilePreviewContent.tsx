@@ -50,7 +50,7 @@ function InlineImage({ fileName, fileUrl }: { fileName: string; fileUrl: string 
 
   if (errored) {
     return (
-      <div className="bg-secondary rounded-xl flex flex-col items-center justify-center py-10 gap-3">
+      <div className="bg-muted rounded-lg flex flex-col items-center justify-center py-10 gap-3">
         <FileText className="w-10 h-10 text-muted-foreground/40" />
         <p className="text-[12px] leading-4 text-muted-foreground">Não foi possível carregar. Tente novamente.</p>
         <Button size="sm" variant="outline" onClick={() => { setErrored(false); setLoaded(false); }}>
@@ -63,10 +63,10 @@ function InlineImage({ fileName, fileUrl }: { fileName: string; fileUrl: string 
   return (
     <div
       ref={containerRef}
-      className={`relative bg-secondary rounded-xl overflow-auto flex items-center justify-center ${zoomed ? "max-h-[80vh]" : "p-2"}`}
+      className={`relative bg-muted rounded-lg overflow-auto flex items-center justify-center ${zoomed ? "max-h-[80vh]" : "p-2"}`}
     >
       {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-secondary/60 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/60 z-10">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       )}
@@ -208,7 +208,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   if (resolvingUrl && isStorageBacked) {
     return (
-      <div className="h-64 bg-secondary rounded-xl flex items-center justify-center gap-2 text-[12px] leading-4 text-muted-foreground">
+      <div className="h-64 bg-muted rounded-lg flex items-center justify-center gap-2 text-[12px] leading-4 text-muted-foreground">
         <Loader2 className="w-4 h-4 animate-spin" /> Carregando arquivo...
       </div>
     );
@@ -216,7 +216,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   if (urlError) {
     return (
-      <div className="bg-secondary rounded-xl flex flex-col items-center justify-center py-10 gap-3 text-center px-6">
+      <div className="bg-muted rounded-lg flex flex-col items-center justify-center py-10 gap-3 text-center px-6">
         <FileText className="w-10 h-10 text-muted-foreground/40" />
         <p className="text-[13px] leading-5 font-medium text-foreground break-all">{fileName}</p>
         <p className="text-[12px] leading-4 text-muted-foreground">Não foi possível carregar o arquivo agora.</p>
@@ -229,7 +229,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
   const embedUrl = getVideoEmbedUrl(previewUrl);
   if (embedUrl) {
     return (
-      <div className="bg-black rounded-xl overflow-hidden">
+      <div className="bg-black rounded-lg overflow-hidden">
         <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
           <iframe
             src={embedUrl}
@@ -249,7 +249,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   const canShowFrames = !!fileId && !!framesKind;
   const DocTabs = canShowFrames ? (
-    <div className="flex items-center gap-1 p-1 bg-secondary/60 border-b border-border">
+    <div className="flex items-center gap-1 p-1 bg-muted/60 border-b border-border">
       {!officeLike && (
         <button
           onClick={() => setTab("viewer")}
@@ -274,7 +274,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   if (canShowFrames && (tab === "frames" || officeLike)) {
     return (
-      <div className="rounded-xl overflow-hidden border border-border bg-background">
+      <div className="rounded-lg overflow-hidden border border-border bg-background">
         {DocTabs}
         <ExtractedFramesPreview fileId={fileId!} kind={framesKind!} />
       </div>
@@ -284,7 +284,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   if (mediaKind === "pdf" || isPdf(fileName, previewUrl)) {
     return (
-      <div className="rounded-xl overflow-hidden flex flex-col border border-border">
+      <div className="rounded-lg overflow-hidden flex flex-col border border-border">
         {DocTabs}
         <iframe
           src={`${previewUrl}#toolbar=1&navpanes=0&view=FitH`}
@@ -292,7 +292,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
           className="w-full h-[70vh] bg-white border-0"
           loading="eager"
         />
-        <div className="flex items-center justify-center gap-4 py-2 bg-secondary/50 border-t border-border">
+        <div className="flex items-center justify-center gap-4 py-2 bg-muted/50 border-t border-border">
           <button
             type="button"
             onClick={() => openFile(previewUrl)}
@@ -317,7 +317,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
     const gviewSrc = `https://docs.google.com/gview?embedded=1&url=${encoded}`;
     return (
       <div className={`${superficie.painel} overflow-hidden flex flex-col`}>
-        <div className="min-h-[320px] flex flex-col items-center justify-center gap-4 px-6 py-12 text-center bg-secondary/30">
+        <div className="min-h-[320px] flex flex-col items-center justify-center gap-4 px-6 py-12 text-center bg-muted/30">
           <div className="w-16 h-16 rounded-md bg-background border border-border flex items-center justify-center">
             <FileText className="w-8 h-8 text-muted-foreground" />
           </div>
@@ -333,7 +333,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
             </Button>
           )}
         </div>
-        <div className="flex items-center justify-center gap-4 py-2 bg-secondary/50 border-t border-border flex-wrap">
+        <div className="flex items-center justify-center gap-4 py-2 bg-muted/50 border-t border-border flex-wrap">
           <a href={gviewSrc} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-primary hover:underline">
             <Eye className="w-3 h-3" /> Visualizador alternativo
           </a>
@@ -350,7 +350,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   if (mediaKind === "video" || isVideo(fileName, previewUrl)) {
     return (
-      <div className="bg-secondary rounded-xl overflow-hidden p-2">
+      <div className="bg-muted rounded-lg overflow-hidden p-2">
         <video
           src={previewUrl}
           controls
@@ -364,7 +364,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   if (mediaKind === "audio" || isAudio(fileName, previewUrl)) {
     return (
-      <div className="bg-secondary rounded-xl p-6 flex flex-col items-center gap-3">
+      <div className="bg-muted rounded-lg p-6 flex flex-col items-center gap-3">
         <p className="text-[13px] leading-5 font-medium text-foreground text-center break-all">{fileName}</p>
         <audio src={previewUrl} controls className="w-full" />
       </div>
@@ -373,7 +373,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   // Generic file — nice card with actions
   return (
-    <div className="bg-secondary rounded-xl flex flex-col items-center justify-center py-10 gap-4">
+    <div className="bg-muted rounded-lg flex flex-col items-center justify-center py-10 gap-4">
       <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
         <FileText className="w-8 h-8 text-muted-foreground" />
       </div>

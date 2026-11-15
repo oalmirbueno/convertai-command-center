@@ -134,7 +134,7 @@ function Miniatura({ caminho, alt, tamanho = "h-16 w-16", marcada = false }: { c
 }
 
 function Linha({ children, tom = "neutro" }: { children: ReactNode; tom?: "neutro" | "aviso" | "ok" }) {
-  const cor = tom === "aviso" ? "text-amber-600 dark:text-amber-400" : tom === "ok" ? "text-success" : "text-muted-foreground";
+  const cor = tom === "aviso" ? "text-warning" : tom === "ok" ? "text-success" : "text-muted-foreground";
   return <p className={juntar("text-[12px] leading-4", cor)}>{children}</p>;
 }
 
@@ -656,7 +656,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                   className={juntar("mb-1 mr-1 flex min-w-0 max-w-full items-center rounded-md px-1 py-0.5 text-left text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
                   data-selo="resumo-do-gerar"
                 >
-                  <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 transition-transform", gradeAberta ? "" : "-rotate-90")} aria-hidden="true" />
+                  <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 transition-transform duration-200", gradeAberta ? "" : "-rotate-90")} aria-hidden="true" />
                   <span className="min-w-0 truncate">{resumoDoGerar}</span>
                 </button>
                 <AjudaRecolhida className="mb-1 ml-1" rotulo="O que vai na direção do selo">

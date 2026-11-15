@@ -68,8 +68,8 @@ const PARTES_ANTIGAS: Record<string, string> = { versoes: "historico", trilha: "
 
 const COR_DO_STATUS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
-  sent: "bg-warning/15 text-warning",
-  completed: "bg-success/15 text-success",
+  sent: "bg-warning-soft text-warning",
+  completed: "bg-success-soft text-success",
   cancelled: "bg-muted text-muted-foreground",
   substituido: "bg-muted text-muted-foreground",
 };

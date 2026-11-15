@@ -461,7 +461,7 @@ function CartaoDaFoto({
           type="button"
           onClick={onAmpliar}
           aria-label={`Ver grande ${foto.nome}`}
-          className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+          className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-card hover:text-foreground"
         >
           <Maximize2 className="h-3 w-3" />
         </button>
@@ -485,7 +485,7 @@ function CartaoDaFoto({
           ]}
         />
       </div>
-      <label className="absolute right-1.5 top-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
+      <label className="absolute right-1.5 top-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-card">
         <input type="checkbox" checked={marcada} onChange={onMarcar} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Selecionar ${foto.nome}`} />
       </label>
     </div>
@@ -842,7 +842,7 @@ export default function EtapaAcervo() {
             <div className="shrink-0 border-b border-border px-3 pb-2 pt-2.5" data-barra-das-fotos="">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-y-1">
                 {/* Produto e Modelo, cada um com a contagem: só fotos, nunca artes. */}
-                <div role="tablist" aria-label="Lado das fotos" className="mr-2 flex min-w-0 rounded-lg bg-muted p-0.5" data-lados-das-fotos="">
+                <div role="tablist" aria-label="Lado das fotos" className="mr-2 flex min-w-0 rounded-full bg-muted p-0.5" data-lados-das-fotos="">
                   {LADOS_DA_FOTO.map((l) => {
                     const ativo = lado === l.valor;
                     const n = l.valor === "modelo" ? separadas.modelo.length : separadas.produto.length;
@@ -855,7 +855,7 @@ export default function EtapaAcervo() {
                         aria-label={`${l.rotulo} ${n}`}
                         title={`${l.rotulo}: ${l.dica}`}
                         onClick={() => setLado(l.valor)}
-                        className={juntar("toque-compacto inline-flex h-8 items-center rounded-md px-2 text-[13px] font-medium", ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground", foco)}
+                        className={juntar("toque-compacto inline-flex h-8 items-center rounded-full px-2 text-[13px] font-medium", ativo ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground", foco)}
                         data-lado={l.valor}
                       >
                         {/* 16/10/2026: aba só com o ícone e a contagem pequena (o nome no title). */}
@@ -908,7 +908,7 @@ export default function EtapaAcervo() {
                   {escolhidas.length ? ` · ${escolhidas.length} ${escolhidas.length === 1 ? "marcada" : "marcadas"}` : ""}
                 </span>
                 {visiveis.length > 0 && (
-                  <button type="button" className={juntar("mr-3 rounded font-medium text-primary hover:underline", foco)} onClick={marcarVisiveis}>
+                  <button type="button" className={juntar("mr-3 rounded-sm font-medium text-primary hover:underline", foco)} onClick={marcarVisiveis}>
                     {todasVisiveisMarcadas ? "Desmarcar as visíveis" : "Selecionar as visíveis"}
                   </button>
                 )}
@@ -957,7 +957,7 @@ export default function EtapaAcervo() {
                 data-barra-de-selecao=""
               >
                 <div
-                  className="pointer-events-auto flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto overscroll-contain scrollbar-hidden rounded-md border border-border bg-card px-2 py-1.5 shadow-sm lg:rounded-none lg:border-0 lg:px-1 lg:shadow-none"
+                  className="pointer-events-auto flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto overscroll-contain scrollbar-hidden rounded-md border border-border bg-card px-2 py-1.5 shadow-card lg:rounded-none lg:border-0 lg:px-1 lg:shadow-none"
                   data-linha-da-selecao=""
                 >
                   <span className="mr-1 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[12px] font-semibold tabular-nums text-primary" title={`${escolhidas.length} ${escolhidas.length === 1 ? "foto marcada" : "fotos marcadas"}`}>

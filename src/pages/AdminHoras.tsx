@@ -8,7 +8,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import GradeDeSecoes from "@/components/sistema/GradeDeSecoes";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campo, espaco, juntar, lista } from "@/components/sistema/estilos";
+import { botao, campo, espaco, juntar, lista, superficie } from "@/components/sistema/estilos";
 import { BarraFina, BarrasPorMes, MapaDeHoras } from "@/components/horas/Graficos";
 import {
   CARGA_PADRAO_HORAS,
@@ -47,6 +47,7 @@ import {
   rotuloDoMes,
 } from "@/lib/horas/formato";
 import { cn } from "@/lib/utils";
+import { useLarguraMinima } from "@/hooks/useLarguraMinima";
 
 /**
  * Horas e custos (frente CR, 28/09). Admin e gestor. Junta o tempo que o
@@ -97,7 +98,7 @@ function TabelaDeComparacao({
   rotuloDoAtual: string;
 }) {
   return (
-    <div className="min-w-0 overflow-x-auto">
+    <div className={juntar(superficie.painel, "min-w-0 overflow-x-auto px-1 py-1 sm:px-2")}>
       <table className="w-full min-w-[560px] text-[13px]">
         <thead className="border-b border-border">
           <tr>
@@ -319,6 +320,8 @@ export default function AdminHoras() {
   // Quem: o gestor vê sempre o próprio tempo (o banco garante); o admin escolhe.
   const pessoa = !ehAdmin ? null : pessoaGuardada === "eu" ? (user && user.id) || null : pessoaGuardada === "todos" ? null : pessoaGuardada;
   const resumo = useResumoDeHoras(mes, pessoa);
+  // Celular: o período do dia vira lista (a faixa de quatro opções não cabe ao lado do título).
+  const telaLarga = useLarguraMinima(640);
   const custos = useCustosDoHistorico(mes, {});
 
   const dados = resumo.data;
@@ -390,7 +393,7 @@ export default function AdminHoras() {
   })();
 
   const seletorDoMes = (
-    <select aria-label="Mês" value={mes} onChange={(e) => setMes(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-8 w-auto max-w-[200px] px-2")}>
+    <select aria-label="Mês" value={mes} onChange={(e) => setMes(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto max-w-[200px] rounded-full px-3")}>
       {opcoesDeMes.map((m) => (
         <option key={m} value={m}>
           {maiuscula(rotuloDoMes(m))}
@@ -399,7 +402,7 @@ export default function AdminHoras() {
     </select>
   );
   const seletorDePessoa = ehAdmin ? (
-    <select aria-label="Pessoa" value={pessoaGuardada} onChange={(e) => setPessoa(e.target.value)} className={juntar(campo, "mb-1 h-8 w-auto max-w-[200px] px-2")}>
+    <select aria-label="Pessoa" value={pessoaGuardada} onChange={(e) => setPessoa(e.target.value)} className={juntar(campo, "mb-1 h-9 w-auto max-w-[200px] rounded-full px-3")}>
       <option value="eu">Você</option>
       <option value="todos">Equipe toda</option>
       {((dados && dados.pessoas) || [])
@@ -536,7 +539,7 @@ export default function AdminHoras() {
                 className="mb-1 mr-2"
               />
               {chaveDoRecorte === "semana" && (
-                <select aria-label="Semana" value={semanaUsada} onChange={(e) => setSemana(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-8 w-auto px-2")}>
+                <select aria-label="Semana" value={semanaUsada} onChange={(e) => setSemana(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto rounded-full px-3")}>
                   {semanas.map((s) => (
                     <option key={s} value={s}>
                       Semana de {s.slice(8, 10)}/{s.slice(5, 7)}
@@ -545,7 +548,7 @@ export default function AdminHoras() {
                 </select>
               )}
               {chaveDoRecorte === "dia" && diasComTempo.length > 0 && (
-                <select aria-label="Dia" value={dia} onChange={(e) => setDia(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-8 w-auto px-2")}>
+                <select aria-label="Dia" value={dia} onChange={(e) => setDia(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto rounded-full px-3")}>
                   {diasComTempo.map((d) => (
                     <option key={d} value={d}>
                       {d.slice(8, 10)}/{d.slice(5, 7)}
@@ -558,6 +561,7 @@ export default function AdminHoras() {
                 valor={periodo}
                 onEscolher={(v) => setPeriodo(v)}
                 opcoes={[{ valor: "todos", rotulo: "Dia todo" }].concat(PERIODOS.map((p) => ({ valor: p.chave, rotulo: p.rotulo })))}
+                modo={telaLarga ? undefined : "lista"}
                 className="mb-1"
               />
             </div>
@@ -571,7 +575,7 @@ export default function AdminHoras() {
               descricao={semHoras ? "As horas aparecem aqui conforme o trabalho nos clientes." : "Escolha outro mês."}
             />
           ) : (
-            <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Clientes do mês">
+            <ul className={juntar(superficie.painel, lista.divisoria, "px-2 py-1.5 sm:px-3")} aria-label="Clientes do mês">
               {ordenadas.map((l) => (
                 <LinhaDoCliente
                   key={l.client_id}
@@ -637,7 +641,7 @@ export default function AdminHoras() {
         </GradeDeSecoes>
 
         <Secao titulo="Histórico" descricao="o mês fecha sozinho na virada" ajuda="Cada linha é um mês de São Paulo. O tempo zera no começo do mês e o mês anterior fica guardado aqui.">
-          <div className="min-w-0 overflow-x-auto">
+          <div className={juntar(superficie.painel, "min-w-0 overflow-x-auto px-1 py-1 sm:px-2")}>
             <table className="w-full min-w-[720px] text-[13px]">
               <thead className="border-b border-border">
                 <tr>

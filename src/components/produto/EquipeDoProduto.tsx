@@ -27,7 +27,7 @@ import { Barra, CartaoDoPainel, Foto } from "./pecas";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as unknown as { from: (t: string) => any };
 
-const COR_DO_PAPEL: Record<PapelNaConta, string> = { admin: "bg-primary/10 text-primary", gerente: "bg-warning/10 text-warning", usuario: "bg-muted text-muted-foreground" };
+const COR_DO_PAPEL: Record<PapelNaConta, string> = { admin: "bg-accent-soft text-primary", gerente: "bg-warning-soft text-warning", usuario: "bg-muted text-muted-foreground" };
 const nomeDe = (m: { nome?: string | null; email?: string | null }) => m.nome || m.email || "Sem nome";
 
 /** Reduz a foto para um quadrado pequeno (cabe no banco e carrega na hora). */

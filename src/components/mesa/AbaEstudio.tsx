@@ -1371,7 +1371,7 @@ export function DetalheDoItem({
   const seletorDeGerador = (
     <div className="w-[128px] min-w-0 shrink-0">
       <Select value={modeloImagem || ""} onValueChange={(id) => { setModeloImagem(id); void guardarEscolha({ modelo_imagem_id: id }); }} disabled={emLote || opcoesDeImagem.length === 0}>
-        <SelectTrigger className="h-8 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
+        <SelectTrigger className="toque-compacto h-8 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
           <SelectValue placeholder={opcoesDeImagem.length ? "Gerador" : "Sem gerador"} />
         </SelectTrigger>
         <SelectContent>
@@ -1389,7 +1389,7 @@ export function DetalheDoItem({
   const chaveCorrigirSozinho = (
     <div className="inline-flex h-8 shrink-0 items-center" data-corrigir-sozinho={corrigirSozinho ? "ligado" : "desligado"}>
       <ShieldCheck className={`mr-1.5 h-3.5 w-3.5 shrink-0 ${corrigirSozinho ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
-      <Switch
+      <Switch className="toque-compacto"
         id={`corrigir-sozinho-${item.id}`}
         checked={corrigirSozinho}
         onCheckedChange={(v) => setCorrigirSozinho(v === true)}
@@ -1484,7 +1484,7 @@ export function DetalheDoItem({
   // o item, os ajustes da geração, a ação principal e a tela cheia (só o ícone) numa faixa só, que quebra
   // em duas quando não cabe. Nenhuma função saiu: a explicação de cada chave está no "?" ou na dica.
   const barraDoItem = (
-    <div className="shrink-0 border-b border-primary">
+    <div className="shrink-0 border-b border-border">
       <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 py-1.5" data-barra-do-item="">
         <div className="flex min-w-[140px] flex-1 basis-[150px] items-center">
           {temRoteiro && (
@@ -1608,7 +1608,7 @@ export function DetalheDoItem({
   const avisoDePostDeFotos = trabalho && ehPostDeFotos(trabalho.direcao) ? (
     <div className="mb-3 flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-[12px] leading-snug" role="status" data-aviso="post-de-fotos">
       <span className="mr-2 min-w-0 flex-1">Este item é um post de fotos da Mesa Foto: as fotos vão como estão, sem arte. Troque as fotos, a legenda e envie ao cliente por lá.</span>
-      <Link to={linkDoPostNaMesaFoto(clientId, { taskId: item.id, trabalhoId: trabalho.id })} className="inline-flex h-8 shrink-0 items-center rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground">
+      <Link to={linkDoPostNaMesaFoto(clientId, { taskId: item.id, trabalhoId: trabalho.id })} className="inline-flex h-8 shrink-0 items-center rounded-full bg-primary px-2.5 text-[12px] font-medium text-primary-foreground">
         Abrir na Mesa Foto
       </Link>
     </div>
@@ -2203,7 +2203,7 @@ export function DetalheDoItem({
 
       {cardsDaDirecao.length > 1 && (
         <label className="flex cursor-pointer items-start rounded-lg border border-border bg-background px-3 py-2.5">
-          <Switch checked={infinito} onCheckedChange={(v) => void alternarContinuo(v)} disabled={salvandoContinuo || algoGerando || entregue || formato !== "feed_4x5"} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
+          <Switch checked={infinito} onCheckedChange={(v) => void alternarContinuo(v)} disabled={salvandoContinuo || algoGerando || entregue || formato !== "feed_4x5"} className="toque-compacto mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
           <span className="min-w-0">
             <span className="block text-[13px] font-medium">Carrossel contínuo</span>
             <span className="block text-[12px] leading-snug text-muted-foreground">
@@ -2458,7 +2458,7 @@ export function DetalheDoItem({
         type="button"
         onClick={() => setFerramenta("")}
         aria-label="Fechar a ferramenta"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
       >
         <X className="h-4 w-4" />
       </button>
@@ -2879,7 +2879,7 @@ export default function AbaEstudio({
 
   const carregando = dados.isLoading || (!!tarefaId && !selecionado && (avulso.isLoading || avulso.isFetching));
   const vazio = itemDeOutraMarca ? (
-    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-xl border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-item-de-outra-marca="">
+    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-lg border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-item-de-outra-marca="">
       <p className="text-[14px] font-semibold">Este item é de outra marca</p>
       <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. O Estúdio mostra e gera só a marca {marcaAberta ? marcaAberta.nome : "aberta"}, com o kit dela.</p>
     </div>

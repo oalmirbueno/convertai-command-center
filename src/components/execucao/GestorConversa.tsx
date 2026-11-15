@@ -370,7 +370,7 @@ function AnexosDoPedido({ p }: { p?: PedidoDoDono | null }) {
   return (
     <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5 sm:max-w-[75%]">
       {p.audio && <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"><Mic className="h-3 w-3" />Áudio {tempoDoAudio(p.audio.segundos)} · transcrito</span>}
-      {(p.previas || []).map((src, i) => <img key={i} src={src} alt="" className="h-16 w-16 rounded-xl border border-border object-cover" />)}
+      {(p.previas || []).map((src, i) => <img key={i} src={src} alt="" className="h-16 w-16 rounded-md border border-border object-cover" />)}
       {!p.previas?.length && imgs.length > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground"><ImageIcon className="h-3 w-3" />{imgs.length} {imgs.length === 1 ? "imagem" : "imagens"}</span>}
       {docs.map((a, i) => <span key={i} className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground" title={`${a.caracteres.toLocaleString("pt-BR")} caracteres lidos`}><FileText className="h-3 w-3 shrink-0" /><span className="truncate">{a.nome}</span></span>)}
       {(p.nao_lidos || []).map((a, i) => <span key={`n${i}`} className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 text-[11px] text-warning" title={a.motivo}><CircleAlert className="h-3 w-3 shrink-0" /><span className="truncate">{a.nome} (não lido)</span></span>)}

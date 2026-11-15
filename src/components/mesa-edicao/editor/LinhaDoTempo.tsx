@@ -193,7 +193,7 @@ const ClipeNaFaixa = memo(function ClipeNaFaixa({ projeto, t, c, ativo, a, px, f
   const rotulo = rotuloDoClipe(projeto, c);
   return (
     <div
-      className={juntar("group absolute top-1 bottom-1 overflow-hidden rounded border text-left transition-opacity", COR[t.tipo], ativo && "ring-2 ring-primary", destacado && !ativo && "ring-2 ring-amber-400", apagado && !ativo && "opacity-25", a && "z-20 opacity-90 shadow-sm")}
+      className={juntar("group absolute top-1 bottom-1 overflow-hidden rounded border text-left transition-opacity", COR[t.tipo], ativo && "ring-2 ring-primary", destacado && !ativo && "ring-2 ring-amber-400", apagado && !ativo && "opacity-25", a && "z-20 opacity-90 shadow-card")}
       style={{ left: esquerda, width: Math.max(2, w), transform: a && a.tipo === "mover" ? `translateY(${a.dy}px)` : undefined, cursor: "grab" }}
       title={`${apelido} · ${rotulo} · ${tempoFino(c.inicio_s)} a ${tempoFino(fimDoClipe(c))}`}
       data-clipe={c.id}

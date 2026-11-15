@@ -459,7 +459,7 @@ export default function ProjectJournal({
                   className={`relative z-10 mr-3 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${
                     isNote
                       ? "border-primary/30 bg-primary/10 text-primary"
-                      : "border-border bg-secondary/50 text-muted-foreground"
+                      : "border-border bg-muted/50 text-muted-foreground"
                   }`}
                 >
                   <EntryIcon className="h-3.5 w-3.5" />

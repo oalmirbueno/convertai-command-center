@@ -275,7 +275,7 @@ export default function ChavesECotas({
                   Desligado, o cliente sem chave própria de um provedor fica sem IA daquele provedor.
                 </AjudaRecolhida>
               </span>
-              <Switch
+              <Switch className="toque-compacto"
                 id="usar-chave-da-agencia"
                 checked={lista.data.usar_chave_agencia}
                 disabled={salvandoConfig}

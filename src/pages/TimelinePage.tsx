@@ -604,7 +604,7 @@ export default function TimelinePage() {
                     >
                       <div className={`absolute -left-[9px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full ${
                         m.status === "completed" ? "bg-primary" :
-                        m.status === "in_progress" ? "border-[2.5px] border-primary bg-card" : "bg-muted"
+                        m.status === "in_progress" ? "border-[2.5px] border-primary bg-card" : "border-2 border-border bg-card"
                       }`}>
                         {m.status === "completed" && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                       </div>
@@ -638,7 +638,7 @@ export default function TimelinePage() {
                       <Fragment key={m.id}>
                         {i > 0 && (
                           <div className={`mt-[14px] h-[3px] w-32 rounded-full transition-colors ${
-                            milestones[i - 1].status === "completed" ? "bg-primary" : "bg-muted"
+                            milestones[i - 1].status === "completed" ? "bg-primary" : "bg-border"
                           }`} />
                         )}
                         <button
@@ -651,8 +651,8 @@ export default function TimelinePage() {
                             m.status === "completed"
                               ? "bg-primary text-primary-foreground"
                               : m.status === "in_progress"
-                                ? "border-[3px] border-primary bg-transparent"
-                                : "bg-muted"
+                                ? "border-[3px] border-primary bg-card"
+                                : "border-2 border-border bg-card"
                           }`}>
                             {m.status === "completed" && <Check className="h-4 w-4" />}
                             {m.status === "in_progress" && <div className="h-2 w-2 rounded-full bg-primary" />}
@@ -743,7 +743,7 @@ export default function TimelinePage() {
                             )}
                             <div className={`mr-3 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
                               m.status === "completed" ? "bg-success text-white" :
-                              m.status === "in_progress" ? "border-2 border-primary" : "bg-muted"
+                              m.status === "in_progress" ? "border-2 border-primary" : "border-2 border-border bg-card"
                             }`}>
                               {m.status === "completed" && <Check className="h-3 w-3" />}
                             </div>

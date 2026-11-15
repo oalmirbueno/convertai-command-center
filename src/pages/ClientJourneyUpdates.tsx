@@ -34,7 +34,7 @@ import {
   etiqueta,
   foco,
   juntar,
-  lista,
+  superficie,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
@@ -126,7 +126,7 @@ function WeekBackstage({ clientId, recolhida = false }: { clientId: string; reco
       descricao={`${data.total} ${data.total === 1 ? "etapa concluída" : "etapas concluídas"}`}
       ajuda="Este é o trabalho de bastidor da semana, atualizado conforme a equipe avança. O que chega até você, como conteúdo e publicações, nasce daqui."
     >
-      <ul className={juntar(lista.aberta, lista.divisoria)}>
+      <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")}>
         {data.fronts.map((front) => (
           <li key={front.area} className="min-w-0 px-2 py-3">
             <div className="flex min-w-0 items-center justify-between">
@@ -231,15 +231,15 @@ import {
 
 const RITUAL_LABELS: Record<string, { label: string; cls: string }> = {
   rota_semana: { label: "Rota da Semana", cls: "bg-primary/10 text-primary" },
-  meio_semana: { label: "Check do Meio da Semana", cls: "bg-sky-500/10 text-sky-500" },
-  prova_movimento: { label: "Prova de Movimento", cls: "bg-emerald-500/10 text-emerald-500" },
+  meio_semana: { label: "Check do Meio da Semana", cls: "bg-info-soft text-info" },
+  prova_movimento: { label: "Prova de Movimento", cls: "bg-success-soft text-success" },
   radar_aceleriq: { label: "Radar Aceleriq", cls: "bg-info/10 text-info" },
-  marco_90: { label: "Marco 90", cls: "bg-amber-500/10 text-amber-500" },
+  marco_90: { label: "Marco 90", cls: "bg-warning-soft text-warning" },
 };
 
 const SIGNAL_TONE: Record<string, string> = {
-  good: "text-emerald-500",
-  attention: "text-amber-500",
+  good: "text-success",
+  attention: "text-warning",
   neutral: "text-foreground",
 };
 
@@ -495,7 +495,7 @@ export default function ClientJourneyUpdates() {
           key={atalho.to}
           type="button"
           onClick={() => navigate(atalho.to)}
-          className={juntar(botao.secundario, "px-2.5 sm:px-3.5")}
+          className={juntar(botao.secundario, "px-2.5 max-sm:h-8 max-sm:w-8 max-sm:px-0 sm:px-3.5")}
           aria-label={atalho.label}
           title={atalho.label}
         >
@@ -556,8 +556,8 @@ export default function ClientJourneyUpdates() {
               </p>
             ))}
           </div>
-          <div className="max-w-3xl border-l-2 border-emerald-500/60 pl-3">
-            <p className={juntar(texto.rotulo, "flex items-center text-emerald-500")}>
+          <div className="max-w-3xl rounded-md bg-accent-soft px-4 py-3">
+            <p className={juntar(texto.rotulo, "flex items-center text-primary")}>
               <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Próximo passo
             </p>
             <p className={juntar(texto.corpo, "mt-1 leading-6")}>{narrative.nextStep}</p>
@@ -572,7 +572,7 @@ export default function ClientJourneyUpdates() {
       {/* ── Frentes ativas ── */}
       {activeProjects.length > 0 && (
         <Secao divisoria recolhidaDeInicio={pequena} titulo="Suas frentes" descricao={`${activeProjects.length} ${activeProjects.length === 1 ? "ativa" : "ativas"}`}>
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")}>
             {activeProjects.map((project: any) => {
               const view = buildProgressView(project, (snapshot?.tasks || []) as any[]);
               // Contexto real: o que esta em producao nesta frente agora
@@ -625,10 +625,10 @@ export default function ClientJourneyUpdates() {
       {/* ── O que já foi ao ar ── */}
       {published.length > 0 && (
         <Secao divisoria recolhidaDeInicio={pequena} titulo="Já publicado" descricao={`${published.length} mais recentes`}>
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")}>
             {published.map((publication: any, index: number) => (
               <li key={`${publication.published_at}-${index}`} className="flex min-w-0 items-center px-2 py-2.5">
-                <CheckCircle2 className="mr-3 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                <CheckCircle2 className="mr-3 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
                 <p className="min-w-0 flex-1 truncate text-[13px] text-foreground">
                   Publicado em{" "}
                   {new Date(publication.published_at).toLocaleDateString("pt-BR", {
@@ -708,13 +708,13 @@ export default function ClientJourneyUpdates() {
                     <li><span className="font-semibold tabular-nums text-primary">{materials}</span> materia(is) produzidos e entregues</li>
                   )}
                   {postsLive > 0 && (
-                    <li><span className="font-semibold tabular-nums text-sky-500">{postsLive}</span> publicação(ões) no ar</li>
+                    <li><span className="font-semibold tabular-nums text-info">{postsLive}</span> publicação(ões) no ar</li>
                   )}
                   {reportsCount > 0 && (
-                    <li><span className="font-semibold tabular-nums text-amber-500">{reportsCount}</span> relatório(s) de resultado medidos</li>
+                    <li><span className="font-semibold tabular-nums text-warning">{reportsCount}</span> relatório(s) de resultado medidos</li>
                   )}
                   {contactsGrowth !== null && contactsGrowth > 0 && (
-                    <li>Contatos crescendo <span className="font-semibold text-emerald-500">{contactsGrowth}%</span> entre o primeiro e o último período medido</li>
+                    <li>Contatos crescendo <span className="font-semibold text-success">{contactsGrowth}%</span> entre o primeiro e o último período medido</li>
                   )}
                 </ul>
               </div>
@@ -766,7 +766,7 @@ export default function ClientJourneyUpdates() {
               </ResponsiveContainer>
               <div className="flex flex-wrap px-3 pt-1 text-[11px] text-muted-foreground [&>*]:mr-4">
                 <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-sm bg-primary" aria-hidden="true" /> Pessoas que chamaram vocês</span>
-                <span className="flex items-center"><span className="mr-1.5 h-0.5 w-3 rounded bg-sky-500" aria-hidden="true" /> Pessoas alcançadas</span>
+                <span className="flex items-center"><span className="mr-1.5 h-0.5 w-3 rounded bg-info" aria-hidden="true" /> Pessoas alcançadas</span>
               </div>
             </div>
           </Secao>
@@ -811,12 +811,12 @@ export default function ClientJourneyUpdates() {
             acao={
               <div className="hidden text-[11px] text-muted-foreground sm:flex [&>*+*]:ml-3" aria-hidden="true">
                 <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-primary" /> Entregas</span>
-                <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-sky-500" /> Publicações</span>
-                <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500" /> Relatórios</span>
+                <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-info" /> Publicações</span>
+                <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-warning" /> Relatórios</span>
               </div>
             }
           >
-            <ul className={juntar(lista.aberta, lista.divisoria)}>
+            <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")}>
               {rows.map((row) => {
                 const isOpen = expandedMonth === row.key;
                 return (
@@ -825,7 +825,7 @@ export default function ClientJourneyUpdates() {
                     type="button"
                     onClick={() => setExpandedMonth(isOpen ? null : row.key)}
                     aria-expanded={isOpen}
-                    className={juntar("flex w-full min-w-0 items-center rounded-lg px-2 py-2.5 text-left transition-colors", isOpen ? "bg-muted/40" : "hover:bg-muted/30", foco)}
+                    className={juntar("flex w-full min-w-0 items-center rounded-md px-2 py-2.5 text-left transition-colors", isOpen ? "bg-muted/40" : "hover:bg-muted/30", foco)}
                   >
                     <span className="mr-3 w-14 shrink-0 text-[12px] font-medium text-muted-foreground">
                       {monthLabel(row.key)}
@@ -836,8 +836,8 @@ export default function ClientJourneyUpdates() {
                         style={{ width: `${Math.max(6, (row.total / peak) * 100)}%` }}
                       >
                         {row.entregas > 0 && <span className="h-full bg-primary" style={{ flex: row.entregas }} />}
-                        {row.publicacoes > 0 && <span className="h-full bg-sky-500" style={{ flex: row.publicacoes }} />}
-                        {row.relatorios > 0 && <span className="h-full bg-amber-500" style={{ flex: row.relatorios }} />}
+                        {row.publicacoes > 0 && <span className="h-full bg-info" style={{ flex: row.publicacoes }} />}
+                        {row.relatorios > 0 && <span className="h-full bg-warning" style={{ flex: row.relatorios }} />}
                       </div>
                     </div>
                     <span className="ml-3 w-20 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
@@ -866,7 +866,7 @@ export default function ClientJourneyUpdates() {
                         .slice(0, 4)
                         .map((m: any, index: number) => (
                           <p key={`ms-${index}`} className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
-                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden="true" />
                             <span className="truncate">Etapa concluída: {m.title}</span>
                           </p>
                         ))}
@@ -874,7 +874,7 @@ export default function ClientJourneyUpdates() {
                         .filter((pub: any) => pub.status === "published" && pub.published_at && pub.published_at.startsWith(row.key))
                         .map((pub: any, index: number) => (
                           <p key={index} className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
-                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" aria-hidden="true" />
+                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
                             Publicação no ar em {new Date(pub.published_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                             {pub.permalink && (
                               <a href={pub.permalink} target="_blank" rel="noreferrer" className="ml-1.5 text-primary hover:opacity-80">ver</a>
@@ -890,7 +890,7 @@ export default function ClientJourneyUpdates() {
                             onClick={() => navigate(`/relatorios/${report.id}`)}
                             className={juntar(texto.auxiliar, "flex min-w-0 items-center rounded text-left hover:text-foreground", foco)}
                           >
-                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
+                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
                             <span className="truncate">{report.title}</span>
                           </button>
                         ))}
@@ -902,8 +902,8 @@ export default function ClientJourneyUpdates() {
             </ul>
             <div className="mt-2 flex flex-wrap text-[11px] text-muted-foreground sm:hidden [&>*]:mr-3">
               <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-primary" aria-hidden="true" /> Entregas</span>
-              <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-sky-500" aria-hidden="true" /> Publicações</span>
-              <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" /> Relatórios</span>
+              <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-info" aria-hidden="true" /> Publicações</span>
+              <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-warning" aria-hidden="true" /> Relatórios</span>
             </div>
           </Secao>
         );
@@ -922,7 +922,7 @@ export default function ClientJourneyUpdates() {
       {/* ── Atualizações escritas pela Aceleriq ── */}
       {rituals.length > 0 && (
         <Secao divisoria titulo="Atualizações da Aceleriq" descricao={`${rituals.length} ${rituals.length === 1 ? "atualização" : "atualizações"}`}>
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")}>
           {rituals.map((update: any, index: number) => {
             const ritualType = (update.metrics as any)?.ritual_type as string;
             const badge = RITUAL_LABELS[ritualType] || {

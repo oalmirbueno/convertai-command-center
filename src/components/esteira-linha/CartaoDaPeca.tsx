@@ -33,7 +33,7 @@ export default function CartaoDaPeca({ cartao, aoAbrir }: { cartao: CartaoDaEste
         aria-label={`${cartao.titulo}. ${cartao.formato}. ${cartao.rotuloDaEtapa}. Ver detalhes`}
         aria-haspopup="dialog"
         className={juntar(
-          "block w-full rounded-md border border-border bg-background py-2 pl-2 pr-7 text-left transition-colors hover:border-foreground/30 hover:bg-muted/50",
+          "block w-full rounded-md border border-transparent bg-muted/60 py-2 pl-2.5 pr-7 text-left transition-colors hover:border-border hover:bg-muted [[data-prioritario=sim]_&]:bg-card [[data-prioritario=sim]_&]:shadow-card",
           foco,
         )}
         data-abrir-peca=""
@@ -53,7 +53,7 @@ export default function CartaoDaPeca({ cartao, aoAbrir }: { cartao: CartaoDaEste
       >
         <MenuMais
           rotulo={`Mais ações: ${cartao.titulo}`}
-          className="h-6 w-6 text-muted-foreground opacity-70 hover:opacity-100 group-hover:opacity-100"
+          className="h-6 w-6 text-muted-foreground opacity-60 hover:opacity-100 group-hover:opacity-100"
           itens={[
             {
               rotulo: "Abrir na página completa",

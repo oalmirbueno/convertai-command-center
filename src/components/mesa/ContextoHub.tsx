@@ -135,7 +135,7 @@ export function Hub({
           aria-controls={corpo}
           className="-mx-2 flex min-w-0 flex-1 items-center rounded-md px-2 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <ChevronDown className={`mr-2.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "" : "-rotate-90"}`} />
+          <ChevronDown className={`mr-2.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${aberto ? "" : "-rotate-90"}`} />
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center">
               <span className="truncate text-[15px] font-semibold leading-[22px] text-foreground">{titulo}</span>

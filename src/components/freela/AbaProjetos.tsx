@@ -7,6 +7,7 @@ import { useConfirm } from "@/components/shared/confirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, etiqueta, GrupoDeCampos, juntar, Painel, RegiaoRolavel, SeletorCompacto, texto,
+  superficie,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dadosFreela";
 import {
@@ -29,17 +30,17 @@ const formVazio = {
 };
 
 const corDoStatus: Record<string, string> = {
-  kickoff: "bg-info/15 text-info",
-  em_andamento: "bg-warning/15 text-warning",
-  entrega: "bg-primary/10 text-primary",
-  pago: "bg-success/15 text-success",
+  kickoff: "bg-info-soft text-info",
+  em_andamento: "bg-warning-soft text-warning",
+  entrega: "bg-accent-soft text-primary",
+  pago: "bg-success-soft text-success",
   arquivado: "bg-muted text-muted-foreground",
 };
 
 const corDaParcela: Record<string, string> = {
-  aberta: "bg-warning/15 text-warning",
-  atrasada: "bg-destructive/15 text-destructive",
-  paga: "bg-success/15 text-success",
+  aberta: "bg-warning-soft text-warning",
+  atrasada: "bg-danger-soft text-destructive",
+  paga: "bg-success-soft text-success",
   cancelada: "bg-muted text-muted-foreground",
 };
 
@@ -359,7 +360,7 @@ export default function AbaProjetos() {
             descricao="Aceite uma proposta e vire projeto, ou crie direto aqui."
           />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-5")}>
             {lista.map((p) => {
               const doProjeto = parcelasPorProjeto.get(p.id) || [];
               const pagas = doProjeto.filter((x) => x.status === "paga").length;

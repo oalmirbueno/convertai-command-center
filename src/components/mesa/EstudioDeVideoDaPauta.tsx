@@ -192,10 +192,10 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
       <PainelDaBancada id="apartir">{atual ? <div className="space-y-4" data-a-partir-do-video={atual.id}>
         <div className="flex items-center gap-1.5"><p className="text-[13px]">A partir de <strong>{atual.nome}</strong></p><AjudaRecolhida rotulo="Sobre partir deste vídeo">Continue a história, faça uma nova versão da mesma abertura ou emende com outro vídeo. O resultado entra na prancheta desta pauta.</AjudaRecolhida></div>
         <div className="flex flex-wrap gap-2" aria-label="Editar este vídeo">
-          <button type="button" className="inline-flex h-8 items-center rounded-md border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("cortar")}><Scissors className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Cortar</button>
-          <button type="button" className="inline-flex h-8 items-center rounded-md border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("som")}><Music className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Trilha</button>
-          <button type="button" className="inline-flex h-8 items-center rounded-md border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("legenda")}><Type className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Legenda</button>
-          <button type="button" className="inline-flex h-8 items-center rounded-md border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("entrega")}><Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Enviar para aprovação</button>
+          <button type="button" className="inline-flex h-8 items-center rounded-full border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("cortar")}><Scissors className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Cortar</button>
+          <button type="button" className="inline-flex h-8 items-center rounded-full border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("som")}><Music className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Trilha</button>
+          <button type="button" className="inline-flex h-8 items-center rounded-full border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("legenda")}><Type className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Legenda</button>
+          <button type="button" className="inline-flex h-8 items-center rounded-full border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("entrega")}><Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Enviar para aprovação</button>
         </div>
         <ContinuarVideo key={atual.id} videoInicial={atual.id} taskId={item.id} escopo={chave(`a-partir:${atual.id}`)} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba("resultados"); }} />
       </div> : semVideo("Suba, escolha no Workspace ou gere um vídeo para usar como ponto de partida.")}</PainelDaBancada>

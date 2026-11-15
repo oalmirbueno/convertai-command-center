@@ -178,7 +178,7 @@ export default function AbaResultados() {
 
         {(aprendizados.data || []).length > 0 && (
           <details className="min-w-0 border-t border-border pt-4" aria-label="Aprendizados registrados">
-            <summary className={juntar("cursor-pointer rounded text-[13px] font-medium text-foreground", foco)}>Aprendizados registrados ({(aprendizados.data || []).length})</summary>
+            <summary className={juntar("cursor-pointer rounded-sm text-[13px] font-medium text-foreground", foco)}>Aprendizados registrados ({(aprendizados.data || []).length})</summary>
             <ul className="mt-2 divide-y divide-border">
               {(aprendizados.data || []).map((a) => (
                 <li key={a.id} className="py-2">

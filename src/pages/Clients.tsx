@@ -36,7 +36,6 @@ import {
   EstadoDeErro,
   EstadoVazio,
   Etapas,
-  FaixaDeNumeros,
   Painel,
   Secao,
   SeletorCompacto,
@@ -49,6 +48,7 @@ import {
   useEstadoDaTela,
   useReservaFlutuante,
 } from "@/components/sistema";
+import { StatCard, StatGrid, StatusDot } from "@/components/ds";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
@@ -80,8 +80,8 @@ function getRenewalStatus(dateStr: string | null | undefined) {
   const diffMs = renewal.getTime() - today.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return { level: "expired", label: `Vencido há ${Math.abs(diffDays)} dia(s)`, color: "text-destructive", bg: "bg-destructive/10 border-destructive/30", icon: true };
-  if (diffDays <= 7) return { level: "urgent", label: `Vence em ${diffDays} dia(s)`, color: "text-warning", bg: "bg-warning/10 border-warning/30", icon: true };
+  if (diffDays < 0) return { level: "expired", label: `Vencido há ${Math.abs(diffDays)} dia(s)`, color: "text-destructive", bg: "bg-danger-soft border-transparent", icon: true };
+  if (diffDays <= 7) return { level: "urgent", label: `Vence em ${diffDays} dia(s)`, color: "text-warning", bg: "bg-warning-soft border-transparent", icon: true };
   if (diffDays <= 15) return { level: "soon", label: `Vence em ${diffDays} dias`, color: "text-muted-foreground", bg: "", icon: false };
   return { level: "ok", label: "", color: "text-muted-foreground", bg: "", icon: false };
 }
@@ -140,8 +140,8 @@ const SERVICE_FILTERS: { value: string; label: string }[] = [
 ];
 
 const typeBadge: Record<string, { label: string; cls: string }> = {
-  recurring: { label: "Recorrente", cls: "bg-primary/10 text-primary" },
-  one_off: { label: "Avulso", cls: "bg-warning/10 text-warning" },
+  recurring: { label: "Recorrente", cls: "bg-accent-soft text-primary" },
+  one_off: { label: "Avulso", cls: "bg-warning-soft text-warning" },
   hybrid: { label: "Híbrido", cls: "bg-accent/15 text-foreground" },
 };
 
@@ -517,28 +517,28 @@ function normalizeClientFinancial(record: FinancialRecord): ClientFinancialView 
 function financialStatusMeta(status: string | null) {
   const normalized = status?.toLowerCase().trim() || "";
   if (["current", "active", "em_dia"].includes(normalized)) {
-    return { label: "Em dia", className: "border-success/30 bg-success/10 text-success" };
+    return { label: "Em dia", className: "border-transparent bg-success-soft text-success" };
   }
   if (["review_required", "needs_review", "draft"].includes(normalized)) {
-    return { label: "Revisar", className: "border-warning/30 bg-warning/10 text-warning" };
+    return { label: "Revisar", className: "border-transparent bg-warning-soft text-warning" };
   }
   if (["paused", "standby", "pausado"].includes(normalized)) {
     return { label: "Pausado", className: "border-border bg-secondary text-muted-foreground" };
   }
   if (["paid", "received", "completed", "pago", "recebido"].includes(normalized)) {
-    return { label: "Recebido", className: "border-success/30 bg-success/10 text-success" };
+    return { label: "Recebido", className: "border-transparent bg-success-soft text-success" };
   }
   if (["partial", "partially_paid", "parcial"].includes(normalized)) {
-    return { label: "Parcial", className: "border-warning/30 bg-warning/10 text-warning" };
+    return { label: "Parcial", className: "border-transparent bg-warning-soft text-warning" };
   }
   if (["overdue", "late", "delinquent", "atrasado", "inadimplente"].includes(normalized)) {
-    return { label: "Inadimplente", className: "border-destructive/30 bg-destructive/10 text-destructive" };
+    return { label: "Inadimplente", className: "border-transparent bg-danger-soft text-destructive" };
   }
   if (["cancelled", "canceled", "reversed", "cancelado", "estornado"].includes(normalized)) {
     return { label: "Cancelado", className: "border-border bg-secondary text-muted-foreground" };
   }
   if (["pending", "open", "expected", "scheduled", "pendente", "aberto", "previsto"].includes(normalized)) {
-    return { label: "A receber", className: "border-warning/30 bg-warning/10 text-warning" };
+    return { label: "A receber", className: "border-transparent bg-warning-soft text-warning" };
   }
   if (["not_configured", "unconfigured", "none"].includes(normalized)) {
     return { label: "Definir cobrança", className: "border-border bg-secondary/60 text-muted-foreground" };
@@ -1089,16 +1089,16 @@ export default function Clients() {
     // cobrança no mês, diz isso com todas as letras.
     const billingRead = internal ? null : billingReadByClient.get(String(c.id));
     const statusMeta = internal
-      ? { label: "Interna", className: "border-info/30 bg-info/10 text-info" }
+      ? { label: "Interna", className: "border-transparent bg-info-soft text-info" }
       : billingRead
         ? {
             label: billingRead.label,
             className:
               billingRead.tone === "late"
-                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                ? "border-transparent bg-danger-soft text-destructive"
                 : billingRead.tone === "due"
-                  ? "border-warning/30 bg-warning/10 text-warning"
-                  : "border-success/30 bg-success/10 text-success",
+                  ? "border-transparent bg-warning-soft text-warning"
+                  : "border-transparent bg-success-soft text-success",
           }
         : (c.client_type || "recurring") === "one_off"
           ? { label: "Por projeto", className: "border-border bg-secondary/60 text-muted-foreground" }
@@ -1180,7 +1180,7 @@ export default function Clients() {
     return (
       <li
         key={c.id}
-        className={juntar("min-w-0 px-3 py-3 transition-colors hover:bg-muted/30 sm:px-4", extra?.apagado && "opacity-80")}
+        className={juntar("min-w-0 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-5 sm:py-3.5", extra?.apagado && "opacity-80")}
         onContextMenu={(e) => {
           e.preventDefault();
           setMenuCliente({ x: e.clientX, y: e.clientY, cliente: c });
@@ -1230,8 +1230,8 @@ export default function Clients() {
                 <TooltipTrigger asChild>
                   <span
                     className={juntar(
-                      "ml-3 hidden shrink-0 items-center rounded-md px-2 py-1 text-[12px] tabular-nums md:inline-flex",
-                      renovacaoEmAlerta ? juntar(status?.color, "bg-destructive/10") : "text-muted-foreground",
+                      "ml-3 hidden h-6 shrink-0 items-center rounded-full px-2.5 text-[12px] tabular-nums md:inline-flex",
+                      renovacaoEmAlerta ? juntar(status?.color, "bg-danger-soft") : "text-muted-foreground",
                     )}
                     aria-label={`Renovação ${formatBRDate(c.plan_renewal_date)}${renovacaoEmAlerta && status?.label ? `. ${status.label}` : ""}`}
                   >
@@ -1302,9 +1302,9 @@ export default function Clients() {
                     etiqueta,
                     "ml-1.5",
                     financial?.pricingMode === "custom"
-                      ? "bg-warning/10 text-warning"
+                      ? "bg-warning-soft text-warning"
                       : financial?.pricingMode === "linked"
-                        ? "bg-primary/10 text-primary"
+                        ? "bg-accent-soft text-primary"
                         : "bg-muted text-muted-foreground",
                   )}
                 >
@@ -1519,17 +1519,24 @@ export default function Clients() {
             No celular a faixa de números sai (16/10/2026): os números moram no Financeiro. */}
         {isAdmin && !isMobile && (
           <section aria-label="Resumo financeiro dos clientes" className="mb-5">
-            <FaixaDeNumeros
-              tamanho="compacto"
-              colunas={5}
-              rotulo="Números dos clientes"
-              itens={kpiCards.map((card) => ({
-                rotulo: card.label,
-                valor: card.loading ? <span className="block h-5 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${card.label}`} /> : card.value,
-                corDoValor: card.tone,
-                apoio: card.helper,
-              }))}
-            />
+            <StatGrid cols={5} label="Números dos clientes">
+              {kpiCards.map((card, i) => (
+                <StatCard
+                  key={card.label}
+                  tone={i === 0 ? "accent" : "default"}
+                  label={
+                    i === 0 ? card.label : (
+                      <>
+                        <StatusDot tone={card.tone.indexOf("destructive") >= 0 ? "danger" : card.tone.indexOf("warning") >= 0 ? "warning" : "success"} className="mr-1.5 align-middle" />
+                        {card.label}
+                      </>
+                    )
+                  }
+                  value={card.loading ? <span className="block h-7 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${card.label}`} /> : card.value}
+                  hint={card.helper}
+                />
+              ))}
+            </StatGrid>
             {financialError && (
               <p className={juntar(texto.auxiliar, "mt-1.5 flex items-center text-warning")} role="status">
                 <AlertTriangle className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />

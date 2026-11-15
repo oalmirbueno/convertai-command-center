@@ -18,7 +18,7 @@ import {
   botao,
   foco,
   juntar,
-  lista,
+  superficie,
   texto,
 } from "@/components/sistema";
 import type { UserProfile } from "@/contexts/AuthContext";
@@ -259,16 +259,16 @@ export default function AdminViewAsClient() {
         ) : ativos.length === 0 ? (
           <EstadoVazio icone={<Eye className="h-5 w-5" />} titulo="Nenhum cliente ativo" descricao="Clientes com plano ativo aparecem aqui." />
         ) : (
-          <ul aria-label="Clientes ativos" className={juntar(lista.aberta, "grid grid-cols-1 gap-x-6 sm:grid-cols-2")}>
+          <ul aria-label="Clientes ativos" className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {ativos.map((c: any) => (
               <li key={c.id} className="min-w-0">
                 <button
                   type="button"
                   onClick={() => selectClient(c)}
-                  className={juntar("group flex h-full w-full min-w-0 items-center rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted/40", foco)}
+                  className={juntar(superficie.painel, "group flex h-full w-full min-w-0 items-center px-4 py-3.5 text-left transition-colors hover:border-primary/40", foco)}
                 >
-                  <Avatar className="mr-3 h-8 w-8 shrink-0">
-                    <AvatarFallback className="bg-primary/15 text-[11px] font-semibold text-primary">{iniciais(c)}</AvatarFallback>
+                  <Avatar className="mr-3 h-10 w-10 shrink-0">
+                    <AvatarFallback className="bg-accent-soft text-[12px] font-semibold text-primary">{iniciais(c)}</AvatarFallback>
                   </Avatar>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{c.company_name || c.full_name}</span>

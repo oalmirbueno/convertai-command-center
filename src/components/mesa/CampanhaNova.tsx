@@ -353,7 +353,7 @@ export default function CampanhaNova({
                   aria-expanded={maisOpcoes}
                   className="inline-flex items-center text-[12px] font-medium text-muted-foreground hover:text-foreground"
                 >
-                  <ChevronDown className={`mr-1 h-4 w-4 transition-transform ${maisOpcoes ? "" : "-rotate-90"}`} />
+                  <ChevronDown className={`mr-1 h-4 w-4 transition-transform duration-200 ${maisOpcoes ? "" : "-rotate-90"}`} />
                   Mais opções
                   <span className="ml-1.5 font-normal">{extras ? `(${extras} escolhida(s))` : "(tipo, imagens, briefing, referências)"}</span>
                 </button>

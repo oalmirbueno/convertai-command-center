@@ -304,7 +304,7 @@ function CartaoDoArquivo({ itensNoCarrossel, onAbrir, formatDate, ...acoes }: It
         className="block w-full min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         title={`${file.file_name} · ${kindLabel(resolveKind(file))} · ${file.project?.name || "Sem projeto"}`}
       >
-        <span className="relative block overflow-hidden rounded-md" style={{ paddingBottom: "100%" }}>
+        <span className="relative block overflow-hidden rounded-lg" style={{ paddingBottom: "100%" }}>
           <FileThumb file={file} />
           <span className={juntar(etiqueta, "absolute bottom-1.5 left-1.5 bg-background/90", visibilidade.cor)}>{visibilidade.label}</span>
           {itensNoCarrossel > 1 && (
@@ -1714,7 +1714,7 @@ export default function AdminFiles() {
                 ))}
               </div>
             ) : (
-              <ul className="divide-y divide-border border-y border-border">
+              <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden px-2 py-1 sm:px-3")}>
                 {filteredFiles.map((f: any) => (
                   <LinhaDoArquivo key={f.id} {...propsDoItem(f)} />
                 ))}

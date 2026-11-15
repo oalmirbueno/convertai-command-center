@@ -38,15 +38,16 @@ import {
   juntar,
   lista,
   texto,
+  superficie,
 } from "@/components/sistema";
 
 export const COR_DO_ESTADO: Record<EstadoDaConta, string> = {
   teste: "bg-muted text-muted-foreground",
-  ativa: "bg-primary/10 text-primary",
-  atrasada: "bg-warning/10 text-warning",
-  suspensa: "bg-destructive/10 text-destructive",
+  ativa: "bg-accent-soft text-primary",
+  atrasada: "bg-warning-soft text-warning",
+  suspensa: "bg-danger-soft text-destructive",
   cancelada: "bg-muted text-muted-foreground",
-  cortesia: "bg-primary/10 text-primary",
+  cortesia: "bg-accent-soft text-primary",
 };
 
 const ESTADOS_QUE_A_CASA_DEFINE: EstadoDaConta[] = ["teste", "ativa", "cortesia", "suspensa", "cancelada"];
@@ -127,7 +128,7 @@ export default function ContasDaCasa() {
         {visiveis.length === 0 ? (
           <EstadoVazio compacto titulo={todas.length ? "Nenhuma empresa neste filtro." : "Nenhuma empresa ainda."} descricao={todas.length ? undefined : "Crie a primeira ou espere alguém abrir a conta pelo site."} />
         ) : (
-          <ul className={juntar(lista.aberta, lista.divisoria)} data-lista-de-contas="">
+          <ul className={juntar(superficie.painel, lista.divisoria, "px-2 py-1.5 sm:px-3")} data-lista-de-contas="">
             {visiveis.map((c) => (
               <li key={c.id}>
                 <button type="button" className={juntar(lista.linha, "w-full text-left")} onClick={() => setAberta(c.id)} data-conta={c.id}>
@@ -374,7 +375,7 @@ function FichaDaConta({ conta, planos, onFechar, onMudou }: { conta: ContaNaCasa
                   <span className={juntar(texto.corpo, "block truncate")}>{m.nome || m.email}</span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>{m.email}{m.entrou_em ? ` · entrou em ${diaLegivel(m.entrou_em)}` : ""}</span>
                 </span>
-                <span className={juntar(etiqueta, "ml-2", m.papel === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{m.papel === "admin" ? "Administra" : "Usuário"}</span>
+                <span className={juntar(etiqueta, "ml-2", m.papel === "admin" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{m.papel === "admin" ? "Administra" : "Usuário"}</span>
                 {m.estado === "convidado" && (
                   <button
                     type="button"

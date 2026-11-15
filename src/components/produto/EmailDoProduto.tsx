@@ -41,10 +41,10 @@ import SemAcesso from "./SemAcesso";
 
 const ROTULO_DA_CAIXA: Record<CaixaDeEmail["estado"], string> = { pedida: "Pedida", criada: "Criada", copiando: "Copiando o histórico", ativa: "Ativa", removida: "Removida" };
 const COR_DA_CAIXA: Record<CaixaDeEmail["estado"], string> = {
-  pedida: "bg-warning/10 text-warning",
+  pedida: "bg-warning-soft text-warning",
   criada: "bg-muted text-muted-foreground",
   copiando: "bg-muted text-muted-foreground",
-  ativa: "bg-primary/10 text-primary",
+  ativa: "bg-accent-soft text-primary",
   removida: "bg-muted text-muted-foreground",
 };
 

@@ -2649,7 +2649,7 @@ export default function Workspace() {
           />
           <div
             role="menu"
-            className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+            className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-pop"
             style={{
               left: Math.min(menuDaArea.x, window.innerWidth - 240),
               top: Math.min(menuDaArea.y, window.innerHeight - 190),
@@ -2737,8 +2737,9 @@ export default function Workspace() {
                       {/* Cartão de mídia: a imagem manda, proporção por padding-bottom, nada escurecido. */}
                       <div
                         className={juntar(
-                          "relative overflow-hidden rounded-lg transition-shadow",
-                          temImagem ? "bg-muted" : superficie.poco,
+                          "relative overflow-hidden transition-shadow",
+                          // Pasta e arquivo sem miniatura: cartão branco (14/11/2026); mídia continua com a imagem mandando.
+                          temImagem ? "rounded-lg bg-muted" : superficie.painel,
                           dragActive ? "ring-2 ring-primary" : "group-hover:ring-1 group-hover:ring-border",
                         )}
                         style={{ paddingBottom: "100%" }}
@@ -2754,7 +2755,7 @@ export default function Workspace() {
                           <div className="absolute inset-0 flex flex-col items-center justify-center">
                             <Icon className={juntar("h-10 w-10", isFolder ? "text-primary" : KIND_META[k].color)} aria-hidden="true" />
                             {!isFolder && extOf(n.name) && (
-                              <span className={juntar(etiqueta, "mt-2 bg-background font-mono", KIND_META[k].accent)}>{extOf(n.name)}</span>
+                              <span className={juntar(etiqueta, "mt-2 bg-background", KIND_META[k].accent)}>{extOf(n.name)}</span>
                             )}
                           </div>
                         )}
@@ -2804,7 +2805,7 @@ export default function Workspace() {
               </ul>
 
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden px-2 py-1 sm:px-3")}>
                 {filtered.map(n => {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";

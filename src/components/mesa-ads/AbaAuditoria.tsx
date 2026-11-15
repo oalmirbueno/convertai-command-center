@@ -136,7 +136,7 @@ export default function AbaAuditoria() {
               const rotulo = atual.categorias.find((c) => c.categoria === cat)?.rotulo ?? cat;
               return (
                 <details key={cat} className="min-w-0 border-b border-border py-1.5">
-                  <summary className={juntar("cursor-pointer rounded text-[13px]", foco)}>
+                  <summary className={juntar("cursor-pointer rounded-sm text-[13px]", foco)}>
                     {rotulo} <span className="text-[12px] text-muted-foreground">({doCat.filter((c) => c.resultado === "passou").length} de {doCat.filter((c) => c.resultado === "passou" || c.resultado === "falhou").length} passaram)</span>
                   </summary>
                   <ul className="min-w-0 divide-y divide-border/60">{doCat.map((c) => <Controle key={c.id} c={c} />)}</ul>

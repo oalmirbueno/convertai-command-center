@@ -287,7 +287,7 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor, onIrPara }: { 
         {/* O estado, uma vez, e o que falta com a ação de cada item. */}
         <div className="mb-5 min-w-0" data-estado-da-publicacao={estadoGeral.pronto ? "pronto" : "falta"}>
           <p className={juntar(texto.corpo, "flex min-w-0 items-center font-medium")}>
-            {estadoGeral.pronto ? <CheckCircle2 className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> : <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />}
+            {estadoGeral.pronto ? <CheckCircle2 className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> : <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />}
             <span className="min-w-0 truncate">{estadoGeral.texto}</span>
           </p>
           {(faltas.length > 0 || !trava.ok || pendentesDaTela.length > 0 || (pediuZip && zipFalhou && !!ultimoZip) || motorDesligado) && (
@@ -302,7 +302,7 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor, onIrPara }: { 
               )}
               {!trava.ok && (
                 <li className={juntar(lista.linha, "py-1")}>
-                  <span className={juntar(texto.auxiliar, "min-w-0 flex-1 whitespace-normal", trava.codigo === "conferencia_com_problemas" ? "text-amber-700 dark:text-amber-400" : "text-destructive")} data-motivo-da-trava={trava.codigo || ""}>
+                  <span className={juntar(texto.auxiliar, "min-w-0 flex-1 whitespace-normal", trava.codigo === "conferencia_com_problemas" ? "text-warning" : "text-destructive")} data-motivo-da-trava={trava.codigo || ""}>
                     {trava.motivo}
                   </span>
                 </li>
@@ -490,7 +490,7 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor, onIrPara }: { 
           {comparacao.length > 0 && (
             <ul className="min-w-0 space-y-0.5" data-comparacao-com-o-ar="">
               {comparacao.map((l) => (
-                <li key={l} className={juntar(texto.corpo, "whitespace-normal", l.indexOf("Sai do ar") === 0 && "text-amber-700 dark:text-amber-400")}>
+                <li key={l} className={juntar(texto.corpo, "whitespace-normal", l.indexOf("Sai do ar") === 0 && "text-warning")}>
                   {l}
                 </li>
               ))}

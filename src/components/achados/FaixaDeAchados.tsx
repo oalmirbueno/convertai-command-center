@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Copy } from "lucide-react";
 import { toast } from "sonner";
-import { AjudaRecolhida, botao, juntar, texto } from "@/components/sistema";
+import { AjudaRecolhida, botao, juntar, superficie, texto } from "@/components/sistema";
 import type { Achado, TomDoAchado } from "./detectores";
 
 /**
  * Faixa de achados (20/10/2026): cartões "achado → ação" no padrão do painel.
  * Número grande, frase curta e UMA ação (link para a tela certa ou cópia da
- * mensagem pronta, nunca envio sozinho). Sem caixa: só a linha fina em cima.
+ * mensagem pronta, nunca envio sozinho). Desde 14/11/2026 cada achado é um
+ * cartão de indicador (canto de 20 px, número de 28 px, bolinha do tom).
  *
  * - Some quando não há achado (só aparece número maior que zero).
  * - No celular a faixa rola por dentro, para o lado; a página não ganha
@@ -23,6 +24,11 @@ const COR_DO_TOM: Record<TomDoAchado, string> = {
   urgente: "text-destructive",
   atencao: "text-warning",
   info: "text-info",
+};
+const BOLINHA_DO_TOM: Record<TomDoAchado, string> = {
+  urgente: "bg-destructive",
+  atencao: "bg-warning",
+  info: "bg-info",
 };
 
 async function copiar(textoParaCopiar: string) {
@@ -70,7 +76,7 @@ export default function FaixaDeAchados({
       </div>
       <ul
         aria-label="Achados com ação"
-        className="flex min-w-0 snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-1 sm:grid sm:snap-none sm:grid-cols-2 sm:gap-x-6 sm:overflow-visible sm:pb-0 lg:grid-cols-3"
+        className="flex min-w-0 snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-1 sm:grid sm:snap-none sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:pb-0 lg:grid-cols-3"
       >
         {visiveis.map((a) => {
           const local = acoesLocais ? acoesLocais[a.id] : undefined;
@@ -81,13 +87,14 @@ export default function FaixaDeAchados({
               {a.acao.rotulo}
             </>
           );
-          const classeDaAcao = juntar(botao.barra, "-ml-2 text-primary hover:text-primary");
+          const classeDaAcao = juntar(botao.barra, "-mb-1 -ml-2 mt-2 self-start text-primary hover:text-primary");
           return (
-            <li key={a.id} data-achado={a.id} className="mr-4 w-[72%] max-w-[260px] shrink-0 snap-start border-t border-border pt-2 sm:mr-0 sm:w-auto sm:max-w-none">
-              <span className="flex min-w-0 items-baseline">
-                <span className={juntar(texto.numero, COR_DO_TOM[a.tom])}>{a.numero}</span>
+            <li key={a.id} data-achado={a.id} className={juntar(superficie.painel, "mr-3 flex w-[72%] max-w-[260px] shrink-0 snap-start flex-col px-4 py-3.5 sm:mr-0 sm:w-auto sm:max-w-none sm:px-5 sm:py-4")}>
+              <span className="flex min-w-0 items-center">
+                <span className={juntar(texto.numeroGrande, COR_DO_TOM[a.tom])}>{a.numero}</span>
+                <span className={juntar("ml-auto h-2 w-2 shrink-0 rounded-full", BOLINHA_DO_TOM[a.tom])} aria-hidden="true" />
               </span>
-              <span className={juntar(texto.corpo, "line-clamp-2 min-h-[40px]")}>{a.frase}</span>
+              <span className={juntar(texto.corpo, "mt-0.5 line-clamp-2 min-h-[40px] text-muted-foreground")}>{a.frase}</span>
               {local ? (
                 <button type="button" onClick={() => local(a)} aria-label={`${a.acao.rotulo}: ${nome}`} className={classeDaAcao}>{conteudoDaAcao}</button>
               ) : a.acao.copiar ? (

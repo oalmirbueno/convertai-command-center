@@ -346,7 +346,7 @@ export default function EstudioBaseDaLamina({
       onClick={onClick}
       title={dica}
       aria-label={dica}
-      className="mr-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+      className="mr-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
       data-abrir={dado}
     >
       {icone}
@@ -433,7 +433,7 @@ export default function EstudioBaseDaLamina({
                 {DESCRICAO_DO_MODO[base.modo]}
                 {temFotoComUso ? <span className="mt-1.5 block">{AJUDA_DO_USO}</span> : null}
               </AjudaRecolhida>
-              <button type="button" onClick={abrirMenu} aria-haspopup="menu" aria-expanded={!!menu} aria-label="Mais opções de fotos e referências" title="Mais opções de fotos e referências" className="ml-0.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground">
+              <button type="button" onClick={abrirMenu} aria-haspopup="menu" aria-expanded={!!menu} aria-label="Mais opções de fotos e referências" title="Mais opções de fotos e referências" className="ml-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground">
                 <MoreHorizontal className="h-4 w-4" />
               </button>
             </div>

@@ -79,10 +79,10 @@ export default function TituloRecolhivel({
       onClick={onAlternar}
       aria-expanded={!recolhido}
       title={recolhido ? "Mostrar" : "Recolher"}
-      className={juntar("relative -left-1 flex min-w-0 items-center rounded-md px-1 py-0.5 text-left hover:bg-muted", foco, className)}
+      className={juntar("relative -left-1 flex min-w-0 items-center rounded-full py-0.5 pl-1 pr-2.5 text-left transition-colors hover:bg-muted", foco, className)}
       data-titulo-recolhivel=""
     >
-      <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
+      <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
       {/* 28/09: título numa linha só; quem encolhe primeiro é o resumo (shrink-[4]).
           Deslocado com relative -left-1: margem negativa encolhia a largura medida
           e cortava o título com espaço sobrando. */}

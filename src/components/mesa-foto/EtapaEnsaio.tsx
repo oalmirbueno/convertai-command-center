@@ -545,7 +545,7 @@ function CartaoDaTomada({
         )}
         {emGeracao && (
           <span className="absolute inset-0 flex items-center justify-center" aria-live="polite">
-            <span className="inline-flex items-center rounded-full bg-card px-2 py-1 text-[11px] font-medium shadow-sm">
+            <span className="inline-flex items-center rounded-full bg-card px-2 py-1 text-[11px] font-medium shadow-card">
               <span className="mr-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-primary" /> Gerando
             </span>
           </span>

@@ -120,8 +120,8 @@ export { RotuloLargo } from "@/components/sistema/BotaoComIcone";
 
 export function AvisoDoBanco() {
   return (
-    <div className="flex min-w-0 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] leading-4" role="status" data-aviso-banco="">
-      <Database className="mr-2 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" />
+    <div className="flex min-w-0 items-center rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-[12px] leading-4" role="status" data-aviso-banco="">
+      <Database className="mr-2 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
       <p className="mr-1 min-w-0 flex-1 [overflow-wrap:anywhere]">O banco ainda não guarda roteiros.</p>
       <AjudaRecolhida rotulo="Sobre o banco dos roteiros">
         Falta aplicar o SQL da Mesa Roteiros. Dá para gerar e baixar o PDF, mas o roteiro não fica salvo.
@@ -136,9 +136,9 @@ export function AvisoDoJevCartao({ aviso }: { aviso: AvisoDoJev | null | undefin
   const nota = (n: number | null) => (n == null ? "sem nota" : `${n.toFixed(1).replace(".", ",")} de 5`);
   const prob = aviso.promessa_cumprida;
   return (
-    <div className={juntar("rounded-md px-3 py-2.5", aviso.frases.length ? "bg-amber-500/10" : "bg-muted/50")} data-aviso-jev="">
+    <div className={juntar("rounded-md px-3 py-2.5", aviso.frases.length ? "bg-warning-soft" : "bg-muted/50")} data-aviso-jev="">
       <div className="flex min-w-0 items-center text-[12px] font-medium">
-        {aviso.frases.length ? <AlertTriangle className="mr-1.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" /> : <Info className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+        {aviso.frases.length ? <AlertTriangle className="mr-1.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" /> : <Info className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
         <span className="min-w-0 truncate">Conferência editorial (aviso, não bloqueia)</span>
       </div>
       <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>

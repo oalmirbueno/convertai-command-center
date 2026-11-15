@@ -26,6 +26,7 @@ import {
   RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela, botao, campo, campoTexto, etiqueta, foco, juntar, superficie, texto,
   type OpcaoCompacta,
 } from "@/components/sistema";
+import { StatCard, StatGrid } from "@/components/ds";
 import CashFlow from "@/components/finance/CashFlow";
 import InvestorCapital from "@/components/finance/InvestorCapital";
 import FixedCosts from "@/components/finance/FixedCosts";
@@ -87,13 +88,13 @@ const statusBadge = (status: string, dueDate?: string) => {
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const due = parseAppDate(dueDate);
   const isOverdue = due && due < todayStart && status === "pending";
-  if (status === "paid") return <span className={juntar(etiqueta, "bg-success/15 text-success")}>Pago</span>;
-  if (status === "partial") return <span className={juntar(etiqueta, "bg-info/15 text-info")}>Parcial</span>;
-  if (status === "completed") return <span className={juntar(etiqueta, "bg-success/15 text-success")}>Concluída</span>;
-  if (status === "approved") return <span className={juntar(etiqueta, "bg-info/15 text-info")}>Aprovada pelo cliente</span>;
-  if (isOverdue) return <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>Atrasado</span>;
-  if (status === "pending") return <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>Pendente</span>;
-  if (status === "rejected") return <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>Recusada</span>;
+  if (status === "paid") return <span className={juntar(etiqueta, "bg-success-soft text-success")}>Pago</span>;
+  if (status === "partial") return <span className={juntar(etiqueta, "bg-info-soft text-info")}>Parcial</span>;
+  if (status === "completed") return <span className={juntar(etiqueta, "bg-success-soft text-success")}>Concluída</span>;
+  if (status === "approved") return <span className={juntar(etiqueta, "bg-info-soft text-info")}>Aprovada pelo cliente</span>;
+  if (isOverdue) return <span className={juntar(etiqueta, "bg-danger-soft text-destructive")}>Atrasado</span>;
+  if (status === "pending") return <span className={juntar(etiqueta, "bg-warning-soft text-warning")}>Pendente</span>;
+  if (status === "rejected") return <span className={juntar(etiqueta, "bg-danger-soft text-destructive")}>Recusada</span>;
   return <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{status}</span>;
 };
 
@@ -133,31 +134,24 @@ const rascunhoDeCobrancaValido = (v: unknown) =>
   !!v && typeof v === "object" && ["client_id", "type", "amount", "due_date", "description"].every((k) => typeof (v as Record<string, unknown>)[k] === "string");
 
 /** Ação discreta de uma linha de lista (32 px). */
-const acaoDaLinha = `inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 ${foco}`;
+const acaoDaLinha = `inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 ${foco}`;
 
 /** Rodapé de diálogo: ações à direita, o primário por último. */
 const rodapeDoDialogo = "flex min-w-0 flex-wrap items-center justify-end border-t border-border pt-4 [&>*+*]:ml-2";
 
-/** Cor do número (classe de texto) no pontinho da FaixaDeNumeros. */
-function pontoDaCor(cor: string): "verde" | "info" | "alerta" | "perigo" | "neutro" {
-  if (cor.indexOf("destructive") >= 0) return "perigo";
-  if (cor.indexOf("warning") >= 0) return "alerta";
-  if (cor.indexOf("info") >= 0) return "info";
-  if (cor.indexOf("success") >= 0 || cor.indexOf("primary") >= 0) return "verde";
-  return "neutro";
-}
+/** Número do cartão de indicador: seis cartões na fileira, então 24 px (20 no celular) para o valor caber inteiro. */
+/** No celular o cartão tem meia tela: o ícone sai para o rótulo caber inteiro. */
+const semIconeNoCelular = "max-sm:[&>span:first-child>span[aria-hidden]]:hidden";
+const numeroDoCartao = "block truncate text-[20px] leading-7 sm:text-[24px] sm:leading-8";
 
-/** Número sem caixa (resumo de uma seção). */
+/** Resumo de uma seção: os números numa faixa só (mesmo cartão das outras áreas do Financeiro). */
 function Resumo({ itens }: { itens: { rotulo: string; valor: string; cor?: string }[] }) {
   return (
-    <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 lg:grid-cols-4">
-      {itens.map((s) => (
-        <div key={s.rotulo} className="min-w-0">
-          <dt className={juntar(texto.rotulo, "truncate")}>{s.rotulo}</dt>
-          <dd className={juntar("mt-0.5 truncate text-[15px] font-semibold tabular-nums", s.cor || "text-foreground")}>{s.valor}</dd>
-        </div>
-      ))}
-    </dl>
+    <FaixaDeNumeros
+      rotulo="Resumo"
+      colunas={Math.min(4, Math.max(2, itens.length)) as 2 | 3 | 4}
+      itens={itens.map((s) => ({ rotulo: s.rotulo, valor: s.valor, corDoValor: s.cor }))}
+    />
   );
 }
 
@@ -1364,28 +1358,29 @@ function LegacyFinanceiro() {
             )}
 
             {/* Os números numa faixa só (antes, um cartão por número); o último leva à projeção. */}
-            <FaixaDeNumeros
-              rotulo="Números do financeiro"
-              colunas={totalDeNumeros >= 6 ? 6 : totalDeNumeros === 5 ? 5 : 4}
-              itens={[
-                ...numeros.map((n) => ({
-                  rotulo: n.rotulo,
-                  valor: billingLoading ? <span className="block h-6 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${n.rotulo}`} /> : n.valor,
-                  apoio: billingLoading ? undefined : n.sub,
-                  ponto: pontoDaCor(n.cor),
-                  lado: n.ajuda ? <AjudaRecolhida>{n.ajuda}</AjudaRecolhida> : undefined,
-                })),
-                ...(mostraProjecao ? [{
-                  rotulo: "Próximo mês",
-                  valor: fmt(nextMonthTotal),
-                  apoio: `${nextMonthFull} ${nextYear}: ${nextMonthSub}`,
-                  ponto: "info" as const,
-                  lado: <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />,
-                  para: "/financeiro/projecao",
-                  dica: `Projeção de ${nextMonthFull}: ${fmt(nextMonthTotal)}. Ver projeção`,
-                }] : []),
-              ]}
-            />
+            <StatGrid cols={totalDeNumeros >= 6 ? 6 : totalDeNumeros === 5 ? 5 : 4} label="Números do financeiro">
+              {numeros.map((n) => (
+                <StatCard
+                  key={n.rotulo}
+                  label={n.rotulo}
+                  value={billingLoading ? <span className="block h-6 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${n.rotulo}`} /> : <span className={numeroDoCartao}>{n.valor}</span>}
+                  hint={billingLoading ? undefined : n.sub}
+                  icon={<span className={n.cor}>{n.icone}</span>}
+                  help={n.ajuda}
+                  className={semIconeNoCelular}
+                />
+              ))}
+              {mostraProjecao && (
+                <StatCard
+                  label="Próximo mês"
+                  value={<span className={numeroDoCartao}>{fmt(nextMonthTotal)}</span>}
+                  hint={`${nextMonthFull} ${nextYear}: ${nextMonthSub}`}
+                  icon={<ChevronRight className="h-3.5 w-3.5" />}
+                  to="/financeiro/projecao"
+                  className={semIconeNoCelular}
+                />
+              )}
+            </StatGrid>
 
             {/* 13/11/2026 (dono): entrou, saiu, saldo e de onde entrou, com o CRM e E-mail junto. */}
             <DinheiroDoMesLido periodo={`${selYear}-${String(selMonth + 1).padStart(2, "0")}-01`} />
@@ -1856,9 +1851,9 @@ function LegacyFinanceiro() {
                                   <div className="mr-3 min-w-0 flex-1">
                                     <div className="flex min-w-0 items-center">
                                       <p className={juntar(texto.corpo, "mr-2 min-w-0 truncate font-medium")}>{nome}</p>
-                                      {planStatus === "active" && <span className={juntar(etiqueta, "bg-success/15 text-success")}>Ativo</span>}
-                                      {planStatus === "soon" && <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>Renova em breve</span>}
-                                      {planStatus === "overdue" && <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>Pendente</span>}
+                                      {planStatus === "active" && <span className={juntar(etiqueta, "bg-success-soft text-success")}>Ativo</span>}
+                                      {planStatus === "soon" && <span className={juntar(etiqueta, "bg-warning-soft text-warning")}>Renova em breve</span>}
+                                      {planStatus === "overdue" && <span className={juntar(etiqueta, "bg-danger-soft text-destructive")}>Pendente</span>}
                                       {planStatus === "unknown" && <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Sem data</span>}
                                     </div>
                                     <p className={juntar(texto.auxiliar, "truncate")}>
@@ -2155,7 +2150,7 @@ function LegacyFinanceiro() {
                       onClick={() => setRechargeForm(f => ({ ...f, amount: String(val) }))}
                       className={juntar(
                         "flex min-w-0 flex-col items-center rounded-md border px-2 py-2.5 transition-colors",
-                        ativo ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground hover:bg-muted",
+                        ativo ? "border-primary bg-accent-soft text-primary" : "border-border text-foreground hover:bg-muted",
                         foco,
                       )}
                     >

@@ -222,7 +222,7 @@ export default function GeracoesRecentes({ arquivos, taskId, criativoId, pedidos
             <li key={p.id} className="flex min-w-0 items-start py-2.5" data-geracao={p.id}>
               <div className="mr-2 flex shrink-0">
                 {envios.slice(0, 4).map((e) => (
-                  <span key={e.n} className="relative mr-1 block w-10 overflow-hidden rounded bg-muted" style={{ paddingBottom: "3.25rem" }} title={e.erro || ROTULO[e.estado] || e.estado}>
+                  <span key={e.n} className="relative mr-1 block w-10 overflow-hidden rounded-sm bg-muted" style={{ paddingBottom: "3.25rem" }} title={e.erro || ROTULO[e.estado] || e.estado}>
                     {e.storage_path ? <MiniaturaDoStorage bucket="mesa" caminho={e.storage_path} alt={`Variação ${e.n}`} className="absolute inset-0 h-full w-full" /> : null}
                   </span>
                 ))}

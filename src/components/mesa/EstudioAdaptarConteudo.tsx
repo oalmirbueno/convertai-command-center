@@ -58,7 +58,7 @@ export default function EstudioAdaptarConteudo({
   return (
     <div className="min-w-0" data-controle="adaptar-conteudo" data-ligado={ligado ? "sim" : "nao"}>
       <div className="flex min-w-0 items-center">
-        <Switch
+        <Switch className="toque-compacto"
           id="adaptar-conteudo-a-copy"
           checked={ligado}
           disabled={bloqueado || salvando}

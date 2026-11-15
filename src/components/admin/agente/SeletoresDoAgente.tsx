@@ -58,7 +58,7 @@ function Lista({
           onFechar();
         }
       }}
-      className="absolute left-0 top-full z-10 mt-1 w-72 max-w-[calc(100vw-32px)] rounded-lg border border-border bg-popover p-1.5 shadow-lg"
+      className="absolute left-0 top-full z-10 mt-1 w-72 max-w-[calc(100vw-32px)] rounded-lg border border-border bg-popover p-1.5 shadow-pop"
     >
       {children}
     </div>

@@ -158,7 +158,7 @@ export default function LogosReais({ criativo, caminhoDaArte }: { criativo: Cria
             ))}
           </ul>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <select aria-label="Canto do logo" value={canto} onChange={(e) => setCanto(e.target.value as CantoDoLogo)} className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-[12px]">
+            <select aria-label="Canto do logo" value={canto} onChange={(e) => setCanto(e.target.value as CantoDoLogo)} className="h-8 min-w-0 rounded-md border border-input bg-card px-2 text-[12px]">
               {CANTOS_DO_LOGO.map((c) => <option key={c.valor} value={c.valor}>{c.rotulo}</option>)}
             </select>
             <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!caminhoDaArte || compondo || !logos[escolhido]} onClick={() => void porNaArte(logos[escolhido])} aria-label="Pôr na arte" title="Pôr na arte">

@@ -85,7 +85,7 @@ export function NotesPreview({ src, clientId, clientName, onChange }: { src: str
           key={i}
           type="button"
           onClick={() => toggleAt(i)}
-          className="flex items-start text-[13px] py-1 w-full text-left bg-transparent border-0 hover:bg-secondary/40 rounded px-1 -mx-1 cursor-pointer touch-manipulation"
+          className="flex items-start text-[13px] py-1 w-full text-left bg-transparent border-0 hover:bg-muted/40 rounded px-1 -mx-1 cursor-pointer touch-manipulation"
           style={{ paddingLeft: cb[1].length * 6 + 4 }}
         >
           <span className={cn("mr-2 mt-[3px] w-4 h-4 border rounded-sm flex items-center justify-center shrink-0", checked ? "bg-primary border-primary" : "border-muted-foreground/50")}>
@@ -259,9 +259,9 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
   }
 
   return (
-    <div className="my-3 overflow-hidden rounded-lg border border-border bg-secondary/20">
+    <div className="my-3 overflow-hidden rounded-lg border border-border bg-muted/20">
       {/* Cabeçalho numa linha: nome, cliente e projeto, o "?" com o como usar e recarregar. */}
-      <div className="flex min-w-0 items-center border-b border-border bg-secondary/40 px-3 py-2 text-[12px]">
+      <div className="flex min-w-0 items-center border-b border-border bg-muted/40 px-3 py-2 text-[12px]">
         <Columns3 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
         <span className="shrink-0 font-semibold">Kanban</span>
         <span className="ml-1.5 min-w-0 truncate text-muted-foreground">· {clientName || "cliente"}</span>
@@ -347,7 +347,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                           className={cn("px-1 py-0.5 rounded hover:opacity-80",
                             t.priority === "urgent" ? "bg-destructive/20 text-destructive" :
                             t.priority === "high" ? "bg-amber-500/20 text-amber-600" :
-                            t.priority === "low" ? "bg-secondary" : "bg-secondary")}
+                            t.priority === "low" ? "bg-muted" : "bg-muted")}
                           title="Alterar prioridade"
                         >{t.priority || "medium"}</button>
                       )}
@@ -363,7 +363,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                       ) : (
                         <button
                           onClick={() => setEditing({ id: t.id, field: "due" })}
-                          className="px-1 py-0.5 rounded border border-dashed border-border/60 hover:bg-secondary"
+                          className="px-1 py-0.5 rounded border border-dashed border-border/60 hover:bg-muted"
                           title="Definir prazo"
                         >{t.due_date ? `Prazo ${t.due_date}` : "Prazo"}</button>
                       )}

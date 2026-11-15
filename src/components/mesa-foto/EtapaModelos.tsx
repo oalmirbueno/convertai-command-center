@@ -711,7 +711,7 @@ function LinhaDoMotor({ motor, ligado, qualidade, onAlternar }: { motor: OpcaoDe
         data-motor={motor.id}
         className={`flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted ${ligado ? "text-foreground" : "text-foreground/80"}`}
       >
-        <span className={`mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${ligado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>{ligado && <Check className="h-2.5 w-2.5" />}</span>
+        <span className={`mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border ${ligado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>{ligado && <Check className="h-2.5 w-2.5" />}</span>
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
           {motor.rotulo}
           {motor.resolucao ? <span className="ml-1 text-[11px] font-normal text-muted-foreground">{motor.resolucao}</span> : null}
@@ -746,10 +746,10 @@ function SeletorDeMotores({
         <button
           type="button"
           aria-label={`Motores da rodada: ${ligados.length} ${ligados.length === 1 ? "ligado" : "ligados"}`}
-          className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-background px-2.5 text-left text-[13px] transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-card px-2.5 text-left text-[13px] transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-seletor-de-motores=""
         >
-          <span className="mr-2 shrink-0 rounded bg-primary/10 px-1.5 py-px text-[11px] font-semibold tabular-nums text-primary">{ligados.length}</span>
+          <span className="mr-2 shrink-0 rounded-full bg-primary/10 px-2 py-px text-[11px] font-semibold tabular-nums text-primary">{ligados.length}</span>
           <span className={`min-w-0 flex-1 truncate ${ligados.length ? "" : "text-muted-foreground"}`}>{resumo}</span>
           <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </button>
@@ -1515,7 +1515,7 @@ function FotosDoModelo({ persona, imagens }: { persona: Persona; imagens: Imagem
   const derivada = derivadas.find((i) => i.id === atual?.id);
   return <div className="space-y-3" data-pasta-do-modelo={persona.id}>
     {atual ? <>
-      <button type="button" className="mx-auto block w-full max-w-sm cursor-zoom-in rounded focus-visible:ring-2 focus-visible:ring-primary" aria-label="Ampliar foto do modelo" onClick={() => setZoom(lista.indexOf(atual))}>
+      <button type="button" className="mx-auto block w-full max-w-sm cursor-zoom-in rounded-sm focus-visible:ring-2 focus-visible:ring-primary" aria-label="Ampliar foto do modelo" onClick={() => setZoom(lista.indexOf(atual))}>
         <ImagemDaMesa caminho={atual.caminho} bucket={atual.bucket || "mesa"} alt={atual.titulo || persona.nome} className="max-h-[38vh] w-full !object-contain" />
       </button>
       <GaleriaDeFotos titulo={`Pasta de ${persona.nome}`} fotos={lista} atualId={atual.id} onSelecionar={setEscolhida} />

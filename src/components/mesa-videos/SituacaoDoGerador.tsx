@@ -89,7 +89,7 @@ export default function SituacaoDoGerador() {
       <ul className="space-y-1.5" aria-label="O que falta para gerar">
         {provedores.map((p) => (
           <li key={p.provedor} className="flex min-w-0 items-start text-[13px]" data-provedor={p.provedor}>
-            {p.faltam.length ? <AlertTriangle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" /> : <CheckCircle2 className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
+            {p.faltam.length ? <AlertTriangle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" /> : <CheckCircle2 className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
             <span className="min-w-0 flex-1">
               <span className="font-medium">{p.rotulo}</span>
               <span className={texto.auxiliar}>
@@ -101,7 +101,7 @@ export default function SituacaoDoGerador() {
           </li>
         ))}
         <li className="flex min-w-0 items-start text-[13px]" data-carteira="">
-          {saldoCurto ? <AlertTriangle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" /> : <CheckCircle2 className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
+          {saldoCurto ? <AlertTriangle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" /> : <CheckCircle2 className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
           <span className="min-w-0 flex-1">
             <span className="font-medium">Carteira de IA do cliente</span>
             <span className={texto.auxiliar}>

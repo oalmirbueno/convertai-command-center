@@ -1256,7 +1256,7 @@ export default function AdminCiclo() {
           onClick={() =>
             void (avulso ? marcarEtapaAvulsa(client, step) : toggle(client, step))
           }
-          className={`flex h-8 items-center justify-center rounded-lg border text-[12px] font-bold tabular-nums transition-colors active:scale-95 ${
+          className={`flex h-8 items-center justify-center rounded-md border text-[12px] font-semibold tabular-nums transition-colors active:scale-95 ${
             done
               ? onboardingTrack
                 ? "border-info bg-info text-white"
@@ -1265,7 +1265,7 @@ export default function AdminCiclo() {
                 ? "border-primary bg-primary/10 text-primary"
                 : onboardingTrack
                   ? "border-info/25 bg-info/5 text-info/70"
-                  : "border-border bg-secondary/30 text-muted-foreground"
+                  : "border-border bg-muted/40 text-muted-foreground"
           } ${pendingKey === key ? "opacity-50" : ""}`}
         >
           {done ? <Check className="h-4 w-4" strokeWidth={3} /> : step}
@@ -1277,10 +1277,8 @@ export default function AdminCiclo() {
       <div
         key={client.id}
         ref={(node) => { cardRefs.current[client.id] = node; }}
-        // Sem caixa (sistema): linha com divisória; semana fechada ganha só a marca verde à esquerda.
-        className={`min-w-0 border-t border-border py-3 transition-colors ${
-          complete ? "border-l-2 border-l-success pl-3" : ""
-        } ${highlighted === client.id ? "rounded-md ring-2 ring-primary" : ""}`}
+        // Cartão do cliente (redesenho de 14/11/2026); semana fechada ganha a borda verde.
+        className={juntar(superficie.painel, "min-w-0 px-4 py-3 transition-colors", complete && "border-success/40", highlighted === client.id && "ring-2 ring-primary")}
       >
         {/* Linha de identidade: altura fixa, contador com largura reservada */}
         <button
@@ -1410,7 +1408,7 @@ export default function AdminCiclo() {
               className={`flex-1 rounded-full ${
                 etapaFeita(client, index + 1)
                   ? !avulso && index + 1 > totalSteps ? "bg-info" : "bg-primary"
-                  : "bg-secondary"
+                  : "bg-muted"
               }`}
             />
           ))}
@@ -1433,7 +1431,7 @@ export default function AdminCiclo() {
               onClick={() =>
                 void (avulso ? marcarEtapaAvulsa(client, nextStep) : toggle(client, nextStep))
               }
-              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50"
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50"
             >
               <Check className="h-4 w-4" strokeWidth={3} />
               Feito
@@ -1452,7 +1450,7 @@ export default function AdminCiclo() {
             de jogo, REAL: cada Feito marca a etapa de verdade no
             histórico. Corrigir uma marcação é na folha (toque no nome). */}
         {!avulso ? (
-          <div className="divide-y divide-border border-t border-border">
+          <div className="divide-y divide-border/60 border-t border-border/60">
             {FRENTES_DA_SEMANA.map((frente) => {
               const aberta = frente.steps.find((s) => !etapaFeita(client, s)) ?? null;
               const feitasNaFila = frente.steps.filter((s) => etapaFeita(client, s)).length;
@@ -1487,7 +1485,7 @@ export default function AdminCiclo() {
                     type="button"
                     disabled={!canWrite || pendingKey === chaveBotao}
                     onClick={() => void toggle(client, aberta)}
-                    className={`flex h-8 shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 text-[12px] font-bold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50 ${
+                    className={`flex h-8 shrink-0 items-center gap-1 rounded-full bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50 ${
                       pendingKey === chaveBotao ? "opacity-50" : ""
                     }`}
                   >
@@ -1600,10 +1598,12 @@ export default function AdminCiclo() {
       type="button"
       onClick={() => setAvulsosAbertos(true)}
       className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
-        avulsosAbertos ? "text-primary" : "text-muted-foreground"
+        avulsosAbertos ? "text-foreground" : "text-muted-foreground"
       }`}
     >
-      <Sparkles className="h-5 w-5" />
+      <span className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors ${avulsosAbertos ? "bg-primary text-primary-foreground" : ""}`}>
+        <Sparkles className="h-[18px] w-[18px]" />
+      </span>
       <span className="flex items-center gap-1">
         Avulsos
         <span className="tabular-nums opacity-70">{totalAvulsos > 0 ? totalAvulsos : ""}</span>
@@ -1623,10 +1623,12 @@ export default function AdminCiclo() {
         type="button"
         onClick={() => { setArea(target); setAvulsosAbertos(false); setServicoAvulso(null); }}
         className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
-          selected ? "text-primary" : "text-muted-foreground"
+          selected ? "text-foreground" : "text-muted-foreground"
         }`}
       >
-        <Icon className="h-5 w-5" />
+        <span className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors ${selected ? "bg-primary text-primary-foreground" : ""}`}>
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
         <span className="flex items-center gap-1">
           {config.short}
           <span className="tabular-nums opacity-70">
@@ -1653,7 +1655,7 @@ export default function AdminCiclo() {
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Abrir menu"
           >
             <Menu className="h-5 w-5" />
@@ -1670,7 +1672,7 @@ export default function AdminCiclo() {
           <button
             type="button"
             onClick={() => setHistoryOpen(true)}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Ver histórico"
           >
             <TrendingUp className="h-[18px] w-[18px]" />
@@ -1681,7 +1683,7 @@ export default function AdminCiclo() {
           <button
             type="button"
             onClick={() => setWeekOffset((current) => current - 1)}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary/60"
+            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Semana anterior"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -1699,7 +1701,7 @@ export default function AdminCiclo() {
           <button
             type="button"
             onClick={() => setWeekOffset((current) => current + 1)}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary/60"
+            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Próxima semana"
           >
             <ChevronRight className="h-4 w-4" />
@@ -1718,7 +1720,7 @@ export default function AdminCiclo() {
                 type="button"
                 onClick={() => setDayKey(key)}
                 className={`flex h-12 flex-col items-center justify-center rounded-md transition-colors ${
-                  isToday ? "bg-primary/15" : count > 0 ? "bg-secondary/50" : ""
+                  isToday ? "bg-accent-soft" : count > 0 ? "bg-muted/70" : "hover:bg-muted/50"
                 }`}
                 aria-label={`Dia ${day.getDate()}: ${count} ${count === 1 ? "marcação" : "marcações"}`}
               >
@@ -1739,7 +1741,7 @@ export default function AdminCiclo() {
         </div>
 
         <div className="flex h-8 items-center gap-2 px-3">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-all duration-300"
               style={{ width: `${Math.round(weekTotals.pct * 100)}%` }}
@@ -1787,7 +1789,7 @@ export default function AdminCiclo() {
             <button
               type="button"
               onClick={jumpToNext}
-              className="flex w-full items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/[0.06] p-3 text-left"
+              className="flex w-full items-center gap-2.5 rounded-lg bg-accent-soft p-3 text-left transition-colors hover:bg-primary/[0.14]"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[13px] font-bold tabular-nums text-primary">
                 {nextUp.step}
@@ -1867,7 +1869,7 @@ export default function AdminCiclo() {
                   {acoes.map((acao, indice) => (
                     <div
                       key={`${acao.clientId}:${acao.acao}:${indice}`}
-                      className="rounded-lg px-1 py-0.5 transition-colors hover:bg-secondary/50"
+                      className="rounded-lg px-1 py-0.5 transition-colors hover:bg-muted/60"
                     >
                       <button
                         type="button"
@@ -1924,7 +1926,7 @@ export default function AdminCiclo() {
           {carregandoClientes ? (
             <Carregando rotulo="Carregando os clientes" linhas={4} />
           ) : (
-            <div className="grid min-w-0 grid-cols-1 border-b border-border lg:grid-cols-2 lg:gap-x-6 empty:border-b-0">{openClients.map(renderClientCard)}</div>
+            <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">{openClients.map(renderClientCard)}</div>
           )}
 
           {!carregandoClientes && activeClients.length === 0 && (
@@ -1959,7 +1961,7 @@ export default function AdminCiclo() {
               <button
                 type="button"
                 onClick={() => setShowClosed((current) => !current)}
-                className="flex h-10 w-full items-center justify-between rounded-lg border border-success/25 bg-success/5 px-3 text-left"
+                className="flex h-10 w-full items-center justify-between rounded-full bg-success-soft px-4 text-left transition-colors hover:bg-success/15"
               >
                 <span className="text-[12px] font-semibold text-success">
                   {closedClients.length} {closedClients.length === 1 ? "cliente fechado" : "clientes fechados"}
@@ -1968,7 +1970,7 @@ export default function AdminCiclo() {
                   {showClosed ? "esconder" : "ver"}
                 </span>
               </button>
-              {showClosed && <div className="grid min-w-0 grid-cols-1 border-b border-border lg:grid-cols-2 lg:gap-x-6">{closedClients.map(renderClientCard)}</div>}
+              {showClosed && <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">{closedClients.map(renderClientCard)}</div>}
             </div>
           )}
 
@@ -2063,7 +2065,7 @@ export default function AdminCiclo() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Frentes do ciclo"
       >
-        <div className="flex items-stretch h-14 max-w-[560px] mx-auto">
+        <div className="flex items-stretch h-16 max-w-[560px] mx-auto">
           <AreaTab target="social" />
           <AreaTab target="trafego" />
           <AvulsosTab />
@@ -2212,7 +2214,7 @@ export default function AdminCiclo() {
             <button
               type="button"
               onClick={() => { setLegendOpen(true); setMenuOpen(false); }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-secondary/60"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-muted"
             >
               <ListChecks className="h-4 w-4 text-primary" /> Como funciona o ciclo
             </button>
@@ -2234,7 +2236,7 @@ export default function AdminCiclo() {
                 type="button"
                 onClick={() => void logWeekToBrain()}
                 disabled={brainSaving}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-secondary/60 disabled:opacity-50"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-muted disabled:opacity-50"
               >
                 <Brain className={`h-4 w-4 text-primary ${brainSaving ? "animate-pulse" : ""}`} />
                 Guardar a semana no segundo cérebro
@@ -2249,7 +2251,7 @@ export default function AdminCiclo() {
                 key={link.url}
                 to={link.url}
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <link.icon className="h-4 w-4" /> {link.title}
               </Link>
@@ -2281,7 +2283,7 @@ export default function AdminCiclo() {
                     <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
                       {Math.round(week.pct * 100)}%
                     </span>
-                    <span className="flex h-24 w-full items-end overflow-hidden rounded-md bg-secondary/40">
+                    <span className="flex h-24 w-full items-end overflow-hidden rounded-md bg-muted/60">
                       <span
                         className={`block w-full rounded-md ${
                           selected ? "bg-primary" : week.pct >= 1 ? "bg-success/70" : "bg-primary/40"
@@ -2347,7 +2349,7 @@ export default function AdminCiclo() {
               <li key={slot.step} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-foreground">
                 <span
                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${
-                    slot.fixed ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"
+                    slot.fixed ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {slot.step}

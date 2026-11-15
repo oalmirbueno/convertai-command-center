@@ -55,14 +55,14 @@ function Aviso({ children }: { children: string }) {
 
 function NumeroDaMeta({ metrica, valor, rotulo }: { metrica: MetricaDoCatalogo; valor: number | null; rotulo?: string }) {
   return (
-    <div className={juntar(superficie.painel, "min-w-0 px-3 py-2.5")} data-metrica={metrica.id}>
+    <div className={juntar(superficie.painel, "min-w-0 px-4 py-3")} data-metrica={metrica.id}>
       <dt className="flex min-w-0 items-center">
         <span className="truncate text-[12px] text-muted-foreground" title={rotulo || metrica.rotulo}>{rotulo || metrica.rotulo}</span>
         <AjudaRecolhida className="ml-1 shrink-0" rotulo={`O que é ${rotulo || metrica.rotulo}?`} titulo={rotulo || metrica.rotulo}>
           {metrica.ajuda}
         </AjudaRecolhida>
       </dt>
-      <dd className="mt-0.5 truncate text-[24px] font-semibold tabular-nums">{formatar(valor, metrica.formato)}</dd>
+      <dd className="mt-1 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums">{formatar(valor, metrica.formato)}</dd>
     </div>
   );
 }
@@ -204,7 +204,7 @@ export function GraficoNoTempo({
         ))}
       </div>
       <details className="mt-2">
-        <summary className={juntar("cursor-pointer rounded text-[12px] text-muted-foreground hover:text-foreground", foco)}>Ver em tabela</summary>
+        <summary className={juntar("cursor-pointer rounded-sm text-[12px] text-muted-foreground hover:text-foreground", foco)}>Ver em tabela</summary>
         <div className="mt-2">
           <table className="w-full text-[12px] tabular-nums">
             <thead>

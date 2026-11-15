@@ -140,8 +140,8 @@ function EstadoVazio({
       </div>
       {carregando && (
         <div className="mt-8 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <div className="h-[68px] animate-pulse rounded-xl bg-muted" />
-          <div className="h-[68px] animate-pulse rounded-xl bg-muted" />
+          <div className="h-[68px] animate-pulse rounded-lg bg-muted" />
+          <div className="h-[68px] animate-pulse rounded-lg bg-muted" />
         </div>
       )}
       {recentes.length > 0 && (
@@ -374,7 +374,7 @@ export default function AbaCampanhas({
 
   const centro = nova ? (
     hypeIndice !== null && hypes.isLoading ? (
-      <div className="mx-auto h-64 max-w-2xl animate-pulse rounded-xl bg-muted" />
+      <div className="mx-auto h-64 max-w-2xl animate-pulse rounded-lg bg-muted" />
     ) : (
       <CampanhaNova
         key={chaveDaNova.current}

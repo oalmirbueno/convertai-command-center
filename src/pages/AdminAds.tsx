@@ -268,6 +268,21 @@ function Metrica({
   corDoValor?: string;
   grande?: boolean;
 }) {
+  // Resumo do cliente (redesenho de 14/11/2026): cartão de indicador, rótulo pequeno em cima e número grande.
+  if (grande) {
+    return (
+      <div className={juntar(superficie.painel, "flex min-w-0 items-start px-4 py-3.5 sm:px-5 sm:py-4")} title={dica} data-metrica="">
+        <div className="min-w-0 flex-1">
+          <p className={juntar(texto.rotulo, "truncate font-normal")}>{unidade}</p>
+          <p className={juntar("mt-1.5 flex min-w-0 items-center text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums max-sm:text-[20px] max-sm:leading-7", corDoValor || "text-foreground")}>
+            <span className="min-w-0 truncate">{valor}</span>
+            {seta}
+          </p>
+        </div>
+        <span className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground max-sm:hidden" aria-hidden="true">{icone}</span>
+      </div>
+    );
+  }
   return (
     <div className="flex min-w-0 items-center" title={dica} data-metrica="">
       <span
@@ -317,7 +332,7 @@ function NumerosDoCliente({ dados, grande = false }: { dados: NumerosDoClienteDa
   const custo = p && p.custoPorResultado != null && p.custoPorResultado > 0 ? p.custoPorResultado : null;
   const icone = grande ? "h-[18px] w-[18px]" : "h-4 w-4";
   return (
-    <div className={juntar("grid min-w-0 grid-cols-2 gap-x-4 gap-y-3", grande ? "md:grid-cols-4" : "lg:grid-cols-4")}>
+    <div className={juntar("grid min-w-0 grid-cols-2", grande ? "gap-3 md:grid-cols-4 md:gap-4" : "gap-x-4 gap-y-3 lg:grid-cols-4")}>
       <Metrica grande={grande} icone={<Wallet className={icone} />} valor={dinheiro(dados.investido)} unidade="investido" dica={EXPLICACOES.investido} />
       <Metrica
         grande={grande}
@@ -735,13 +750,13 @@ function ClientAdsDetail({
           </div>
 
           {aba === "campanhas" && (
-            <div className="min-w-0 border-t border-border pt-4">
+            <div className="min-w-0">
               {carregando && porCampanha.length === 0 ? (
                 <Carregando rotulo="Carregando campanhas" linhas={3} />
               ) : porCampanha.length === 0 ? (
                 <EstadoVazio compacto titulo="Nenhuma campanha com movimento nos últimos 30 dias." />
               ) : (
-                <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Campanhas">
+                <ul className={juntar(superficie.painel, lista.divisoria, "min-w-0 p-1.5 sm:p-2")} aria-label="Campanhas">
                   {porCampanha.map(({ resumo, ficha }) => (
                     <LinhaDaCampanha
                       key={resumo.campaignId}
@@ -1193,7 +1208,7 @@ function ContasEConexao({
 
         {/* A situação de cada conta, problemas primeiro. No computador rola por dentro; no celular a página rola. */}
         {ativas.length > 0 && (
-          <ul className="-mx-2 min-w-0 divide-y divide-border lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain" aria-label="Situação das contas">
+          <ul className={juntar(superficie.painel, "min-w-0 px-2 py-1 divide-y divide-border lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain")} aria-label="Situação das contas">
             {ativas.map((conta) => {
               const sit = situacaoDaConta(conta);
               const tom = CLASSE_DO_TOM_DA_CONTA[sit.tom];
@@ -1591,7 +1606,7 @@ export default function AdminAds() {
                     }
                   />
                 ) : (
-                  <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Clientes com anúncios">
+                  <ul className={juntar(superficie.painel, lista.divisoria, "min-w-0 overflow-hidden p-1.5 sm:p-2")} aria-label="Clientes com anúncios">
                     {filtrados.map(([clientId, linhas]) => {
                       const dados = numerosDoCliente(linhas, contasDoCliente(clientId));
                       const problemas = contasDoCliente(clientId).filter(temProblema).length;

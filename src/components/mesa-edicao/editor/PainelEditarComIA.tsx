@@ -211,7 +211,7 @@ export default function PainelEditarComIA({
       </div>
 
       {!fala && (
-        <p className="text-[12px] text-amber-600 dark:text-amber-400">
+        <p className="text-[12px] text-warning">
           Sem fala marcada: legenda, zoom e animações precisam dela.{" "}
           {irPara && (
             <button type="button" className="underline" onClick={() => irPara("timestamp")}>
@@ -263,7 +263,7 @@ export default function PainelEditarComIA({
         <div className="space-y-2 border-t border-border pt-3" data-plano-da-edicao="">
           <p className={texto.corpo}>{plano.resumo}</p>
           {avisosDoPlano.map((a) => (
-            <p key={a} className="text-[12px] text-amber-600 dark:text-amber-400">
+            <p key={a} className="text-[12px] text-warning">
               {a}
             </p>
           ))}
@@ -372,7 +372,7 @@ export default function PainelEditarComIA({
           <ul className="space-y-1" aria-label="Peças da edição">
             {montagem.passos.map((x) => (
               <li key={x.id} className="flex min-w-0 text-[12px]">
-                {x.feito ? <Check className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden="true" /> : <X className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                {x.feito ? <Check className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" /> : <X className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
                 <span className="min-w-0">
                   <span className="font-medium">{x.rotulo}</span>
                   <span className="text-muted-foreground">: {x.detalhe}</span>

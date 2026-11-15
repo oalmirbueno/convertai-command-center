@@ -121,7 +121,7 @@ export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false, colu
   return (
     <section className={coluna ? "min-w-0 p-0.5" : "min-w-0 border-t border-border pt-4"} aria-label="O produto" data-produto-das-fotos="" data-coluna={coluna ? "" : undefined} data-recolhido={recolhido ? "sim" : "nao"}>
       <div className={recolhido ? "flex min-w-0 flex-wrap items-center justify-between" : "mb-2.5 flex min-w-0 flex-wrap items-center justify-between"}>
-        <div className="mr-2 flex min-w-0 flex-1 items-center">
+        <div className="mr-2 flex min-w-0 flex-auto items-center">
           <TituloRecolhivel titulo="O produto" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
           {!recolhido && <AjudaRecolhida className="ml-1.5" rotulo="Como o produto é identificado">
             {kits.length

@@ -55,10 +55,10 @@ function Variacao({ valor, bomQuandoSobe }: { valor: number | null | undefined; 
 
 function NumeroGrande({ rotulo, valor, variacao, bomQuandoSobe = true, dica }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string }) {
   return (
-    <div className={juntar(superficie.painel, "min-w-0 px-3 py-2.5")} title={dica}>
-      <dt className="truncate text-[11px] text-muted-foreground">{rotulo}</dt>
+    <div className={juntar(superficie.painel, "min-w-0 px-4 py-3")} title={dica}>
+      <dt className="truncate text-[12px] text-muted-foreground">{rotulo}</dt>
       <dd className="mt-0.5 flex min-w-0 items-baseline">
-        <span className="truncate text-[20px] font-semibold tabular-nums">{valor}</span>
+        <span className="truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums">{valor}</span>
         <Variacao valor={variacao} bomQuandoSobe={bomQuandoSobe} />
       </dd>
     </div>
@@ -72,7 +72,7 @@ export function ResumoDoTopo({ dados, grupo, onGrupo }: { dados: ResultadosDaCon
   const mix = dados.mix;
   return (
     <section aria-label="Resumo" className="min-w-0 space-y-2">
-      <dl className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4">
+      <dl className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-4">
         <NumeroGrande rotulo="Investimento" valor={brl(r.investimento)} variacao={t ? t.gasto_pct : null} dica="Quanto a Meta cobrou no período." />
         <NumeroGrande rotulo={r.misturado ? `${r.rotulo} (principal)` : r.rotulo} valor={inteiro(r.resultados)} variacao={t ? t.resultados_pct : null} dica="O resultado que o objetivo das campanhas busca." />
         <NumeroGrande rotulo="Custo por resultado" valor={brl(r.custo_por_resultado)} variacao={t ? t.custo_por_resultado_pct : null} bomQuandoSobe={false} />
@@ -138,7 +138,7 @@ export function CartaoCompacto({ a, acao }: { a: AnuncioDoResultado; acao?: Reac
   const m = a.metricas;
   return (
     <article className={juntar(superficie.painel, "grid min-w-0 grid-cols-[56px_minmax(0,1fr)] gap-3 p-2.5")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
-      <div className="relative w-14 overflow-hidden rounded-md bg-secondary/40" style={{ paddingTop: "125%" }}>
+      <div className="relative w-14 overflow-hidden rounded-md bg-muted/40" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
           <Foto src={a.imagem_url} alt={a.nome} className="h-full w-full" />
         </div>
@@ -182,7 +182,7 @@ function textoDoIndice(indice: number | null): string {
 export function CartaoDaPeca({ p }: { p: PecaAgrupada }) {
   return (
     <article className={juntar(superficie.painel, "grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 p-2.5")} aria-label={`Criativo ${p.nome}`}>
-      <div className="relative w-[72px] overflow-hidden rounded-md bg-secondary/40" style={{ paddingTop: "125%" }}>
+      <div className="relative w-[72px] overflow-hidden rounded-md bg-muted/40" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
           <Foto src={p.imagem_url} alt={p.nome} className="h-full w-full" />
         </div>

@@ -30,6 +30,7 @@ import {
   etiqueta,
   juntar,
   lista,
+  superficie,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
@@ -71,10 +72,10 @@ const CAMPOS_DE_LEMBRETE = ", lembretes, ultimo_lembrete_em";
 type LinhaDaLista = LinhaDoBriefingNoPainel & { rascunho_salvo_em?: string | null; lembretes?: number | null; ultimo_lembrete_em?: string | null; anexos?: AnexoDoBriefing[] };
 
 const ETIQUETA: Record<SituacaoNoPainel, { rotulo: string; classe: string }> = {
-  reabrir: { rotulo: "Reabrir", classe: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
-  recebido: { rotulo: "Recebido", classe: "bg-primary/15 text-primary" },
+  reabrir: { rotulo: "Reabrir", classe: "bg-warning-soft text-warning" },
+  recebido: { rotulo: "Recebido", classe: "bg-accent-soft text-primary" },
   expirado: { rotulo: "Expirado", classe: "bg-muted text-muted-foreground" },
-  vencendo: { rotulo: "Vencendo", classe: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
+  vencendo: { rotulo: "Vencendo", classe: "bg-warning-soft text-warning" },
   pendente: { rotulo: "Aguardando", classe: "bg-muted text-foreground" },
 };
 
@@ -464,7 +465,7 @@ export default function AdminBriefings() {
               )
             ) : (
               <RegiaoRolavel rotulo="Briefings" memoria="briefings:lista">
-                <ul className={juntar(lista.aberta, lista.divisoria)}>
+                <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")}>
                   {filtrados.map((b) => {
                     const s = painel.situacao[b.id] || "pendente";
                     const est = emArquivados ? { rotulo: "Arquivado", classe: "bg-muted text-muted-foreground" } : ETIQUETA[s];
@@ -474,7 +475,7 @@ export default function AdminBriefings() {
                     const lembrar = !emArquivados && !!painel.lembrar[b.id];
                     const marcado = selecionados.indexOf(b.id) >= 0;
                     return (
-                      <li key={b.id} className={juntar(lista.linha, "py-1.5")}>
+                      <li key={b.id} className={juntar(lista.linha, "rounded-md py-2")}>
                         {selecaoVisivel && (
                           <input
                             type="checkbox"
@@ -497,7 +498,7 @@ export default function AdminBriefings() {
                           </span>
                         </button>
                         {lembrar && (
-                          <button type="button" onClick={() => abrir(b.id, true)} className={juntar(botao.barra, "ml-2 text-amber-700 dark:text-amber-300")} aria-label={`Lembrar ${nomeDoBriefing(b)}`}>
+                          <button type="button" onClick={() => abrir(b.id, true)} className={juntar(botao.barra, "ml-2 text-warning")} aria-label={`Lembrar ${nomeDoBriefing(b)}`}>
                             <BellRing className="h-4 w-4" aria-hidden="true" />
                             <span className="ml-1.5 hidden sm:inline">Lembrar</span>
                           </button>

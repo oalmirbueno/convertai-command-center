@@ -10,7 +10,7 @@ export default function SugestoesDoAgente({ children }: { children: ReactNode })
       <button type="button" aria-expanded={aberto} aria-controls={id}
         onClick={() => setAberto(v => !v)}
         className="flex min-h-7 items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
-        <ChevronDown aria-hidden="true" className={`h-3 w-3 transition-transform ${aberto ? "rotate-180" : ""}`} />
+        <ChevronDown aria-hidden="true" className={`h-3 w-3 transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} />
         {aberto ? "Recolher sugestões" : "Sugestões"}
       </button>
       {aberto && <div id={id} className="max-h-40 overflow-y-auto overscroll-contain pt-1">{children}</div>}

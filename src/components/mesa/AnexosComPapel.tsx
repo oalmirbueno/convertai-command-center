@@ -95,7 +95,7 @@ export default function AnexosComPapel({
           disabled={desabilitado || cheio}
           aria-expanded={acervoAberto}
           // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
-          className="mb-1 mr-1.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          className="mb-1 mr-1.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
           aria-label="Do acervo"
           title="Do acervo: escolher do acervo do cliente"
         >

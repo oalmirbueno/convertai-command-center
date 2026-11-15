@@ -248,7 +248,7 @@ function FerramentasDoNo({ noId, tipo }: { noId: string; tipo: TipoDeNo }) {
   const ctx = useContext(ContextoDoQuadro);
   if (!ctx) return null;
   return (
-    <div className="nodrag absolute -top-9 right-0 flex items-center rounded-lg border border-white/10 bg-zinc-950 p-0.5 shadow-xl" data-ferramentas-do-no={noId}>
+    <div className="nodrag absolute -top-9 right-0 flex items-center rounded-lg border border-white/10 bg-zinc-950 p-0.5 shadow-pop" data-ferramentas-do-no={noId}>
       <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => ctx.abrir(noId)} aria-label="Ajustar o cartão" title="Ajustar">
         <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -270,7 +270,7 @@ function NoCartao({ data, selected }: NodeProps<NoDeCartao>) {
   return (
     <div
       style={{ width: TAMANHO_DO_CARTAO.largura, height: TAMANHO_DO_CARTAO.altura }}
-      className={`relative overflow-visible rounded-xl border bg-zinc-950 text-left text-zinc-100 shadow-sm shadow-black/30 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/10"}`}
+      className={`relative overflow-visible rounded-lg border bg-zinc-950 text-left text-zinc-100 shadow-sm shadow-black/30 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/10"}`}
       data-no-do-canvas={no.id}
       data-tipo={no.tipo}
     >
@@ -406,7 +406,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   return (
     <div
       style={{ width: TAMANHO_DA_SAIDA.largura, height: TAMANHO_DA_SAIDA.altura }}
-      className={`relative flex flex-col overflow-visible rounded-xl border bg-zinc-950 text-zinc-100 shadow-sm shadow-black/40 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/15"}`}
+      className={`relative flex flex-col overflow-visible rounded-lg border bg-zinc-950 text-zinc-100 shadow-sm shadow-black/40 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/15"}`}
       data-no-do-canvas={no.id}
       data-tipo="gerar"
     >
@@ -568,7 +568,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
           }
           titulo="Geração do Canvas"
           descricao={carrossel ? "Fotos coerentes no primeiro motor, uma de cada vez a partir da capa. Tudo entra no acervo, marcado como gerado." : "Uma foto por motor ligado. O que sair entra no acervo, marcado como gerado, e aparece aqui."}
-          className="nodrag h-9 w-full rounded-xl bg-emerald-400 text-[13px] font-semibold text-black hover:bg-emerald-300"
+          className="nodrag h-9 w-full rounded-md bg-emerald-400 text-[13px] font-semibold text-black hover:bg-emerald-300"
           disabled={!ctx || bloqueios.length > 0 || gerando.length > 0}
           fecharAoConfirmar
           partes={() => partesDoResultado(no, entradas)}
@@ -616,7 +616,7 @@ function NoVideo({ data, selected }: NodeProps<NoDeVideo>) {
   return (
     <div
       style={{ width: TAMANHO_DO_VIDEO.largura, height: TAMANHO_DO_VIDEO.altura }}
-      className={`relative flex flex-col overflow-visible rounded-xl border bg-zinc-950 text-zinc-100 shadow-sm ${selected ? "border-white/60 ring-2 ring-orange-400/70" : "border-orange-400/30"}`}
+      className={`relative flex flex-col overflow-visible rounded-lg border bg-zinc-950 text-zinc-100 shadow-sm ${selected ? "border-white/60 ring-2 ring-orange-400/70" : "border-orange-400/30"}`}
       data-no-do-canvas={no.id}
       data-tipo="video"
     >
@@ -642,7 +642,7 @@ function NoQuadro({ data, selected }: NodeProps<NoDeVideo>) {
   return (
     <div
       style={{ width: TAMANHO_DO_QUADRO.largura, height: TAMANHO_DO_QUADRO.altura }}
-      className={`relative flex flex-col overflow-visible rounded-xl border bg-zinc-950 text-zinc-100 shadow-sm ${selected ? "border-white/60 ring-2 ring-teal-400/70" : "border-teal-400/30"}`}
+      className={`relative flex flex-col overflow-visible rounded-lg border bg-zinc-950 text-zinc-100 shadow-sm ${selected ? "border-white/60 ring-2 ring-teal-400/70" : "border-teal-400/30"}`}
       data-no-do-canvas={no.id}
       data-tipo="quadro"
     >
@@ -691,7 +691,7 @@ function Paleta({ onTipo, onAdicionar }: { onTipo: (t: TipoDeNo) => void; onAdic
     <nav
       ref={roda}
       aria-label="Cartões para o quadro"
-      className={`${PAINEL} ${FLUTUANTE} ${juntar(rolagem.janela, "absolute left-3 top-3 z-10 max-h-[calc(100%-24px)] w-[56px] rounded-xl p-1")}`}
+      className={`${PAINEL} ${FLUTUANTE} ${juntar(rolagem.janela, "absolute left-3 top-3 z-10 max-h-[calc(100%-24px)] w-[56px] rounded-lg p-1")}`}
       data-paleta-lateral=""
       data-rolagem-propria=""
     >
@@ -715,7 +715,7 @@ function Paleta({ onTipo, onAdicionar }: { onTipo: (t: TipoDeNo) => void; onAdic
             aria-label={tipo.rotulo}
             title={`${tipo.rotulo}: ${tipo.dica} Toque para pôr no quadro (ou arraste).`}
             data-paleta={t}
-            className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1 text-center transition-colors hover:bg-white/10"
+            className="mb-0.5 flex w-full flex-col items-center rounded-lg px-0.5 py-1 text-center transition-colors hover:bg-white/10"
           >
             {/* 16/10/2026 (dono: "deixa só o ícone, sem as bordinhas"): o nome vai no title e no aria-label. */}
             <span className={`flex h-8 w-8 items-center justify-center ${t === "agente" ? "rounded-full" : "rounded-lg"} ${tipo.fundo}`}>
@@ -725,7 +725,7 @@ function Paleta({ onTipo, onAdicionar }: { onTipo: (t: TipoDeNo) => void; onAdic
         );
       })}
       <span className="mx-1 my-1 block h-px bg-white/10" />
-      <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1 text-center hover:bg-white/10" aria-label="Adicionar" title="Adicionar: escolher do acervo, dos produtos ou das pessoas, pela foto">
+      <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-0.5 flex w-full flex-col items-center rounded-lg px-0.5 py-1 text-center hover:bg-white/10" aria-label="Adicionar" title="Adicionar: escolher do acervo, dos produtos ou das pessoas, pela foto">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400 text-black">
           <Plus className="h-4 w-4" aria-hidden="true" />
         </span>
@@ -743,8 +743,8 @@ function BarraLateral({ recolhida, onRecolher, titulo, custo, custoCurto, childr
   const roda = useRodaPresa<HTMLElement>();
   if (recolhida) {
     return (
-      <div ref={roda} className={`${PAINEL} ${FLUTUANTE} absolute right-3 top-3 z-10 flex w-[56px] flex-col items-center rounded-xl px-1 py-1.5`} data-ajustes="recolhidos">
-        <button type="button" onClick={() => onRecolher(false)} aria-label="Abrir os ajustes" className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-white/10" title="Ajustes do cartão ou do Resultado">
+      <div ref={roda} className={`${PAINEL} ${FLUTUANTE} absolute right-3 top-3 z-10 flex w-[56px] flex-col items-center rounded-lg px-1 py-1.5`} data-ajustes="recolhidos">
+        <button type="button" onClick={() => onRecolher(false)} aria-label="Abrir os ajustes" className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-white/10" title="Ajustes do cartão ou do Resultado">
           <SlidersHorizontal className="h-4 w-4" />
         </button>
         <span className="mt-0.5 text-center text-[11px] leading-tight text-zinc-400">Ajustes</span>
@@ -756,7 +756,7 @@ function BarraLateral({ recolhida, onRecolher, titulo, custo, custoCurto, childr
     <aside
       ref={roda}
       aria-label="Ajustes"
-      className={`${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[60%] min-w-0 flex-col rounded-xl sm:inset-x-auto sm:bottom-auto sm:right-3 sm:top-3 sm:z-10 sm:max-h-[calc(100%-24px)] sm:w-[272px] xl:w-[296px]`}
+      className={`${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[60%] min-w-0 flex-col rounded-lg sm:inset-x-auto sm:bottom-auto sm:right-3 sm:top-3 sm:z-10 sm:max-h-[calc(100%-24px)] sm:w-[272px] xl:w-[296px]`}
       data-ajustes="abertos"
     >
       <div className="flex shrink-0 items-center border-b border-white/10 px-3 py-2">

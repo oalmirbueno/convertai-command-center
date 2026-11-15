@@ -51,7 +51,7 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
     <div
       role="region"
       aria-label="Envios"
-      className="fixed z-50 overflow-hidden rounded-lg border border-border bg-card shadow-xl
+      className="fixed z-50 overflow-hidden rounded-lg border border-border bg-card shadow-pop
         left-2 right-2 w-auto bottom-[calc(env(safe-area-inset-bottom,0px)+5.5rem)]
         sm:left-auto sm:right-4 sm:w-[380px] sm:max-w-[calc(100vw-2rem)] sm:bottom-4"
     >

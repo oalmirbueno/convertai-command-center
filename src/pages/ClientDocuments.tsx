@@ -330,7 +330,7 @@ export default function ClientDocuments() {
           descricao={`${registrosDeEntrega.length} ${registrosDeEntrega.length === 1 ? "documento" : "documentos"}`}
           ajuda="O documento de cada entrega da equipe: o que foi feito, com as imagens reais e os números com a fonte. Toque para abrir."
         >
-          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Registros de entrega">
+          <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")} aria-label="Registros de entrega">
             {registrosDeEntrega.map((f: any) => (
               <li
                 key={f.id}
@@ -363,7 +363,7 @@ export default function ClientDocuments() {
           descricao="Quando a equipe liberar um material ou pedir sua aprovação, ele aparece aqui na hora."
         />
       ) : (
-        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Documentos">
+        <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")} aria-label="Documentos">
           {filteredFiles.map((f: any) => {
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
 
@@ -373,7 +373,7 @@ export default function ClientDocuments() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Ver ${f.file_name}`}
-                className={juntar("min-w-0 cursor-pointer rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40", foco)}
+                className={juntar("min-w-0 cursor-pointer rounded-md px-2 py-2.5 transition-colors hover:bg-muted/40", foco)}
                 onClick={() => setPreviewFile(f)}
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >

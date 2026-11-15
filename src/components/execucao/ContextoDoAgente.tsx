@@ -34,7 +34,7 @@ const ROTULO_ESTADO: Record<string, string> = {
 };
 
 const TOM_ESTADO: Record<string, string> = {
-  queued: "bg-secondary text-muted-foreground",
+  queued: "bg-muted text-muted-foreground",
   in_progress: "bg-info/15 text-info",
   done: "bg-success/15 text-success",
   review: "bg-warning/15 text-warning",
@@ -249,7 +249,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                   <span className={juntar(
                     etiqueta,
                     "h-6 px-2",
-                    TOM_ESTADO[l.status] || "bg-secondary text-muted-foreground",
+                    TOM_ESTADO[l.status] || "bg-muted text-muted-foreground",
                   )}>
                     <Icone className={juntar("mr-1 h-3 w-3", l.status === "in_progress" && "animate-spin")} aria-hidden="true" />
                     {ROTULO_ESTADO[l.status] || l.status}

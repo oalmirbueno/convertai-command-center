@@ -311,7 +311,7 @@ export default function EstudioDeNomes({
             Com as escolhas da última rodada.{" "}
             <button
               type="button"
-              className={juntar(toqueCompacto, "rounded px-1 text-[12px] font-medium text-primary underline-offset-2 hover:underline", foco)}
+              className={juntar(toqueCompacto, "rounded-sm px-1 text-[12px] font-medium text-primary underline-offset-2 hover:underline", foco)}
               onClick={() => {
                 setCriterios(criteriosDoBriefing);
                 setPedido(pedidoInicial);

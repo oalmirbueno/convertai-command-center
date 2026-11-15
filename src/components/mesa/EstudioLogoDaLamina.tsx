@@ -107,7 +107,7 @@ export default function EstudioLogoDaLamina({
     <div
       role="radiogroup"
       aria-label={alvo === "lamina" ? `Logo da lâmina ${ordem}` : "Logo do conjunto"}
-      className={compacto ? "inline-flex h-8 min-w-0 max-w-full items-center rounded-md bg-muted p-0.5" : "flex min-w-0 flex-wrap items-center"}
+      className={compacto ? "inline-flex h-8 min-w-0 max-w-full items-center rounded-full bg-muted p-0.5" : "flex min-w-0 flex-wrap items-center"}
     >
       {opcoes.map((o) => {
         const marcada = o.valor === atual;
@@ -122,10 +122,10 @@ export default function EstudioLogoDaLamina({
             onClick={() => void escolher(o.valor)}
             className={
               compacto
-                ? `inline-flex h-7 shrink-0 items-center rounded px-2 text-[12px] transition-colors disabled:opacity-50 ${
-                    marcada ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                ? `toque-compacto inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[12px] transition-colors disabled:opacity-50 ${
+                    marcada ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`
-                : `mb-1 mr-1.5 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[12px] transition-colors disabled:opacity-50 ${
+                : `mb-1 mr-1.5 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[12px] transition-colors disabled:opacity-50 ${
                     marcada ? "border-primary bg-primary/10 font-medium text-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                   }`
             }

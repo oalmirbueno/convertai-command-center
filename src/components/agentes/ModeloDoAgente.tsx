@@ -71,7 +71,7 @@ export default function ModeloDoAgente({
         >
           <Cpu className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="min-w-0 truncate">{linha}</span>
-          <ChevronDown className={juntar("ml-0.5 h-3.5 w-3.5 shrink-0 transition-transform", aberto ? "rotate-180" : "")} aria-hidden="true" />
+          <ChevronDown className={juntar("ml-0.5 h-3.5 w-3.5 shrink-0 transition-transform duration-200", aberto ? "rotate-180" : "")} aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[300px] space-y-2 p-3">

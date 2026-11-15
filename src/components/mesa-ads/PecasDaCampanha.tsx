@@ -162,7 +162,7 @@ export default function PecasDaCampanha({
                     {/* Proporção pelo padding (Safari 11 não tem a proporção nativa): 4:5 no feed e no carrossel, 9:16 nos stories. */}
                     <span
                       className={juntar(
-                        "relative block h-0 w-full overflow-hidden rounded-md bg-secondary ring-2",
+                        "relative block h-0 w-full overflow-hidden rounded-md bg-muted ring-2",
                         p.formato === "stories_9x16" ? "pb-[177.78%]" : "pb-[125%]",
                         marcada ? "ring-primary" : "ring-transparent",
                       )}
@@ -217,7 +217,7 @@ export function PuxarDeUmaCampanha({ onEscolher, className = "" }: { onEscolher:
       onChange={(e) => {
         if (e.target.value) onEscolher(e.target.value);
       }}
-      className={juntar("h-8 min-w-0 max-w-full rounded-md border border-input bg-background px-2 text-[12px] text-foreground sm:max-w-[260px]", className)}
+      className={juntar("h-8 min-w-0 max-w-full rounded-md border border-input bg-card px-2 text-[12px] text-foreground sm:max-w-[260px]", className)}
       data-puxar-de-campanha=""
     >
       <option value="">Puxar de uma campanha</option>

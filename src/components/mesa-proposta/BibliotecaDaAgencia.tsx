@@ -465,7 +465,7 @@ export default function BibliotecaDaAgencia({ aberta, onAberta, aba, onAba }: { 
               type="button"
               role="tab"
               aria-selected={aba === a.valor}
-              className={juntar("toque-compacto mr-4 border-b-2 pb-1.5 text-[13px] font-medium", aba === a.valor ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+              className={juntar("toque-compacto mb-1 mr-1 inline-flex h-8 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium transition-colors", aba === a.valor ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
               onClick={() => onAba(a.valor)}
             >
               {a.rotulo}

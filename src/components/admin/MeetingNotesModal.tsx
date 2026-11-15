@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { X, Loader2, CalendarIcon, Upload, FileText, Trash2, Sparkles, CheckCircle2 } from "lucide-react";
+import { Loader2, Upload, FileText, Trash2, Sparkles, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { createFileRecord } from "@/lib/fileRecordActions";
@@ -7,11 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { juntar, superficie } from "@/components/sistema/estilos";
+import { CampoDeFormulario, JanelaCentral, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import { useNavigate } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 
@@ -228,147 +224,119 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={isProcessing ? undefined : onClose} />
-      <div className={juntar(superficie.painel, "relative w-full max-w-[580px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200 flex flex-col max-h-[90vh]")}
-        style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Gerar Projeto via IA</h2>
-          </div>
-          <button onClick={isProcessing ? undefined : onClose}
-            className={cn("text-muted-foreground hover:text-foreground transition-colors bg-transparent border-none p-1", isProcessing && "opacity-30 cursor-not-allowed")}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
-          {/* Processing overlay */}
-          {isProcessing && (
-            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
-              <div className="flex items-center gap-3">
-                {step === "done" ? (
-                  <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
-                ) : (
-                  <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
-                )}
-                <p className="text-sm font-medium text-foreground">{stepLabels[step]}</p>
-              </div>
-              <Progress value={progress} className="h-1.5" />
-              <p className="text-[11px] text-muted-foreground">
-                {files.length > 0 ? `${files.length} documento(s) sendo processado(s)` : "Processando anotações"}
-              </p>
-            </div>
-          )}
-
-          {/* Client */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cliente *</label>
-            <select value={clientId} onChange={e => setClientId(e.target.value)} disabled={isProcessing}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors disabled:opacity-50">
-              <option value="">Selecionar...</option>
-              {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
-            </select>
-          </div>
-
-          {/* Project type */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Tipo de Projeto</label>
-            <select value={projectType} onChange={e => setProjectType(e.target.value)} disabled={isProcessing}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors disabled:opacity-50">
-              {PROJECT_TYPES.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
-            </select>
-          </div>
-
-          {/* File uploads */}
-          <div className="space-y-2">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Documentos ({files.length}/{MAX_FILES})
-            </label>
-            <input ref={fileRef} type="file" accept={ACCEPTED_FORMATS} onChange={handleFileChange} multiple className="hidden" />
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-              onClick={() => !isProcessing && fileRef.current?.click()}
-              className={cn(
-                "border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors min-h-[80px]",
-                isProcessing ? "opacity-50 cursor-not-allowed border-border" : "border-border hover:border-primary/40 hover:bg-primary/5"
-              )}
-            >
-              <Upload className="w-5 h-5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground text-center">
-                Arraste ou clique para adicionar PDFs, .md, .txt
-              </p>
-            </div>
-
-            {/* File list */}
-            {files.length > 0 && (
-              <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
-                {files.map((f, i) => (
-                  <div key={`${f.name}-${i}`} className="flex items-center gap-2 bg-secondary/60 rounded-lg px-3 py-2">
-                    <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{f.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{formatFileSize(f.size)}</p>
-                    </div>
-                    {!isProcessing && (
-                      <button onClick={(e) => { e.stopPropagation(); removeFile(i); }}
-                        className="text-muted-foreground hover:text-destructive transition-colors bg-transparent border-none p-0.5 cursor-pointer">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Manual notes */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Anotações de Reunião {files.length === 0 && "*"}
-            </label>
-            <textarea value={content} onChange={e => setContent(e.target.value)} rows={6}
-              disabled={isProcessing}
-              placeholder="Cole aqui suas anotações, transcrições, pontos discutidos..."
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none disabled:opacity-50" />
-          </div>
-
-          <div className="bg-secondary/50 rounded-lg p-3">
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              <Sparkles className="w-3 h-3 inline mr-1 text-primary" />
-              A IA vai analisar todos os documentos e anotações para gerar automaticamente:
-              nome do projeto, escopo detalhado, marcos, tarefas iniciais e prazo estimado.
-            </p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-border flex justify-end gap-3 shrink-0">
-          <button onClick={onClose} disabled={isProcessing}
-            className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border border-border disabled:opacity-50">
+    <JanelaCentral
+      aberta={open}
+      onMudar={(v) => { if (!v && !isProcessing) onClose(); }}
+      largura="md"
+      icone={<Sparkles className="h-4 w-4 text-primary" />}
+      titulo="Gerar Projeto via IA"
+      ajuda="A IA lê os documentos e as anotações e monta o projeto: nome, escopo, marcos, tarefas iniciais e prazo estimado."
+      rotuloDaAjuda="O que a IA gera"
+      fecharNoFundo={!isProcessing}
+      rodape={
+        <div className="flex justify-end space-x-2">
+          <button type="button" onClick={onClose} disabled={isProcessing} className={botao.secundario}>
             Cancelar
           </button>
-          <button onClick={handleSave} disabled={isProcessing || !clientId || (!content.trim() && files.length === 0)}
-            className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 flex items-center gap-2">
+          <button type="button" onClick={handleSave} disabled={isProcessing || !clientId || (!content.trim() && files.length === 0)} className={botao.primario}>
             {isProcessing ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 Processando...
               </>
             ) : (
               <>
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                 Gerar Projeto com IA
               </>
             )}
           </button>
         </div>
+      }
+    >
+      <div className="space-y-4">
+        {/* Andamento */}
+        {isProcessing && (
+          <div className="space-y-2.5 rounded-md bg-accent-soft p-3.5" role="status">
+            <div className="flex items-center">
+              {step === "done" ? (
+                <CheckCircle2 className="mr-2.5 h-4 w-4 shrink-0 text-success" />
+              ) : (
+                <Loader2 className="mr-2.5 h-4 w-4 shrink-0 animate-spin text-primary" />
+              )}
+              <p className="min-w-0 text-[13px] font-medium leading-5 text-foreground">{stepLabels[step]}</p>
+            </div>
+            <Progress value={progress} className="h-1.5" />
+            <p className={texto.auxiliar}>
+              {files.length > 0 ? `${files.length} documento(s) sendo processado(s)` : "Processando anotações"}
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <CampoDeFormulario rotulo="Cliente" obrigatorio>
+            <select value={clientId} onChange={e => setClientId(e.target.value)} disabled={isProcessing} className={campo}>
+              <option value="">Selecionar...</option>
+              {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
+            </select>
+          </CampoDeFormulario>
+
+          <CampoDeFormulario rotulo="Tipo de Projeto">
+            <select value={projectType} onChange={e => setProjectType(e.target.value)} disabled={isProcessing} className={campo}>
+              {PROJECT_TYPES.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
+            </select>
+          </CampoDeFormulario>
+        </div>
+
+        {/* Documentos */}
+        <div className="space-y-2">
+          <p className={texto.rotulo}>
+            Documentos <span className="tabular-nums">({files.length}/{MAX_FILES})</span>
+          </p>
+          <input ref={fileRef} type="file" accept={ACCEPTED_FORMATS} onChange={handleFileChange} multiple className="hidden" />
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+            onClick={() => !isProcessing && fileRef.current?.click()}
+            className={juntar(
+              "flex min-h-[84px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-border p-4 text-center transition-colors",
+              isProcessing ? "cursor-not-allowed opacity-50" : "hover:border-primary/50 hover:bg-accent-soft/50"
+            )}
+          >
+            <Upload className="h-4 w-4 text-muted-foreground" />
+            <p className={juntar(texto.auxiliar, "mt-1.5")}>
+              Arraste ou clique para adicionar PDFs, .md, .txt
+            </p>
+          </div>
+
+          {files.length > 0 && (
+            <ul className="divide-y divide-border/60">
+              {files.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex items-center py-2">
+                  <FileText className="mr-2.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium leading-5 text-foreground">{f.name}</p>
+                    <p className="text-[11px] leading-4 tabular-nums text-muted-foreground">{formatFileSize(f.size)}</p>
+                  </div>
+                  {!isProcessing && (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); removeFile(i); }} aria-label={`Remover ${f.name}`}
+                      className={juntar(botao.icone, "ml-2 h-7 w-7 hover:text-destructive")}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <CampoDeFormulario rotulo="Anotações de Reunião" obrigatorio={files.length === 0}>
+          <textarea value={content} onChange={e => setContent(e.target.value)} rows={6}
+            disabled={isProcessing}
+            placeholder="Cole aqui suas anotações, transcrições, pontos discutidos..."
+            className={juntar(campoTexto, "resize-none")} />
+        </CampoDeFormulario>
       </div>
-    </div>
+    </JanelaCentral>
   );
 }

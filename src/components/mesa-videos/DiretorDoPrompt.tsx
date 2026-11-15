@@ -178,7 +178,7 @@ export default function DiretorDoPrompt({
                 </ul>
               )}
               {resposta.avisos.map((a, i) => (
-                <p key={i} className={juntar(texto.auxiliar, "text-amber-700 dark:text-amber-400")}>
+                <p key={i} className={juntar(texto.auxiliar, "text-warning")}>
                   {a}
                 </p>
               ))}

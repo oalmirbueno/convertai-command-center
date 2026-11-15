@@ -91,7 +91,7 @@ export function Variacao({ agora, antes }: { agora: number; antes: number }) {
   const pct = Math.round(((agora - antes) / antes) * 100);
   if (!isFinite(pct) || pct === 0) return null;
   return (
-    <span className={juntar("ml-2 inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[11px] font-medium tabular-nums", pct > 0 ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive")}>
+    <span className={juntar("ml-2 inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[11px] font-medium tabular-nums", pct > 0 ? "bg-accent-soft text-primary" : "bg-danger-soft text-destructive")}>
       {pct > 0 ? "+" : ""}
       {pct}%
     </span>

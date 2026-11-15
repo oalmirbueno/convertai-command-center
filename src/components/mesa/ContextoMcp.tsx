@@ -103,7 +103,7 @@ export default function ContextoMcp() {
               <li key={chave} className="flex min-w-0 items-start py-2.5" data-item-mcp={chave} data-ativo={i.ativo ? "sim" : "nao"}>
                 <div className="mr-3 min-w-0 flex-1">
                   <p className="flex min-w-0 items-center text-[13px]">
-                    <span className="mr-1.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{ROTULO_DA_FONTE[i.fonte]}</span>
+                    <span className="mr-1.5 shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{ROTULO_DA_FONTE[i.fonte]}</span>
                     <span className="min-w-0 truncate font-medium">{i.titulo}</span>
                   </p>
                   <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
@@ -117,7 +117,7 @@ export default function ContextoMcp() {
                   disabled={trocando === chave}
                   onCheckedChange={(v) => void trocar(i, v === true)}
                   aria-label={`${i.titulo}: vale para o planejamento`}
-                  className="mt-0.5"
+                  className="toque-compacto mt-0.5"
                 />
               </li>
             );

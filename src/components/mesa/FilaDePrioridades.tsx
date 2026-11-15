@@ -254,7 +254,7 @@ export default function FilaDePrioridades({
           <button
             type="button"
             onClick={() => { void consulta.refetch(); void revisoes.refetch(); }}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
             aria-label="Atualizar prioridades"
             title="Atualizar"
           >
@@ -267,7 +267,7 @@ export default function FilaDePrioridades({
         <Input aria-label="Buscar cliente nas prioridades" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente" className="h-9 max-w-xs" />
         {consulta.dataUpdatedAt > 0 && <span className="ml-auto text-[11px] text-muted-foreground max-sm:hidden">Conferido às {new Date(consulta.dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
       </div>
-      {primeiro && !consulta.isError && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Próxima ação recomendada">
+      {primeiro && !consulta.isError && <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Próxima ação recomendada">
         <div className="min-w-0 flex-1"><p className="text-[12px] leading-4 font-medium text-primary">Comece por aqui · {primeiro.nome}</p><p className="mt-1 text-[13px] leading-5 font-semibold">{tituloComMes(primeiro.acoes[0])}</p><p className="mt-1 text-[12px] leading-4 text-muted-foreground">{primeiro.acoes[0].motivo}</p></div>
         <button type="button" className={juntar(botao.primario, "h-9 px-3 text-[12px] leading-4")} onClick={() => onAbrir(primeiro.client_id, primeiro.acoes[0].aba, primeiro.acoes[0].mes)}>Começar <ArrowRight className="ml-2 h-4 w-4" /></button>
       </div>}
@@ -358,7 +358,7 @@ export default function FilaDePrioridades({
       )}
 
       {fila && fila.grupos.length > 0 && grupos.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border p-5 text-center text-[13px] text-muted-foreground">Nada com esse filtro.</p>
+        <p className="rounded-lg bg-muted/50 p-5 text-center text-[13px] text-muted-foreground">Nada com esse filtro.</p>
       )}
 
       {fila && emDia.length > 0 && (

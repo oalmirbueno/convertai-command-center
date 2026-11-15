@@ -360,10 +360,10 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
             {marginRows.length === 0 ? (
               <EstadoVazio compacto titulo="Nenhum cliente com receita ainda." />
             ) : (
-              <RegiaoRolavel memoria="financeiro:planos:margem" rotulo="Margem por cliente" className="lg:max-h-[420px]">
+              <RegiaoRolavel memoria="financeiro:planos:margem" rotulo="Margem por cliente" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden px-4 py-1 sm:px-5")} className="lg:max-h-[420px]">
                 {/* Computador: tabela. Celular e tablet: lista. */}
                 <table className="hidden w-full text-[13px] lg:table">
-                  <thead className="bg-background lg:sticky lg:top-0 lg:z-10">
+                  <thead className="bg-card lg:sticky lg:top-0 lg:z-10">
                     <tr className="border-b border-border">
                       <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Cliente</th>
                       <th className={juntar(texto.rotulo, "px-3 py-2 text-left")}>Plano</th>
@@ -598,9 +598,9 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
       >
         {oneOffOpen && (
           <div id="financeiro-avulsos">
-            <RegiaoRolavel memoria="financeiro:planos:avulsos" rotulo="Avulsos do Plano Diretor" className="lg:max-h-[420px]">
+            <RegiaoRolavel memoria="financeiro:planos:avulsos" rotulo="Avulsos do Plano Diretor" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden px-4 py-1 sm:px-5")} className="lg:max-h-[420px]">
               <table className="hidden w-full text-[13px] lg:table">
-                <thead className="bg-background lg:sticky lg:top-0 lg:z-10">
+                <thead className="bg-card lg:sticky lg:top-0 lg:z-10">
                   <tr className="border-b border-border">
                     <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Entrega</th>
                     <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Lançamento</th>

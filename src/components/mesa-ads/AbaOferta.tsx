@@ -75,7 +75,7 @@ const vazio = (v: string) => !v || !v.trim();
 
 const campoPequeno = "h-9 text-[13px]";
 const areaPequena = "min-h-[64px] text-[13px] leading-relaxed";
-const seletorNativo = "h-9 min-w-0 max-w-full rounded-md border border-input bg-background px-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const seletorNativo = "h-9 min-w-0 max-w-full rounded-md border border-input bg-card px-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Marca de campo sem dado (nada é inventado). */
 function Lacuna() {
@@ -200,7 +200,7 @@ function Ideias({ ideias, onLevar }: { ideias: Ideia[]; onLevar: (i: Ideia) => v
           <li key={`${i.titulo}-${k}`} className="flex min-w-0 flex-wrap items-start py-2.5">
             <div className="mr-3 min-w-0 flex-1">
               <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{i.titulo}</p>
-              {i.gancho_verbal && <p className="mt-0.5 font-serif text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{`“${i.gancho_verbal}”`}</p>}
+              {i.gancho_verbal && <p className="mt-0.5 tracking-[-0.01em] text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{`“${i.gancho_verbal}”`}</p>}
               {i.gancho_visual && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{i.gancho_visual}</p>}
               {(i.estilo_visual || i.formato) && (
                 <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{[i.estilo_visual ? humanizar(i.estilo_visual) : "", i.formato ? humanizar(i.formato) : ""].filter(Boolean).join(" · ")}</p>

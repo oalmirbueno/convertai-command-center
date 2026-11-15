@@ -166,7 +166,7 @@ export default function EmpresasCRM({
                         aria-hidden="true"
                         className={juntar(
                           "mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold sm:hidden",
-                          ficha.abertos > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                          ficha.abertos > 0 ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground",
                         )}
                       >
                         {(ficha.empresa.name.trim().charAt(0) || "?").toUpperCase()}
@@ -303,9 +303,9 @@ export default function EmpresasCRM({
                                       className={juntar(
                                         etiqueta,
                                         negocio.stage === "ganho"
-                                          ? "bg-success/15 text-success"
+                                          ? "bg-success-soft text-success"
                                           : negocio.stage === "perdido"
-                                            ? "bg-destructive/10 text-destructive"
+                                            ? "bg-danger-soft text-destructive"
                                             : "bg-muted text-muted-foreground",
                                       )}
                                     >

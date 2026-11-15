@@ -1,4 +1,5 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { botao } from "@/components/sistema/estilos";
 import { ENDERECO_DO_APP, ehSubdominioDeVenda } from "@/lib/produto/venda";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { agendarPreCargaEmSegundoPlano } from "@/lib/appRefresh";
@@ -183,9 +184,9 @@ const persistencia = opcoesDePersistencia();
 function EsqueletoDaPagina() {
   return (
     <div aria-busy="true" aria-label="Abrindo a página" className="space-y-4 pb-10">
-      <div className="h-8 w-56 animate-pulse rounded-lg bg-muted" />
-      <div className="h-24 animate-pulse rounded-xl bg-muted/80" />
-      <div className="h-[45vh] animate-pulse rounded-xl bg-muted/60" />
+      <div className="h-8 w-56 animate-pulse rounded-full bg-muted" />
+      <div className="h-24 animate-pulse rounded-lg bg-muted/80" />
+      <div className="h-[45vh] animate-pulse rounded-lg bg-muted/60" />
     </div>
   );
 }
@@ -195,12 +196,12 @@ function EsqueletoDaMesa() {
   return (
     <div aria-busy="true" aria-label="Abrindo a Mesa" className="space-y-5 pb-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="h-8 w-52 animate-pulse rounded-lg bg-muted" />
-        <div className="h-9 w-full animate-pulse rounded-lg bg-muted sm:ml-auto sm:w-[280px]" />
+        <div className="h-8 w-52 animate-pulse rounded-full bg-muted" />
+        <div className="h-9 w-full animate-pulse rounded-full bg-muted sm:ml-auto sm:w-[280px]" />
       </div>
-      <div className="h-16 animate-pulse rounded-xl bg-muted" />
-      <div className="h-10 animate-pulse rounded-xl bg-muted" />
-      <div className="h-[55vh] animate-pulse rounded-xl bg-muted/70" />
+      <div className="h-16 animate-pulse rounded-lg bg-muted" />
+      <div className="h-10 animate-pulse rounded-full bg-muted" />
+      <div className="h-[55vh] animate-pulse rounded-lg bg-muted/70" />
     </div>
   );
 }
@@ -323,14 +324,14 @@ function ProfileErrorScreen() {
         <button
           type="button"
           onClick={() => { void retryProfile(); }}
-          className="rounded-xl bg-primary px-5 py-2.5 text-[13px] leading-5 font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+          className={botao.primario}
         >
           Tentar de novo
         </button>
         <button
           type="button"
           onClick={() => { void logout(); }}
-          className="rounded-xl border border-border px-5 py-2.5 text-[13px] leading-5 font-medium text-foreground hover:border-primary/50 transition-colors cursor-pointer bg-transparent"
+          className={botao.secundario}
         >
           Sair
         </button>

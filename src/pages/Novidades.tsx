@@ -1,5 +1,6 @@
 import { CheckCircle2, Hammer, Sparkles } from "lucide-react";
-import { CabecalhoDePagina, EstadoVazio, Secao, juntar, texto } from "@/components/sistema";
+import { ChevronDown } from "lucide-react";
+import { CabecalhoDePagina, EstadoVazio, Secao, foco, juntar, superficie, texto } from "@/components/sistema";
 import {
   RELEASE_NOTES,
   formatReleaseDate,
@@ -16,15 +17,15 @@ import {
  * Lista limpa: uma entrada por linha, separadas por divisória, sem caixa.
  */
 
-function Novidade({ entry }: { entry: ReleaseEntry }) {
+function Novidade({ entry, aberta = false }: { entry: ReleaseEntry; aberta?: boolean }) {
   const building = entry.status === "esta-semana";
   return (
-    <article className="min-w-0 py-5 first:pt-0">
+    <article className="min-w-0 px-4 py-4 sm:px-5">
       <header className="flex min-w-0 items-start">
         <span
           className={juntar(
             "mr-2.5 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-            building ? "bg-warning/10 text-warning" : "bg-primary/10 text-primary",
+            building ? "bg-warning-soft text-warning" : "bg-accent-soft text-primary",
           )}
           aria-hidden="true"
         >
@@ -39,7 +40,12 @@ function Novidade({ entry }: { entry: ReleaseEntry }) {
       <p className="mt-1.5 pl-[30px] text-[13px] leading-5 text-muted-foreground">{entry.summary}</p>
 
       {entry.items.length > 0 && (
-        <ul className="mt-3 space-y-2.5 pl-[30px]">
+        <details className="group mt-2 pl-[30px]" open={aberta}>
+          <summary className={juntar("relative -left-2.5 inline-flex h-7 cursor-pointer list-none items-center rounded-full px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground [&::-webkit-details-marker]:hidden", foco)}>
+            {entry.items.length} {entry.items.length === 1 ? "melhoria" : "melhorias"}
+            <ChevronDown className="ml-1 h-3.5 w-3.5 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
+          </summary>
+        <ul className="mt-2 space-y-2.5">
           {entry.items.map((item) => (
             <li key={item.title} className="min-w-0">
               <p className={juntar(texto.corpo, "font-medium")}>{item.title}</p>
@@ -47,6 +53,7 @@ function Novidade({ entry }: { entry: ReleaseEntry }) {
             </li>
           ))}
         </ul>
+        </details>
       )}
     </article>
   );
@@ -74,9 +81,9 @@ export default function Novidades() {
               </span>
             }
           >
-            <div className="divide-y divide-border">
+            <div className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60")}>
               {building.map((entry) => (
-                <Novidade key={entry.id} entry={entry} />
+                <Novidade key={entry.id} entry={entry} aberta />
               ))}
             </div>
           </Secao>
@@ -84,7 +91,6 @@ export default function Novidades() {
 
         {live.length > 0 && (
           <Secao
-            divisoria={building.length > 0}
             recolher="novidades:no-ar"
             titulo={
               <span className="inline-flex items-center">
@@ -92,9 +98,9 @@ export default function Novidades() {
               </span>
             }
           >
-            <div className="divide-y divide-border">
-              {live.map((entry) => (
-                <Novidade key={entry.id} entry={entry} />
+            <div className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60")}>
+              {live.map((entry, i) => (
+                <Novidade key={entry.id} entry={entry} aberta={i === 0 && building.length === 0} />
               ))}
             </div>
           </Secao>

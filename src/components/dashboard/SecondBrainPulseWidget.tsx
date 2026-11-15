@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertCircle, Brain, GitCommit, Inbox, RefreshCw, Radio } from "lucide-react";
+import { AlertCircle, GitCommit, Inbox, RefreshCw } from "lucide-react";
+import { Card, Chip } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -71,48 +72,45 @@ export default function SecondBrainPulseWidget() {
     staleTime: 10_000,
   });
 
+  const poco = "min-w-0 rounded-md bg-muted/60 p-3.5";
+  const rotulo = "mb-2 flex items-center text-[12px] font-medium text-muted-foreground";
+
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-primary" />
-          <p className="label-sm">Segundo Cérebro · Pulse</p>
-          {data?.configured && (
-            <span className="flex items-center gap-1 text-[10px] text-success font-mono">
-              <Radio className="w-3 h-3 animate-pulse" />
-              ao vivo
-            </span>
-          )}
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="h-7 px-2 text-[11px]"
-        >
-          <RefreshCw className={`w-3 h-3 mr-1 ${isFetching ? "animate-spin" : ""}`} />
+    <Card
+      title="Segundo Cérebro"
+      collapsible={false}
+      subtitle={
+        data ? (
+          <span className="inline-flex items-center">
+            {data.configured && <Chip tone="success" dot className="mr-2">ao vivo</Chip>}
+            Atualizado {relTime(data.fetched_at)}
+          </span>
+        ) : undefined
+      }
+      action={
+        <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching} className="h-8 px-3 text-[12px]">
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
           Atualizar
         </Button>
-      </div>
-
-      {isLoading && <p className="text-xs text-muted-foreground">Sincronizando…</p>}
+      }
+    >
+      {isLoading && <p className="text-[12px] text-muted-foreground">Sincronizando…</p>}
 
       {error && (
-        <p className="text-xs text-destructive">
+        <p className="text-[12px] text-destructive">
           Falha ao consultar o bridge: {(error as Error).message}
         </p>
       )}
 
       {data && !data.configured && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[12px] text-muted-foreground">
           Bridge não configurado. Defina os segredos <code className="font-mono">SECOND_BRAIN_GITHUB_*</code>.
         </p>
       )}
 
       {data?.configured && data.error === "bridge_unavailable" && (
-        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/25 p-3 text-xs text-muted-foreground">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <div className={`${poco} flex items-start text-[12px] text-muted-foreground`}>
+          <AlertCircle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
           <div>
             <p className="text-foreground">Segundo Cérebro temporariamente indisponível.</p>
             <p className="mt-0.5">O painel continua ativo e tentará sincronizar novamente automaticamente.</p>
@@ -121,44 +119,44 @@ export default function SecondBrainPulseWidget() {
       )}
 
       {data?.configured && data.pulse && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {/* HEAD */}
-          <div className="border border-border/60 rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">HEAD</p>
+          <div className={poco}>
+            <p className={rotulo}>HEAD</p>
             {data.pulse.head ? (
               <>
-                <p className="font-mono text-sm text-foreground">{data.pulse.head.short}</p>
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{data.pulse.head.message}</p>
-                <p className="text-[10px] text-muted-foreground mt-2">
+                <p className="font-mono text-[13px] text-foreground">{data.pulse.head.short}</p>
+                <p className="mt-1 line-clamp-2 text-[12px] text-muted-foreground">{data.pulse.head.message}</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">
                   {data.pulse.head.author ?? "-"} · {relTime(data.pulse.head.committed_at)}
                 </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
                   branch <span className="font-mono">{data.pulse.branch}</span> · {data.pulse.latency_ms}ms {data.pulse.cached ? "· cache" : ""}
                 </p>
               </>
             ) : (
-              <p className="text-xs text-muted-foreground">Sem commits.</p>
+              <p className="text-[12px] text-muted-foreground">Sem commits.</p>
             )}
           </div>
 
           {/* Recent commits */}
-          <div className="border border-border/60 rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-              <GitCommit className="w-3 h-3" /> Commits recentes
+          <div className={poco}>
+            <p className={rotulo}>
+              <GitCommit className="mr-1.5 h-3 w-3" /> Commits recentes
             </p>
-            <div className="space-y-1.5 max-h-40 overflow-auto pr-1">
-              {data.commits.length === 0 && <p className="text-xs text-muted-foreground">-</p>}
+            <div className="space-y-1 pr-1 lg:max-h-40 lg:overflow-auto">
+              {data.commits.length === 0 && <p className="text-[12px] text-muted-foreground">-</p>}
               {data.commits.map((c) => (
                 <a
                   key={c.sha}
                   href={c.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block text-xs hover:bg-muted/40 rounded px-1.5 py-1 transition-colors"
+                  className="block rounded-sm px-1.5 py-1 text-[12px] transition-colors hover:bg-card"
                 >
-                  <span className="font-mono text-primary/80">{c.short}</span>{" "}
+                  <span className="font-mono text-primary">{c.short}</span>{" "}
                   <span className="text-foreground line-clamp-1">{c.message}</span>
-                  <span className="block text-[10px] text-muted-foreground">
+                  <span className="block text-[11px] text-muted-foreground">
                     {c.author ?? "-"} · {relTime(c.committed_at)}
                   </span>
                 </a>
@@ -167,15 +165,15 @@ export default function SecondBrainPulseWidget() {
           </div>
 
           {/* Inbox */}
-          <div className="border border-border/60 rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-              <Inbox className="w-3 h-3" /> Inbox pendente
-              <span className="ml-auto font-mono text-foreground">{data.pulse.inbox_pending}</span>
+          <div className={poco}>
+            <p className={rotulo}>
+              <Inbox className="mr-1.5 h-3 w-3" /> Inbox pendente
+              <Chip className="ml-auto">{data.pulse.inbox_pending}</Chip>
             </p>
-            <div className="space-y-1 max-h-40 overflow-auto pr-1">
-              {data.inbox.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma proposta aguardando.</p>}
+            <div className="space-y-1 pr-1 lg:max-h-40 lg:overflow-auto">
+              {data.inbox.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhuma proposta aguardando.</p>}
               {data.inbox.map((i) => (
-                <p key={i.sha} className="text-[11px] font-mono text-muted-foreground truncate">
+                <p key={i.sha} className="truncate font-mono text-[11px] text-muted-foreground">
                   {i.path.split("/").slice(-1)[0]}
                 </p>
               ))}
@@ -183,12 +181,6 @@ export default function SecondBrainPulseWidget() {
           </div>
         </div>
       )}
-
-      {data && (
-        <p className="text-[10px] text-muted-foreground mt-3">
-          Atualizado {relTime(data.fetched_at)}
-        </p>
-      )}
-    </div>
+    </Card>
   );
 }

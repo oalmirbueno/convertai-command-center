@@ -538,26 +538,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [celular]);
 
   const ferramentaDoMais = "toque-compacto flex h-16 min-w-0 flex-col items-center justify-center text-[11px] font-medium leading-4 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
-  const linhaDoMais = "flex h-11 w-full min-w-0 items-center rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const linhaDoMais = "flex h-11 w-full min-w-0 items-center rounded-full px-3.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
   return (
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav. data-casca: o modo foco (src/lib/modoFoco.ts + index.css) esconde a barra, o que flutua e tira o recuo do conteúdo. */}
       {/* Só de 768 px para cima (16/10/2026): o celular tem o topo enxuto logo abaixo. */}
-      {!celular && <nav data-casca="topo" className="dark fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-xl flex items-center px-3 gap-2 lg:px-4 lg:gap-4 text-foreground"
-        style={{
-          top: 'calc(env(safe-area-inset-top) + 12px)',
-          background: 'rgba(17, 17, 19, 0.85)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          border: '1px solid rgba(39, 39, 42, 0.5)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
-        }}
+      {!celular && <nav data-casca="topo" className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-full flex items-center pl-4 pr-2 gap-2 lg:gap-4 border border-border bg-card/90 text-foreground shadow-card backdrop-blur-xl"
+        style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
       >
         {/* Clip the square bitmap's transparent padding to the navbar so it
             cannot intercept clicks on the page below. Keep menus unclipped. */}
         <div className="flex h-full items-center shrink-0 overflow-hidden">
-          <img src={aceleriqLogo} alt="Aceleriq" className="h-28 w-auto" />
+          <img src={aceleriqLogo} alt="Aceleriq" className="logo-do-topo h-28 w-auto" />
         </div>
 
         {/* Center: Nav links (desktop) */}
@@ -571,17 +564,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 to={item.url}
                 data-tour={tourId}
                 className={({ isActive }) => cn(
-                  "relative whitespace-nowrap px-2 lg:px-3 py-1.5 text-[13px] rounded-md transition-colors",
-                  indice >= LINKS_NO_TOPO_ESTREITO && "hidden lg:block",
-                  isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  "relative inline-flex h-8 items-center whitespace-nowrap px-3 lg:px-3.5 text-[13px] rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  indice >= LINKS_NO_TOPO_ESTREITO && "hidden lg:inline-flex",
+                  isActive ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
                 {({ isActive }) => (
                   <>
                     {item.title}
-                    {isActive && (
-                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
-                    )}
                   </>
                 )}
               </NavLink>
@@ -595,12 +585,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               onClick={() => setMoreOpen(!moreOpen)}
               aria-label="Mais páginas"
               aria-expanded={moreOpen}
-              className="rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", moreOpen && "bg-muted text-foreground")}
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
             {moreOpen && (
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-56 max-h-[70vh] overflow-y-auto rounded-xl bg-popover border border-border p-1.5 shadow-lg animate-fade-in"
+              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-60 max-h-[70vh] overflow-y-auto rounded-lg bg-popover border border-border p-2 shadow-pop animate-fade-in"
                 style={{ transformOrigin: 'top center' }}
               >
                 {/* 768 a 1023: os links principais que não couberam na barra. */}
@@ -612,8 +602,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         to={item.url}
                         onClick={() => setMoreOpen(false)}
                         className={({ isActive }) => cn(
-                          "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] transition-colors",
-                          isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                          "flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors",
+                          isActive ? "bg-accent-soft font-medium text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                         )}
                       >
                         <item.icon className="w-3.5 h-3.5" />
@@ -626,7 +616,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {isAdminOrTeam ? (
                   gruposDoMenu.map((group) => (
                     <div key={group.label} className="mb-1 last:mb-0">
-                      <p className="px-3 pb-0.5 pt-2 text-[11px] font-semibold text-muted-foreground/70">
+                      <p className="px-3 pb-1 pt-2.5 text-[11px] font-medium text-muted-foreground/80">
                         {group.label}
                       </p>
                       {group.items.map((item) => (
@@ -636,8 +626,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           end={item.fimExato}
                           onClick={() => setMoreOpen(false)}
                           className={({ isActive }) => cn(
-                            "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] transition-colors",
-                            isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                            "flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors",
+                            isActive ? "bg-accent-soft font-medium text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                           )}
                         >
                           <item.icon className="w-3.5 h-3.5" />
@@ -654,8 +644,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       to={item.url}
                       onClick={() => setMoreOpen(false)}
                       className={({ isActive }) => cn(
-                        "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors",
-                        isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                        "flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors",
+                        isActive ? "bg-accent-soft font-medium text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                       )}
                     >
                       <item.icon className="w-3.5 h-3.5" />
@@ -683,7 +673,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setBuscaAberta(true)}
             aria-label="Buscar página (Ctrl+K)"
             title="Buscar página (Ctrl+K)"
-            className="hidden sm:flex w-8 h-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="hidden sm:flex w-8 h-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Search className="w-4 h-4" />
           </button>
@@ -695,7 +685,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
             title={theme === "dark" ? "Tema claro" : "Tema escuro"}
             data-prioridade-no-topo="tema"
-            className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -703,7 +693,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             type="button"
             data-tour="nav-notifications"
             aria-label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações"}
-            className="relative w-8 h-8 hidden md:flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="relative w-8 h-8 hidden md:flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => setNotifOpen(true)}
           >
             <Bell className="w-4 h-4" />
@@ -723,14 +713,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               aria-expanded={userMenuOpen}
               className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Avatar className="w-7 h-7 cursor-pointer">
+              <Avatar className="w-9 h-9 cursor-pointer">
                 <AvatarFallback className="bg-primary/15 text-primary text-[11px] font-semibold">
                   {profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </AvatarFallback>
               </Avatar>
             </button>
             {userMenuOpen && (
-              <div className="absolute top-full right-0 mt-2 w-48 rounded-xl bg-popover border border-border p-1.5 shadow-lg animate-fade-in">
+              <div className="absolute top-full right-0 mt-2 w-52 rounded-lg bg-popover border border-border p-2 shadow-pop animate-fade-in">
                 <div className="px-3 py-2 border-b border-border mb-1">
                   <p className="text-[12px] font-medium text-foreground">{profile?.full_name}</p>
                   <p className="text-[11px] text-muted-foreground">{profile?.role === "admin" ? "Administrador" : profile?.company_name}</p>
@@ -738,7 +728,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => { setUserMenuOpen(false); navigate("/perfil"); }}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-[13px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
                   <UserCircle className="w-3.5 h-3.5" />
                   Meu perfil
@@ -748,7 +738,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={() => { setUserMenuOpen(false); toggleTheme(); }}
                   data-tema-no-menu=""
-                  className="hidden md:flex lg:hidden items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                  className="hidden md:flex lg:hidden items-center gap-2.5 w-full px-3 py-2 rounded-md text-[13px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
                   {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
                   {theme === "dark" ? "Tema claro" : "Tema escuro"}
@@ -756,7 +746,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => { setUserMenuOpen(false); logout(); }}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-[13px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   Sair
@@ -778,7 +768,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <header
           data-casca="topo"
           data-topo-do-celular=""
-          className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background md:hidden"
+          className="fixed inset-x-0 top-0 z-40 bg-background md:hidden"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
         >
           <div className="flex h-[52px] min-w-0 items-center px-2">
@@ -805,7 +795,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => setBuscaAberta(true)}
                 aria-label="Buscar página"
-                className="toque-compacto flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="toque-compacto flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Search className="h-5 w-5" />
               </button>
@@ -813,7 +803,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => setNotifOpen(true)}
                 aria-label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações"}
-                className="toque-compacto relative flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="toque-compacto relative flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Bell className="h-5 w-5" />
                 {unreadCount > 0 && (

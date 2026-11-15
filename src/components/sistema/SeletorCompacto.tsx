@@ -127,7 +127,7 @@ export default function SeletorCompacto({
         role="tablist"
         aria-label={rotulo}
         onKeyDown={(e) => andar(e, '[role="tab"]:not([disabled])', true)}
-        className={juntar("inline-flex h-9 min-w-0 max-w-full items-center rounded-md bg-muted p-0.5", larguraTotal && "flex w-full", className)}
+        className={juntar("inline-flex h-9 min-w-0 max-w-full items-center rounded-full bg-muted p-0.5", larguraTotal && "flex w-full", className)}
         data-seletor-compacto="segmentado"
       >
         {opcoes.map((o, i) => {
@@ -142,7 +142,7 @@ export default function SeletorCompacto({
               disabled={o.desativada}
               onClick={() => onEscolher(o.valor)}
               className={juntar(
-                "toque-compacto inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded px-3 text-[12.5px] font-medium transition-colors disabled:opacity-50",
+                "toque-compacto inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[12.5px] font-medium transition-all duration-200 disabled:opacity-50",
                 larguraTotal && "flex-1",
                 ativa ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 foco,
@@ -167,7 +167,7 @@ export default function SeletorCompacto({
           aria-expanded={aberto}
           aria-label={`${rotulo}: ${escolhida ? escolhida.rotulo : "escolher"}`}
           className={juntar(
-            "toque-compacto inline-flex h-9 min-w-0 max-w-full items-center rounded-md border border-border bg-transparent px-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-muted",
+            "toque-compacto inline-flex h-9 min-w-0 max-w-full items-center rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-foreground transition-colors hover:bg-muted",
             aberto && "bg-muted",
             foco,
             className,
@@ -187,7 +187,7 @@ export default function SeletorCompacto({
       <PopoverContent
         align="start"
         sideOffset={6}
-        className="w-[calc(100vw-24px)] max-w-[300px] p-1"
+        className="w-[calc(100vw-24px)] max-w-[300px] p-1.5"
         onOpenAutoFocus={(e) => {
           const alvo = lista.current ? ((lista.current.querySelector('[aria-selected="true"]') || lista.current.querySelector('[role="option"]')) as HTMLElement | null) : null;
           if (alvo) {
@@ -219,7 +219,7 @@ export default function SeletorCompacto({
                   }
                 }}
                 className={juntar(
-                  "flex min-w-0 cursor-pointer items-center rounded px-2 py-1.5 text-[13px] outline-none transition-colors hover:bg-muted focus:bg-muted",
+                  "flex min-w-0 cursor-pointer items-center rounded-sm px-2.5 py-1.5 text-[13px] outline-none transition-colors hover:bg-muted focus:bg-muted",
                   ativa ? "text-foreground" : "text-foreground/90",
                   o.desativada && "cursor-not-allowed opacity-50",
                 )}

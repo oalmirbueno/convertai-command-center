@@ -26,10 +26,10 @@ import {
 /** Cor da etiqueta do status (o status do dia: validade vencida já vem como expirada). */
 export const COR_DO_STATUS: Record<string, string> = {
   rascunho: "bg-muted text-muted-foreground",
-  enviada: "bg-primary/10 text-primary",
-  vista: "bg-warning/10 text-warning",
-  aceita: "bg-success/10 text-success",
-  recusada: "bg-destructive/10 text-destructive",
+  enviada: "bg-accent-soft text-primary",
+  vista: "bg-warning-soft text-warning",
+  aceita: "bg-success-soft text-success",
+  recusada: "bg-danger-soft text-destructive",
   expirada: "bg-muted text-muted-foreground",
 };
 
@@ -46,7 +46,7 @@ export function LinhaDaProposta({ l, cliente, onAbrir }: { l: LinhaDaCarteira; c
             <span className={juntar(etiqueta, "ml-1.5", COR_DO_STATUS[l.status] || COR_DO_STATUS.rascunho)}>{situacaoDaLinha({ ...l, status: l.status })}</span>
             {l.upsell && <span className={juntar(etiqueta, "ml-1.5 bg-accent/15 text-foreground")}>Upsell</span>}
             {l.followup && (
-              <span className={juntar(etiqueta, "ml-1.5 hidden bg-warning/10 text-warning sm:inline-flex")} title={l.followup.texto}>
+              <span className={juntar(etiqueta, "ml-1.5 hidden bg-warning-soft text-warning sm:inline-flex")} title={l.followup.texto}>
                 <BellRing className="mr-1 h-3 w-3" aria-hidden="true" />
                 Follow-up
               </span>

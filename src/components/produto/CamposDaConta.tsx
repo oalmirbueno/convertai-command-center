@@ -115,7 +115,7 @@ export default function CamposDaConta({ estado }: { estado: EstadoDoProduto }) {
                   </span>
                 </span>
                 {c.no_cartao && <span className={juntar(etiqueta, "ml-2 hidden bg-muted text-muted-foreground sm:inline-flex")}>No cartão</span>}
-                {c.obrigatorio && <span className={juntar(etiqueta, "ml-2 hidden bg-warning/10 text-warning sm:inline-flex")}>Obrigatório</span>}
+                {c.obrigatorio && <span className={juntar(etiqueta, "ml-2 hidden bg-warning-soft text-warning sm:inline-flex")}>Obrigatório</span>}
                 <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => abrir(c)} aria-label={`Editar ${c.rotulo}`} title="Editar"><Pencil className="h-4 w-4" aria-hidden="true" /></button>
                 <button type="button" className={botao.icone} onClick={() => setApagando(c)} aria-label={`Apagar ${c.rotulo}`} title="Apagar"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
               </li>
