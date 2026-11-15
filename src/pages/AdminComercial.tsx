@@ -42,7 +42,7 @@ import Termometro from "@/components/comercial/Termometro";
 import { listarEventosDoFunil } from "@/components/comercial/eventosDoFunil";
 import { resumoDaOportunidade } from "@/components/comercial/resumoDaOportunidade";
 import { temperaturaDoLead, type EventoDoLead } from "@/components/comercial/temperatura";
-import { Avatar, CardSurface, Chip, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
+import { Avatar, CardSurface, Chip, Collapsible, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
 import DinheiroDoMes from "@/components/comercial/DinheiroDoMes";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
@@ -905,13 +905,11 @@ function VisaoGeral({
           ]}
         />
 
-        {!naConta() && <DinheiroDoMes recebido={recebido} caixa={caixa} />}
-
         {carregando ? (
           <Carregando rotulo="Carregando o resumo" linhas={5} />
         ) : (
           <section aria-label="Áreas do Comercial" className="min-w-0">
-            <ul className="grid min-w-0 gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <ul className="grid min-w-0 grid-flow-row-dense gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
               <Bloco titulo="CRM" icone={KanbanSquare} onClick={() => onIr("crm")}>
                 <Linha
                   forte={`${resumo.abertos} ${resumo.abertos === 1 ? "negócio aberto" : "negócios abertos"}`}
@@ -987,6 +985,9 @@ function VisaoGeral({
             </ul>
           </section>
         )}
+
+        {/* v4 C2: entrou, saiu e saldo repetem o Financeiro; ficam recolhidos embaixo, abrem com um toque. */}
+        {!naConta() && <DinheiroDoMesRecolhido recebido={recebido} caixa={caixa} />}
       </div>
     </AreaDeTrabalho>
   );
@@ -2103,5 +2104,14 @@ function EditorDeCampanha({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** v4 C2: entrou, saiu e saldo repetem o Financeiro; na visão geral ficam recolhidos embaixo e abrem com um toque. */
+function DinheiroDoMesRecolhido(props: Parameters<typeof DinheiroDoMes>[0]) {
+  return (
+    <Collapsible title="Dinheiro do mês" storageKey="comercial:visao:dinheiro" defaultOpen={false} summary="entrou, saiu e de onde veio">
+      <DinheiroDoMes {...props} />
+    </Collapsible>
   );
 }

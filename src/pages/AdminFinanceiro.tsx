@@ -25,7 +25,7 @@ import {
   RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela, botao, campo, campoTexto, etiqueta, foco, juntar, superficie, texto,
   type OpcaoCompacta,
 } from "@/components/sistema";
-import { Avatar, ChartLegend, Donut, OverflowMenu, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
+import { Avatar, ChartLegend, Donut, OverflowMenu, PillTabs, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
 import { IconeDaLinha, Numeros, grafico } from "@/components/finance/pecasDoFinanceiro";
 import CashFlow from "@/components/finance/CashFlow";
 import InvestorCapital from "@/components/finance/InvestorCapital";
@@ -289,6 +289,8 @@ function LegacyFinanceiro() {
   const aba = abasPermitidas.some((a) => a.valor === abaGuardada) ? abaGuardada : abaPadrao;
 
   const [newBillingOpen, setNewBillingOpen] = useState(false);
+  // v4 C2: a visão geral em três abas (cobranças, o mês, receita) no lugar de dez blocos empilhados.
+  const [visaoDoMes, setVisaoDoMes] = useState<"cobrancas" | "mes" | "receita">("cobrancas");
   const [creatingBilling, setCreatingBilling] = useState(false);
   const creatingBillingRef = useRef(false);
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
@@ -1432,7 +1434,7 @@ function LegacyFinanceiro() {
 
             {/* Rodada ousada (15/11/2026): três por fileira, número grande; o saldo é o cartão de tinta e o recebido o sólido da marca. */}
             <StatGrid cols={3} label="Números do financeiro">
-              {numeros.map((n, i) => {
+              {numeros.slice(0, 3).map((n, i) => {
                 const previsto = receivedVal + pendingVal;
                 return (
                   <StatCard
@@ -1462,47 +1464,71 @@ function LegacyFinanceiro() {
                   />
                 );
               })}
-              {mostraProjecao && (
-                <StatCard
-                  label="Próximo mês"
-                  value={fmt(nextMonthTotal)}
-                  hint={<span className="block max-sm:min-h-[32px]">{`${nextMonthFull} ${nextYear} · ${nextMonthSub}`}</span>}
-                  corner={<span aria-hidden="true" className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground"><ChevronRight className="h-4 w-4" /></span>}
-                  to="/financeiro/projecao"
-                  className={numeros.length % 2 === 1 ? "max-sm:col-span-2" : ""}
-                />
-              )}
             </StatGrid>
 
-            {/* 13/11/2026 (dono): entrou, saiu, saldo e de onde entrou, com o CRM e E-mail junto. */}
-            <DinheiroDoMesLido periodo={`${selYear}-${String(selMonth + 1).padStart(2, "0")}-01`} />
+            {/* v4 C2: os números de apoio numa faixa sem cartão (como "Income / Expense" da referência). */}
+            <div className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-5 px-1 sm:grid-cols-3" aria-label="Outros números do mês" role="group">
+              {numeros.slice(3).map((n) => (
+                <div key={n.rotulo} className="min-w-0">
+                  <p className="truncate text-[12px] leading-4 text-muted-foreground">{n.rotulo}</p>
+                  <p className={juntar("mt-1 truncate text-[22px] font-medium leading-7 tracking-[-0.02em] tabular-nums", billingLoading ? "animate-pulse text-muted-foreground/40" : n.rotulo === "Atrasado" && overdueVal > 0 ? "text-destructive" : "text-foreground")}>{billingLoading ? "R$ --.---" : n.valor}</p>
+                  {n.sub && <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground" title={n.sub}>{n.sub}</p>}
+                </div>
+              ))}
+              {mostraProjecao && (
+                <Link to="/financeiro/projecao" className={juntar("group min-w-0 rounded-md", foco)}>
+                  <p className="flex items-center text-[12px] leading-4 text-muted-foreground">Próximo mês<ChevronRight aria-hidden="true" className="ml-0.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" /></p>
+                  <p className="mt-1 truncate text-[22px] font-medium leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(nextMonthTotal)}</p>
+                  <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground" title={nextMonthSub}>{`${nextMonthFull} ${nextYear} · ${nextMonthSub}`}</p>
+                </Link>
+              )}
+            </div>
 
-            {/* 09/11/2026 (dono: "mais clean"): quatro zeros do Freela eram só ruído. Aparece o que tem valor; sem
-                movimento, uma linha leva ao caixa do Freela. */}
-            {billingLoading || cardsDoFreela.length > 0 ? (
-              <Numeros
-                rotulo="Freela"
-                destaques={false}
-                tamanho="md"
-                colunas={billingLoading ? 4 : (Math.max(2, cardsDoFreela.length) as 2 | 3 | 4)}
-                itens={billingLoading ? todosOsCardsDoFreela : cardsDoFreela}
-              />
-            ) : (
-              <p className={texto.auxiliar} data-freela-sem-movimento="">
-                <Link to="/freela/caixa" className="underline-offset-2 hover:text-foreground hover:underline">Freela sem movimento em {nomeMesFreela}</Link>
-              </p>
-            )}
-
-            <ManagementSummary
-              monthLabel={`${MONTHS_FULL[selMonth]} ${selYear}`}
-              receivedItems={monthReceivedItems}
-              expectedMonthlyRevenue={expectedMonthlyRevenue}
-              activeClientsCount={activeMensalistas}
-              clients={clients || []}
-              isCurrentMonth={isCurrentMonthSelected}
+            <PillTabs
+              label="Partes da visão geral"
+              value={visaoDoMes}
+              onChange={(v) => setVisaoDoMes(v as typeof visaoDoMes)}
+              tabs={[
+                { value: "cobrancas", label: "Cobranças", count: allPending.length || undefined },
+                { value: "mes", label: "Divisão do mês" },
+                { value: "receita", label: "Receita" },
+              ]}
             />
 
-            {primeiraCarga ? (
+            {visaoDoMes === "mes" && (
+              <div className="min-w-0 space-y-6 sm:space-y-8">
+            {/* 13/11/2026 (dono): entrou, saiu, saldo e de onde entrou, com o CRM e E-mail junto. */}
+              <DinheiroDoMesLido periodo={`${selYear}-${String(selMonth + 1).padStart(2, "0")}-01`} />
+  
+              {/* 09/11/2026 (dono: "mais clean"): quatro zeros do Freela eram só ruído. Aparece o que tem valor; sem
+                  movimento, uma linha leva ao caixa do Freela. */}
+              {billingLoading || cardsDoFreela.length > 0 ? (
+                <Numeros
+                  rotulo="Freela"
+                  destaques={false}
+                  tamanho="md"
+                  colunas={billingLoading ? 4 : (Math.max(2, cardsDoFreela.length) as 2 | 3 | 4)}
+                  itens={billingLoading ? todosOsCardsDoFreela : cardsDoFreela}
+                />
+              ) : (
+                <p className={texto.auxiliar} data-freela-sem-movimento="">
+                  <Link to="/freela/caixa" className="underline-offset-2 hover:text-foreground hover:underline">Freela sem movimento em {nomeMesFreela}</Link>
+                </p>
+              )}
+
+              <ManagementSummary
+                monthLabel={`${MONTHS_FULL[selMonth]} ${selYear}`}
+                receivedItems={monthReceivedItems}
+                expectedMonthlyRevenue={expectedMonthlyRevenue}
+                activeClientsCount={activeMensalistas}
+                clients={clients || []}
+                isCurrentMonth={isCurrentMonthSelected}
+              />
+              </div>
+            )}
+
+
+            {visaoDoMes === "cobrancas" && (primeiraCarga ? (
               <Carregando forma="lista" linhas={5} rotulo="Carregando cobranças" />
             ) : semNadaNoFinanceiro ? (
               <EstadoVazio
@@ -1695,10 +1721,13 @@ function LegacyFinanceiro() {
                   </Secao>
                 )}
               </>
-            )}
+            ))}
 
+            {visaoDoMes === "receita" && !(chartData.length > 0 || pieTotal > 0) && (
+              <EstadoVazio compacto titulo="Sem receita para mostrar ainda." />
+            )}
             {/* Receita: mês a mês e proporção por marca */}
-            {(chartData.length > 0 || pieTotal > 0) && (
+            {visaoDoMes === "receita" && (chartData.length > 0 || pieTotal > 0) && (
               <Secao titulo="Receita" descricao={`${currentYear}${brandFilter !== "all" ? ` · ${brandFilter === "aceleriq" ? "AcelerIQ" : "SiteBolt"}` : ""}`} divisoria>
                 <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
                   {chartData.length > 0 && (

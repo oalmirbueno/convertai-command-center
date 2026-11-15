@@ -524,9 +524,8 @@ export default function AdminHoras() {
           <Numeros
             rotulo="Capacidade"
             className="lg:col-span-2"
-            grade="grid-cols-2 md:grid-cols-3 max-md:[&>*:last-child:nth-child(odd)]:col-span-2"
-            destaques={false}
-            tamanho="md"
+            grade="grid-cols-2 md:grid-cols-3"
+            emFaixa
             itens={[
               {
                 rotulo: "Ocupação",
@@ -575,6 +574,15 @@ export default function AdminHoras() {
                 valor: String(tMes ? tMes.entregas : 0),
                 apoio: avancoDoMes === null ? `${tMes ? tMes.porTipo.publicados || 0 : 0} posts publicados` : `${Math.round(avancoDoMes * 100)}% do plano`,
               },
+            ]}
+          />
+          {/* v4 C2: a eficiência num painel só, sem um cartão por número. */}
+          <Numeros
+            rotulo="Eficiência do mês"
+            className="mt-3 sm:mt-5"
+            grade="grid-cols-2 sm:grid-cols-3"
+            emFaixa
+            itens={[
               { rotulo: "Horas por entrega", valor: formatarHoras(efMes.horasPorEntrega, 2), apoio: "tempo ÷ entregas" },
               { rotulo: "IA por entrega", valor: formatarUsd(efMes.custoPorEntrega), apoio: "custo ÷ entregas" },
               { rotulo: "Entregas por hora", valor: formatarNumero(efMes.entregasPorHora, 2), apoio: `${tMes ? tMes.atrasadas : 0} atrasadas` },

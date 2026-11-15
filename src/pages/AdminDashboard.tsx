@@ -557,6 +557,8 @@ export default function AdminDashboard() {
                               <MoreHorizontal className="h-4 w-4" />
                             </button>
                           </PopoverTrigger>
+                          {/* O conteúdo só existe aberto e só para o admin (RLS). */}
+                          {isAdmin && showMenu && (
                           <PopoverContent align="end" className="w-56 p-2" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => { setEditProject(p); setMenuProject(null); }}
                               className="flex w-full cursor-pointer items-center rounded-sm border-none bg-transparent px-3 py-2 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
@@ -582,6 +584,7 @@ export default function AdminDashboard() {
                               <Trash2 className="mr-2.5 h-3.5 w-3.5" /> Excluir
                             </button>
                           </PopoverContent>
+                          )}
                         </Popover>
                       )}
                     </div>

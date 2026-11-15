@@ -223,6 +223,7 @@ export function Numeros({
   tamanho,
   emPoco = false,
   grade: gradeExata,
+  emFaixa = false,
   className = "",
   ...resto
 }: {
@@ -235,9 +236,36 @@ export function Numeros({
   emPoco?: boolean;
   /** Classes exatas da grade (ex.: "grid-cols-2 md:grid-cols-3"). Vence `colunas`. */
   grade?: string;
+  /** v4 C2: um painel só com os números soltos dentro (rótulo pequeno, número médio, sem cartão por número). */
+  emFaixa?: boolean;
   className?: string;
 } & Record<`data-${string}`, string | undefined>) {
   const n = itens.length;
+  if (emFaixa) {
+    return (
+      <div role="group" aria-label={rotulo} className={juntar("grid min-w-0 content-start gap-x-6 gap-y-6 rounded-lg border border-border bg-card p-5 shadow-card sm:p-6", gradeExata || "grid-cols-2 lg:grid-cols-3", className)} {...resto}>
+        {itens.map((item) => {
+          const ponto = item.ponto ? PONTO_DO_NUMERO[item.ponto] : "";
+          const corpo = (
+            <>
+              <p className="flex min-w-0 items-center text-[12px] leading-4 text-muted-foreground">
+                {ponto && <span aria-hidden="true" className={juntar("mr-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full", ponto)} />}
+                <span className="truncate" title={item.dica}>{item.rotulo}</span>
+              </p>
+              <p className={juntar("mt-1.5 truncate text-[24px] font-medium leading-8 tracking-[-0.02em] tabular-nums", item.corDoValor || "text-foreground")}>{item.valor}</p>
+              {(item.apoio || item.aoLado) && <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{item.apoio || item.aoLado}</p>}
+              {item.extra && <div className="mt-2">{item.extra}</div>}
+            </>
+          );
+          return item.aoClicar ? (
+            <button key={item.chave || item.rotulo} type="button" onClick={item.aoClicar} className={juntar("min-w-0 rounded-md text-left", foco)}>{corpo}</button>
+          ) : (
+            <div key={item.chave || item.rotulo} className="min-w-0">{corpo}</div>
+          );
+        })}
+      </div>
+    );
+  }
   const c = Math.max(1, Math.min(colunas, n || colunas));
   const grade =
     c === 1
