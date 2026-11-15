@@ -81,15 +81,15 @@ export default function TesteDeAvisos({ idsNoSino }: { idsNoSino: readonly strin
         type="button"
         onClick={disparar}
         disabled={rodando}
-        className="text-[11px] text-primary hover:underline disabled:opacity-60 bg-transparent border-none p-0"
+        className="toque-compacto inline-flex h-7 items-center rounded-full bg-muted px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-foreground hover:text-background disabled:opacity-60"
       >
         {rodando ? "Testando avisos..." : "Testar avisos"}
       </button>
       {erro && <p className="text-[11px] text-destructive">{erro}</p>}
       {etapas.length > 0 && (
-        <ul className="space-y-1" aria-live="polite">
+        <ul className="space-y-1.5 rounded-md bg-muted/60 p-3" aria-live="polite">
           {etapas.map((etapa) => (
-            <li key={etapa.canal} className="flex items-start gap-2 text-[11px] leading-snug">
+            <li key={etapa.canal} className="flex items-start gap-2 text-[12px] leading-snug">
               <span className="mt-0.5 shrink-0">{ICONE[etapa.estado]}</span>
               <span className="min-w-0">
                 <span className="font-medium text-foreground">{etapa.canal}:</span>{" "}
