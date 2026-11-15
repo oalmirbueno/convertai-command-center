@@ -1,7 +1,7 @@
 import { limparTecnico } from "@/lib/cadernoExecucao";
 import { nomeDaTarefaDoBanco } from "@/lib/nomeDaTarefa";
 import { useMemo } from "react";
-import { Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
+import { Clock, ShieldAlert, UserRound } from "lucide-react";
 import { esperandoVoce, precisaDecisao } from "@/lib/precisaDecisao";
 import { etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
@@ -287,7 +287,7 @@ export default function Escritorio({
           </div>
           {area === "Sem área" && aberta && <p className="mt-1 px-1 text-[12px] text-muted-foreground">Abra o agente e escolha a área dele no topo do perfil.</p>}
           {aberta && (
-            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar("mt-3 grid max-h-[65vh] gap-3 overflow-y-auto overscroll-contain rounded-lg pr-1 [scrollbar-width:thin]", doGrupo.length === 2 && "sm:grid-cols-2", doGrupo.length > 2 && "sm:grid-cols-2 xl:grid-cols-3")}>
+            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar("mt-3 grid gap-3 rounded-lg pr-1 [scrollbar-width:thin] lg:max-h-[65vh] lg:overflow-y-auto lg:overscroll-contain", doGrupo.length === 2 && "sm:grid-cols-2", doGrupo.length > 2 && "sm:grid-cols-2 xl:grid-cols-3")}>
               {doGrupo.map((a, indice) => {
                 const meus = porAgente.get(a.id) ?? [];
                 const estado = estadoQueManda(meus);
@@ -347,11 +347,6 @@ export default function Escritorio({
                           <ShieldAlert className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> aprovação
                         </span>
                       )}
-                      {pausado && (
-                        <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
-                          <PauseCircle className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> pausado
-                        </span>
-                      )}
                     </p>
 
                     {!tarefa && emFoco?.last_action && <p className="mt-3 line-clamp-2 text-[13px] text-foreground/85">{limparTecnico(String(emFoco.last_action))}</p>}
@@ -360,7 +355,7 @@ export default function Escritorio({
                       <button
                         type="button"
                         onClick={() => idTarefa && aoAbrirTarefa(String(idTarefa))}
-                        className={juntar("mt-3 block w-full min-w-0 rounded-2xl bg-muted/60 px-3 py-2.5 text-left transition-colors hover:bg-muted", foco)}
+                        className={juntar("mt-3 block w-full min-w-0 rounded-md bg-muted/60 px-3 py-2.5 text-left transition-colors hover:bg-muted", foco)}
                       >
                         {/* 26/10: "Área · assunto" (o cliente vem logo abaixo); o código ACE fica no detalhe da tarefa. */}
                         <span className="block truncate text-[13px] font-medium text-foreground" title={nomeDaTarefaDoBanco(tarefa, { agente: a.display_name }).texto}>{nomeDaTarefaDoBanco(tarefa, { agente: a.display_name }).semCliente}</span>
@@ -378,7 +373,7 @@ export default function Escritorio({
                         <ProgressBar value={feitas} max={meus.length} height={6} tone={1} label={`${feitas} de ${meus.length} feitas`} />
                         <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 text-[12px] leading-4 text-muted-foreground">
                           {pedacos.map(([n, r, tom]) => <span key={r}><span className={juntar("font-semibold tabular-nums", tom)}>{n}</span> {r}</span>)}
-                          <span className="ml-auto tabular-nums"><span className="font-semibold text-foreground">{feitas}</span> de {meus.length} feitas</span>
+                          <span className="ml-auto tabular-nums"><span className="font-semibold text-foreground">{feitas}</span>/{meus.length}</span>
                         </p>
                       </div>
                     )}

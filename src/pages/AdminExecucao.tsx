@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Activity, AlertTriangle, Bot, Building2, CheckCircle2, ChevronRight, ClipboardCopy, Clock, ExternalLink,
-  FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
+  FolderPlus, Network, FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import type { MovimentoDoOrganograma, NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import { AGENTE_NOVO, ordemParaGravar, passoNoGrupo, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
@@ -52,7 +52,7 @@ import { registrarDecisaoDoDono, type ClienteDaDecisao } from "@/lib/decisaoDoVi
 import { lazyDiscreto, quandoOcioso } from "@/lib/lazyComPreCarga";
 import {
   AjudaRecolhida, AreaDeTrabalho, BarraDeControles, CabecalhoDePagina, CampoDeBusca, Carregando,
-  EstadoDeErro, EstadoVazio, Etapas, Painel, RegiaoRolavel, Secao, SeletorCompacto, botao, etiqueta,
+  EstadoDeErro, EstadoVazio, Etapas, MenuMais, Painel, RegiaoRolavel, Secao, SeletorCompacto, botao, etiqueta,
   foco, juntar, superficie, texto, useAreaDeTrabalho, useEstadoDaTela,
 } from "@/components/sistema";
 
@@ -330,6 +330,7 @@ export default function AdminExecucao() {
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const [reconciliando, setReconciliando] = useState(false);
+  const [janelaDoMenu, setJanelaDoMenu] = useState<"projeto" | "departamentos" | null>(null);
   const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string; contextoInicial?: { cliente: { id: string; nome: string }; pedido: string }; textoInicial?: string; aba?: string } | null>(null);
   const [responsavelAberto, setResponsavelAberto] = useState<
     { taskId: string; titulo?: string; atual?: string | null } | null>(null);
@@ -1685,33 +1686,38 @@ export default function AdminExecucao() {
       ) : linhasDeAtencao.length === 0 ? (
         <EstadoVazio compacto titulo="Nada esperando você agora." />
       ) : (
-        <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden p-1.5")}>
-          {linhasDeAtencao.map((l) => (
-            <li key={l.chave}>
-              <button
-                type="button"
-                onClick={() => irParaVisao(l.visao)}
-                className="group flex w-full min-w-0 items-center rounded-lg px-3 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              >
-                <span className={juntar("mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full", l.ponto === "bg-destructive" ? "bg-danger-soft" : "bg-warning-soft")} aria-hidden="true">
-                  <span className={juntar("h-2 w-2 rounded-full", l.ponto)} />
-                </span>
-                <span className={juntar("min-w-0 flex-1 text-[13px] font-medium leading-5", l.tom)}>{l.texto}</span>
-                <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        /* v4 (15/11, passada estrutural): UM cartão de tinta com o número grande e as frases dentro (sem círculo e sem traço por linha), como o cartão de destaque das referências. */
+        <div className={juntar(superficie.painel, superficie.tinta, "overflow-hidden p-5")}>
+          <p className="flex min-w-0 items-end">
+            <span className="text-[48px] font-medium leading-[48px] tracking-[-0.04em] tabular-nums text-foreground">{contagemDasAbas.decisoes ?? linhasDeAtencao.length}</span>
+            <span className="mb-1 ml-2.5 min-w-0 text-[13px] leading-4 text-muted-foreground">esperando<br />você</span>
+          </p>
+          <ul className="-mx-2 mt-4">
+            {linhasDeAtencao.map((l) => (
+              <li key={l.chave}>
+                <button
+                  type="button"
+                  onClick={() => irParaVisao(l.visao)}
+                  className="group flex w-full min-w-0 items-center rounded-full px-2 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  <span className={juntar("mr-2.5 h-2 w-2 shrink-0 rounded-full", l.ponto)} aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground" title={l.texto}>{l.texto}</span>
+                  <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {(numeros.andamento > 0 || numeros.feitas > 0) && (
-        /* Rodada ousada (15/11/2026): os dois estados que não pedem nada viram os cartões de destaque (tinta e sólido), com o número grande. */
+        /* Os dois estados que não pedem nada: um cartão claro e o sólido da marca, com o número grande. */
         <p className="mt-3 grid min-w-0 grid-cols-2 gap-3" data-estados-da-execucao="">
-          <button type="button" onClick={() => irParaVisao("in_progress")} className={juntar(superficie.painel, superficie.tinta, "flex min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)} title="Ver o que está andando">
-            <span className="block truncate text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums text-foreground">{numeros.andamento}</span>{" "}
+          <button type="button" onClick={() => irParaVisao("in_progress")} className={juntar(superficie.painel, "flex min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)} title="Ver o que está andando">
+            <span className="block truncate text-[28px] font-medium leading-9 tracking-[-0.03em] tabular-nums text-foreground">{numeros.andamento}</span>{" "}
             <span className="mt-1 block truncate text-[12px] font-medium leading-4 text-muted-foreground">andando</span>
           </button>
           <button type="button" onClick={() => irParaVisao("done")} className={juntar(superficie.painel, superficie.destaque, "flex min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)} title="Ver o que foi feito com prova">
-            <span className="block truncate text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums text-foreground">{numeros.feitas}</span>{" "}
+            <span className="block truncate text-[28px] font-medium leading-9 tracking-[-0.03em] tabular-nums text-foreground">{numeros.feitas}</span>{" "}
             <span className="mt-1 block truncate text-[12px] font-medium leading-4 text-muted-foreground">feito com prova</span>
           </button>
         </p>
@@ -2273,32 +2279,18 @@ export default function AdminExecucao() {
           </>
         }
         acoes={
-          <div className="flex items-center gap-0.5">
-            {profile?.role === "admin" && (
-              <>
-              <Departamentos agentes={operadores} />
-              <button
-                type="button"
-                onClick={() => void reconciliarExecucoes()}
-                disabled={reconciliando}
-                title={reconciliando ? "Reconciliando…" : "Reconciliar: registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."}
-                aria-label="Reconciliar execuções"
-                className={botao.icone}
-              >
-                <Wrench className={juntar("h-4 w-4", reconciliando && "animate-pulse")} aria-hidden="true" />
-              </button>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => void atualizarTudo()}
-              disabled={atualizando}
-              aria-label="Atualizar"
-              title={dataUpdatedAt ? `Atualizar · atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Atualizar · aguardando a primeira leitura"}
-              className={botao.icone}
-            >
-              <RefreshCw className={juntar("h-4 w-4", atualizando && "animate-spin")} aria-hidden="true" />
-            </button>
+          /* v4 (15/11, passada estrutural): cinco ícones soltos viravam ruído. Fica a tela cheia e um "…" com o resto. */
+          <div className="flex items-center gap-1">
+            {profile?.role === "admin" && <Departamentos agentes={operadores} janela={janelaDoMenu} aoFechar={() => setJanelaDoMenu(null)} />}
+            <MenuMais
+              rotulo="Mais ações da Execução"
+              itens={[
+                { rotulo: atualizando ? "Atualizando…" : "Atualizar", icone: <RefreshCw className={juntar("h-4 w-4", atualizando && "animate-spin")} aria-hidden="true" />, desativado: atualizando, dica: dataUpdatedAt ? `Atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Aguardando a primeira leitura", aoEscolher: () => void atualizarTudo() },
+                profile?.role === "admin" && { rotulo: "Novo projeto", icone: <FolderPlus className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => setJanelaDoMenu("projeto") },
+                profile?.role === "admin" && { rotulo: "Departamentos", icone: <Network className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => setJanelaDoMenu("departamentos") },
+                profile?.role === "admin" && { rotulo: reconciliando ? "Reconciliando…" : "Reconciliar execuções", icone: <Wrench className="h-4 w-4" aria-hidden="true" />, desativado: reconciliando, separadorAntes: true, dica: "Registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico.", aoEscolher: () => void reconciliarExecucoes() },
+              ]}
+            />
             <BotaoDeTelaCheia tela={telaCheia} className="h-9 px-2.5" />
           </div>
         }

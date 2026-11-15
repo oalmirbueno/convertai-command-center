@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import { comandoDaAprovacao } from "@/lib/execucaoApresentacao";
 import { centralReviewError } from "@/lib/centralReview";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertTriangle, Archive, Bot, Clock, HandCoins, Loader2, MessageCircle, MonitorSmartphone, Timer, UserCheck } from "lucide-react";
-import { Carregando, EstadoDeErro, Secao, botao, juntar, superficie } from "@/components/sistema";
+import { AlertTriangle, Archive, HandCoins, Loader2, MessageCircle, MonitorSmartphone, Timer, UserCheck } from "lucide-react";
+import { Carregando, EstadoDeErro, MenuMais, Secao, botao, juntar, superficie } from "@/components/sistema";
 import MesaDeDecisao, { type DecisaoDaMesa, type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 
@@ -218,7 +218,8 @@ export default function AprovacoesExplicadas({
     const canal = destino?.channel === "whatsapp" ? `WhatsApp${typeof destino?.recipient === "string" ? ` · ${destino.recipient}` : ""}` : destino?.channel === "portal" ? "Portal do cliente" : a.destino;
     return {
       id: a.id,
-      tipo: ROTULO_ACAO[a.action_kind] || a.action_kind,
+      // v4 (15/11): tipo sem nome de máquina ("ads_budget" lia como código): vira "Ads budget".
+      tipo: ROTULO_ACAO[a.action_kind] || String(a.action_kind || "").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()),
       tomDoTipo: a.reversivel ? "aviso" : "perigo",
       cliente,
       avatar: <FotoDoCliente nome={cliente} clienteId={a.client_id || null} tamanho="sm" />,
@@ -226,16 +227,17 @@ export default function AprovacoesExplicadas({
       mensagem: typeof relatorio?.summary === "string" && relatorio.summary.trim() ? relatorio.summary : a.por_que,
       passo: typeof relatorio?.next_steps === "string" && relatorio.next_steps.trim() ? relatorio.next_steps : null,
       sinais: [
-        { icone: <Bot className="h-3 w-3" />, texto: a.origin === "central" ? "Central do cliente" : nomesDeAgentes.get(a.operator_id) || "agente" },
+        // v4 (15/11, passada estrutural): à vista só o que muda a decisão (canal, custo, validade, risco). Quem pediu e o prazo foram para "Detalhes".
         ...(canal ? [{ icone: destino?.channel === "whatsapp" ? <MessageCircle className="h-3 w-3" /> : <MonitorSmartphone className="h-3 w-3" />, texto: canal }] : []),
         ...(typeof a.custo_previsto === "number" ? [{ icone: <HandCoins className="h-3 w-3" />, texto: a.custo_previsto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), tom: "aviso" as const }] : []),
-        ...(a.prazo ? [{ icone: <Clock className="h-3 w-3" />, texto: `prazo ${a.prazo}` }] : []),
         ...(a.valid_until ? [{ icone: <Timer className="h-3 w-3" />, texto: `vale até ${quando(a.valid_until)}` }] : []),
         ...(!a.reversivel ? [{ icone: <AlertTriangle className="h-3 w-3" />, texto: "irreversível", tom: "perigo" as const }] : []),
         ...(a.status === "adiado" ? [{ texto: "adiada" }] : []),
       ],
       detalhes: <div className="space-y-1">
         {relatorio && <Campo rotulo="Por quê">{a.por_que}</Campo>}
+        <Campo rotulo="Quem pediu">{a.origin === "central" ? "Central do cliente" : nomesDeAgentes.get(a.operator_id) || "agente"}</Campo>
+        <Campo rotulo="Prazo">{a.prazo}</Campo>
         <Campo rotulo="Tarefa">{a.kanban_task_id ? titulosDeTarefas.get(a.kanban_task_id) : null}</Campo>
         <Campo rotulo="Dados usados">{a.dados_usados}</Campo>
         <Campo rotulo="Impacto">{a.impacto}</Campo>
@@ -253,12 +255,15 @@ export default function AprovacoesExplicadas({
       // Pedido da Central (ritual) exige o motivo também na rejeição (regra do banco).
       rejeitarPedeMotivo: a.origin === "central",
       podeAdiar: a.status !== "adiado" && a.origin !== "central" && !a.report_id,
-      extras: <>
-        {a.task_link_id && <button type="button" onClick={() => aoAbrirDiario(a.task_link_id!)} title="Responder no diário" className={juntar(botao.discreto, "h-11 px-3")}><UserCheck className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
-        <button type="button" disabled={retirar.isPending} onClick={() => retirar.mutate([a.id])} className={juntar(botao.icone, "h-11 w-11")} aria-label={`Tirar da lista: ${a.o_que}`} title="Tirar da lista (fica no histórico como expirado)">
-          {retirar.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Archive className="h-4 w-4" aria-hidden="true" />}
-        </button>
-      </>,
+      // v4 (15/11, passada estrutural): o rodapé fica com a decisão; diário e tirar da lista vão para o "…".
+      extras: <MenuMais
+        rotulo={`Mais ações: ${a.o_que}`}
+        className="h-11 w-11"
+        itens={[
+          a.task_link_id && { rotulo: "Responder no diário", icone: <UserCheck className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => aoAbrirDiario(a.task_link_id!) },
+          { rotulo: retirar.isPending ? "Tirando…" : "Tirar da lista", icone: retirar.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Archive className="h-4 w-4" aria-hidden="true" />, dica: "Fica no histórico como expirado", desativado: retirar.isPending, aoEscolher: () => retirar.mutate([a.id]) },
+        ]}
+      />,
     };
   });
 
