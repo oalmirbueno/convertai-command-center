@@ -107,7 +107,7 @@ export default function DataTable<T>({
                 key={rowKey(row, i)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 data-highlight={destaque ? "" : undefined}
-                className={juntar("group transition-colors", destaque ? "bg-primary/10" : "hover:bg-muted/50", onRowClick && "cursor-pointer")}
+                className={juntar("group", destaque ? "[&>td]:bg-primary/10" : "hover:[&>td]:bg-muted/60", "[&>td:first-child]:rounded-l-md [&>td:last-child]:rounded-r-md [&>td]:transition-colors", onRowClick && "cursor-pointer")}
               >
                 {columns.map((c) => (
                   <td

@@ -168,9 +168,9 @@ export default function Lancador({
           title={comAgente ? `Aceleriq e ajuda (${ATALHO_DO_AGENTE} abre o agente)` : "Ajuda"}
           data-botao-do-lancador=""
           className={juntar(
-            "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors xl:h-11 xl:w-11",
             // v4: ícone num círculo com fundo próprio, como os outros da barra; o do agente é o círculo na cor da marca.
-            aberto ? "bg-foreground text-background" : comAgente ? "bg-accent-solid text-on-accent hover:bg-foreground hover:text-background" : "bg-muted text-foreground hover:bg-foreground hover:text-background",
+            aberto ? "bg-foreground text-background" : comAgente ? "bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_hsl(var(--primary)/0.7)] hover:bg-foreground hover:text-background" : "border border-border bg-card text-foreground shadow-card hover:bg-foreground hover:text-background",
             foco,
           )}
         >

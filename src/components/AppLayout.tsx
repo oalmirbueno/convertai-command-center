@@ -12,7 +12,7 @@ import Lancador from "@/components/lancador/Lancador";
 import { PedidoDeAcessoPelaUrl } from "@/components/acesso/JanelaDoPedidoDeAcesso";
 import { EVENTO_ABRIR_AGENTE, type PedidoParaAbrirAgente } from "@/lib/lancador";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, RefreshCw, Repeat } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Search, Zap, Sun, Moon, Sparkles, Bot, RefreshCw, Repeat } from "lucide-react";
 import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -86,10 +86,10 @@ export function BotaoVersaoNova() {
       onClick={() => { atualizarAgora(); }}
       aria-label="Nova versão do painel: clique para atualizar"
       title="Nova versão do painel: clique para atualizar"
-      className="relative w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-foreground hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:w-10 xl:h-11 xl:w-11"
     >
       <RefreshCw className="w-4 h-4" />
-      <span aria-hidden="true" className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+      <span aria-hidden="true" className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
     </button>
   );
 }
@@ -288,6 +288,17 @@ const gruposPorPapel = (podeGestao: boolean, podeCriacao = true) =>
  * ficam; o tema vai para o menu do perfil. De 1024 para cima, tudo na barra.
  */
 const LINKS_NO_TOPO_ESTREITO = 3;
+const LINKS_NO_TOPO_MEDIO = 5;
+
+/**
+ * B2 (15/11/2026): as pílulas do menu do topo. A ativa é o VERDE VIVO da marca com letra quase preta
+ * (o contraste se resolve na letra, nunca apagando o verde); a parada é a pílula de cartão.
+ */
+const PILULA_ATIVA_DO_TOPO = "bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_hsl(var(--primary)/0.7)]";
+const PILULA_PARADA_DO_TOPO = "border border-border bg-card text-muted-foreground shadow-card hover:border-foreground/20 hover:text-foreground";
+const LINHA_DO_MAIS_DO_TOPO = "group flex h-10 min-w-0 items-center rounded-full pl-1.5 pr-3 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const LINHA_ATIVA_DO_MAIS = "bg-primary font-medium text-primary-foreground";
+const LINHA_PARADA_DO_MAIS = "text-muted-foreground hover:bg-muted hover:text-foreground";
 
 /**
  * v4 (15/11/2026): atalhos do trilho lateral do computador largo. Só URLs: o item (nome, ícone,
@@ -386,6 +397,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         .filter((item): item is NavItem => !!item),
     }))
     .filter((grupo) => grupo.items.length > 0);
+  // B2: a tela aberta mora no "Mais"? (o item de URL mais longa que casa com a rota, e nenhum link da barra casa)
+  const rotaAtual = (location.pathname || "/").replace(/\/+$/, "") || "/";
+  const casaComARota = (item: NavItem) => rotaAtual === item.url || (!item.fimExato && rotaAtual.indexOf(`${item.url}/`) === 0);
+  const ativoNoMais: NavItem | null = mainNav.some(casaComARota)
+    ? null
+    : moreNav.filter(casaComARota).sort((a, b) => b.url.length - a.url.length)[0] || null;
+  const IconeDoMais = ativoNoMais ? ativoNoMais.icon : LayoutGrid;
   const { data: notifData } = useNotifications();
   // Quem usa as mesas já tem o código delas antes do clique (src/lib/mesa/preCarga.ts).
   usePreCargaOciosaDasMesas(["admin", "manager", "design"].includes(role));
@@ -568,22 +586,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav. data-casca: o modo foco (src/lib/modoFoco.ts + index.css) esconde a barra, o que flutua e tira o recuo do conteúdo. */}
       {/* Só de 768 px para cima (16/10/2026): o celular tem o topo enxuto logo abaixo. */}
-      {!celular && <nav data-casca="topo" className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-full grid grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)] items-center pl-4 pr-2 gap-2 lg:gap-4 border border-border bg-card/95 text-foreground shadow-card backdrop-blur-xl"
-        style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
+      {!celular && <nav data-casca="topo" data-topo-em-pilulas="" className="fixed inset-x-0 top-0 z-50 bg-background/85 text-foreground backdrop-blur-xl"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
+        {/* B2 (15/11/2026, dono: "menu do topo idêntico à referência"): sem barra em volta. Logo, cada link na sua
+            pílula (a ativa é o verde vivo com letra escura), a busca em pílula e os ícones em círculos, direto no fundo. */}
+        <div className="relative mx-auto grid h-[76px] w-full max-w-[1840px] grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 px-6 xl:gap-3">
         {/* Clip the square bitmap's transparent padding to the navbar so it
             cannot intercept clicks on the page below. Keep menus unclipped. */}
         {/* v4: três colunas (logo | links | ícones). Os links ficam parados no centro mesmo
             quando o lado direito ganha ou perde um ícone (cronômetro, gerações, versão nova). */}
-        <div className="flex h-[50px] min-w-0 items-center overflow-hidden">
+        <NavLink to="/dashboard" aria-label="Aceleriq: início" className="-ml-3 flex h-[50px] w-[104px] min-w-0 items-center overflow-hidden rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:mr-1">
           <img src={aceleriqLogo} alt="Aceleriq" width={112} height={112} decoding="async" className="logo-do-topo h-28 w-28 max-w-none shrink-0" />
-        </div>
+        </NavLink>
 
         {/* Center: Nav links (desktop) */}
         {/* De 768 a 1023 cabem os LINKS_NO_TOPO_ESTREITO primeiros; o resto vai para o "..." (sem corte nem rolagem lateral). */}
         <div className="hidden md:flex min-w-0 items-center gap-1 flex-1 justify-center">
-          {/* v4: os links moram num trilho cinza em pílula; o ativo é a pílula de tinta (como nas referências). */}
-          <div className="flex min-w-0 items-center rounded-full bg-muted p-1 [&>*+*]:ml-0.5" data-trilho-do-menu="">
+          {/* B2: uma pílula por link (ícone + nome de 1280 px para cima); a ativa é o verde vivo da marca com letra escura. */}
+          <div className="flex min-w-0 items-center [&>*+*]:ml-1.5 xl:[&>*+*]:ml-2" data-trilho-do-menu="">
           {mainNav.map((item, indice) => {
             const tourId = item.url.replace("/", "nav-");
             return (
@@ -592,13 +613,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 to={item.url}
                 data-tour={tourId}
                 className={({ isActive }) => cn(
-                  "relative inline-flex h-8 items-center whitespace-nowrap px-3 lg:px-3.5 text-[13px] rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "relative inline-flex h-10 items-center whitespace-nowrap px-3 lg:px-3.5 text-[13px] font-medium rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:h-11 xl:px-4 xl:text-[14px]",
                   indice >= LINKS_NO_TOPO_ESTREITO && "hidden lg:inline-flex",
-                  isActive ? "bg-foreground font-medium text-background" : "text-muted-foreground hover:bg-card hover:text-foreground"
+                  // B2: de 1024 a 1279 cabem 5 pílulas; a 6ª (cliente) entra no "Mais" só nessa faixa.
+                  indice >= LINKS_NO_TOPO_MEDIO && "lg:max-xl:!hidden",
+                  isActive ? PILULA_ATIVA_DO_TOPO : PILULA_PARADA_DO_TOPO
                 )}
               >
-                {({ isActive }) => (
+                {() => (
                   <>
+                    <item.icon className="mr-2 hidden h-4 w-4 shrink-0 desk:block" />
                     {item.title}
                   </>
                 )}
@@ -607,19 +631,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
 
           {/* More dropdown */}
-          <div className="relative" ref={moreRef} data-tour="nav-more">
+          <div ref={moreRef} data-tour="nav-more">
             <button
               type="button"
               onClick={() => setMoreOpen(!moreOpen)}
               aria-label="Mais páginas"
               aria-expanded={moreOpen}
-              className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", moreOpen && "bg-card text-foreground")}
+              data-botao-mais-do-topo=""
+              className={cn(
+                "inline-flex h-10 max-w-[200px] items-center whitespace-nowrap rounded-full px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-3.5 xl:h-11 xl:px-4 xl:text-[14px]",
+                ativoNoMais ? PILULA_ATIVA_DO_TOPO : moreOpen ? "bg-foreground text-background" : PILULA_PARADA_DO_TOPO,
+              )}
             >
-              <MoreHorizontal className="w-4 h-4" />
+              {/* Quando a tela aberta mora no "Mais", a pílula verde leva o nome dela: sempre há um item aceso no topo. */}
+              <IconeDoMais className="mr-2 hidden h-4 w-4 shrink-0 desk:block" />
+              <span className="min-w-0 truncate">{ativoNoMais ? ativoNoMais.title : "Mais"}</span>
+              <ChevronDown className={cn("ml-1.5 h-3.5 w-3.5 shrink-0 transition-transform duration-200", moreOpen && "rotate-180")} aria-hidden="true" />
             </button>
             {moreOpen && (
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-60 max-h-[70vh] overflow-y-auto rounded-lg bg-popover border border-border p-2 shadow-pop animate-fade-in"
-                style={{ transformOrigin: 'top center' }}
+              <div
+                data-painel-do-mais=""
+                className={cn(
+                  "absolute left-6 top-full -mt-1 max-h-[80vh] overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-3 shadow-pop animate-fade-in",
+                  isAdminOrTeam ? "w-[min(1080px,calc(100%-3rem))]" : "w-72",
+                )}
+                style={{ transformOrigin: 'top left' }}
               >
                 {/* 768 a 1023: os links principais que não couberam na barra. */}
                 {mainNav.length > LINKS_NO_TOPO_ESTREITO && (
@@ -630,11 +666,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         to={item.url}
                         onClick={() => setMoreOpen(false)}
                         className={({ isActive }) => cn(
-                          "flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors",
-                          isActive ? "bg-accent-soft font-medium text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          LINHA_DO_MAIS_DO_TOPO,
+                          isActive ? LINHA_ATIVA_DO_MAIS : LINHA_PARADA_DO_MAIS
                         )}
                       >
-                        <item.icon className="w-3.5 h-3.5" />
+                        <span aria-hidden="true" className="mr-2.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-foreground group-aria-[current=page]:bg-black/10 group-aria-[current=page]:text-inherit"><item.icon className="h-3.5 w-3.5" /></span>
+                        {item.title}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+                {mainNav.length > LINKS_NO_TOPO_MEDIO && (
+                  <div className="mb-1 hidden border-b border-border pb-1 lg:max-xl:block" data-links-que-nao-couberam="medio">
+                    {mainNav.slice(LINKS_NO_TOPO_MEDIO).map((item) => (
+                      <NavLink key={item.url} to={item.url} onClick={() => setMoreOpen(false)} className={({ isActive }) => cn(LINHA_DO_MAIS_DO_TOPO, isActive ? LINHA_ATIVA_DO_MAIS : LINHA_PARADA_DO_MAIS)}>
+                        <span aria-hidden="true" className="mr-2.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-foreground group-aria-[current=page]:bg-black/10 group-aria-[current=page]:text-inherit"><item.icon className="h-3.5 w-3.5" /></span>
                         {item.title}
                       </NavLink>
                     ))}
@@ -642,9 +688,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 )}
                 {/* Cliente não tem grupos: a lista dele é curta e direta. */}
                 {isAdminOrTeam ? (
-                  gruposDoMenu.map((group) => (
-                    <div key={group.label} className="mb-1 last:mb-0">
-                      <p className="px-3 pb-1 pt-2.5 text-[11px] font-medium text-muted-foreground/80">
+                  <div className="columns-2 gap-3 lg:columns-3 xl:columns-4" data-grupos-do-mais="">
+                  {gruposDoMenu.map((group) => (
+                    <div key={group.label} className="mb-3 break-inside-avoid rounded-md bg-muted/50 p-1.5">
+                      <p className="px-2.5 pb-1.5 pt-1.5 text-[12px] font-semibold text-foreground">
                         {group.label}
                       </p>
                       {group.items.map((item) => (
@@ -654,17 +701,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           end={item.fimExato}
                           onClick={() => setMoreOpen(false)}
                           className={({ isActive }) => cn(
-                            "flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors",
-                            isActive ? "bg-accent-soft font-medium text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                            LINHA_DO_MAIS_DO_TOPO,
+                            isActive ? LINHA_ATIVA_DO_MAIS : LINHA_PARADA_DO_MAIS
                           )}
                         >
-                          <item.icon className="w-3.5 h-3.5" />
-                          {item.title}
-                          {item.contador ? <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold tabular-nums text-primary-foreground" aria-label={`${item.contador} para aprovar`}>{item.contador}</span> : null}
+                          <span aria-hidden="true" className="mr-2.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-foreground group-aria-[current=page]:bg-black/10 group-aria-[current=page]:text-inherit"><item.icon className="h-3.5 w-3.5" /></span>
+                          <span className="min-w-0 truncate">{item.title}</span>
+                          {item.contador ? <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-foreground px-1.5 text-[11px] font-semibold tabular-nums text-background" aria-label={`${item.contador} para aprovar`}>{item.contador}</span> : null}
                         </NavLink>
                       ))}
                     </div>
-                  ))
+                  ))}
+                  </div>
                 ) : (
                   moreNav.map((item) => (
                     <NavLink
@@ -672,11 +720,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       to={item.url}
                       onClick={() => setMoreOpen(false)}
                       className={({ isActive }) => cn(
-                        "flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors",
-                        isActive ? "bg-accent-soft font-medium text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        LINHA_DO_MAIS_DO_TOPO,
+                        isActive ? LINHA_ATIVA_DO_MAIS : LINHA_PARADA_DO_MAIS
                       )}
                     >
-                      <item.icon className="w-3.5 h-3.5" />
+                      <span aria-hidden="true" className="mr-2.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-foreground group-aria-[current=page]:bg-black/10 group-aria-[current=page]:text-inherit"><item.icon className="h-3.5 w-3.5" /></span>
                       {item.title}
                     </NavLink>
                   ))
@@ -688,7 +736,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Right: Icons */}
-        <div className="col-start-3 flex items-center justify-end gap-1.5">
+        <div className="col-start-3 flex min-w-0 items-center justify-end gap-1.5 xl:gap-2" data-direita-do-topo="">
           {/* Voltar para onde eu estava (29/09): o lugar anterior num toque, com a lista dos últimos. */}
           {isAdminOrTeam && <VoltarParaOndeEstava />}
           {/* Cronômetro por cliente (frente CR): o cliente em foco e o tempo do mês nele; clicar abre Horas e custos. */}
@@ -702,9 +750,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setBuscaAberta(true)}
             aria-label="Buscar página (Ctrl+K)"
             title="Buscar página (Ctrl+K)"
-            className="hidden sm:flex w-8 h-8 items-center justify-center rounded-full bg-muted text-foreground hover:bg-foreground hover:text-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-busca-do-topo=""
+            className={cn(
+              "group order-first hidden h-10 items-center rounded-full border border-border bg-card p-1 text-foreground shadow-card transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex xl:h-11",
+              // Com largura vira a pílula "Buscar página" (o cliente tem um link a mais na barra: só de 1600 px para cima).
+              isAdminOrTeam ? "desk:ml-2 desk:mr-auto desk:max-w-[260px] desk:flex-1" : "min-[1600px]:ml-2 min-[1600px]:mr-auto min-[1600px]:max-w-[260px] min-[1600px]:flex-1",
+            )}
           >
-            <Search className="w-4 h-4" />
+            {/* Como na referência: a lupa num círculo e, com largura, o convite ao lado. */}
+            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted transition-colors group-hover:bg-foreground group-hover:text-background xl:h-9 xl:w-9"><Search className="h-4 w-4" /></span>
+            <span aria-hidden="true" className={cn("ml-2.5 hidden min-w-0 flex-1 truncate text-left text-[13px] text-muted-foreground", isAdminOrTeam ? "desk:block" : "min-[1600px]:block")}>Buscar página</span>
+            <kbd aria-hidden="true" className={cn("mr-2 hidden shrink-0 rounded-full bg-muted px-2 py-0.5 font-outfit text-[11px] font-medium text-muted-foreground", isAdminOrTeam ? "min-[1560px]:block" : "min-[1600px]:block")}>Ctrl K</kbd>
           </button>
           {/* Lançador (768 px para cima): agente, ajuda da tela, tour e atalhos na barra, nunca flutuando. Cliente: o "?". */}
           <Lancador variante="topo" className="hidden md:block" {...propsDoLancador} />
@@ -714,7 +770,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
             title={theme === "dark" ? "Tema claro" : "Tema escuro"}
             data-prioridade-no-topo="tema"
-            className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-full bg-muted text-foreground hover:bg-foreground hover:text-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-full border border-border bg-card text-foreground shadow-card hover:bg-foreground hover:text-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring !h-10 !w-10 shrink-0 xl:!h-11 xl:!w-11"
           >
             {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -722,12 +778,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             type="button"
             data-tour="nav-notifications"
             aria-label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações"}
-            className="relative w-8 h-8 hidden md:flex items-center justify-center rounded-full bg-muted text-foreground hover:bg-foreground hover:text-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="relative hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-card transition-colors hover:bg-foreground hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex xl:h-11 xl:w-11"
             onClick={() => setNotifOpen(true)}
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center px-1 tabular-nums ring-2 ring-card">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center px-1 tabular-nums ring-2 ring-background">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -740,24 +796,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               aria-label="Menu do perfil"
               aria-expanded={userMenuOpen}
-              className="flex items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex shrink-0 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Avatar className="w-9 h-9 cursor-pointer">
-                <AvatarFallback className="bg-accent-solid text-on-accent text-[11px] font-semibold">
+              <Avatar className="h-10 w-10 cursor-pointer xl:h-11 xl:w-11">
+                <AvatarFallback className="bg-primary text-primary-foreground text-[13px] font-semibold">
                   {profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </AvatarFallback>
               </Avatar>
-              {/* v4: nome e papel ao lado do avatar quando há largura (1440 para cima). */}
-              <span className="ml-2 mr-2 hidden max-w-[140px] min-w-0 flex-col items-start text-left desk:flex" data-usuario-no-topo="">
-                <span className="max-w-full truncate text-[12px] font-medium leading-4 text-foreground">{profile?.full_name}</span>
-                <span className="max-w-full truncate text-[11px] leading-[14px] text-muted-foreground">{papelLegivel}</span>
-              </span>
             </button>
             {userMenuOpen && (
-              <div className="absolute top-full right-0 mt-2 w-52 rounded-lg bg-popover border border-border p-2 shadow-pop animate-fade-in">
+              <div className="absolute top-full right-0 mt-2 w-56 rounded-lg bg-popover border border-border p-2 shadow-pop animate-fade-in">
                 <div className="px-3 py-2 border-b border-border mb-1">
                   <p className="text-[12px] font-medium text-foreground">{profile?.full_name}</p>
-                  <p className="text-[11px] text-muted-foreground">{profile?.role === "admin" ? "Administrador" : profile?.company_name}</p>
+                  <p className="text-[11px] text-muted-foreground">{papelLegivel}</p>
                 </div>
                 <button
                   type="button"
@@ -791,13 +842,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Fim da direita. O menu do celular mora na folha "Mais" da barra de baixo (16/10/2026). */}
         </div>
+        </div>
       </nav>}
 
       {/* v4: trilho lateral de atalhos (computador largo, 1440 x 720 para cima; ver index.css).
           Pílulas verticais flutuantes com os lugares de todo dia que ficavam atrás do "...":
           o mesmo menu, já peneirado pelo papel. O ativo é o círculo de tinta. */}
       {!celular && trilho.length > 0 && (
-        <aside data-casca="topo" data-trilho-lateral="" aria-label="Atalhos" className="fixed left-6 z-40 flex-col" style={{ top: "calc(env(safe-area-inset-top) + 88px)" }}>
+        <aside data-casca="topo" data-trilho-lateral="" aria-label="Atalhos" className="fixed left-6 z-40 flex-col" style={{ top: "calc(env(safe-area-inset-top) + 96px)" }}>
           {trilho.map((grupo, g) => (
             <nav key={grupo.label} aria-label={grupo.label} className={cn("flex flex-col items-center rounded-full border border-border bg-card p-1.5 shadow-card [&>*+*]:mt-1", g > 0 && "mt-3")}>
               {grupo.items.map((item) => (
@@ -809,11 +861,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   aria-label={item.title}
                   className={({ isActive }) => cn(
                     "relative inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
                   <item.icon className="h-[18px] w-[18px]" />
-                  {item.contador ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-card">{item.contador > 9 ? "9+" : item.contador}</span> : null}
+                  {item.contador ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-foreground px-1 text-[11px] font-bold tabular-nums text-background ring-2 ring-card">{item.contador > 9 ? "9+" : item.contador}</span> : null}
                 </NavLink>
               ))}
             </nav>
@@ -857,7 +909,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => setBuscaAberta(true)}
                 aria-label="Buscar página"
-                className="toque-compacto ml-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="toque-compacto ml-1.5 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-card transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Search className="h-[18px] w-[18px]" />
               </button>
@@ -865,7 +917,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => setNotifOpen(true)}
                 aria-label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações"}
-                className="toque-compacto relative ml-1.5 mr-1 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="toque-compacto relative ml-1.5 mr-1 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-card transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Bell className="h-[18px] w-[18px]" />
                 {unreadCount > 0 && (
@@ -886,7 +938,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         ref={conteudoRef}
         onScroll={celular ? aoRolarConteudo : undefined}
         className={cn(
-          "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+52px)] bottom-[calc(env(safe-area-inset-bottom)+56px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+80px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible",
+          "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+52px)] bottom-[calc(env(safe-area-inset-bottom)+56px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+88px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible",
           // Tela larga em todas as páginas, igual às mesas: com 1280/1400 px o painel
           // ficava espremido com espaço vazio dos lados (dono, 23/09 e 26/09).
           "max-w-[1840px]",

@@ -34,7 +34,7 @@ function gravar(lista: Lugar[]) {
 }
 
 const BOTAO =
-  "toque-compacto inline-flex h-8 min-w-0 items-center rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "toque-compacto inline-flex h-8 min-w-0 items-center rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:h-10 md:px-3 xl:h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * `compacto` (topo do celular, 16/10/2026): só a seta de voltar, sem a lista
@@ -89,15 +89,15 @@ export default function VoltarParaOndeEstava({ compacto = false }: { compacto?: 
   const titulo = `Voltar para ${rotuloCompleto(anterior)}`;
 
   return (
-    <div className="flex min-w-0 items-center" data-voltar-para-onde-estava="">
-      <button type="button" onClick={() => navigate(anterior.url)} aria-label={titulo} title={titulo} className={`${BOTAO} max-w-[220px]`}>
+    <div className={compacto ? "flex min-w-0 items-center" : "flex min-w-0 items-center rounded-full border border-border bg-card shadow-card"} data-voltar-para-onde-estava="">
+      <button type="button" onClick={() => navigate(anterior.url)} aria-label={titulo} title={titulo} className={`${BOTAO} max-w-[180px]`}>
         <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="ml-1.5 hidden min-w-0 truncate lg:inline">{rotuloCompleto(anterior)}</span>
+        <span className="ml-1.5 hidden min-w-0 truncate min-[1600px]:inline">{rotuloCompleto(anterior)}</span>
       </button>
       {!compacto && outros.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" aria-label="Últimos lugares" title="Últimos lugares" className={`${BOTAO} w-6 justify-center px-0`}>
+            <button type="button" aria-label="Últimos lugares" title="Últimos lugares" className={`${BOTAO} w-7 justify-center !px-0 md:-ml-2 md:mr-1`}>
               <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </DropdownMenuTrigger>

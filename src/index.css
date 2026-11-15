@@ -1027,3 +1027,39 @@ body[data-gaveta-aberta] [data-casca="flutuante"] {
     padding-left: 0 !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   B2 (15/11/2026, dono: "tirou o verde dos destaques", "menu do topo idêntico")
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Verde vivo de volta nos ÍCONES: o tom fundo (--primary-text) é só para LETRA
+   sobre claro. Ícone não é texto (basta 3:1): volta a usar o verde da marca. */
+svg.text-primary,
+.text-primary > svg:not([class*="text-"]) {
+  color: hsl(var(--primary));
+}
+
+/* Topo em pílulas (computador): o cronômetro e o que mais entrar na direita
+   seguem o mesmo desenho (pílula ou círculo de cartão com borda fina). */
+[data-topo-em-pilulas] [data-cronometro-do-topo] {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-card);
+}
+[data-topo-em-pilulas] [data-cronometro-do-topo="sem-cliente"] {
+  width: 40px;
+  padding: 0;
+  flex-shrink: 0;
+  color: hsl(var(--foreground));
+}
+@media (min-width: 1280px) {
+  [data-topo-em-pilulas] [data-cronometro-do-topo] {
+    height: 44px;
+  }
+  [data-topo-em-pilulas] [data-cronometro-do-topo="sem-cliente"] {
+    width: 44px;
+  }
+}
