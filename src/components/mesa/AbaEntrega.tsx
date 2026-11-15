@@ -279,9 +279,10 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         <div className={juntar("flex w-full flex-col items-stretch sm:ml-3 sm:w-auto sm:items-end", ACAO_NO_PE_DO_CELULAR)} data-acao-no-pe="">
           <div className="flex min-w-0 flex-row items-center justify-end [&>*+*]:ml-2">
             <BotaoDocumentoDaEntrega pedido={pedidoDoDocumento} variante="discreto" />
-            <Button type="button" className="gap-0 px-3 max-sm:h-11 max-sm:min-w-[120px] max-sm:px-4" onClick={() => void enviarTudo()} disabled={!total || !!progresso} title={total ? `Enviar ${total} para aprovação` : "Nada para enviar"}>
+            <Button type="button" className="h-10 gap-0 rounded-full px-4 text-[13px] font-semibold max-sm:h-11 max-sm:min-w-[120px]" onClick={() => void enviarTudo()} disabled={!total || !!progresso} title={total ? `Enviar ${total} para aprovação` : "Nada para enviar"}>
               {progresso ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
-              {total > 0 && <span className="ml-1.5 tabular-nums" aria-hidden="true">{total}</span>}
+              {/* v4 E2: a ação principal da aba com nome. */}
+              <span className="ml-1.5 tabular-nums" aria-hidden="true">{total > 0 ? `Enviar ${total}` : "Enviar"}</span>
               <span className="sr-only">{total ? `Enviar ${total} para aprovação` : "Nada para enviar"}</span>
             </Button>
           </div>
@@ -454,7 +455,8 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   const [fimDeSemana, setFimDeSemana] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [trocandoAutomatico, setTrocandoAutomatico] = useState(false);
-  const [recolhido, setRecolhido] = useRecolhido(`mesa:entrega:ajustes:${clientId}`, false);
+  // v4 E2 (dono, 15/11: "menos blocos acima da dobra"): o plano de publicação abre recolhido (o resumo fica na linha); a lista de artes sobe.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa:entrega:ajustes:${clientId}`, true);
 
   const melhores = useQuery({
     queryKey: ["mesa", "melhores-horarios", clientId],
