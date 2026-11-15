@@ -82,8 +82,8 @@ function IconeDaBarra({ ativo, children }: { ativo: boolean; children: ReactNode
     <span
       aria-hidden="true"
       className={cn(
-        "mb-0.5 inline-flex h-7 w-12 items-center justify-center rounded-full transition-colors",
-        ativo ? "bg-primary/15 text-primary" : "",
+        "mb-0.5 inline-flex h-7 w-12 items-center justify-center rounded-full transition-all duration-200",
+        ativo ? "bg-primary text-primary-foreground" : "",
       )}
     >
       {children}
@@ -106,7 +106,7 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
   return (
     <>
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border/70 bg-card"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Navegação principal"
         data-barra-de-baixo=""
@@ -153,7 +153,7 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
             aria-describedby={undefined}
             data-folha-de-baixo=""
             data-folha-mais=""
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col rounded-t-xl border-t border-border bg-card text-foreground outline-none supports-[height:1dvh]:max-h-[88dvh] md:hidden"
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col rounded-t-xl border-t border-border bg-card shadow-pop text-foreground outline-none supports-[height:1dvh]:max-h-[88dvh] md:hidden"
           >
             <div aria-hidden="true" className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-muted-foreground/30" data-alca="" />
             <div className="flex min-w-0 shrink-0 items-center px-4 pb-2 pt-2">
@@ -161,7 +161,7 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
               <div className="min-w-0 flex-1">{perfil}</div>
               <DialogPrimitive.Close
                 aria-label="Fechar"
-                className="toque-compacto ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="toque-compacto ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </DialogPrimitive.Close>
@@ -170,7 +170,7 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
               {grupos.map((grupo) => (
                 <div key={grupo.label} className="pt-3 first:pt-1">
                   <p className="px-1 pb-1 text-[12px] font-medium leading-4 text-muted-foreground">{grupo.label}</p>
-                  <div className="grid grid-cols-2 gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {grupo.items.map((item) => (
                       <NavLink
                         key={item.url}
@@ -179,8 +179,8 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
                         onClick={() => onMaisAberto(false)}
                         className={({ isActive }) =>
                           cn(
-                            "flex h-11 min-w-0 items-center rounded-md px-2.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            isActive ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            "flex h-11 min-w-0 items-center rounded-full px-3.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            isActive ? "bg-accent-soft font-medium text-primary" : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
                           )
                         }
                       >

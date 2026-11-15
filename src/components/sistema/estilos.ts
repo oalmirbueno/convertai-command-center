@@ -11,20 +11,20 @@ import { extendTailwindMerge } from "tailwind-merge";
  */
 
 /**
- * Escala de fonte FECHADA (28/09): 11, 12, 13, 14, 15, 20 e 24 px. Nada fora
+ * Escala de fonte FECHADA (28/09; 28 px desde 14/11/2026): 11, 12, 13, 14, 15, 20, 24 e 28 px. Nada fora
  * dela (nada de 10,5, 11,5, 12,5, 13,5, 16, 18 px nem text-xs/text-sm/text-lg).
  * 14 px é só a conversa com agente (`conversa`); 24 px é só número de destaque
  * (`texto.numero`). A tabela de troca está em docs/design/SISTEMA.md, seção 2,
  * e o teste src/test/padrao-visual-catraca.test.ts não deixa o total subir.
  */
-export const ESCALA_DE_FONTE = [11, 12, 13, 14, 15, 20, 24] as const;
+export const ESCALA_DE_FONTE = [11, 12, 13, 14, 15, 20, 24, 28] as const;
 
 /** Escala tipográfica: sete papéis, seis tamanhos (mais os 14 px da conversa). */
 export const texto = {
   /** Título da página ou da área (um por tela). */
-  tituloPagina: "text-[20px] font-semibold leading-7 tracking-[-0.01em] text-foreground",
+  tituloPagina: "text-[24px] font-semibold leading-8 tracking-[-0.02em] text-foreground max-sm:text-[20px] max-sm:leading-7",
   /** Título de seção. */
-  tituloSecao: "text-[15px] font-semibold leading-[22px] text-foreground",
+  tituloSecao: "text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground",
   /** Rótulo de campo, de coluna, de grupo. */
   rotulo: "text-[12px] font-medium leading-4 text-muted-foreground",
   /** Texto corrido e valores. */
@@ -34,7 +34,9 @@ export const texto = {
   /** Etiqueta, contador, legenda miúda (11 px). O menor tamanho do painel. */
   etiqueta: "text-[11px] font-medium leading-4",
   /** Número de destaque (KPI, total): 24 px, algarismos da mesma largura. */
-  numero: "text-[24px] font-semibold leading-8 tracking-[-0.01em] tabular-nums text-foreground",
+  numero: "text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground",
+  /** Número grande do cartão de indicador (ds/StatCard): 28 px. */
+  numeroGrande: "text-[28px] font-semibold leading-9 tracking-[-0.025em] tabular-nums text-foreground",
 } as const;
 
 /**
@@ -46,7 +48,7 @@ export const conversa = {
   /** Texto de mensagem (o TextoDoAgente já usa). */
   mensagem: "text-[14px] leading-[1.6]",
   /** Balão de mensagem: junte com `doUsuario` ou `doAgente`. */
-  balao: "min-w-0 rounded-xl px-3.5 py-2.5 text-[14px] leading-[1.6] text-foreground [overflow-wrap:anywhere]",
+  balao: "min-w-0 rounded-lg px-3.5 py-2.5 text-[14px] leading-[1.6] text-foreground [overflow-wrap:anywhere]",
   /** Balão de quem pediu: à direita, com a cor da marca. */
   doUsuario: "ml-8 bg-primary/10",
   /** Balão do agente: quase a largura toda (texto longo lê melhor). */
@@ -61,8 +63,8 @@ export const conversa = {
 export const foco = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
 /** Altura única de campo (36 px) e o mesmo visual para input, select e textarea. */
-export const campo = `block h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${foco}`;
-export const campoTexto = `block min-h-[88px] w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-[13px] leading-5 text-foreground placeholder:text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${foco}`;
+export const campo = `block h-9 w-full min-w-0 rounded-md border border-input bg-card px-3 text-[13px] text-foreground placeholder:text-muted-foreground transition-colors hover:border-muted-foreground/40 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50 ${foco}`;
+export const campoTexto = `block min-h-[88px] w-full min-w-0 rounded-md border border-input bg-card px-3 py-2 text-[13px] leading-5 text-foreground placeholder:text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${foco}`;
 
 /**
  * Marca de toque compacto: no celular (< 768 px) o src/styles/responsive.css
@@ -75,21 +77,21 @@ export const campoTexto = `block min-h-[88px] w-full min-w-0 rounded-md border b
  */
 export const toqueCompacto = "toque-compacto";
 
-const botaoBase = `toque-compacto inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3.5 text-[13px] font-medium transition-colors active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 ${foco}`;
+const botaoBase = `toque-compacto inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[13px] font-medium transition-colors active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 ${foco}`;
 
 /** Botões: um primário por área; o resto secundário ou discreto. */
 export const botao = {
   primario: `${botaoBase} bg-primary text-primary-foreground hover:bg-primary/90`,
-  secundario: `${botaoBase} border border-border bg-transparent text-foreground hover:bg-muted`,
+  secundario: `${botaoBase} border border-border bg-card text-foreground hover:bg-muted`,
   // Sem px-2.5: o CSS gerado sempre deixou valer o px-3.5 da base, e é esse o
   // visual aprovado. Com o juntar resolvendo conflito, manter os dois mudaria o
   // botão só onde ele passa pelo juntar.
   discreto: `${botaoBase} text-muted-foreground hover:bg-muted hover:text-foreground`,
   perigo: `${botaoBase} border border-destructive/40 bg-transparent text-destructive hover:bg-destructive/10`,
   /** Só ícone (32 px): sempre com aria-label. */
-  icone: `toque-compacto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${foco}`,
+  icone: `toque-compacto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${foco}`,
   /** Ícone com texto curto na barra da mesa (32 px de altura). */
-  barra: `toque-compacto inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${foco}`,
+  barra: `toque-compacto inline-flex h-8 shrink-0 items-center justify-center rounded-full px-2.5 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${foco}`,
 } as const;
 
 /**
@@ -100,9 +102,9 @@ export const botao = {
  */
 export const superficie = {
   /** O único cartão elevado (Painel). Nada de cartão dentro dele. Nunca para embrulhar uma seção. */
-  painel: "rounded-lg border border-border bg-card",
+  painel: "rounded-lg border border-border bg-card shadow-card",
   /** Poço dentro de um painel: fundo levemente diferente, sem borda. */
-  poco: "rounded-md bg-muted/50",
+  poco: "rounded-md bg-muted/60",
   /** Divisória fina entre seções. */
   divisoria: "border-t border-border",
 } as const;
@@ -138,7 +140,7 @@ export const lista = {
   /** A lista com traço leve entre as linhas (junte com `aberta`). */
   divisoria: "divide-y divide-border/50",
   /** Uma linha: canto, respiro e fundo suave no hover. */
-  linha: "flex min-w-0 items-center rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40",
+  linha: "flex min-w-0 items-center rounded-lg px-2.5 py-2.5 transition-colors hover:bg-muted/40",
   /** Linha em destaque (junte com `linha`): fundo verde leve no lugar do hover. */
   destaque: "bg-primary/[0.07] hover:bg-primary/10",
 } as const;
@@ -167,7 +169,7 @@ export const rolagem = {
 export const larguraDaMesa = "mx-auto w-full min-w-0 max-w-[1760px]";
 
 /** Etiqueta pequena de estado (contagem, situação). */
-export const etiqueta = "inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[11px] font-medium leading-none tabular-nums";
+export const etiqueta = "inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-medium leading-none tabular-nums";
 
 /**
  * Junta classes ignorando vazios e resolve conflito do Tailwind: a classe que

@@ -56,8 +56,8 @@ const corDoPonto: Record<NonNullable<NumeroDaFaixa["ponto"]>, string> = {
 type Tamanho = "grande" | "compacto";
 
 const classeDoValor = (tamanho: Tamanho) =>
-  tamanho === "compacto" ? "text-[16px] font-semibold leading-6 tabular-nums" : "text-[18px] font-semibold leading-7 tabular-nums sm:text-[20px]";
-const classeDaCelula = (tamanho: Tamanho) => juntar("block min-w-0 border-l border-t border-border text-left", tamanho === "compacto" ? "px-4 py-2.5" : "px-4 py-3");
+  tamanho === "compacto" ? "text-[16px] font-semibold leading-6 tracking-[-0.01em] tabular-nums" : "text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums sm:text-[24px] sm:leading-8";
+const classeDaCelula = (tamanho: Tamanho) => juntar("block min-w-0 border-l border-t border-border text-left", tamanho === "compacto" ? "px-4 py-3" : "px-4 py-3.5 sm:px-5 sm:py-4");
 
 /** Miolo de uma célula (rótulo, valor, apoio e extra). */
 function Miolo({

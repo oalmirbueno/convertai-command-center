@@ -13,6 +13,46 @@ Componentes: `src/components/sistema/` (importe de `@/components/sistema`).
 
 ---
 
+## 0. Redesenho de 14/11/2026 (vale por cima do que estiver abaixo)
+
+Pedido do dono: "mais clean, enxuto, bonito, minimalista e moderno, quase igual às referências. Menos é mais.
+Menos texto, informação direta, explicação longa atrás do '?'. Recolher mais leve e suave. Não perder função
+nenhuma. Qualquer pessoa ou agente navega só de olhar. No celular também." Vale para **todas** as telas,
+incluindo a casca (menu), as Mesas, o Dashboard e o Financeiro. Não muda: lógica, funções e a posição das
+áreas em cada tela.
+
+**O que mudou no sistema (uma fonte só):**
+
+| Tema | Agora | Onde |
+|---|---|---|
+| Superfícies | Fundo levemente tingido; cartão branco (claro) ou um tom acima (escuro); borda fina; sombra quase nenhuma (`shadow-card`) | `src/index.css` |
+| Destaque | UM só: o verde da marca (não mudou). Estado usa tons suaves: `bg-accent-soft`, `bg-success-soft`, `bg-warning-soft`, `bg-danger-soft`, `bg-info-soft` | `src/index.css`, `tailwind.config.ts` |
+| Cantos | Cartão 20 px (`rounded-lg`), controle 12 px (`rounded-md`), etiqueta 8 px (`rounded-sm`), folha/janela 24 px (`rounded-xl`). Botão, etiqueta, aba e busca são **pílula** (`rounded-full`) | `tailwind.config.ts`, `estilos.ts` |
+| Tipografia | Título de página 24 px (20 no celular); número de destaque 24 px e número grande de indicador 28 px (`texto.numeroGrande`), sempre `tabular-nums`; rótulo pequeno e apagado, **sem caixa alta** | `estilos.ts` |
+| Abas | Aba aberta é pílula escura (`Etapas`, `PillTabs`); segmentado é faixa cinza com a opção em cartão (`SeletorCompacto`, `PillTabs variant="soft"`) | `sistema/`, `ds/` |
+| Menu | Barra do topo em pílula na cor do tema; página aberta em pílula verde. Celular: barra de baixo com o ícone ativo em pílula verde | `AppLayout.tsx`, `MobileBottomNav.tsx` |
+| Recolher | Seta que gira, conteúdo que desliza: `ds/Collapsible` (abre e fecha), `Secao`/`Painel` (abrem deslizando depois do clique) e todo `<details>` (desliza onde o navegador anima altura automática) | `ds/Collapsible.tsx`, `index.css` |
+| Quadros | Coluna com fundo suave e canto grande, contagem em pílula no cabeçalho, cartão com canto de 12 px, rolagem por coluna | `QuadroKanban.tsx` |
+
+**Componentes de tela** (`import { ... } from "@/components/ds"`): `PageHeader`, `Toolbar` + `SearchField`,
+`Card` + `CardSurface`, `StatCard` + `StatGrid` + `Sparkline`, `PillTabs`, `Chip` + `DeltaChip` + `StatusDot`,
+`Collapsible`, `HelpTooltip` (o "?"), `OverflowMenu` (o "…"), `EmptyState`, `DataTable`. São a camada de cima
+dos primitivos de `src/components/sistema` (que continuam valendo: `Secao`, `Painel`, `FaixaDeNumeros`,
+`SeletorCompacto`, `Etapas`, `MenuMais`, `AjudaRecolhida`, `EstadoVazio`, `JanelaCentral`).
+
+**Regras de tela:**
+
+1. Toda página começa com `PageHeader` (ou `CabecalhoDePagina`): título, no máximo uma linha de estado, o "?".
+2. Indicador é `StatCard`: rótulo pequeno, número grande, variação em pílula. No máximo um `tone="accent"` por fileira.
+3. Um botão principal por cartão ou área; o resto vai para o "…" (`OverflowMenu`/`MenuMais`).
+4. Estado é `Chip` com tom (e bolinha quando ajuda); nada de etiqueta em caixa alta nem fonte mono em número.
+5. Lista dentro de cartão: linhas com traço leve (`divide-border/60`) e fundo suave no hover, sem caixa por linha.
+6. Continuam valendo: cartão só onde tem função (4.1), nada de cartão dentro de cartão, explicação no "?" (5),
+   catraca do padrão visual (16), compatibilidade (14) e pop-up no centro (4.4).
+
+A seção 1 (raio de 12 px, "painel não tem sombra") e a 2 (título de 20 px) foram atualizadas por esta seção.
+A regra "Dashboard intocado" (4.0) foi revogada pelo dono em 14/11/2026.
+
 ## 1. Tokens
 
 | Token | Valor | Uso |

@@ -120,10 +120,10 @@ export default function Etapas({
                 className={juntar(
                   "toque-compacto relative inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[13px] font-medium transition-all duration-200",
                   foco,
-                  aberta ? "bg-muted pr-3 text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  aberta ? "bg-foreground pr-3 text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
-                <span className={juntar("inline-flex shrink-0", aberta && "text-primary")} aria-hidden="true">{item.icone}</span>
+                <span className="inline-flex shrink-0" aria-hidden="true">{item.icone}</span>
                 <span
                   className={juntar(
                     "overflow-hidden transition-all duration-200",
@@ -133,7 +133,7 @@ export default function Etapas({
                   {item.rotulo}
                 </span>
                 {contador !== null && (aberta ? (
-                  <span className="ml-1.5 rounded bg-background/70 px-1 text-[10.5px] font-semibold leading-4 tabular-nums text-foreground">{contador}</span>
+                  <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[10.5px] font-semibold leading-4 tabular-nums text-primary-foreground">{contador}</span>
                 ) : (
                   <span className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-muted px-1 text-center text-[9.5px] font-semibold leading-4 tabular-nums text-foreground"><span className="sr-only">, </span>{contador}</span>
                 ))}
@@ -155,14 +155,14 @@ export default function Etapas({
               title={item.dica}
               {...(item.dados || {})}
               className={juntar(
-                "toque-compacto relative inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md px-2.5 text-[13px] font-medium transition-colors sm:px-3",
+                "toque-compacto relative inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[13px] font-medium transition-colors sm:px-3.5",
                 foco,
-                aberta ? "text-foreground" : item.fechada ? "text-muted-foreground/60 hover:bg-muted/60" : item.destaque ? "text-primary hover:bg-muted/60" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                aberta ? "bg-foreground text-background" : item.fechada ? "text-muted-foreground/60 hover:bg-muted" : item.destaque ? "text-primary hover:bg-muted" : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
-              {numerar && !item.feita && <span className={juntar("mr-1.5 text-[11px] tabular-nums", aberta ? "text-primary" : "text-muted-foreground/70")}>{i + 1}</span>}
+              {numerar && !item.feita && <span className={juntar("mr-1.5 text-[11px] tabular-nums", aberta ? "text-background/60" : "text-muted-foreground/70")}>{i + 1}</span>}
               {item.feita && (
-                <span className={juntar("mr-1.5 inline-flex w-3 shrink-0 justify-center", aberta ? "text-primary" : "text-muted-foreground")} aria-hidden="true" data-etapa-feita="">
+                <span className={juntar("mr-1.5 inline-flex w-3 shrink-0 justify-center", aberta ? "text-background/70" : "text-primary")} aria-hidden="true" data-etapa-feita="">
                   <Check className="h-3 w-3" />
                 </span>
               )}
@@ -170,9 +170,8 @@ export default function Etapas({
               {item.rotulo}
               {item.feita && <span className="sr-only">, concluída</span>}
               {typeof item.contador === "number" && item.contador > 0 && (
-                <span className="ml-1.5 rounded bg-muted px-1 text-[10.5px] font-semibold leading-4 tabular-nums text-foreground">{item.contador}</span>
+                <span className={juntar("ml-1.5 rounded-full px-1.5 text-[10.5px] font-semibold leading-4 tabular-nums", aberta ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>{item.contador}</span>
               )}
-              {aberta && <span aria-hidden="true" className="absolute bottom-0 left-2.5 right-2.5 h-0.5 rounded-full bg-primary sm:left-3 sm:right-3" />}
             </button>
           );
         })}

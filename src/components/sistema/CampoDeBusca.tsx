@@ -23,14 +23,14 @@ export default function CampoDeBusca({
 }) {
   return (
     <div className={juntar("relative min-w-0", className)}>
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
       <input
         type="search"
         value={valor}
         onChange={(e) => onMudar(e.target.value)}
         placeholder={placeholder}
         aria-label={rotulo}
-        className={juntar(campo, "pl-9", valor ? "pr-9" : "")}
+        className={juntar(campo, "rounded-full pl-9", valor ? "pr-9" : "")}
       />
       {valor && (
         <button

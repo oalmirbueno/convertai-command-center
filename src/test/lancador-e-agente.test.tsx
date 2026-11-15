@@ -209,9 +209,9 @@ describe("nada flutua sobre o conteúdo", () => {
     expect(avatar).not.toMatch(/hidden/);
     // Links: 3 na faixa estreita, o resto no "..." (só nessa faixa).
     expect(layout).toContain("const LINKS_NO_TOPO_ESTREITO = 3;");
-    expect(layout).toContain('indice >= LINKS_NO_TOPO_ESTREITO && "hidden lg:block"');
+    expect(layout).toContain('indice >= LINKS_NO_TOPO_ESTREITO && "hidden lg:inline-flex"'); // 14/11: o link virou pílula (inline-flex); some e volta nas mesmas larguras
     expect(layout).toContain('className="mb-1 border-b border-border pb-1 lg:hidden" data-links-que-nao-couberam=""');
-    expect(layout).toContain("whitespace-nowrap px-2 lg:px-3");
+    expect(layout).toContain("whitespace-nowrap px-3 lg:px-3.5");
     expect(layout).toContain('<div className="hidden md:flex min-w-0 items-center gap-1 flex-1 justify-center">');
   });
 

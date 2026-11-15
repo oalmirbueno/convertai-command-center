@@ -70,11 +70,25 @@ export default {
         success: "hsl(var(--success))",
         warning: "hsl(var(--warning))",
         info: "hsl(var(--info))",
+        // Tons suaves de estado (redesenho de 14/11/2026): fundo de etiqueta, aviso e célula.
+        "accent-soft": "hsl(var(--accent-soft))",
+        "success-soft": "hsl(var(--success-soft))",
+        "warning-soft": "hsl(var(--warning-soft))",
+        "danger-soft": "hsl(var(--danger-soft))",
+        "info-soft": "hsl(var(--info-soft))",
       },
+      // Cantos (redesenho de 14/11/2026): cartão 20 px (lg), controle 12 px (md),
+      // etiqueta 8 px (sm). xl e 2xl ficam acima do cartão, para folha e janela.
       borderRadius: {
+        "2xl": "calc(var(--radius) + 8px)",
+        xl: "calc(var(--radius) + 4px)",
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        md: "var(--radius-control)",
+        sm: "var(--radius-tag)",
+      },
+      boxShadow: {
+        card: "var(--shadow-card)",
+        pop: "var(--shadow-pop)",
       },
       keyframes: {
         "accordion-down": {
