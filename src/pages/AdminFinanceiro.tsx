@@ -1499,7 +1499,7 @@ function LegacyFinanceiro() {
               <div className="min-w-0 space-y-6 sm:space-y-8">
             {/* 13/11/2026 (dono): entrou, saiu, saldo e de onde entrou, com o CRM e E-mail junto. */}
               <DinheiroDoMesLido periodo={`${selYear}-${String(selMonth + 1).padStart(2, "0")}-01`} />
-  
+
               {/* 09/11/2026 (dono: "mais clean"): quatro zeros do Freela eram só ruído. Aparece o que tem valor; sem
                   movimento, uma linha leva ao caixa do Freela. */}
               {billingLoading || cardsDoFreela.length > 0 ? (
