@@ -42,7 +42,7 @@ import Termometro from "@/components/comercial/Termometro";
 import { listarEventosDoFunil } from "@/components/comercial/eventosDoFunil";
 import { resumoDaOportunidade } from "@/components/comercial/resumoDaOportunidade";
 import { temperaturaDoLead, type EventoDoLead } from "@/components/comercial/temperatura";
-import { FaixaDeNumeros } from "@/components/sistema";
+import { Avatar, CardSurface, Chip, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
 import DinheiroDoMes from "@/components/comercial/DinheiroDoMes";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
@@ -590,7 +590,7 @@ export default function AdminComercial() {
   );
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-6">
       {/* ── Cabecalho: identidade, estado da área e as ações. Os numeros
              ficam com quem os usa, e nao empilhados aqui em cima: cinco
              cartoes iguais no topo de quatro telas diferentes obrigam a ler
@@ -607,7 +607,7 @@ export default function AdminComercial() {
           acoes={acoes}
         />
         {/* Celular: as áreas logo abaixo do título, numa linha que rola. */}
-        {!abasNoTitulo && !conta && <div className="mt-2 min-w-0 border-b border-border pb-1">{abasDasAreas}</div>}
+        {!abasNoTitulo && !conta && <div className="mt-3 min-w-0 pb-1">{abasDasAreas}</div>}
       </header>
 
       {leituraFalhou && (
@@ -627,14 +627,16 @@ export default function AdminComercial() {
         <button
           type="button"
           onClick={() => setAba("caixa")}
-          className={juntar("flex w-full min-w-0 items-center rounded-md bg-primary/10 px-3 py-2 text-left text-[13px] font-medium text-primary hover:bg-primary/15", foco)}
+          className={juntar("flex min-h-[52px] w-full min-w-0 items-center rounded-full bg-foreground px-2 py-2 pr-5 text-left text-[13px] font-medium text-background transition-opacity hover:opacity-90", foco)}
           data-aviso-da-caixa=""
         >
-          <Inbox className="mr-2 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-solid text-on-accent">
+            <Inbox className="h-4 w-4" aria-hidden="true" />
+          </span>
           <span className="min-w-0 flex-1 truncate">
             {novosDaCaixa} {novosDaCaixa === 1 ? "lead avançou ou fechou" : "leads avançaram ou fecharam"} com o Mercúrio
           </span>
-          <span className="ml-2 shrink-0">Abrir a Caixa</span>
+          <span className="ml-2 inline-flex shrink-0 items-center">Abrir a Caixa<ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" /></span>
         </button>
       )}
 
@@ -675,19 +677,19 @@ export default function AdminComercial() {
       )}
 
       {aba === "crm" && (
-        <FaixaDeNumeros
-          tamanho="compacto"
-          apoioAoLado
+        <NumerosEmCartoes
+          tamanho="md"
           // 16/10/2026: no celular o CRM é só o funil (os números estão na Visão geral).
           className="max-sm:hidden"
           rotulo="Números do CRM"
           itens={[
             {
+              variante: "accent",
               rotulo: "Em aberto",
               valor: carregandoLeads ? "…" : String(resumo.abertos),
               apoio: resumo.abertos === 1 ? "lead em conversa" : "leads em conversa",
             },
-            { rotulo: "Em jogo", valor: carregandoLeads ? "…" : dinheiro(resumo.valorEmJogo), apoio: "em 12 meses", dica: "Mensalidade x 12 + entrada dos negócios abertos" },
+            { variante: "ink", rotulo: "Em jogo", valor: carregandoLeads ? "…" : dinheiro(resumo.valorEmJogo), apoio: "em 12 meses", dica: "Mensalidade x 12 + entrada dos negócios abertos" },
             {
               rotulo: "Previsão do mês",
               valor: carregandoLeads ? "…" : dinheiro(previsao.ponderado),
@@ -695,11 +697,14 @@ export default function AdminComercial() {
                  metade do funil; dizer quantos ficaram de fora impede a conta
                  de virar promessa. */
               apoio: previsao.semData > 0 ? `${previsao.leads} com data, ${previsao.semData} sem` : `${previsao.leads} com data prevista`,
+              // Parte do funil que entrou na previsão (com data prevista sobre o total lido).
+              razao: previsao.leads + previsao.semData > 0 ? { feito: previsao.leads, total: previsao.leads + previsao.semData, rotulo: "Negócios com data prevista" } : undefined,
             },
             {
               rotulo: "Ganhos no mês",
               valor: carregandoLeads ? "…" : String(resumo.ganhosNoMes),
               apoio: resumo.taxaDeGanho == null ? "nada fechado ainda" : `${Math.round(resumo.taxaDeGanho * 100)}% de aproveitamento`,
+              razao: resumo.taxaDeGanho == null ? undefined : { feito: resumo.taxaDeGanho, total: 1, rotulo: "Aproveitamento dos negócios fechados" },
             },
           ]}
         />
@@ -875,14 +880,15 @@ function VisaoGeral({
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Visão geral do Comercial" memoriaDaRolagem="comercial:visao">
-      <div className="min-w-0 space-y-5">
+      <div className="min-w-0 space-y-6 sm:space-y-8">
         {/* Os quatro números que resumem o mês do departamento. */}
-        <FaixaDeNumeros
-          tamanho="compacto"
-          apoioAoLado
+        <NumerosEmCartoes
+          tamanho="lg"
           rotulo="Números do mês"
           itens={[
             {
+              variante: "accent",
+              icone: <KanbanSquare className="h-5 w-5" />,
               rotulo: "Em conversa",
               valor: carregando ? "…" : String(resumo.abertos),
               apoio: resumo.abertos === 1 ? "lead aberto" : "leads abertos",
@@ -892,8 +898,9 @@ function VisaoGeral({
               rotulo: "Previsão do mês",
               valor: carregando ? "…" : dinheiro(previsao.ponderado),
               apoio: previsao.semData > 0 ? `${previsao.leads} com data, ${previsao.semData} sem` : `${previsao.leads} com data prevista`,
+              razao: previsao.leads + previsao.semData > 0 ? { feito: previsao.leads, total: previsao.leads + previsao.semData, rotulo: "Negócios com data prevista" } : undefined,
             },
-            { rotulo: "Receita do mês", valor: dinheiro(receita), apoio: naConta() ? "dos ganhos" : "do Financeiro" },
+            { variante: "ink", rotulo: "Receita do mês", valor: dinheiro(receita), apoio: naConta() ? "dos ganhos" : "do Financeiro" },
           ]}
         />
 
@@ -902,8 +909,8 @@ function VisaoGeral({
         {carregando ? (
           <Carregando rotulo="Carregando o resumo" linhas={5} />
         ) : (
-          <Painel semEspaco as="section" aria-label="Áreas do Comercial">
-            <ul className="divide-y divide-border">
+          <section aria-label="Áreas do Comercial" className="min-w-0">
+            <ul className="grid min-w-0 gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
               <Bloco titulo="CRM" icone={KanbanSquare} onClick={() => onIr("crm")}>
                 <Linha
                   forte={`${resumo.abertos} ${resumo.abertos === 1 ? "negócio aberto" : "negócios abertos"}`}
@@ -926,7 +933,7 @@ function VisaoGeral({
                 ) : (
                   // 16/10/2026: no celular só os dois primeiros.
                   proximos.map((a, i) => (
-                    <span key={a.id} className={juntar("flex min-w-0 items-baseline justify-between", i >= 2 && "max-sm:hidden")}>
+                    <span key={a.id} className={juntar("flex min-w-0 items-baseline justify-between rounded-md bg-muted/60 px-3 py-2", i >= 2 && "max-sm:hidden")}>
                       <span className={juntar(texto.corpo, "mr-2 min-w-0 truncate")}>
                         {a.title}
                         {nomeDoLead(a.lead_id) ? <span className="text-muted-foreground"> · {nomeDoLead(a.lead_id)}</span> : null}
@@ -937,8 +944,8 @@ function VisaoGeral({
                 )}
               </Bloco>
 
-              <Bloco titulo="Metas" icone={Target} onClick={() => onIr("metas")}>
-                <span className="grid min-w-0 gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+              <Bloco titulo="Metas" icone={Target} onClick={() => onIr("metas")} largo>
+                <span className="grid min-w-0 gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
                   {/* 16/10/2026: no celular só as metas definidas. */}
                   {linhasDeMeta.every((linha) => linha.alvo <= 0) && (
                     <span className={juntar(texto.auxiliar, "block truncate sm:hidden")}>Nenhuma meta definida no mês.</span>
@@ -947,7 +954,7 @@ function VisaoGeral({
                     <span key={linha.id} className={juntar("block min-w-0", linha.alvo <= 0 && "max-sm:hidden")}>
                       <span className="flex min-w-0 items-baseline justify-between text-[12px] leading-4">
                         <span className="mr-2 min-w-0 truncate text-muted-foreground">{linha.label}</span>
-                        <span className="shrink-0 tabular-nums text-foreground">
+                        <span className="shrink-0 font-semibold tabular-nums text-foreground">
                           {mostrar(linha, linha.feito)}
                           {linha.alvo > 0 ? (
                             <span className="text-muted-foreground"> de {mostrar(linha, linha.alvo)}</span>
@@ -977,10 +984,53 @@ function VisaoGeral({
                 <span className={juntar(texto.auxiliar, "block truncate max-sm:hidden")}>No ar, próximos e origem dos leads</span>
               </Bloco>
             </ul>
-          </Painel>
+          </section>
         )}
       </div>
     </AreaDeTrabalho>
+  );
+}
+
+/**
+ * Os números da área em cartões (rodada ousada, 15/11/2026): número grande, rótulo apagado, um cartão
+ * sólido e um de tinta por fileira. `razao` desenha a barra de uma proporção que a tela já calculou
+ * (nunca um número novo).
+ */
+function NumerosEmCartoes({
+  rotulo,
+  itens,
+  tamanho = "lg",
+  className,
+}: {
+  rotulo: string;
+  itens: Array<{
+    rotulo: string;
+    valor: string;
+    apoio?: string;
+    dica?: string;
+    variante?: "default" | "accent" | "ink";
+    icone?: ReactNode;
+    razao?: { feito: number; total: number; rotulo: string };
+  }>;
+  tamanho?: "md" | "lg" | "xl";
+  className?: string;
+}) {
+  return (
+    <StatGrid cols={4} label={rotulo} className={className}>
+      {itens.map((item) => (
+        <StatCard
+          key={item.rotulo}
+          variant={item.variante}
+          size={tamanho}
+          icon={item.icone}
+          label={item.rotulo}
+          value={item.valor}
+          hint={item.apoio}
+          help={item.dica}
+          chart={item.razao ? <ProgressBar value={item.razao.feito} max={item.razao.total} tone={item.variante === "accent" ? "current" : 1} striped label={`${item.razao.rotulo}: ${Math.round((item.razao.feito / item.razao.total) * 100)}%`} /> : undefined}
+        />
+      ))}
+    </StatGrid>
   );
 }
 
@@ -989,36 +1039,38 @@ function Bloco({
   icone: Icone,
   onClick,
   children,
+  largo = false,
 }: {
   titulo: string;
   icone: React.ComponentType<{ className?: string }>;
   onClick: () => void;
   children: React.ReactNode;
+  /** Ocupa a fileira inteira (as metas, que são várias barras). */
+  largo?: boolean;
 }) {
   return (
-    <li className="min-w-0">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={`Abrir ${titulo}`}
-        className={juntar("group grid w-full min-w-0 grid-cols-[minmax(0,1fr)_16px] items-start gap-x-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 md:grid-cols-[160px_minmax(0,1fr)_16px]", foco)}
-      >
-        <span className="flex min-w-0 items-center text-[13px] font-semibold leading-5 text-foreground">
-          <Icone className="mr-2 h-4 w-4 shrink-0 text-primary" />
-          {titulo}
+    <CardSurface as="li" className={juntar("group relative flex min-w-0 flex-col transition-transform duration-200 hover:-translate-y-0.5", largo && "md:col-span-2 xl:col-span-3")} data-area-do-comercial={titulo}>
+      <button type="button" onClick={onClick} aria-label={`Abrir ${titulo}`} className={juntar("flex w-full min-w-0 flex-1 flex-col rounded-[inherit] p-5 text-left sm:p-6", foco)}>
+        <span className="flex min-w-0 items-center">
+          <span className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+            <Icone className="h-[18px] w-[18px]" />
+          </span>
+          <span className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>{titulo}</span>
+          <span className="ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-foreground group-hover:text-background">
+            <ArrowRight className="h-4 w-4 -rotate-45 transition-transform group-hover:rotate-0" aria-hidden="true" />
+          </span>
         </span>
-        <ArrowRight className="mt-0.5 h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 md:order-last" aria-hidden="true" />
-        <span className="col-span-2 mt-1.5 block min-w-0 space-y-1.5 md:col-span-1 md:mt-0">{children}</span>
+        <span className="mt-5 block min-w-0 space-y-2">{children}</span>
       </button>
-    </li>
+    </CardSurface>
   );
 }
 
 function Linha({ forte, fraca }: { forte: string; fraca: string }) {
   return (
-    <span className="flex min-w-0 items-baseline justify-between">
-      <span className="mr-2 min-w-0 truncate text-[13px] font-medium text-foreground">{forte}</span>
-      <span className={juntar(texto.auxiliar, "shrink-0")}>{fraca}</span>
+    <span className="block min-w-0">
+      <span className="block min-w-0 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground max-sm:text-[20px] max-sm:leading-7">{forte}</span>
+      <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>{fraca}</span>
     </span>
   );
 }
@@ -1026,7 +1078,7 @@ function Linha({ forte, fraca }: { forte: string; fraca: string }) {
 function BarraDeProgresso({ feito, alvo, fina = false }: { feito: number; alvo: number; fina?: boolean }) {
   const pct = alvo > 0 ? Math.min(feito / alvo, 1) : 0;
   return (
-    <span className={juntar("mt-1 block overflow-hidden rounded-full bg-muted", fina ? "h-1" : "h-1.5")}>
+    <span className={juntar("mt-2 block overflow-hidden rounded-full bg-muted", fina ? "h-1.5" : "h-2.5")}>
       <span
         className={juntar("block h-full rounded-full transition-all", feito >= alvo ? "bg-success" : "bg-primary")}
         style={{ width: `${Math.round(pct * 100)}%` }}
@@ -1080,8 +1132,8 @@ function Metas({
       {carregando ? (
         <Carregando rotulo="Carregando as metas" linhas={5} />
       ) : (
-        <Painel semEspaco as="section" aria-label="Metas do mês" className="mt-4">
-          <ul className="divide-y divide-border/60">
+        <section aria-label="Metas do mês" className="mt-6 min-w-0 sm:mt-8">
+          <ul className="grid min-w-0 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
             {METRICAS.map((metrica) => {
               const meta = metas.find((m) => m.metric === metrica.id);
               const feito = realizadoDoMes({
@@ -1096,18 +1148,12 @@ function Metas({
                 metrica.dinheiro ? dinheiro(v) : String(Math.round(v));
               const aberta = editando === metrica.id;
               return (
-                <li key={metrica.id} className="min-w-0 px-4 py-3">
-                  <div className="flex min-w-0 items-center">
+                <CardSurface as="li" padded key={metrica.id} variant={alvo > 0 && feito >= alvo ? "accent" : "default"} className="flex min-w-0 flex-col" data-meta={metrica.id}>
+                  <div className="flex min-w-0 items-start">
                     <div className="mr-3 min-w-0 flex-1">
-                      <p className={juntar(texto.corpo, "truncate font-medium")}>{metrica.label}</p>
-                      {/* De onde vem o número: sem isto, "por que está assim?"
-                          não tem resposta na própria tela. */}
-                      <p className={juntar(texto.auxiliar, "truncate max-sm:hidden")}>{metrica.fonte}</p>
+                      <p className="truncate text-[13px] font-medium leading-5 text-muted-foreground">{metrica.label}</p>
                     </div>
-                    <p className="shrink-0 text-right">
-                      <span className="text-[15px] font-semibold tabular-nums text-foreground">{mostrar(feito)}</span>
-                      <span className={juntar(texto.auxiliar, "tabular-nums")}>{alvo > 0 ? ` de ${mostrar(alvo)}` : " · sem meta"}</span>
-                    </p>
+                    {alvo > 0 && <Chip tone={feito >= alvo ? "neutral" : "accent"} className="mt-0.5">{Math.round((feito / alvo) * 100)}%</Chip>}
                     {!aberta && (
                       <button
                         type="button"
@@ -1123,12 +1169,18 @@ function Metas({
                       </button>
                     )}
                   </div>
-
-                  {alvo > 0 && <BarraDeProgresso feito={feito} alvo={alvo} />}
+                  <p className="mt-4 min-w-0 truncate">
+                    <span className="text-[32px] font-semibold leading-10 tracking-[-0.03em] tabular-nums text-foreground max-sm:text-[28px] max-sm:leading-9">{mostrar(feito)}</span>
+                    <span className={juntar(texto.auxiliar, "ml-1.5 tabular-nums")}>{alvo > 0 ? ` de ${mostrar(alvo)}` : " · sem meta"}</span>
+                  </p>
+                  {alvo > 0 && <ProgressBar className="mt-4" value={feito} max={alvo} height={10} tone={feito >= alvo ? "current" : 1} striped label={`${metrica.label}: ${mostrar(feito)} de ${mostrar(alvo)}`} />}
+                  {/* De onde vem o número: sem isto, "por que está assim?"
+                      não tem resposta na própria tela. */}
+                  <p className={juntar(texto.auxiliar, "mt-3 line-clamp-2 max-sm:hidden")}>{metrica.fonte}</p>
 
                   {aberta && (
                     <form
-                      className="mt-2.5 flex min-w-0 items-center"
+                      className="mt-4 flex min-w-0 items-center"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void salvar(metrica.id);
@@ -1153,11 +1205,11 @@ function Metas({
                       </button>
                     </form>
                   )}
-                </li>
+                </CardSurface>
               );
             })}
           </ul>
-        </Painel>
+        </section>
       )}
     </AreaDeTrabalho>
   );
@@ -1198,7 +1250,7 @@ function Marketing({
       ) : (
         <Painel semEspaco as="section" aria-label="Campanhas">
           {/* Cabeçalho da tabela (do md para cima); no celular cada linha empilha. */}
-          <div className="hidden grid-cols-[minmax(0,1fr)_repeat(4,110px)_96px] items-center gap-x-2 border-b border-border px-4 py-2 md:grid" aria-hidden="true">
+          <div className="mx-3 mt-3 hidden grid-cols-[minmax(0,1fr)_repeat(4,120px)_56px] items-center gap-x-3 rounded-md bg-muted/60 px-4 py-2.5 md:grid" aria-hidden="true">
             <span className={texto.rotulo}>Campanha</span>
             <span className={juntar(texto.rotulo, "text-right")}>Investido</span>
             <span className={juntar(texto.rotulo, "text-right")}>Leads</span>
@@ -1206,7 +1258,7 @@ function Marketing({
             <span className={juntar(texto.rotulo, "text-right")}>Custo por cliente</span>
             <span />
           </div>
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-border/60 px-3 pb-2">
             {campanhas.map((campanha) => {
               const kpi = kpisDaCampanha(campanha, leads);
               const numeros = [
@@ -1226,20 +1278,26 @@ function Marketing({
                     }`
                   : null;
               return (
-                <li key={campanha.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_repeat(4,110px)_96px]">
-                  <button type="button" onClick={() => onEditar(campanha)} className={juntar("min-w-0 rounded-sm text-left", foco)} aria-label={`Editar campanha ${campanha.name}`}>
-                    <span className={juntar(texto.corpo, "block truncate font-medium hover:underline")}>{campanha.name}</span>
-                    <span className={juntar(texto.auxiliar, "block truncate")}>
-                      {campanha.channel} · {campanha.status}
+                <li key={campanha.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-md px-4 py-4 transition-colors hover:bg-muted/50 md:grid-cols-[minmax(0,1fr)_repeat(4,120px)_56px]">
+                  <button type="button" onClick={() => onEditar(campanha)} className={juntar("flex min-w-0 items-center rounded-sm text-left", foco)} aria-label={`Editar campanha ${campanha.name}`}>
+                    <Avatar icon={<Megaphone className="h-4 w-4" />} tone={campanha.status === "ativa" ? "solid" : "neutral"} className="mr-3" />
+                    <span className="block min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center">
+                      <span className="min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{campanha.name}</span>
+                      <StatusPill tone={campanha.status === "ativa" ? "success" : "neutral"} className="ml-2">{campanha.status}</StatusPill>
+                    </span>
+                    <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+                      {campanha.channel}
                     </span>
                     {ganhos && (
                       <span className="block truncate text-[12px] leading-4 text-success" title={ganhos}>
                         {ganhos}
                       </span>
                     )}
+                    </span>
                   </button>
                   {numeros.map((n) => (
-                    <span key={n.rotulo} className="hidden text-right text-[13px] tabular-nums text-foreground md:block">
+                    <span key={n.rotulo} className="hidden text-right text-[13px] font-medium tabular-nums text-foreground md:block">
                       {n.valor}
                     </span>
                   ))}
@@ -1250,11 +1308,11 @@ function Marketing({
                   </span>
                   {/* Celular: os quatro números numa grade embaixo do nome.
                       16/10/2026: abaixo de 640 px só investido e leads. */}
-                  <dl className="col-span-2 mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 md:hidden">
+                  <dl className="col-span-2 mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-md bg-muted/60 p-3 md:hidden">
                     {numeros.map((n, i) => (
                       <div key={n.rotulo} className={juntar("min-w-0", i >= 2 && "max-sm:hidden")}>
                         <dt className={texto.rotulo}>{n.rotulo}</dt>
-                        <dd className="truncate text-[13px] tabular-nums text-foreground">{n.valor}</dd>
+                        <dd className="truncate text-[15px] font-semibold tabular-nums text-foreground">{n.valor}</dd>
                       </div>
                     ))}
                   </dl>
@@ -1902,18 +1960,17 @@ function ResumoNoTopoDoLead({ lead, atividades, eventos }: { lead: Lead; ativida
   const resumo = resumoDaOportunidade(lead, atividades, eventos, agoraIso);
   const temperatura = temperaturaDoLead(lead, atividades, eventos, agoraIso);
   return (
-    <div className="-m-0.5 flex min-w-0 flex-wrap items-center text-[12px] tabular-nums text-muted-foreground [&>*]:m-0.5" aria-label="Resumo da oportunidade">
-      <Termometro temperatura={temperatura} className="mr-1" />
-      <span className="min-w-0 font-medium text-primary">{resumo.valor}</span>
-      <span aria-hidden="true">·</span>
-      <span className="min-w-0" title="Chance de fechar nesta etapa">{resumo.chance}% de chance</span>
-      <span aria-hidden="true">·</span>
-      <span className="min-w-0">{resumo.tempoNaEtapa}</span>
-      <span aria-hidden="true">·</span>
+    <div className="-m-1 flex min-w-0 flex-wrap items-center text-[12px] tabular-nums text-muted-foreground [&>*]:m-1" aria-label="Resumo da oportunidade">
+      <span className="min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">{resumo.valor}</span>
+      <Termometro temperatura={temperatura} />
+      <span className="inline-flex h-6 min-w-0 items-center rounded-full bg-muted px-2.5 font-medium text-foreground" title="Chance de fechar nesta etapa">{resumo.chance}% de chance</span>
+      <span className="inline-flex h-6 min-w-0 items-center rounded-full bg-muted px-2.5">{resumo.tempoNaEtapa}</span>
       {resumo.proximoPasso ? (
-        <span className={juntar("min-w-0 truncate", resumo.atrasado && "font-medium text-warning")} title={resumo.proximoPasso}>
-          Próximo: {resumo.proximoPasso}
-          {resumo.quando ? ` · ${resumo.quando}` : ""}
+        <span className={juntar("inline-flex h-6 min-w-0 max-w-full items-center rounded-full px-2.5", resumo.atrasado ? "bg-warning-soft font-medium text-warning" : "bg-accent-soft text-primary")} title={resumo.proximoPasso}>
+          <span className="min-w-0 truncate">
+            Próximo: {resumo.proximoPasso}
+            {resumo.quando ? ` · ${resumo.quando}` : ""}
+          </span>
         </span>
       ) : (
         <span className="min-w-0 italic text-muted-foreground/70">sem próximo passo</span>

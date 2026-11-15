@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { FaixaDeNumeros } from "@/components/sistema";
+import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react";
+import { texto } from "@/components/sistema";
+import { CardSurface, ChartLegend, Donut, ProgressBar, StatCard, type DonutSegment } from "@/components/ds";
 import { caixaDaCasa, dinheiro, recebidoDoMes, type CaixaDaCasa, type RecebidoDoMes } from "@/lib/comercial";
 
 /**
@@ -11,47 +13,87 @@ import { caixaDaCasa, dinheiro, recebidoDoMes, type CaixaDaCasa, type RecebidoDo
 export default function DinheiroDoMes({ recebido, caixa }: { recebido?: RecebidoDoMes; caixa?: CaixaDaCasa }) {
   const ou = (v: number | undefined) => (v === undefined ? "…" : dinheiro(v));
   const resultado = recebido && caixa ? recebido.total - caixa.saiuNoMes : undefined;
+  const saldoNegativo = !!caixa && caixa.saldo < 0;
+  // De onde entrou: as quatro partes do recebido do mês (a mesma conta do Financeiro), em rosca.
+  const partes: DonutSegment[] = recebido
+    ? [
+        { label: "Mensalidades", value: recebido.mensalidades, tone: 1 },
+        { label: "Avulsos e extras", value: recebido.avulsos, tone: 2 },
+        { label: "Projetos", value: recebido.projetos, tone: 4 },
+        { label: "CRM e E-mail", value: recebido.crmEmail, tone: 5 },
+      ]
+    : [];
+  const apoios = [
+    recebido ? `${recebido.clientesRecorrentes} ${recebido.clientesRecorrentes === 1 ? "cliente" : "clientes"}` : undefined,
+    "à parte",
+    "parcelas",
+    "assinaturas",
+  ];
+  const valores = [recebido?.mensalidades, recebido?.avulsos, recebido?.projetos, recebido?.crmEmail];
+  const rotulos = ["Mensalidades", "Avulsos e extras", "Projetos", "CRM e E-mail"];
   return (
-    <section aria-label="Dinheiro do mês" className="min-w-0 space-y-2" data-dinheiro-do-mes="">
-      <FaixaDeNumeros
-        rotulo="Dinheiro do mês, do Financeiro"
-        itens={[
-          { rotulo: "Entrou no mês", valor: ou(recebido?.total), ponto: "verde", apoio: "tudo que foi recebido" },
-          {
-            rotulo: "Saiu no mês",
-            valor: ou(caixa?.saiuNoMes),
-            ponto: "alerta",
-            apoio:
-              resultado === undefined
-                ? "despesas pagas"
-                : resultado >= 0
-                  ? `sobrou ${dinheiro(resultado)}`
-                  : `faltou ${dinheiro(-resultado)}`,
-          },
-          {
-            rotulo: "Saldo em caixa",
-            valor: ou(caixa?.saldo),
-            ponto: caixa && caixa.saldo < 0 ? "perigo" : "info",
-            corDoValor: caixa && caixa.saldo < 0 ? "text-destructive" : undefined,
-            apoio: "hoje, igual ao Financeiro",
-          },
-        ]}
-      />
-      <FaixaDeNumeros
-        tamanho="compacto"
-        apoioAoLado
-        rotulo="De onde entrou"
-        itens={[
-          {
-            rotulo: "Mensalidades",
-            valor: ou(recebido?.mensalidades),
-            apoio: recebido ? `${recebido.clientesRecorrentes} ${recebido.clientesRecorrentes === 1 ? "cliente" : "clientes"}` : undefined,
-          },
-          { rotulo: "Avulsos e extras", valor: ou(recebido?.avulsos), apoio: "à parte" },
-          { rotulo: "Projetos", valor: ou(recebido?.projetos), apoio: "parcelas" },
-          { rotulo: "CRM e E-mail", valor: ou(recebido?.crmEmail), apoio: "assinaturas" },
-        ]}
-      />
+    <section aria-label="Dinheiro do mês" className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-12" data-dinheiro-do-mes="">
+      {/* Rodada ousada (15/11/2026): o que entrou, o que saiu e o saldo em cartões de número grande; de onde
+          entrou vira rosca com legenda. Os mesmos sete números de antes. */}
+      <div role="group" aria-label="Dinheiro do mês, do Financeiro" className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 xl:col-span-7 xl:grid-cols-2">
+        <StatCard
+          className="col-span-2"
+          size="xl"
+          icon={<ArrowDownLeft className="h-5 w-5" />}
+          label="Entrou no mês"
+          value={ou(recebido?.total)}
+          hint="tudo que foi recebido"
+          chart={
+            recebido && caixa && recebido.total > 0 ? (
+              <span className="block min-w-0">
+                <ProgressBar value={caixa.saiuNoMes} max={recebido.total} tone={4} striped height={10} label={`Saiu ${dinheiro(caixa.saiuNoMes)} de ${dinheiro(recebido.total)} que entraram`} />
+                <span className="mt-2 flex min-w-0 items-center justify-between text-[12px] leading-4 text-muted-foreground">
+                  <span className="truncate">Saídas sobre as entradas</span>
+                  <span className="ml-2 shrink-0 font-medium tabular-nums text-foreground">{Math.round((caixa.saiuNoMes / recebido.total) * 100)}%</span>
+                </span>
+              </span>
+            ) : undefined
+          }
+        />
+        <StatCard
+          size="md"
+          icon={<ArrowUpRight className="h-4 w-4" />}
+          label="Saiu no mês"
+          value={ou(caixa?.saiuNoMes)}
+          hint={resultado === undefined ? "despesas pagas" : resultado >= 0 ? `sobrou ${dinheiro(resultado)}` : `faltou ${dinheiro(-resultado)}`}
+        />
+        <StatCard
+          size="md"
+          variant={saldoNegativo ? "default" : "ink"}
+          icon={<Wallet className="h-4 w-4" />}
+          label="Saldo em caixa"
+          value={saldoNegativo ? <span className="text-destructive">{ou(caixa?.saldo)}</span> : ou(caixa?.saldo)}
+          hint="hoje, igual ao Financeiro"
+        />
+      </div>
+      <CardSurface padded className="flex min-w-0 flex-col xl:col-span-5" data-de-onde-entrou="">
+        <p className={texto.tituloSecao}>De onde entrou</p>
+        <div role="group" aria-label="De onde entrou" className="mt-5 flex min-w-0 flex-1 flex-col items-center sm:flex-row">
+          {recebido && recebido.total > 0 && (
+            <Donut segments={partes} size={132} thickness={16} className="mb-4 shrink-0 sm:mb-0 sm:mr-6" label="Partes do recebido do mês">
+              <span className="block text-center text-[11px] font-medium leading-4 text-muted-foreground">recebido</span>
+            </Donut>
+          )}
+          <ChartLegend
+            className="w-full min-w-0 flex-1"
+            items={rotulos.map((rotulo, i) => ({
+              tone: ([1, 2, 4, 5] as const)[i],
+              label: (
+                <>
+                  <span className="text-foreground">{rotulo}</span>
+                  {apoios[i] && <span className="ml-1.5 text-[12px]">{apoios[i]}</span>}
+                </>
+              ),
+              value: ou(valores[i]),
+            }))}
+          />
+        </div>
+      </CardSurface>
     </section>
   );
 }
