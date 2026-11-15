@@ -938,10 +938,12 @@ className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-fu
         ref={conteudoRef}
         onScroll={celular ? aoRolarConteudo : undefined}
         className={cn(
-          "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+52px)] bottom-[calc(env(safe-area-inset-bottom)+56px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+88px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible",
-          // Tela larga em todas as páginas, igual às mesas: com 1280/1400 px o painel
-          // ficava espremido com espaço vazio dos lados (dono, 23/09 e 26/09).
-          "max-w-[1840px]",
+          "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+52px)] bottom-[calc(env(safe-area-inset-bottom)+56px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 md:relative md:inset-auto md:z-auto md:pt-[calc(env(safe-area-inset-top)+88px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)]",
+          // B3 (15/11, dono: "só a área de conteúdo rola"): de 768 px para cima o
+          // <main> é quem rola, com a altura da janela e a barra começando abaixo
+          // do topo. Fica relative sem z-index (fixed criaria camada e prenderia
+          // sobreposições da página por baixo do topo). Largura máxima de 1840 px
+          // e recuo lateral vêm do CSS (src/index.css, "Rolagem da casca").
         )}
         style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
         data-tour="finish"
