@@ -22,7 +22,7 @@ export const LARGURA_DA_COLUNA_DO_CLIENTE = "w-[136px] sm:w-[188px]";
  * em que a página ainda rola um pouco. O espaço da barra de rolagem é
  * reservado nos dois lados para as colunas baterem.
  */
-export const CLASSES_DO_CABECALHO_DOS_DIAS = "sticky -top-4 z-30 shrink-0 overflow-hidden rounded-full bg-muted [scrollbar-gutter:stable] md:top-[calc(env(safe-area-inset-top)+80px)]";
+export const CLASSES_DO_CABECALHO_DOS_DIAS = "sticky -top-4 z-30 shrink-0 overflow-hidden rounded-full border border-border bg-card shadow-card [scrollbar-gutter:stable] md:top-[calc(env(safe-area-inset-top)+80px)]";
 /**
  * A área das faixas (pedido do Almir, 14/11/2026, 21h55): rola por dentro,
  * na vertical (outro cliente) e na horizontal (outros dias), e ocupa o que
@@ -34,7 +34,7 @@ export const CLASSES_DA_ROLAGEM_DAS_DATAS = "relative min-h-0 min-w-0 flex-1 ove
  * individual em cada coluna"); substitui o "+N" de 21h08. Só na vertical.
  * Sem `overscroll-contain`: no fim da célula, a rolagem segue para a área.
  */
-export const CLASSES_DA_ROLAGEM_DA_CELULA = "-m-0.5 max-h-[188px] space-y-1.5 overflow-y-auto overflow-x-hidden p-0.5 sm:max-h-[236px]";
+export const CLASSES_DA_ROLAGEM_DA_CELULA = "-m-0.5 max-h-[196px] space-y-2 overflow-y-auto overflow-x-hidden p-0.5 sm:max-h-[248px]";
 
 function Colunas({ dias }: { dias: DiaDaGrade[] }) {
   return (
@@ -81,20 +81,20 @@ export default function GradeDaEsteira({
           <Colunas dias={dias} />
           <thead>
             <tr>
-              <th className={juntar(texto.rotulo, "sticky left-0 z-20 bg-muted py-2 pl-4 pr-3")} data-canto-cliente="">Cliente</th>
+              <th className={juntar(texto.rotulo, "sticky left-0 z-20 bg-card py-3 pl-5 pr-3")} data-canto-cliente="">Cliente</th>
               {dias.map((d, i) => (
                 <th
                   key={d.data}
                   className={juntar(
                     texto.rotulo,
-                    "border-l border-transparent px-2 py-2",
+                    "border-l border-transparent px-2 py-3",
                     // Duas semanas: um traço mais forte entre a primeira e a segunda.
                     i === 7 && "border-l-foreground/25",
-                    d.data === hoje && "text-foreground",
+                    d.data === hoje && "font-semibold text-foreground",
                   )}
                 >
                   {d.rotulo}
-                  {d.data === hoje && <span className="ml-1.5 inline-flex h-5 items-center rounded-full bg-primary px-2 text-[11px] font-medium text-primary-foreground">Hoje</span>}
+                  {d.data === hoje && <span className="ml-1.5 inline-flex h-5 items-center rounded-full bg-accent-solid px-2 text-[11px] font-semibold text-on-accent">Hoje</span>}
                 </th>
               ))}
             </tr>
@@ -120,12 +120,12 @@ export default function GradeDaEsteira({
           {/* Um tbody por cliente: cada faixa é um bloco, com respiro antes do próximo. A altura dela tem o teto dos dias. */}
           {faixas.map((faixa) => (
             <tbody key={faixa.clientId} data-faixa-da-esteira={faixa.clientId}>
-              <tr aria-hidden="true"><td colSpan={dias.length + 1} className="h-2.5 p-0" /></tr>
+              <tr aria-hidden="true"><td colSpan={dias.length + 1} className="h-3 p-0 sm:h-4" /></tr>
               <tr>
                 <th
                   scope="row"
                   className={juntar(
-                    "sticky left-0 z-10 rounded-l-lg border-y border-l-4 border-border bg-card px-2.5 py-3 align-top font-normal sm:px-3.5",
+                    "sticky left-0 z-10 rounded-l-lg border-y border-l-4 border-border bg-card px-3 py-4 align-top font-normal sm:px-4 sm:py-5",
                     corDeApoioDoCliente(faixa.clientId).faixa,
                   )}
                   data-cabecalho-da-faixa=""
@@ -135,11 +135,11 @@ export default function GradeDaEsteira({
                       url={identidades.data?.get(faixa.clientId)?.profile_picture_url ?? null}
                       clienteId={faixa.clientId}
                       nome={faixa.nome}
-                      tamanho={28}
-                      className="mr-2.5 hidden shrink-0 text-[11px] sm:flex"
+                      tamanho={36}
+                      className="mr-3 hidden shrink-0 text-[12px] sm:flex"
                     />
                     <span className="min-w-0">
-                      <span className="block break-words text-[13px] font-semibold leading-5 text-foreground">{faixa.nome}</span>
+                      <span className="block break-words text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground sm:text-[15px]">{faixa.nome}</span>
                       {faixa.diaPrioritario !== null && (
                         <span className={juntar(texto.auxiliar, "mt-0.5 block")}>Dia prioritário: {faixa.nomeDoDiaPrioritario}</span>
                       )}
@@ -184,7 +184,7 @@ function CelulaDoDia({ celula, ultima, viradaDaSemana, aoAbrir }: { celula: Celu
       data-prioritario={celula.prioritario ? "sim" : undefined}
       data-alerta={celula.alerta ? "sim" : undefined}
       className={juntar(
-        "border-y border-l border-border border-l-border/50 p-1.5 align-top sm:p-2",
+        "border-y border-l border-border border-l-border/50 p-2 align-top sm:p-2.5",
         ultima && "rounded-r-lg border-r",
         viradaDaSemana && "border-l-foreground/25",
         celula.alerta ? "bg-warning-soft" : celula.prioritario ? "bg-accent-soft" : "bg-card",
@@ -192,7 +192,7 @@ function CelulaDoDia({ celula, ultima, viradaDaSemana, aoAbrir }: { celula: Celu
     >
       {celula.prioritario && !celula.alerta && <span className="sr-only">Dia prioritário</span>}
       {celula.alerta ? (
-        <p className="flex items-start text-[12px] font-medium leading-4 text-warning">
+        <p className="flex items-start rounded-md bg-card px-2 py-2 text-[12px] font-medium leading-4 text-warning">
           <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
           Dia prioritário sem peça
         </p>

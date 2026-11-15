@@ -52,7 +52,7 @@ export default function CaixaPrecisaDeVoce({ pedidos, carregando, incompleta }: 
   return (
     <section
       aria-labelledby="precisa-de-voce-titulo"
-      className="shrink-0 rounded-lg bg-warning-soft"
+      className="ds-ink shrink-0 rounded-lg"
       data-precisa-de-voce={pedidos.length}
       data-aviso-recolhido={aberta ? undefined : "sim"}
     >
@@ -62,35 +62,35 @@ export default function CaixaPrecisaDeVoce({ pedidos, carregando, incompleta }: 
           onClick={alternar}
           aria-expanded={aberta}
           aria-controls="precisa-de-voce-lista"
-          className={juntar("toque-compacto flex min-h-10 w-full items-center gap-2 rounded-lg px-3.5 py-2 text-left", foco)}
+          className={juntar("toque-compacto flex min-h-[52px] w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left sm:px-5", foco)}
           data-alternar-aviso=""
         >
-          <span className={juntar(etiqueta, "min-w-[20px] justify-center bg-card px-1.5 text-warning")} aria-hidden="true">{pedidos.length}</span>
-          <span className="min-w-0 flex-1 truncate">
+          <span className="inline-flex h-8 min-w-[32px] shrink-0 items-center justify-center rounded-full bg-accent-solid px-2 text-[13px] font-semibold tabular-nums text-on-accent" aria-hidden="true">{pedidos.length}</span>
+          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">
             <span className="sr-only">Precisa de você: </span>
             {contadorDoPrecisaDeVoce(pedidos.length)}
-            {incompleta && <span className={juntar(texto.auxiliar, "ml-2")}>(parte da lista não pôde ser lida)</span>}
+            {incompleta && <span className={juntar(texto.auxiliar, "ml-2 font-normal")}>(parte da lista não pôde ser lida)</span>}
           </span>
-          <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", aberta && "rotate-180")} aria-hidden="true" />
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><ChevronDown className={juntar("h-4 w-4 transition-transform duration-200", aberta && "rotate-180")} aria-hidden="true" /></span>
         </button>
       </h2>
       {aberta && (
         <ul
           id="precisa-de-voce-lista"
-          className={juntar("mx-2 mb-2 divide-y divide-border/60 rounded-md bg-card", CLASSES_DA_LISTA_DO_AVISO)}
+          className={juntar("mx-2 mb-2 divide-y divide-border rounded-md bg-muted", CLASSES_DA_LISTA_DO_AVISO)}
           data-rolagem-do-aviso=""
         >
           {pedidos.map((p) => (
-            <li key={p.chave} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3.5 py-2.5" data-pedido-do-dono={p.chave} data-tipo={p.tipo}>
+            <li key={p.chave} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3.5" data-pedido-do-dono={p.chave} data-tipo={p.tipo}>
               <div className="min-w-0 flex-1 basis-64">
                 <p className="flex flex-wrap items-center gap-1.5">
-                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{ROTULO_DO_TIPO[p.tipo]}</span>
+                  <span className={juntar(etiqueta, "bg-foreground/10 text-foreground")}>{ROTULO_DO_TIPO[p.tipo]}</span>
                   {p.cliente && <span className="text-[12px] font-medium text-foreground">{p.cliente}</span>}
                 </p>
                 <p className="mt-1 break-words text-[13px] font-medium leading-5 text-foreground">{p.oQue}</p>
                 {p.porQue && <p className={juntar(texto.auxiliar, "mt-0.5 break-words")}>{p.porQue}</p>}
               </div>
-              <Link to={p.link} className={juntar(botao.secundario, "h-8 shrink-0")} aria-label={`Resolver em ${p.onde}: ${p.oQue}`}>
+              <Link to={p.link} className={juntar(botao.primario, "h-8 shrink-0")} aria-label={`Resolver em ${p.onde}: ${p.oQue}`}>
                 {p.onde}
                 <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
               </Link>
