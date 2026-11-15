@@ -1,7 +1,7 @@
 import AtalhoDoProduto from "@/components/produto/AtalhoDoProduto";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import TituloMembros from "@/components/membros/TituloMembros";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -222,7 +222,9 @@ export function TrilhoProdutos({
                     {!estado.ferramenta && p.progresso === 100 ? "Concluído" : estado.rotulo}
                     {!estado.ferramenta && estado.liberado &&
                       p.materiais_total !== undefined &&
-                      ` · ${p.materiais_total} materiais`}
+                      (p.progresso > 0 && p.progresso < 100 && p.materiais_concluidos !== undefined
+                        ? ` · ${p.materiais_concluidos}/${p.materiais_total} materiais`
+                        : ` · ${p.materiais_total} materiais`)}
                   </p>
                   {!estado.ferramenta && p.progresso > 0 && estado.liberado && (
                     <div
@@ -270,7 +272,7 @@ function Jornada({ jornada }: { jornada: NonNullable<Catalogo["jornada"]> }) {
   return (
     <section className="membros-jornada" aria-label="Sua jornada">
       <div className="membros-jornada-resumo">
-        <span className="membros-jornada-icone" aria-hidden="true">
+        <span className="membros-jornada-icone" aria-hidden="true" style={{ "--andamento": percentual } as CSSProperties}>
           <BookCheck size={20} />
         </span>
         <div className="min-w-0">

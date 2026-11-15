@@ -1639,3 +1639,172 @@ button.membros-vitrine-cartao:hover {
     background: linear-gradient(0deg, #06160dfa 0%, #06160de0 42%, #06160d33 72%, #06160d00 100%);
   }
 }
+
+/* ================= Pomodoro: trilho de etapas, relógio em anel, ações sem vazar ================= */
+.membros-pomodoro-etapas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+.membros-pomodoro-etapas .membros-acao {
+  justify-content: center;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 4px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: hsl(var(--muted-foreground));
+  background: none;
+}
+.membros-pomodoro-etapas .membros-acao[aria-pressed="true"] {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.14);
+}
+.membros-pomodoro .membros-relogio {
+  display: grid;
+  place-items: center;
+  width: min(232px, 68vw);
+  aspect-ratio: 1;
+  margin: 10px auto 6px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: clamp(46px, 14vw, 58px);
+  line-height: 1;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(closest-side, hsl(var(--card)) calc(100% - 11px), transparent calc(100% - 10px)),
+    conic-gradient(hsl(var(--primary)) calc(var(--andamento, 0) * 1%), hsl(var(--muted)) 0);
+}
+.membros-pomodoro-acoes {
+  flex-wrap: wrap;
+}
+.membros-pomodoro-acoes .membros-acao {
+  min-height: 46px;
+  padding-inline: 18px;
+  border-radius: 999px;
+}
+.membros-pomodoro-acoes .membros-acao.bg-primary {
+  padding-inline: 26px;
+  font-weight: 600;
+}
+@media (max-width: 639px) {
+  .membros-pomodoro {
+    width: 100%;
+    max-width: none;
+    padding: 26px 18px calc(22px + env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0;
+  }
+  .membros-pomodoro-etapas .membros-acao {
+    font-size: 11.5px;
+    letter-spacing: -0.01em;
+  }
+  .membros-pomodoro-acoes .membros-acao.bg-primary {
+    flex: 1 1 100%;
+  }
+  .membros-pomodoro-acoes .membros-acao:not(.bg-primary) {
+    flex: 1 1 0;
+  }
+}
+
+/* Marcador da capa: círculo de verdade no celular (a regra de toque esticava para 44px de altura). */
+@media (max-width: 767px) {
+  .membros-portal .membros-favoritar {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 50%;
+  }
+}
+
+/* ================= Passada 2: jornada com anel, abas do leitor em trilho, ações em pílula ================= */
+/* Anel de progresso em volta do ícone (dado real da jornada). */
+.membros-portal .membros-jornada-icone {
+  width: 52px;
+  height: 52px;
+  color: hsl(var(--accent-foreground));
+  background:
+    radial-gradient(closest-side, hsl(var(--accent)) calc(100% - 5px), transparent calc(100% - 4px)),
+    conic-gradient(hsl(var(--primary)) calc(var(--andamento, 0) * 1%), hsl(var(--muted)) 0);
+}
+.membros-portal .membros-jornada-resumo strong {
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+/* Abas do leitor: trilho em pílula, a atual cheia (sem sublinhado). */
+.membros-modal .membros-abas {
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+.membros-modal .membros-abas .membros-acao {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+}
+.membros-modal .membros-abas .membros-acao[aria-current="page"] {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.14);
+}
+@media (min-width: 768px) {
+  .membros-modal .membros-abas {
+    align-self: flex-start;
+    max-width: 100%;
+  }
+}
+
+/* Ferramentas: ação principal em pílula, como no resto da área. */
+.membros-portal .membros-ferramenta-rodape .membros-acao {
+  border-radius: 999px;
+  padding-inline: 18px;
+}
+
+/* Controles do leitor (Pomodoro, tela cheia): ícones em círculo, iguais ao fechar. */
+.membros-modal .membros-curso-controles .membros-acao {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+}
+@media (max-width: 767px) {
+  .membros-modal .membros-curso-controles .membros-acao {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+  }
+}
+
+/* Barra do celular com 7 itens (Estúdio e Créditos liberados): os ícones dividem
+   o espaço que sobra da pílula atual, e o Pomodoro continua à vista. */
+@media (max-width: 767px) {
+  .membros-portal .membros-menu:has(> :nth-child(8)) {
+    gap: 0;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu:has(> :nth-child(8)) .membros-acao:not([aria-current="page"]) {
+    flex: 1 1 0;
+    min-width: 30px;
+    padding-inline: 2px;
+  }
+  :root[data-membros-tema] .membros-portal .membros-biblioteca-corpo .membros-menu:has(> :nth-child(8)) .membros-acao[aria-current="page"] {
+    padding-inline: 12px;
+    gap: 6px;
+  }
+}
