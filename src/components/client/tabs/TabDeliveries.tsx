@@ -2,7 +2,9 @@ import { useState, useMemo, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
-import { Carregando, EstadoVazio, Secao, botao, etiqueta, foco, juntar, lista, superficie, texto } from "@/components/sistema";
+import { Carregando, EstadoVazio, botao, foco, juntar, superficie, texto } from "@/components/sistema";
+import { Card, Chip, StatusPill, type Tone } from "@/components/ds";
+import { Bolha } from "../pecasOusadas";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -44,11 +46,11 @@ function SwipeableGallery({ previewIndex, setPreviewIndex, totalItems, children 
   );
 }
 
-const approvalBadge: Record<string, { className: string; label: string }> = {
-  pending: { className: "bg-warning/10 text-warning", label: "Aguardando aprova\u00E7\u00E3o" },
-  approved: { className: "bg-success/10 text-success", label: "Aprovado" },
-  rejected: { className: "bg-destructive/10 text-destructive", label: "Ajuste solicitado" },
-  none: { className: "bg-muted text-muted-foreground", label: "Sem status" },
+const approvalBadge: Record<string, { tone: Tone; label: string }> = {
+  pending: { tone: "warning", label: "Aguardando aprova\u00E7\u00E3o" },
+  approved: { tone: "success", label: "Aprovado" },
+  rejected: { tone: "danger", label: "Ajuste solicitado" },
+  none: { tone: "neutral", label: "Sem status" },
 };
 
 const fileIcons: Record<string, any> = {
@@ -100,10 +102,10 @@ function groupFiles(files: any[]): DeliveryGroup[] {
 
 function CarouselThumbnails({ files, onOpen }: { files: any[]; onOpen: (idx: number) => void }) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1">
+    <div className="flex overflow-x-auto pb-1 [&>*+*]:ml-2">
       {files.map((f, i) => (
         <button key={f.id} onClick={(e) => { e.stopPropagation(); onOpen(i); }}
-          className="relative w-16 h-16 rounded-lg overflow-hidden border border-border shrink-0 hover:border-primary/50 transition-colors">
+          className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-muted ring-1 ring-border transition-shadow hover:ring-2 hover:ring-primary">
           <DeliveryThumb file={f} />
         </button>
       ))}
@@ -216,17 +218,17 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
     <div className="min-w-0 space-y-3">
       {/* Uma área só: aqui é o recorte do projeto; o acervo completo, com os
           filtros por pasta e tipo, vive em Documentos. */}
-      <Secao
-        titulo="Entregas deste projeto"
-        descricao={`${groups.length} ${groups.length === 1 ? "entrega" : "entregas"}${isReadOnly ? " · somente leitura, decisões do cliente bloqueadas" : ""}`}
-        acao={
-          <Link to="/documentos" className={botao.discreto} aria-label="Ver tudo em Documentos">
+      <Card
+        title="Entregas deste projeto"
+        subtitle={`${groups.length} ${groups.length === 1 ? "entrega" : "entregas"}${isReadOnly ? " · somente leitura, decisões do cliente bloqueadas" : ""}`}
+        action={
+          <Link to="/documentos" className={botao.secundario} aria-label="Ver tudo em Documentos">
             <span className="hidden sm:inline">Ver tudo em Documentos</span>
             <ChevronRight className="h-4 w-4 sm:ml-1" aria-hidden="true" />
           </Link>
         }
       >
-      <ul className={juntar(lista.aberta, lista.divisoria)}>
+      <ul className="-mx-3 min-w-0 divide-y divide-border/70">
       {groups.map((group) => {
         const f = group.parent;
         const Icon = group.type === "carousel" ? Images : (fileIcons[f.file_type] || FileText);
@@ -237,37 +239,39 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
               role="button"
               tabIndex={0}
               aria-label={`Abrir ${f.file_name}`}
-              className={juntar("block min-w-0 cursor-pointer rounded-lg px-2 py-3 transition-colors hover:bg-muted/40", foco)}
+              className={juntar("block min-w-0 cursor-pointer rounded-lg px-3 py-4 transition-colors hover:bg-muted/60", foco)}
               onClick={() => { setPreviewGroup(group); setPreviewIndex(0); }}
               onKeyDown={(e) => {
                 if (e.target !== e.currentTarget) return;
                 if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPreviewGroup(group); setPreviewIndex(0); }
               }}
             >
-            <div className="flex min-w-0 items-start">
-              <Icon className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <div className="flex min-w-0 items-center">
+              <Bolha tom={f.approval_status === "pending" ? "alerta" : f.approval_status === "approved" ? "sucesso" : "neutro"} className="mr-3">
+                <Icon className="h-4 w-4" />
+              </Bolha>
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 flex-wrap items-center">
-                  <p className="mr-2 min-w-0 truncate text-[14px] font-medium leading-5 text-foreground">{f.file_name}</p>
+                  <p className="mr-2 min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{f.file_name}</p>
                   {group.type === "carousel" && (
-                    <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>
-                      Carrossel · {group.children.length} itens
-                    </span>
+                    <Chip tone="accent">Carrossel · {group.children.length} itens</Chip>
                   )}
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>Enviado por {f.uploader?.full_name || "-"} · {formatDate(f.created_at)}</p>
+                <span className="mt-1.5 flex sm:hidden"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
               </div>
-              <span className={juntar(etiqueta, "ml-3 mt-0.5", badge.className)}>{badge.label}</span>
+              <span className="ml-3 hidden shrink-0 sm:flex"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
+              <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </div>
 
             {group.type === "carousel" && (
-              <div className="ml-7 mt-2">
+              <div className="ml-[52px] mt-3">
                 <CarouselThumbnails files={group.children} onOpen={(idx) => { setPreviewGroup(group); setPreviewIndex(idx); }} />
               </div>
             )}
 
             {f.approval_status === "rejected" && f.feedback && (
-              <div className={juntar(superficie.poco, "ml-7 mt-2 px-3 py-2")}>
+              <div className={juntar(superficie.poco, "ml-[52px] mt-3 px-4 py-3")}>
                 <p className={texto.rotulo}>Feedback enviado</p>
                 <p className={juntar(texto.corpo, "mt-0.5 [overflow-wrap:anywhere]")}>{f.feedback}</p>
               </div>
@@ -277,7 +281,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
         );
       })}
       </ul>
-      </Secao>
+      </Card>
 
       {/* Preview / Gallery Modal */}
       <Dialog open={!!previewGroup} onOpenChange={() => setPreviewGroup(null)}>
@@ -348,7 +352,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {previewGroup.children.map((cf: any, i: number) => (
                     <button key={cf.id} onClick={() => setPreviewIndex(i)}
-                      className={`shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${i === previewIndex ? "border-primary ring-1 ring-primary/30" : "border-border opacity-60 hover:opacity-100"}`}>
+                      className={`shrink-0 w-14 h-14 rounded-md overflow-hidden border-2 transition-all ${i === previewIndex ? "border-primary ring-1 ring-primary/30" : "border-border opacity-60 hover:opacity-100"}`}>
                       <DeliveryThumb file={cf} />
                     </button>
                   ))}
@@ -377,7 +381,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
                 </div>
               )}
               {previewGroup?.parent.approval_status === "rejected" && previewGroup.parent.feedback && (
-                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
+                <div className="rounded-md bg-danger-soft p-4">
                   <p className="text-[11px] text-muted-foreground mb-0.5">Feedback anterior:</p>
                   <p className="text-[12px] text-foreground">{previewGroup.parent.feedback}</p>
                 </div>
@@ -387,12 +391,12 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
 
           {previewGroup?.parent.approval_status === "pending" && (
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
-              <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
+              <Button variant="outline" className="rounded-full border-destructive/40 text-destructive hover:bg-destructive/10"
                 disabled={isReadOnly}
                 onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewGroup.parent.id); setFeedbackText(""); setPreviewGroup(null); } }}>
                 Solicitar ajuste
               </Button>
-              <Button className="bg-success hover:bg-success/90 text-white"
+              <Button className="rounded-full bg-accent-solid px-6 text-on-accent hover:bg-accent-solid/90"
                 disabled={isReadOnly}
                 onClick={() => { if (!isReadOnly) { setConfirmApprove(previewGroup.parent.id); setPreviewGroup(null); } }}>
                 Aprovar
@@ -409,7 +413,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
           <p className="text-[13px] text-muted-foreground">Esta ação não pode ser desfeita.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmApprove(null)}>Cancelar</Button>
-            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting || isReadOnly}>
+            <Button className="rounded-full bg-accent-solid px-6 text-on-accent hover:bg-accent-solid/90" onClick={handleApprove} disabled={submitting || isReadOnly}>
               {submitting ? "Aprovando..." : "Confirmar"}
             </Button>
           </DialogFooter>
