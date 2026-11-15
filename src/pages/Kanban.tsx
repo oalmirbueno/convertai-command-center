@@ -11,7 +11,7 @@ import { useDiasPrioritarios } from "@/lib/diaPrioritarioApi";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { UserRound, Clock, Plus, X, Paperclip, CalendarIcon, Trash2, MoreVertical, ArrowRight, SlidersHorizontal } from "lucide-react";
+import { UserRound, Plus, X, Paperclip, CalendarIcon, Trash2, MoreVertical, ArrowRight, SlidersHorizontal } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
@@ -54,7 +54,7 @@ import {
   lerEstadoDaTela,
   gravarEstadoDaTela,
 } from "@/components/sistema";
-import { Chip, ProgressBar, type Tone } from "@/components/ds";
+import { ProgressBar } from "@/components/ds";
 
 const columns = [
   { id: "backlog", title: "Backlog", dotColor: "bg-muted-foreground" },
@@ -77,7 +77,18 @@ const priorityDotColors: Record<string, string> = {
   low: "bg-border",
 };
 
-const priorityTone: Record<string, Tone> = { urgent: "danger", high: "warning", medium: "neutral", low: "neutral" };
+/**
+ * Fundo do cartão no computador (polimento v4, 15/11/2026; referência de
+ * quadro em pastel): a prioridade é a cor do cartão inteiro, sem selo.
+ * Urgente rosa, alta âmbar, média branco, baixa cinza.
+ */
+const priorityCard: Record<string, string> = {
+  urgent: "bg-rose-500/[0.16] dark:bg-rose-500/25",
+  high: "bg-amber-400/25 dark:bg-amber-400/20",
+  medium: "bg-card shadow-card",
+  low: "bg-foreground/[0.06]",
+};
+
 
 const priorityLabels: Record<string, string> = {
   urgent: "Urgente",
@@ -308,7 +319,8 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
             }
           }}
           className={cn(
-            "rounded-md border border-border bg-card shadow-card transition-colors hover:border-foreground/25",
+            "border transition-colors hover:border-foreground/25",
+            compacto ? "rounded-md border-border bg-card shadow-card" : cn("rounded-[18px] border-transparent", priorityCard[task.priority] || "bg-card shadow-card"),
             podeArrastar ? "cursor-grab select-none [-webkit-touch-callout:none] active:cursor-grabbing" : "cursor-pointer",
             arrastado && "opacity-40",
             foco,
@@ -331,10 +343,13 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
             </div>
           ) : (
           <div className="p-4">
-            {/* Polimento v4 (15/11/2026): só o que pede atenção vira selo no topo; média e baixa viram o ponto discreto do rodapé. */}
-            {(task.priority === "urgent" || task.priority === "high") && (
-              <Chip dot tone={priorityTone[task.priority] || "neutral"} className="mb-2.5" title={`Prioridade: ${priorityLabels[task.priority]}`}>{priorityLabels[task.priority]}</Chip>
-            )}
+            {/* Polimento v4 (15/11/2026): a prioridade é a cor do cartão; urgente e alta ganham só o nome em cima (sem selo). */}
+            {(task.priority === "urgent" || task.priority === "high") ? (
+              <p className="mb-1.5 flex items-center text-[11px] font-semibold leading-4 text-foreground/80" title={`Prioridade: ${priorityLabels[task.priority]}`}>
+                <span aria-hidden="true" className={juntar("mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full", priorityDotColors[task.priority])} />
+                <span className="sr-only">Prioridade: </span>{priorityLabels[task.priority]}
+              </p>
+            ) : priorityLabels[task.priority] ? <span className="sr-only">Prioridade: {priorityLabels[task.priority]}</span> : null}
             <p className="text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground desk:text-[15px]">{task.title}</p>
             {task.project?.name && <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{task.project.name}</p>}
             {(taskDeliveryTypeLabel(task) || editorial || task.status === "blocked" || task.milestone?.title) && (
@@ -369,35 +384,29 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
                 {noDia ? "No Dia Prioritário" : `Dia Prioritário: ${nomeDoDia(diaPrioritario)}`}
               </span>
             )}
-            <div className="mt-3.5 flex items-center justify-between">
-              <div className="flex min-w-0 items-center text-[12px] tabular-nums text-muted-foreground">
-                {(task.priority === "medium" || task.priority === "low") && (
-                  <span className="mr-3 flex items-center" title={`Prioridade: ${priorityLabels[task.priority]}`}>
-                    <span aria-hidden="true" className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", task.priority === "low" ? "border border-muted-foreground/60" : "bg-muted-foreground")} />
-                    <span className="sr-only">Prioridade: </span>{priorityLabels[task.priority]}
-                  </span>
-                )}
-                {task.due_date && (
-                  <span className="mr-3 flex items-center">
-                    <Clock className="mr-1 h-3 w-3" aria-hidden="true" />
-                    {formatDate(task.due_date)}
-                  </span>
-                )}
-                {anexos > 0 && (
-                  <span className="flex items-center" aria-label={`${anexos} anexos`}>
-                    <Paperclip className="mr-0.5 h-3 w-3" aria-hidden="true" />
-                    {anexos}
-                  </span>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center">
-                <Avatar className="h-7 w-7" title={task.assignee?.full_name || "Sem responsável"}>
-                  <AvatarFallback className={juntar("text-[11px] font-semibold", task.assignee?.full_name ? "bg-muted text-foreground" : "border border-dashed border-foreground/25 bg-transparent text-muted-foreground")}>
-                    {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || <UserRound className="h-3.5 w-3.5" aria-hidden="true" />}
-                  </AvatarFallback>
-                </Avatar>
-                {menuDeAcoes}
-              </div>
+            {/* Rodapé (referências): a pessoa com o nome, e o prazo num selo com calendário. */}
+            <div className="mt-3.5 flex min-w-0 items-center">
+              <Avatar className="h-7 w-7 shrink-0" title={task.assignee?.full_name || "Sem responsável"}>
+                <AvatarFallback className={juntar("text-[11px] font-semibold", task.assignee?.full_name ? "bg-foreground text-background" : "border border-dashed border-foreground/30 bg-transparent text-muted-foreground")}>
+                  {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || <UserRound className="h-3.5 w-3.5" aria-hidden="true" />}
+                </AvatarFallback>
+              </Avatar>
+              <span className={juntar("ml-2 min-w-0 flex-1 truncate text-[12px] leading-4", task.assignee?.full_name ? "font-medium text-foreground" : "text-muted-foreground")}>
+                {task.assignee?.full_name ? task.assignee.full_name.split(" ")[0] : "Sem responsável"}
+              </span>
+              {anexos > 0 && (
+                <span className="ml-2 flex shrink-0 items-center text-[12px] tabular-nums text-muted-foreground" aria-label={`${anexos} anexos`}>
+                  <Paperclip className="mr-0.5 h-3 w-3" aria-hidden="true" />
+                  {anexos}
+                </span>
+              )}
+              {task.due_date && (
+                <span className="ml-2 inline-flex h-6 shrink-0 items-center rounded-full border border-foreground/15 px-2 text-[11px] font-medium tabular-nums text-foreground/80">
+                  <CalendarIcon className="mr-1 h-3 w-3" aria-hidden="true" />
+                  {formatDate(task.due_date)}
+                </span>
+              )}
+              {menuDeAcoes}
             </div>
           </div>
           )}
@@ -1647,7 +1656,7 @@ export default function Kanban() {
                   key={col.id}
                   aria-label={col.title}
                   data-coluna-kanban={col.id}
-                  className={juntar("flex min-w-0 flex-col rounded-lg bg-muted/70 p-2.5 lg:min-h-0", colunaDoToque === col.id && "bg-primary/5 ring-2 ring-primary/30")}
+                  className={juntar("flex min-w-0 flex-col rounded-lg lg:min-h-0", colunaDoToque === col.id && "bg-primary/5 ring-2 ring-primary/30")}
                   onDragOver={isClient ? undefined : (e) => e.preventDefault()}
                   onDrop={isClient ? undefined : () => handleDrop(col.id)}
                 >
@@ -1685,8 +1694,8 @@ export default function Kanban() {
                     {isLoading ? (
                       <Carregando rotulo={`Carregando ${col.title}`} linhas={3} />
                     ) : colTasks.length === 0 ? (
-                      <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-foreground/15 px-3 text-center">
-                        <p className={texto.auxiliar}>{isClient ? "Sem tarefas." : "Sem tarefas. Arraste para cá."}</p>
+                      <div className="flex h-28 items-center justify-center rounded-[18px] bg-[repeating-linear-gradient(135deg,hsl(var(--foreground)/0.06)_0px,hsl(var(--foreground)/0.06)_2px,transparent_2px,transparent_8px)] px-3 text-center">
+                        <p className={juntar(texto.auxiliar, "font-medium")}>{isClient ? "Sem tarefas." : "Sem tarefas. Arraste para cá."}</p>
                       </div>
                     ) : (
                       colTasks.map((task: any) => renderCartao(task, col, colTasks))

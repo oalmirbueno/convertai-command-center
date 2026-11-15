@@ -211,7 +211,8 @@ function CelulaDoDia({ celula, ultima, viradaDaSemana, aoAbrir }: { celula: Celu
         "border-y border-l border-border border-l-border/50 p-1.5 align-top max-sm:snap-start sm:p-3",
         ultima && "rounded-r-lg border-r",
         viradaDaSemana && "border-l-foreground/25",
-        celula.alerta ? "bg-warning-soft" : celula.prioritario ? "bg-accent-soft" : "bg-card",
+        // Dia prioritário sem peça: zona hachurada âmbar (o "vazio que pede ação" das referências).
+        celula.alerta ? "bg-warning-soft bg-[repeating-linear-gradient(135deg,hsl(var(--warning)/0.22)_0px,hsl(var(--warning)/0.22)_2px,transparent_2px,transparent_9px)]" : celula.prioritario ? "bg-accent-soft" : "bg-card",
       )}
     >
       {celula.prioritario && !celula.alerta && <span className="sr-only">Dia prioritário</span>}

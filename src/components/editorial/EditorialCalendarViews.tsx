@@ -2148,7 +2148,7 @@ function BoardTaskCard({
           <UserRound className="h-3 w-3 shrink-0" />
           <span className="truncate">{responsibleName}</span>
         </span>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1 tabular-nums">
+        <span className="ml-auto inline-flex h-6 shrink-0 items-center gap-1 rounded-full border border-foreground/15 px-2 font-medium tabular-nums text-foreground/80">
           <CalendarClock className="h-3 w-3" />
           {boardTaskDueDate(task.due_date)}
         </span>
@@ -2267,7 +2267,8 @@ function BoardColumn({
         // 28/09: sem altura fixa. De 1280 px para cima a coluna ocupa a altura
         // da área (AreaDeTrabalho) e rola sozinha; abaixo disso a grade tem duas
         // colunas e quem rola é o quadro inteiro (uma rolagem por região).
-        "flex min-h-[160px] min-w-0 flex-col rounded-lg bg-muted/70 p-2.5 transition-colors max-sm:bg-transparent max-sm:p-0 xl:h-full xl:min-h-0",
+        // Polimento v4: a coluna não tem mais fundo cinza; quem aparece são o cabeçalho e os cartões.
+        "flex min-h-[160px] min-w-0 flex-col rounded-lg transition-colors xl:h-full xl:min-h-0",
         isOver &&
           acceptsActive &&
           "bg-primary/[0.06] ring-1 ring-primary/40",

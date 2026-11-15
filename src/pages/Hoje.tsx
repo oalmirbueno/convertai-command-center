@@ -287,7 +287,7 @@ export default function Hoje() {
                             <li key={a.chave} className="min-w-0" data-alerta-do-dia={a.nivel}>
                               <Link to="/anuncios/hoje" className={juntar(cartaoLink, "flex-row items-center p-4 sm:p-5")} title="Abrir Anúncios hoje">
                                 <StatusPill tone={TOM_DO_NIVEL[a.nivel]} className="mr-3">{NOME_DO_NIVEL[a.nivel]}</StatusPill>
-                                <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{a.cliente ? <span className="font-medium">{a.cliente} </span> : null}<span className="text-muted-foreground">{a.texto}</span></span>
+                                <span className={juntar(texto.corpo, "flex min-w-0 flex-1 items-baseline")}>{a.cliente ? <span className="mr-1 max-w-[45%] shrink-0 truncate font-medium">{a.cliente}</span> : null}<span className="min-w-0 truncate text-muted-foreground">{a.texto}</span></span>
                               </Link>
                             </li>
                           ))}
@@ -303,7 +303,7 @@ export default function Hoje() {
                                 <CartaoQueLeva compacto externo={prova} para="/anuncios/hoje" rotulo={prova ? `Ver a prova: ${m.cliente} · ${m.acao}` : `Abrir Anúncios hoje: ${m.cliente} · ${m.acao}`}>
                                   <span className={juntar(texto.corpo, "flex min-w-0 items-center")}>
                                     <Bot className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                                    <span className="min-w-0 flex-1 truncate"><span className="font-medium">{m.cliente}</span> <span className="text-muted-foreground">{m.acao}{m.alvo ? ` ${m.alvo}` : ""}</span></span>
+                                    <span className="flex min-w-0 flex-1 items-baseline"><span className="mr-1 max-w-[45%] shrink-0 truncate font-medium">{m.cliente}</span><span className="min-w-0 truncate text-muted-foreground">{m.acao}{m.alvo ? ` ${m.alvo}` : ""}</span></span>
                                     {prova && <ExternalLink className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
                                   </span>
                                   {(m.antes || m.depois) && <span className={juntar(texto.auxiliar, "mt-1 block truncate pl-[22px] tabular-nums")}>{`${m.antes || "-"} → ${m.depois || "-"}`}{m.quem ? ` · ${m.quem}` : ""}</span>}

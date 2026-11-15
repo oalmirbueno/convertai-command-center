@@ -33,14 +33,16 @@ export default function CartaoDaPeca({ cartao, aoAbrir }: { cartao: CartaoDaEste
         aria-label={`${cartao.titulo}. ${cartao.formato}. ${cartao.rotuloDaEtapa}. Ver detalhes`}
         aria-haspopup="dialog"
         className={juntar(
-          "block w-full rounded-[16px] border border-transparent bg-muted px-2 py-2.5 text-left transition-colors hover:border-foreground/20 sm:rounded-lg sm:px-4 sm:py-3.5 [[data-prioritario=sim]_&]:bg-card [[data-prioritario=sim]_&]:shadow-card",
+          "block w-full rounded-[16px] border border-transparent px-2 py-2.5 text-left transition-colors hover:border-foreground/25 sm:rounded-[18px] sm:px-4 sm:py-3.5 [[data-prioritario=sim]_&]:shadow-card",
+          estilo.cartao,
           foco,
         )}
         data-abrir-peca=""
       >
         <span className="line-clamp-2 break-words pr-4 text-[12px] font-semibold leading-4 tracking-[-0.01em] text-foreground sm:text-[13px] sm:leading-[18px]">{cartao.titulo}</span>
-        {/* A etapa é uma pílula só, na cor dela (sem ponto empilhado). */}
-        <span className={juntar("mt-2 inline-flex h-[22px] max-w-full items-center rounded-full px-2 text-[11px] font-medium leading-none sm:mt-2.5 sm:px-2.5", estilo.selo)} data-etapa-da-peca="">
+        {/* O fundo do cartão já é a cor da etapa: aqui só o ponto e o nome dela. */}
+        <span className="mt-2 flex min-w-0 items-center text-[11px] font-medium leading-4 text-foreground/75 sm:mt-2.5" data-etapa-da-peca="">
+          <span className={juntar("mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full", cartao.etapa === "no_ar" ? "bg-foreground" : estilo.ponto)} aria-hidden="true" />
           <span className="truncate">{cartao.rotuloDaEtapa}</span>
         </span>
       </button>
