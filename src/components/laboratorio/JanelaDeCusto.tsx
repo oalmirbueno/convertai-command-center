@@ -100,7 +100,7 @@ export default function JanelaDeCusto({
         }
       >
         {linhas.length ? (
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <ul className={lista.aberta}>
             {linhas.map((l) => (
               <li key={l.id} className={juntar(lista.linha, "justify-between")}>
                 <span className={juntar(texto.corpo, "min-w-0 truncate")}>{l.nome}</span>
@@ -112,7 +112,7 @@ export default function JanelaDeCusto({
           <p className={texto.auxiliar}>Nenhum nó que gasta neste pedido.</p>
         )}
         {saldo ? (
-          <div className="mt-3 flex min-w-0 items-center justify-between" data-saldo-depois="">
+          <div className="mt-3 flex min-w-0 items-center justify-between rounded-[16px] bg-muted/60 px-3 py-2.5" data-saldo-depois="">
             <span className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
               <Wallet className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">Créditos do Laboratório: {usd(q.data ? q.data.saldo_usd : 0)}</span>
