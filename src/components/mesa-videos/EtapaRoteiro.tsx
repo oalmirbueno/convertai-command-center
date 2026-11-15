@@ -413,7 +413,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
                                 </button>
                               )}
                             </div>
-                            <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4" aria-label={`Resultados de ${p.ref}`}>
+                            <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4" aria-label={`Resultados de ${p.ref}`}>
                               {res.map((a) => (
                                 <li key={a.id}>
                                   <button type="button" onClick={() => mudarPlano(p.ref, { escolhido: p.escolhido === a.id ? null : a.id })} className={juntar("relative block w-full overflow-hidden rounded-md bg-muted", p.escolhido === a.id ? "ring-2 ring-primary" : "")} style={{ paddingBottom: "125%" }} aria-label={`${p.escolhido === a.id ? "Tirar" : "Escolher"} ${a.nome}`}>

@@ -1007,7 +1007,7 @@ function AbaDoPinterest({
 
   return (
     <div className="min-w-0 space-y-3">
-      <div className={`${superficie.painel} p-3`}>
+      <div className={`${superficie.painel} p-4`}>
         <p className="text-[12px] leading-relaxed text-muted-foreground">
           Cole aqui o link do pin. Ele entra como {PAPEIS.tecnica.rotulo.toLowerCase()}.
           <AjudaRecolhida className="ml-1 align-middle" rotulo="Como copiar o link do pin">

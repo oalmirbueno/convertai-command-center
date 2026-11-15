@@ -492,7 +492,7 @@ function PedidoDaArteRapida({
             className="min-h-[112px] resize-y border-0 bg-transparent px-3 py-2.5 text-[14px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           {(fotosDoAcervo.length > 0 || anexos.lista.length > 0) && (
-            <ul className="grid grid-cols-3 gap-2 px-3 pb-2 sm:grid-cols-4 xl:grid-cols-6" aria-label="Imagens do pedido">
+            <ul className="grid grid-cols-3 gap-2 sm:gap-3 px-3 pb-2 sm:grid-cols-4 xl:grid-cols-6" aria-label="Imagens do pedido">
               {fotosDoAcervo.map((f) => (
                 <li key={f.id} className="min-w-0">
                   <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: "100%" }}>
@@ -1119,7 +1119,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
               Escolha a data, a hora e como entregar: o item nasce na Agenda, a arte vai para Arquivos (no projeto da marca) e para o post, a data fica confirmada e, conforme a opção, o cliente recebe para aprovar, a peça já fica aprovada e agendada, ou fica só em Arquivos.
             </AjudaRecolhida>
           </p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <label className="min-w-0 text-[12px] text-muted-foreground">
               Data
               <Input type="date" value={data} onChange={(e) => { setData(e.target.value); setDataEscolhida(true); }} className="mt-1 h-10 min-w-0" aria-label="Data do post" />
@@ -1375,7 +1375,7 @@ export default function EstudioArteRapida({
   // Celular e tablet em pé: uma coluna; o histórico recolhe em cima, o pedido ou a peça embaixo.
   return (
     <div className="min-w-0 space-y-3" data-arte-rapida-tela="pilha">
-      <div className={juntar(superficie.painel, "p-2.5")}>
+      <div className={juntar(superficie.painel, "p-4")}>
         <div className="mb-2 flex min-w-0">{topo}</div>
         <div className="flex min-w-0 items-center">
           <div className="min-w-0 flex-1">

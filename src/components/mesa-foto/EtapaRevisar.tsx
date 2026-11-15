@@ -302,7 +302,7 @@ function LinhaDaTomada({
         {tomada.versoes.length === 0 ? (
           <p className="self-center text-[12px] text-muted-foreground">{tomada.status === "bloqueada" ? tomada.motivo_bloqueio || "Bloqueada por falta de evidência." : "Ainda sem versão. Gere no passo 3 (Gerar)."}</p>
         ) : (
-          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 xl:grid-cols-5">
             {tomada.versoes
               .slice()
               .reverse()
@@ -356,7 +356,7 @@ function Comparar({
             onEscolher={setFonteId}
           />
         )}
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
           <div className="min-w-0">
             <p className="mb-1 text-[12px] font-medium text-muted-foreground">Fonte real</p>
             {fonte ? <FotoInteira foto={fonte} /> : <p className="text-[12px] text-muted-foreground">Sem foto do produto.</p>}

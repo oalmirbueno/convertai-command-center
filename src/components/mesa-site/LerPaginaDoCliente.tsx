@@ -144,7 +144,7 @@ export default function LerPaginaDoCliente({
           {(leitura.imagens.length > 0 || leitura.logo) && (
             <div className="min-w-0 pt-2">
               <span className={juntar(texto.rotulo, "block")}>Imagens principais (ficam guardadas na leitura)</span>
-              <ul className="mt-1.5 grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6" data-imagens-lidas="">
+              <ul className="mt-1.5 grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-6" data-imagens-lidas="">
                 {(leitura.logo ? [{ url: leitura.logo, alt: "Logo" }] : []).concat(leitura.imagens).slice(0, 6).map((i) => (
                   <li key={i.url} className="min-w-0">
                     <img src={i.url} alt={i.alt || "Imagem da página"} title={i.alt || undefined} loading="lazy" referrerPolicy="no-referrer" className="h-16 w-full rounded-md border border-border object-cover" />

@@ -289,7 +289,7 @@ export default function ChavesECotas({
               const usoPct = ativa && ativa.cota_mensal_usd ? Math.min(100, Math.round((ativa.gasto_mes_usd / ativa.cota_mensal_usd) * 100)) : null;
               return (
                 // Um provedor é uma coisa só: o cartão sólido do sistema.
-                <section key={provedor} className={juntar(superficie.painel, "space-y-3 p-3.5")}>
+                <section key={provedor} className={juntar(superficie.painel, "space-y-3 p-4")}>
                   <div className="flex min-w-0 items-center justify-between">
                     <h3 className="mr-2 min-w-0 truncate text-[13px] font-semibold">{nomeDoProvedor(provedor)}</h3>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${ativa ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}`}>
@@ -299,7 +299,7 @@ export default function ChavesECotas({
 
                   {ativa ? (
                     <>
-                      <div className="grid grid-cols-2 gap-2 text-[12px]">
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3 text-[12px]">
                         <div className="min-w-0">
                           <p className="text-muted-foreground">Chave</p>
                           <p className="truncate font-mono">•••• {ativa.final_chave}</p>

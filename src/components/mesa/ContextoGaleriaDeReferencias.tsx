@@ -150,7 +150,7 @@ export default function GaleriaDeReferencias({
       {refs.isError && <AvisoDeErro erro={refs.error} />}
 
       {refs.isLoading ? (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Quadrado key={i}>
               <span className="block h-full w-full animate-pulse bg-muted" />
@@ -167,7 +167,7 @@ export default function GaleriaDeReferencias({
         </div>
       ) : (
         <>
-          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">
             {visiveis.map((r) => {
               const lida = !!(r.leitura && r.leitura.trim());
               const indice = comImagem.indexOf(r);

@@ -202,7 +202,7 @@ const ETAPAS_EM_COLUNA: string[] = ["acervo", "estudio"];
 
 function EsqueletoDoDiretor() {
   return (
-    <div aria-busy="true" aria-label="Abrindo o diretor" className={juntar(superficie.painel, "flex h-full min-h-[320px] flex-col p-3")}>
+    <div aria-busy="true" aria-label="Abrindo o diretor" className={juntar(superficie.painel, "flex h-full min-h-[320px] flex-col p-4")}>
       <div className="h-8 w-2/3 animate-pulse rounded-md bg-muted" />
       <div className="mt-auto h-20 animate-pulse rounded-md bg-muted/70" />
     </div>

@@ -81,7 +81,7 @@ function CartaoDaRevisao({ r }: { r: RevisaoDePublicidade }) {
         <span className={juntar(etiqueta, "mr-1.5", v.classe)}>{v.rotulo}</span>
         {r.decisao && <span className={juntar(etiqueta, "bg-muted text-foreground")}>{r.decisao === "aprovada" ? "Aprovada" : "Reprovada"}</span>}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:gap-3">
         <MolduraDaFoto caminho={r.storage_path} alt={`Foto gerada v${r.versao}`} rotulo="Gerada" />
         <div className="min-w-0">
           <p className={juntar(texto.rotulo, "mb-1")}>Fontes do produto</p>
@@ -264,7 +264,7 @@ export default function EtapaRevisao() {
         </div>
       )}
       {campanha.revisoes.length ? (
-        <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2" data-revisoes="">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2" data-revisoes="">
           {campanha.revisoes
             .slice()
             .sort((x, y) => (x.decisao ? 1 : 0) - (y.decisao ? 1 : 0))

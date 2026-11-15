@@ -150,7 +150,7 @@ export default function EtapaUsar() {
               </button>
             </div>
             <div className="min-w-0">
-              <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+              <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
                 {lista.map((f, i) => {
                   const marcada = escolhidasIds.indexOf(f.id) >= 0;
                   return (

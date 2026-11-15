@@ -179,7 +179,7 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
       type="button"
       onClick={onToggle}
       aria-pressed={marcado}
-      className={juntar(superficie.painel, "relative flex min-w-0 flex-col space-y-2 p-3.5 text-left transition-colors", marcado ? "border-primary ring-1 ring-primary" : "hover:border-primary/50")}
+      className={juntar(superficie.painel, "relative flex min-w-0 flex-col space-y-2 p-4 text-left transition-colors", marcado ? "border-primary ring-1 ring-primary" : "hover:border-primary/50")}
     >
       <span className={`absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full border ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
         {marcado && <Check className="h-3 w-3" />}
@@ -477,16 +477,16 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
     // O formulário é o assunto desta parte: um Painel (cartão com função, SISTEMA.md 4.1).
     <Painel as="section" titulo="Período e objetivo">
       <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
         <Campo rotulo="Início"><Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9" /></Campo>
         <Campo rotulo="Fim"><Input type="date" value={fim} min={inicio} onChange={(e) => setFim(e.target.value)} className="h-9" /></Campo>
         <Campo rotulo="Publicações por semana"><Input type="number" min={1} max={14} value={frequencia} onChange={(e) => setFrequencia(e.target.value)} className="h-9" /></Campo>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
         <Campo rotulo="Objetivo principal"><Input value={objetivo} onChange={(e) => setObjetivo(e.target.value)} placeholder="Ex.: pedidos pelo WhatsApp" className="h-9" /></Campo>
         <Campo rotulo="Oferta principal"><Input value={oferta} onChange={(e) => setOferta(e.target.value)} placeholder="Ex.: kit de mudas de outono" className="h-9" /></Campo>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
         <SeletorDoModeloDoEscopo estado={modeloDoEstrategista} valor={modeloId} aoTrocar={(id) => trocarModelo(id || (padraoPara(catalogo, "estrategista") || { id: "" }).id)} />
         <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
         <SeletorDoModeloDoEscopo estado={modeloDaCopy} />
@@ -623,7 +623,7 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
               resumo={`${escolhidos.size} de ${temas.length} escolhidos`}
               acao={<span className="text-[12px] text-muted-foreground">{escolhidos.size} de {temas.length} escolhidos</span>}
             >
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {temas.map((t) => <CartaoDeTema key={t.id} tema={t} marcado={escolhidos.has(t.id)} onToggle={() => alternarTema(t.id)} />)}
               </div>
             </Secao>

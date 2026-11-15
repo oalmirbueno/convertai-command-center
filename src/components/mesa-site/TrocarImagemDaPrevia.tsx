@@ -65,7 +65,7 @@ export default function TrocarImagemDaPrevia({
       {aba === "site" && (
         <>
           {!doSite.length && <EstadoVazio compacto titulo="Este site ainda não tem imagens." descricao="Gere na etapa Imagens ou use o acervo." />}
-          <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3">
+          <ul className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3">
             {doSite.map((i) => {
               const atual = !!pedido && i.id === pedido.substitui_id;
               return (
@@ -86,7 +86,7 @@ export default function TrocarImagemDaPrevia({
           {acervo.isLoading && <p className={texto.auxiliar}>Lendo o acervo</p>}
           {acervo.isError && <p className={juntar(texto.auxiliar, "text-destructive")}>Não foi possível ler o acervo agora.</p>}
           {acervo.data && !acervo.data.fotos.length && <EstadoVazio compacto titulo="Nenhuma foto no acervo desta marca." />}
-          <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3">
+          <ul className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3">
             {(acervo.data ? acervo.data.fotos : []).map((f) => (
               <li key={f.id} className="min-w-0">
                 <button type="button" className="block w-full min-w-0 overflow-hidden rounded-md border border-border text-left hover:border-primary/60" disabled={enviando} onClick={() => onEscolher({ cliente_imagem_id: f.id })} data-foto-do-acervo={f.id}>

@@ -929,7 +929,7 @@ export default function EtapaAcervo() {
               {filtradas.length === 0 ? (
                 <EstadoVazio compacto titulo={doLado.length ? "Nenhuma foto com esse filtro." : lado === "modelo" ? "Nenhuma foto de modelo ainda." : "Nenhuma foto de produto ainda."} />
               ) : (
-                <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6" data-grade-das-fotos="">
+                <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6" data-grade-das-fotos="">
                   {visiveis.map((f) => (
                     <CartaoDaFoto
                       key={f.id}

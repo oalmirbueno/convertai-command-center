@@ -99,7 +99,7 @@ export default function ImagensReaisDoDiretor({ trabalho, ordem, bloqueado, onAt
       <p className={texto.auxiliar}>Pesquisa sem IA · sem custo</p>
       {resultado && <div className="space-y-2" aria-label="Fontes reais encontradas">
         {achados.length === 0 && <p className={texto.auxiliar}>Sem imagens. Refine o assunto ou troque o banco.</p>}
-        {achados.length > 0 && <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Imagens encontradas">
+        {achados.length > 0 && <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3" aria-label="Imagens encontradas">
           {achados.map((r, i) => <li key={r.arquivo} className="min-w-0" data-banco-do-achado={r.banco || ""}>
             <button type="button" className="group block w-full min-w-0 text-left" onClick={() => void aplicar({ arquivo: r.arquivo })} aria-label={`Usar na lâmina: ${r.nome}`} title={`Usar na lâmina: ${r.nome}`}>
               <span className="relative block w-full overflow-hidden rounded-md border border-border bg-muted transition-colors group-hover:border-primary" style={{ paddingBottom: "75%" }}>

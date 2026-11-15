@@ -178,7 +178,7 @@ export function EditorDaLinha({ datas, onDatas, esquema, desabilitado }: { datas
   const rotuloDoTipo = (ESQUEMAS_DE_CAMPANHA.filter((e) => e.id === esquema)[0] || { rotulo: "Promoção" }).rotulo;
   return (
     <div className="min-w-0" data-editor-da-linha="">
-      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
         <label className="block min-w-0 text-[12px] font-medium text-muted-foreground">
           Data do evento
           <Input type="date" value={datas.evento} disabled={desabilitado} onChange={(e) => e.target.value && onDatas({ ...datas, evento: e.target.value, fim: datas.fim && datas.fim < e.target.value ? null : datas.fim })} className="mt-1 h-9 min-w-0" aria-label="Data do evento" />

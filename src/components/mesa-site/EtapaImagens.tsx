@@ -46,7 +46,7 @@ function FotosReais({ site, slot, secao, ocupado, onUsar }: { site: LinhaDoSite;
         />
       )}
       {fotos.data && !fotos.data.fotos.length && <EstadoVazio compacto titulo="Nenhuma foto nesta origem." />}
-      <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+      <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 lg:grid-cols-6">
         {(fotos.data ? fotos.data.fotos : []).slice(0, 36).map((f) => (
           <button key={f.id} type="button" className="min-w-0 overflow-hidden rounded-md" disabled={ocupado} title={`Usar ${f.nome} em ${onde}`} onClick={() => onUsar(f)}>
             <ImagemDaMesa caminho={f.storage_path} bucket={f.storage_bucket} alt={f.nome} className="h-20 w-full" />
@@ -171,7 +171,7 @@ export default function EtapaImagens({ site }: { site: LinhaDoSite; onIrPara?: (
         <div className="min-w-0" data-mais-opcoes-das-imagens="">
           <TituloRecolhivel titulo="Mais opções" recolhido={maisRecolhido} onAlternar={() => setMaisRecolhido(!maisRecolhido)} resumo={`${modeloEscolhido ? nomeDoModelo(modeloEscolhido) : "Sem gerador"} · ${rotuloDaQualidade.toLowerCase()}`} />
           {!maisRecolhido && (
-            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-[640px]">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:max-w-[640px]">
               <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setModelo} rotulo="Gerador" qualidade={qualidade} />
               <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
             </div>
@@ -199,7 +199,7 @@ export default function EtapaImagens({ site }: { site: LinhaDoSite; onIrPara?: (
                 {aqui && (
                   <div className="min-w-0 space-y-3 px-2 pb-3 pt-2" data-linha-aberta={chave}>
                     {!x.so_real && (
-                      <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+                      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
                         <CampoComIA
                           rotulo="Sujeito"
                           campo={{ chave: "imagem.sujeito", rotulo: "Sujeito da imagem", tipo: "texto", valorAtual: sujeito, maximo: 300, dica: `o que a imagem mostra em ${rotuloDoSlot(x.slot)} de ${rotuloDaSecao(x.uid)}: cena do negócio, sem pessoa conhecida, sem texto e sem logo` }}
@@ -249,7 +249,7 @@ export default function EtapaImagens({ site }: { site: LinhaDoSite; onIrPara?: (
       >
         <div className="min-w-0 space-y-3">
           <SeletorCompacto rotulo="Slot da imagem" opcoes={SLOTS_DE_IMAGEM.map((s) => ({ valor: s.id, rotulo: `${s.rotulo} ${s.proporcao.split(" ")[0]}` }))} valor={avulsa.slot} onEscolher={(v) => setAvulsa((a) => ({ ...a, slot: v }))} />
-          <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
             <CampoComIA
               rotulo="Sujeito"
               campo={{ chave: "imagem.sujeito", rotulo: "Sujeito da imagem", tipo: "texto", valorAtual: avulsa.sujeito, maximo: 300, dica: `o que a imagem mostra (${rotuloDoSlot(avulsa.slot)}): cena do negócio, sem pessoa conhecida, sem texto e sem logo` }}
@@ -279,7 +279,7 @@ export default function EtapaImagens({ site }: { site: LinhaDoSite; onIrPara?: (
 
       <Secao titulo="Imagens do site" descricao={`${imagens.filter((i) => i.escolhida !== false).length} no site`} recolher="mesa-site:imagens:lista">
         {!imagens.length && <EstadoVazio compacto titulo="Nenhuma imagem ainda." />}
-        <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
           {imagens.map((i) => (
             <figure key={i.id} className={juntar("min-w-0", i.escolhida === false && "opacity-50")}>
               <ImagemDaMesa caminho={i.path} bucket={i.bucket} alt={i.alt} className="h-36 w-full rounded-md" />

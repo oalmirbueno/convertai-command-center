@@ -379,7 +379,7 @@ export function PublicacaoDaMesaNaAgenda({
   const linkDaMesaFoto = soFotos && !linkDoEstudio && peca.data.taskId ? linkDoPostNaMesaFoto(clientId, { taskId: peca.data.taskId, trabalhoId: peca.data.peca.id }) : null;
   return (
     <>
-    <section className={juntar(superficie.painel, "flex min-w-0 items-center px-4 py-3")}>
+    <section className={juntar(superficie.painel, "flex min-w-0 items-center p-5")}>
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-medium text-muted-foreground">Publicação da Mesa</p>
         <p className="mt-1 flex min-w-0 items-center text-[13px]">

@@ -180,7 +180,7 @@ function CartaoDoAnuncio({
   const { catalogo } = useMesa();
   const m = a.metricas;
   return (
-    <article className={juntar(superficie.painel, "min-w-0 p-3")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
+    <article className={juntar(superficie.painel, "min-w-0 p-4")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
       <div className="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-3 sm:grid-cols-[112px_minmax(0,1fr)]">
         <button type="button" onClick={onFicha} className="block min-w-0 self-start overflow-hidden rounded-md bg-muted/40" aria-label={`Ver ${a.nome}`}>
           <div className="relative w-full" style={{ paddingTop: "125%" }}>
@@ -205,7 +205,7 @@ function CartaoDoAnuncio({
               {a.corpo}
             </p>
           )}
-          <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-[11px] sm:grid-cols-5">
+          <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-[11px] [&_dd]:text-[13px] [&_dd]:font-semibold [&_dd]:leading-5 sm:grid-cols-5">
             <div className="min-w-0">
               <dt className="truncate text-muted-foreground">Gasto</dt>
               <dd className="truncate font-medium tabular-nums">{brl(m.gasto)}</dd>
@@ -292,7 +292,7 @@ function PainelDaAnalise({
         </div>
       </div>
       {analise.resumo && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{analise.resumo}</p>}
-      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
         {grupos.map((g) => (
           <div key={g.titulo} className={juntar(superficie.poco, "min-w-0 p-3")}>
             <p className={`text-[12px] font-semibold ${g.tom}`}>
@@ -330,7 +330,7 @@ function PainelDaAnalise({
       {analise.proximos_testes.length > 0 && (
         <div className="min-w-0">
           <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Próximos testes</p>
-          <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+          <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
             {analise.proximos_testes.map((t, k) => (
               <li key={`${t.titulo}-${k}`} className={juntar(superficie.poco, "flex min-w-0 flex-col p-3")}>
                 <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>

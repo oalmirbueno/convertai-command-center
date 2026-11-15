@@ -211,7 +211,7 @@ export default function PecasDaMarca() {
         }
       >
         <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
             {CAMPOS_DA_ASSINATURA.map((c) => (
               <CampoDeFormulario key={c.chave} rotulo={c.rotulo}>
                 <input className={campo} value={ass[c.chave]} maxLength={c.chave === "logo_url" ? 600 : 120} onChange={(e) => pAss.mudar({ ...ass, [c.chave]: e.target.value })} onBlur={() => void pAss.salvarAgora().catch(() => undefined)} />

@@ -231,7 +231,7 @@ function CartaoDoAngulo({
         </p>
       )}
 
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
         <Linha rotulo="Situação">{angulo.situacao}</Linha>
         <Linha rotulo="Mecanismo">{angulo.mecanismo}</Linha>
         <Linha rotulo="Gancho visual">{angulo.gancho_visual}</Linha>
@@ -247,7 +247,7 @@ function CartaoDoAngulo({
       )}
 
       {(angulo.porque_testar_primeiro || angulo.corte) && (
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
           <Linha rotulo="Por que testar">{angulo.porque_testar_primeiro || ""}</Linha>
           <Linha rotulo="Regra de corte">{angulo.corte ? angulo.corte.texto : ""}</Linha>
         </div>
@@ -652,7 +652,7 @@ export default function AbaPlano({
               </button>
             )}
 
-            <div className="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 2xl:grid-cols-2">
               {angulosOrdenados.map((a, i) => (
                 <div key={a.id} className="min-w-0 space-y-2">
                   <CartaoDoAngulo angulo={a} indice={i} marcado={marcados.indexOf(a.id) >= 0} onMarcar={() => setMarcados((m) => alternar(m, a.id))} referencias={referencias.data || []} />

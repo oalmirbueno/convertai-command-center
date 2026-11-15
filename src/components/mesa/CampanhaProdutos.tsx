@@ -123,7 +123,7 @@ export default function CampanhaProdutos({ campanha }: { campanha: Campanha }) {
             )}
           </div>
           <Input value={rascunho.nome} onChange={(e) => setRascunho((r) => ({ ...r, nome: e.target.value }))} placeholder="Nome (ex.: Elixir de desempenho)" aria-label="Nome do produto" className="h-8 text-[13px]" />
-          <div className="grid min-w-0 grid-cols-2 gap-2">
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
             <Input value={rascunho.preco || ""} onChange={(e) => setRascunho((r) => ({ ...r, preco: e.target.value }))} placeholder="Preço (R$ 129)" aria-label="Preço" className="h-8 text-[13px]" />
             <Input value={rascunho.preco_promocional || ""} onChange={(e) => setRascunho((r) => ({ ...r, preco_promocional: e.target.value }))} placeholder="Promocional (R$ 89)" aria-label="Preço promocional" className="h-8 text-[13px]" />
           </div>

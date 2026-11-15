@@ -635,7 +635,7 @@ function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDire
         </p>
       )}
       {m.sugestoes.length > 0 && (
-        <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2">
+        <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:gap-3">
           {m.sugestoes.map((s) =>
             s.tipo === "plano_de_variacoes" ? (
               <CartaoDoPlanoDeVariacoes key={s.chave} sugestao={s} mensagemId={m.mensagemId} />

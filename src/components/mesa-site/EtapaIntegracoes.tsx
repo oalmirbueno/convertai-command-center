@@ -313,7 +313,7 @@ export default function EtapaIntegracoes({ site }: { site: LinhaDoSite; onIrPara
           </>
         }
       >
-        <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
           <label className="block min-w-0">
             <span className="mb-1 flex min-w-0 items-center">
               <span className={juntar(texto.rotulo, "min-w-0 truncate")}>Título ({contar(seo.titulo, 60)})</span>
@@ -344,7 +344,7 @@ export default function EtapaIntegracoes({ site }: { site: LinhaDoSite; onIrPara
           </span>
           <textarea value={seo.descricao} onChange={(e) => setSeo((s) => ({ ...s, descricao: e.target.value.slice(0, 155) }))} rows={2} className={juntar(campoTexto, "min-h-[60px]")} aria-label="Descrição de SEO" />
         </label>
-        <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
           <input value={seo.palavras.join(", ")} onChange={(e) => setSeo((s) => ({ ...s, palavras: e.target.value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 10) }))} placeholder="Palavras de busca, separadas por vírgula" className={campo} aria-label="Palavras de busca" />
           <label className="flex cursor-pointer items-center py-1 text-[13px]">
             <input type="checkbox" className="mr-2" checked={seo.indexar} onChange={(e) => setSeo((s) => ({ ...s, indexar: e.target.checked }))} />
@@ -353,7 +353,7 @@ export default function EtapaIntegracoes({ site }: { site: LinhaDoSite; onIrPara
         </div>
         <div className="min-w-0 border-t border-border pt-3">
           <span className={juntar(texto.rotulo, "mb-2 block")}>Dados do negócio no Google</span>
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <select value={seo.negocio.tipo} onChange={(e) => mudarNegocio({ tipo: e.target.value })} className={campo} aria-label="Tipo do negócio">
               {TIPOS_DE_NEGOCIO.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -374,7 +374,7 @@ export default function EtapaIntegracoes({ site }: { site: LinhaDoSite; onIrPara
             <input value={seo.negocio.rua} onChange={(e) => mudarNegocio({ rua: e.target.value })} placeholder="Rua e número" className={campo} aria-label="Rua e número" />
             <input value={seo.negocio.bairro} onChange={(e) => mudarNegocio({ bairro: e.target.value })} placeholder="Bairro" className={campo} aria-label="Bairro" />
             <input value={seo.negocio.cidade} onChange={(e) => mudarNegocio({ cidade: e.target.value })} placeholder="Cidade" className={campo} aria-label="Cidade" />
-            <div className="grid min-w-0 grid-cols-2 gap-3">
+            <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4">
               <input value={seo.negocio.estado} onChange={(e) => mudarNegocio({ estado: e.target.value.toUpperCase().slice(0, 2) })} placeholder="UF" className={campo} aria-label="UF" />
               <input value={seo.negocio.cep} onChange={(e) => mudarNegocio({ cep: e.target.value })} placeholder="CEP" inputMode="numeric" className={campo} aria-label="CEP" />
             </div>
@@ -387,7 +387,7 @@ export default function EtapaIntegracoes({ site }: { site: LinhaDoSite; onIrPara
               ))}
             </select>
           </div>
-          <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
             <HorarioDoNegocio linhas={horario} onMudar={setHorario} />
             <textarea value={redes} onChange={(e) => setRedes(e.target.value)} rows={2} className={juntar(campoTexto, "min-h-[60px] self-start")} placeholder="Redes (https://...), uma por linha" aria-label="Redes sociais" />
           </div>

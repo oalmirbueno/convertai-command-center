@@ -95,7 +95,7 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
         recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: `${kits.length} ${kits.length === 1 ? "produto" : "produtos"}` }}
       />
       {!recolhido && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {kits.map((k) => {
             const capa = (fotos.data || []).find((f) => f.id === (k.frente_imagem_id || (k.refs[0] && k.refs[0].imagem_id))) || null;
             const ativo = k.id === kitId;

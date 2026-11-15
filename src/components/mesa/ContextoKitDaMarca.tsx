@@ -115,7 +115,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
         {(referencias.isLoading || vinculos.isLoading) && <p className="text-[12px] text-muted-foreground">Lendo referências...</p>}
         {vinculos.isError && <p className="text-[12px] text-destructive">Não foi possível ler as marcas das referências.</p>}
         {!referencias.isLoading && refs.length === 0 && <p className="text-[12px] text-muted-foreground">O cliente ainda não tem referência com imagem.</p>}
-        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+        <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {refs.map((r) => {
             const daMarca = mapaRefs[r.id] === marca.id;
             return (

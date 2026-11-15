@@ -90,7 +90,7 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
 
   return (
     <div className="min-w-0 space-y-3" data-outra-rede={rede}>
-      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
         <div className="min-w-0 rounded-md bg-success/5 px-3 py-2">
           <p className="text-[13px] font-medium text-foreground">O que dá para fazer hoje</p>
           <ul className="mt-1 space-y-0.5 text-[13px] leading-5 text-foreground">

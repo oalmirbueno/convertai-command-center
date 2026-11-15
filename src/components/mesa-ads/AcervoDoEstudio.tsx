@@ -146,7 +146,7 @@ export default function AcervoDoEstudio({
                 </>
               }
             />
-            <ul className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={`Criativos do ângulo ${g.titulo}`}>
+            <ul className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={`Criativos do ângulo ${g.titulo}`}>
               {g.criativos.map((c) => {
                 const capa = capaDoTrabalho(trabalhoDe(c));
                 const f = formatoDe(c.formato);

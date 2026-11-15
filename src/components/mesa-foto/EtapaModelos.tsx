@@ -996,7 +996,7 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
               <ZoomIn className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
-          <ul className="mt-1 grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Candidatas por motor">
+          <ul className="mt-1 grid min-w-0 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" aria-label="Candidatas por motor">
             {grupos.map((g, i) => (
               <ColunaDoMotor
                 key={g.motor_id}
@@ -1117,7 +1117,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
       <div className="mb-2 w-full sm:w-56">
         <SeletorDeQualidade valor={qualidade} onChange={setQualidade} disabled={semAncora} />
       </div>
-      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6" aria-label="Vistas da folha" data-faixa-da-folha="">
+      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-6" aria-label="Vistas da folha" data-faixa-da-folha="">
         {VISTAS_DA_FOLHA.map((v) => {
           const img = resumo.vistas[v.valor];
           const a = andamentos[chaveDoAndamento(persona.id, "vista", v.valor)];

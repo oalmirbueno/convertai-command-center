@@ -65,7 +65,7 @@ function CartaoDoHype({
 
   return (
     // Item de grade (cartão com função): o cartão sólido do sistema.
-    <article className={juntar("flex min-w-0 flex-col p-3.5", superficie.painel, marcado ? "border-primary" : "")} data-cartao-da-semana={item.chave} data-juntado={marcado ? "" : undefined}>
+    <article className={juntar("flex min-w-0 flex-col p-4", superficie.painel, marcado ? "border-primary" : "")} data-cartao-da-semana={item.chave} data-juntado={marcado ? "" : undefined}>
       <div className="flex min-w-0 items-start">
         {juntando && (
           <span className="mr-2 flex h-5 items-center">

@@ -1,7 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { FileDown } from "lucide-react";
 import { toast } from "sonner";
-import { FaixaDeNumeros, botao, juntar, texto } from "@/components/sistema";
+import { botao, juntar, texto } from "@/components/sistema";
+import { ProgressBar } from "@/components/ds";
+import { NumerosOusados } from "./ousado";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { periodoCurto, type Campanha } from "./mesaV4Api";
 import { numerosDaCampanha, resumoDaCampanhaEmHtml, type SituacaoDaPeca } from "./regrasDaCampanha";
@@ -108,15 +110,18 @@ export default function CampanhaVisao({
       </div>
       {campanha.conceito && <p className="text-[13px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{campanha.conceito}</p>}
 
-      <FaixaDeNumeros
+      {/* Rodada ousada (15/11/2026): números grandes; as peças no cartão sólido e as prontas com a barra do andamento (prontas sobre peças). */}
+      <NumerosOusados
         rotulo="Números da campanha"
         colunas={4}
-        tamanho="compacto"
+        tamanho="md"
+        destaque={0}
+        tinta={-1}
         itens={[
           { rotulo: "Peças", valor: n.pecas },
-          { rotulo: "Prontas", valor: n.prontas, ponto: n.prontas && n.prontas === n.pecas ? "verde" : "neutro", apoio: n.gerando ? `${n.gerando} gerando` : undefined },
-          { rotulo: "Na agenda", valor: n.naAgenda },
-          { rotulo: "Aprovadas", valor: n.aprovadas, apoio: n.comErro ? `${n.comErro} com erro` : undefined },
+          { rotulo: "Prontas", valor: n.prontas, apoio: n.gerando ? `${n.gerando} gerando` : undefined, grafico: n.pecas > 0 ? <ProgressBar value={n.prontas} max={n.pecas} label={`${n.prontas} de ${n.pecas} peças prontas`} /> : undefined },
+          { rotulo: "Na agenda", valor: n.naAgenda, grafico: n.pecas > 0 ? <ProgressBar value={n.naAgenda} max={n.pecas} tone={2} label={`${n.naAgenda} de ${n.pecas} peças na agenda`} /> : undefined },
+          { rotulo: "Aprovadas", valor: n.aprovadas, apoio: n.comErro ? `${n.comErro} com erro` : undefined, grafico: n.pecas > 0 ? <ProgressBar value={n.aprovadas} max={n.pecas} tone={2} label={`${n.aprovadas} de ${n.pecas} peças aprovadas`} /> : undefined },
         ]}
       />
 

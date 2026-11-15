@@ -341,13 +341,13 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
           <EstadoVazio compacto titulo="O diretor não montou fotos." descricao="Planeje de novo com outro pedido." />
         ) : (
           // 28/09 (dono: "uma rolagem por região"): a grade segue a rolagem da região principal.
-          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {ensaio.tomadas.map((t) => (
               <FotoDaCampanha key={t.id} ensaio={ensaio} tomada={t} modeloId={modelo} qualidade={qualidade} onAmpliar={() => setAmpliada(comVersao.indexOf(t))} />
             ))}
           </ul>
         )}
-        <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
+        <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
           <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setModeloId} qualidade={qualidade} />
           <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
         </div>

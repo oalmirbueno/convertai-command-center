@@ -229,7 +229,7 @@ export default function ContextoFontes() {
           </div>
         )}
         {tipografia.data && lista.length === 0 && <p className="text-[13px] text-muted-foreground">Nenhuma fonte ainda. Sem fonte, o Estúdio não gera a arte.</p>}
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
           {lista.map((f) => (
             <li key={f.id} className={juntar(superficie.painel, "min-w-0 overflow-hidden")}>
               <button

@@ -573,7 +573,7 @@ export default function AbaReferencias() {
         />
       )}
       {!parte.recolhido && filtradas.length > 0 && (
-        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
           {filtradas.map((r) => (
             <CartaoDaReferencia key={r.id} r={r} onAbrir={() => setAberta(r.id)} onEstrela={() => void alternarDestaque(r)} />
           ))}

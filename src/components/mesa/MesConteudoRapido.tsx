@@ -203,7 +203,7 @@ export default function MesConteudoRapido({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
               <div className="min-w-0">
                 <p className="mb-1 text-[11px] font-medium text-muted-foreground">Dia</p>
                 <div className="flex min-w-0">
@@ -240,7 +240,7 @@ export default function MesConteudoRapido({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-3">
               {ativas.length > 0 && (
                 <Select value={campanhaId} onValueChange={setCampanhaId} disabled={rodando}>
                   <SelectTrigger className="h-9 min-w-0 text-[12px]" aria-label="Campanha"><SelectValue /></SelectTrigger>

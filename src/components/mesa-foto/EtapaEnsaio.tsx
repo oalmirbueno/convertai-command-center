@@ -119,7 +119,7 @@ function ResumoDoKit({ kit }: { kit: KitDeFoto }) {
           );
         })}
       </div>
-      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
         <ListaCurta titulo="Não pode mudar" itens={kit.invariantes} vazio="Nada escrito." />
         <ListaCurta titulo="Lacunas: fotos que dependem delas ficam bloqueadas" itens={kit.lacunas} vazio="Nenhuma lacuna escrita." tom="alerta" />
       </div>
@@ -257,7 +257,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
             resumo={receita ? `${receita.nome} · ${tomadas.length} ${tomadas.length === 1 ? "foto" : "fotos"}` : "nenhuma escolhida"}
             dica={receitas.data && receitas.data.fonte === "local" ? "Receitas da pesquisa (a função ainda não respondeu)." : "Direção fotográfica pronta por categoria."}>
             {receitas.isLoading && <Carregando linhas={2} rotulo="Lendo as receitas" />}
-            <div role="radiogroup" aria-label="Receita" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+            <div role="radiogroup" aria-label="Receita" className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
               {combinam.concat(outras).map((r) => {
                 const ativa = receita ? receita.id === r.id : false;
                 const combina = combinam.indexOf(r) >= 0;
@@ -761,7 +761,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
                     {g.tipo ? rotuloDoTipoDeVariacao(g.tipo) : "Outras"} <span className="tabular-nums">{g.tomadas.length}</span>
                   </h4>
                 )}
-                <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {g.tomadas.map((t) => (
                     <CartaoDaTomada
                       key={t.id}
@@ -784,7 +784,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
       </div>
       <div className="min-w-0 space-y-5">
         <Cartao titulo="Gerar" dica="Pode trocar de etapa enquanto gera: o andamento segue na barra de cima e cada foto pronta já fica salva. Aprove ou refaça em cada foto.">
-          <div className="grid min-w-0 grid-cols-2 gap-2">
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
             <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setModeloId} qualidade={qualidade} />
             <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
           </div>

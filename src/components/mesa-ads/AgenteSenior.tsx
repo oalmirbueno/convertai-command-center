@@ -219,7 +219,7 @@ export function EstrategiaNaTela({
           </ul>
         )}
         {temGrupos && (
-          <div className="grid min-w-0 grid-cols-1 gap-3 pt-1">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 pt-1">
             <Grupo titulo="Escalar" tom="text-success" itens={e.escalar.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: [x.porque, x.como].filter(Boolean).join(" ") }))} />
             <Grupo titulo="Manter" tom="text-foreground" itens={e.manter.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: x.porque }))} />
             <Grupo titulo="Cortar" tom="text-destructive" itens={e.cortar.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: x.porque }))} />
@@ -419,7 +419,7 @@ function LinhaDoModelo({ escolha, onEscolher }: { escolha: EscolhaDoModelo; onEs
         <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 transition-transform ${aberta ? "rotate-180" : ""}`} />
       </button>
       {aberta && (
-        <div className="mt-1.5 grid min-w-0 grid-cols-1 gap-2 rounded-md bg-muted/50 p-2 sm:grid-cols-2">
+        <div className="mt-1.5 grid min-w-0 grid-cols-1 gap-2 sm:gap-3 rounded-md bg-muted/50 p-2 sm:grid-cols-2">
           <SeletorDeModelo
             catalogo={catalogo}
             tipo="texto"

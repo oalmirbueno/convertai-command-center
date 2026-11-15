@@ -213,7 +213,7 @@ export default function CartaoDaOferta({
 
       {o.promessa && <p className="mt-2 tracking-[-0.01em] text-[20px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{o.promessa}</p>}
 
-      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
         {o.mecanismo && <Bloco rotulo="Mecanismo">{o.mecanismo}</Bloco>}
         {o.garantia && <Bloco rotulo="Garantia">{o.garantia}</Bloco>}
         {o.urgencia_real && <Bloco rotulo="Urgência real">{o.urgencia_real}</Bloco>}
@@ -226,7 +226,7 @@ export default function CartaoDaOferta({
             {detalhes ? "Menos detalhes" : "O que entra, bônus e riscos"}
           </button>
           {detalhes && (
-            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
               {o.entregaveis.length > 0 && <Bloco rotulo="O que entra"><Lista itens={o.entregaveis} /></Bloco>}
               {o.bonus.length > 0 && <Bloco rotulo="Bônus"><Lista itens={o.bonus} /></Bloco>}
               {o.ancoragem && <Bloco rotulo="Ancoragem">{o.ancoragem}</Bloco>}

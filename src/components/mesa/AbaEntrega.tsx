@@ -33,7 +33,7 @@ import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, t
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
-import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import { NumerosAbertos } from "./ousado";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { salvarRegraDoDia } from "./agendaInteligenteApi";
 import { regraDoCliente } from "../../../supabase/functions/_shared/agenda-inteligente";
@@ -629,10 +629,10 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           {/* 14/11/2026 (dono: "menos texto, informação direta"): os ajustes viram números; a regra inteira mora no "?" do título. */}
           <div className="min-w-0" data-regra-do-dia={regraDoDia.data ? "" : undefined}>
-            <FaixaDeNumeros
+            <NumerosAbertos
               rotulo="Publicação e plano"
               colunas={2}
-              tamanho="compacto"
+              tamanho="md"
               itens={[
                 {
                   rotulo: "Horário",
@@ -665,7 +665,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-3">
             <div className="min-w-0 space-y-1.5">
               <Label htmlFor="mesa-hora">{horarioAutomatico ? "Horário fixo (reserva)" : "Horário fixo de publicação"}</Label>
               <Input id="mesa-hora" type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
@@ -679,7 +679,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
               <Input id="mesa-laminas" inputMode="numeric" placeholder="Ex.: 4" value={laminas} onChange={(e) => setLaminas(e.target.value)} />
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3" data-regra-do-dia-editar="">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-3" data-regra-do-dia-editar="">
             <div className="min-w-0 space-y-1.5">
               <Label htmlFor="mesa-por-dia">Posts por dia (máximo)</Label>
               <Input id="mesa-por-dia" inputMode="numeric" value={porDia} onChange={(e) => setPorDia(e.target.value)} />

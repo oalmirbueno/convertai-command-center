@@ -73,7 +73,7 @@ function Catalogo({ kitIds, onKits }: { kitIds: string[]; onKits: (ids: string[]
           <h4 className={juntar(texto.rotulo, "mb-2")}>
             {d.rotulo} <span className="tabular-nums">({d.kits.length})</span>
           </h4>
-          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 xl:grid-cols-4">
             {d.kits.map((k) => {
               const id = String(k.id);
               const capaId = capaDoProduto(k);

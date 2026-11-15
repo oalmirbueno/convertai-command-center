@@ -85,7 +85,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
         </label>
       </div>
       {carregando ? (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" aria-busy="true">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4" aria-busy="true">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="aspect-square animate-pulse rounded-md bg-muted" />
           ))}
@@ -94,7 +94,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
         <p className={texto.auxiliar}>Nenhuma imagem neste filtro.</p>
       ) : (
         <>
-          <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-5" aria-label={rotulo}>
+          <ul className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 xl:grid-cols-5" aria-label={rotulo}>
             {lista.slice(0, limite).map((f) => {
               const marcada = escolhidas.indexOf(f.id) >= 0;
               const s = selo(f);

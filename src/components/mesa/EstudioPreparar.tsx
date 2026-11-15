@@ -147,7 +147,7 @@ export default function EstudioPreparar({
       </div>
       {aviso && <div className="mt-2">{aviso}</div>}
 
-      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Quem faz a direção">
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Quem faz a direção">
         <Opcao
           ativa={modo === "roteiro"}
           onClick={() => temRoteiro && setModo("roteiro")}

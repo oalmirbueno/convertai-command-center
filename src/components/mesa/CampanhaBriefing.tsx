@@ -104,7 +104,7 @@ export function FormularioDoBriefing({
           </button>
         )}
       </div>
-      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
         <Campo rotulo="Oferta" id={`${prefixo}-oferta`}>
           <Input id={`${prefixo}-oferta`} value={valor.oferta} onChange={(e) => mudar({ oferta: e.target.value })} disabled={desabilitado} placeholder="Ex.: 20% nos kits até 12/06" className="h-8 text-[13px]" />
         </Campo>
@@ -218,7 +218,7 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
   if (editando) {
     return (
       <div className="min-w-0 space-y-3">
-        <div className="grid min-w-0 grid-cols-2 gap-3 sm:max-w-sm">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:max-w-sm">
           <Campo rotulo="Início" id={`briefing-${campanha.id}-inicio`}>
             <Input id={`briefing-${campanha.id}-inicio`} type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} disabled={salvando} className="h-8 min-w-0 text-[13px]" />
           </Campo>

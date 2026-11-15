@@ -196,11 +196,11 @@ export function Indicadores({ m, className = "" }: { m: MetricasDaConta; classNa
   const visiveis = KPIS.filter((k) => m[k.chave] !== null);
   if (!visiveis.length) return null;
   return (
-    <dl className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${className}`}>
+    <dl className={`grid grid-cols-2 gap-3 sm:grid-cols-4 ${className}`}>
       {visiveis.map((k) => (
-        <div key={k.chave} className={juntar(superficie.painel, "min-w-0 px-4 py-3")}>
-          <dt className="truncate text-[12px] text-muted-foreground">{k.rotulo}</dt>
-          <dd className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums">{k.formato(m[k.chave])}</dd>
+        <div key={k.chave} className={juntar(superficie.poco, "min-w-0 px-4 py-4")}>
+          <dt className="truncate text-[12px] font-medium text-muted-foreground">{k.rotulo}</dt>
+          <dd className="mt-1.5 truncate text-[24px] font-semibold leading-8 tracking-[-0.03em] tabular-nums">{k.formato(m[k.chave])}</dd>
         </div>
       ))}
     </dl>
@@ -534,7 +534,7 @@ export default function JanelaDaReferencia({
           {r && aba === "ficha" && (
             <div className="mx-auto max-w-3xl space-y-4">
               {blocoCompletar}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                 <div className="block min-w-0">
                   <span className="mb-1 flex items-center text-[12px] font-medium text-foreground/80">
                     Evidência
@@ -561,7 +561,7 @@ export default function JanelaDaReferencia({
                   <Input aria-label="Mecanismo" className="h-9 text-[13px]" value={mecanismo} readOnly={daAgencia} placeholder="Sem citar a marca" onChange={(e) => setMecanismo(e.target.value)} />
                 </label>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                 {CAMPOS_DA_FICHA.map((c) => {
                   const valor = typeof ficha[c.chave] === "string" ? String(ficha[c.chave]) : "";
                   return (

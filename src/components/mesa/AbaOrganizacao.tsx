@@ -175,7 +175,7 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
           {consulta.isError ? <EstadoDeErro titulo="Não foi possível ler os arquivos" descricao={textoDoErro(consulta.error)} acao={<Button variant="outline" size="sm" onClick={() => void consulta.refetch()}>Tentar novamente</Button>} /> :
             consulta.isLoading ? <Carregando forma="grade" linhas={6} rotulo="Lendo a organização do cliente" /> :
               !visiveis.length ? <EstadoVazio icone={<Folder className="h-5 w-5" />} titulo={busca ? "Nenhum arquivo encontrado" : "Esta seleção ainda não tem arquivos"} descricao="Os arquivos enviados ao Workspace ou entregues pelo painel aparecem aqui." /> :
-                <><div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">{visiveis.slice(0, limite).map((item) => <CartaoDoArquivo key={`${item.origem}:${item.id}`} item={item} clientId={clientId} onOrganizar={() => { setMovendo(item); setDestino(item.pasta || ""); }} onAbrir={() => setVendo(item)} />)}</div>
+                <><div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">{visiveis.slice(0, limite).map((item) => <CartaoDoArquivo key={`${item.origem}:${item.id}`} item={item} clientId={clientId} onOrganizar={() => { setMovendo(item); setDestino(item.pasta || ""); }} onAbrir={() => setVendo(item)} />)}</div>
                   {visiveis.length > limite && <Button variant="outline" onClick={() => setLimite((v) => v + 60)}>Mostrar mais arquivos</Button>}</>}
         </div>
       </div>

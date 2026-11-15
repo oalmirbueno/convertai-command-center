@@ -308,7 +308,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
     // Depois da escolha, só o item escolhido fica (os outros não foram tocados).
     const visiveis = estado === "aberta" ? atual.itens : atual.itens.filter((i) => !(i.resultado && !i.resultado.ok && i.resultado.motivo === "Não marcado nesta confirmação."));
     return (
-      <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-3")} aria-label="Qual delas?" data-escolher-um={estado}>
+      <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-4")} aria-label="Qual delas?" data-escolher-um={estado}>
         <p className="flex min-w-0 items-center text-[13px] font-semibold">
           <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
           {estado === "aberta" ? `Qual delas? (${atual.itens.length} com o mesmo nome)` : "Escolhido"}
@@ -361,7 +361,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   }
 
   return (
-    <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-3")} aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
+    <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-4")} aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
       <p className="flex min-w-0 flex-wrap items-center text-[13px] font-semibold">
         <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
         {feitosSozinho.length && estado === "aberta" ? `Já fiz ${feitosSozinho.length} · o resto espera você` : `Ações propostas · ${atual.itens.length}`}

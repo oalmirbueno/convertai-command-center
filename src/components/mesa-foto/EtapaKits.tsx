@@ -151,7 +151,7 @@ function Autorizacao({ kit, onMudar }: { kit: KitDeFoto; onMudar: (k: KitDeFoto)
           <span className="block text-[12px] text-muted-foreground">Só fotos da própria pessoa, do cliente certo. O retoque não muda anatomia, idade ou rosto.</span>
         </span>
       </label>
-      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-3">
         <Input value={a.quem} onChange={(e) => mudar("quem", e.target.value)} placeholder="Quem autorizou" aria-label="Quem autorizou" className="h-8 text-[12px]" />
         <Input value={a.data} onChange={(e) => mudar("data", e.target.value)} placeholder="Data (DD/MM/AAAA)" aria-label="Data da autorização" inputMode="numeric" className="h-8 text-[12px]" />
         <Input value={a.finalidade} onChange={(e) => mudar("finalidade", e.target.value)} placeholder="Para quê (ex.: site e anúncios)" aria-label="Finalidade autorizada" className="h-8 text-[12px]" />
@@ -278,7 +278,7 @@ function CartaoDaProposta({ proposta, fotos, onUsar }: { proposta: PropostaDeKit
           );
         })}
       </div>
-      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
         <ListaCurta titulo="Observado" itens={proposta.atributos.observado} />
         <ListaCurta titulo="Não pode mudar" itens={proposta.invariantes} />
         <ListaCurta titulo="Lacunas" itens={proposta.lacunas} tom="alerta" />
@@ -721,7 +721,7 @@ export default function EtapaKits() {
                   {editando.refs.length === 0 ? (
                     <EstadoVazio compacto titulo="Nenhuma foto ainda." descricao="Produto: frente, três quartos, laterais, verso, detalhes e a embalagem. Pessoa: só autorizadas." />
                   ) : (
-                    <ul className="grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2">
+                    <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 xl:grid-cols-2">
                       {editando.refs.map((r, i) => (
                         <FonteDoKit
                           key={`${r.imagem_id}-${i}`}

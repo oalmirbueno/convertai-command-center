@@ -103,7 +103,7 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
       <button type="button" className={botao.icone} aria-label="Atualizar segundo cérebro" title="Atualizar segundo cérebro" disabled={consulta.isFetching} onClick={() => { void consulta.refetch(); if (aba === "resultados") void sinais.refetch(); }}><RefreshCw className={`h-4 w-4 ${consulta.isFetching ? "animate-spin" : ""}`} /></button>
     </div>
     {novo && <form className="space-y-3 rounded-lg bg-muted/40 p-3" onSubmit={e => { e.preventDefault(); void salvar(); }}>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:gap-3 sm:grid-cols-3">
         <label className="grid gap-1 text-[12px]">Área<select aria-label="Área do conhecimento" value={novaArea} onChange={e => setNovaArea(e.target.value as AreaDoCerebro)} className={selectClass}>{Object.entries(AREA).map(([v,n]) => <option key={v} value={v}>{n}</option>)}</select></label>
         <label className="grid gap-1 text-[12px]">Tipo<select aria-label="Tipo de conhecimento" value={categoria} onChange={e => setCategoria(e.target.value)} className={selectClass}>{["aprendizado","preferencia","evitar"].map(v => <option key={v} value={v}>{CATEGORIA[v]}</option>)}</select></label>
         <label className="grid gap-1 text-[12px]">Validade<select aria-label="Validade do conhecimento" value={validade} onChange={e => setValidade(e.target.value)} className={selectClass}><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="">Sem prazo</option></select></label>

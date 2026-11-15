@@ -232,7 +232,7 @@ export function BlocoDaProposta({
   return (
     <div className="min-w-0 space-y-2">
       {!compacto && grade && (
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 2xl:grid-cols-3">
           {itens.map((it, i) => (
             <CartaoDoConteudo
               key={it.tema_id || i}

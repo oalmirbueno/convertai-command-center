@@ -154,7 +154,7 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
                   {it.tema || "Peça"}
                   {it.carrossel_infinito ? <span className="font-normal text-muted-foreground"> · carrossel contínuo: a foto fica só como sugestão no roteiro</span> : null}
                 </p>
-                <ul className="grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2">
+                <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 xl:grid-cols-2">
                   {pecas.map((p) => <LinhaDaPeca key={`${p.tema_id}-${p.ordem}`} peca={p} item={it} achar={achar} />)}
                 </ul>
               </section>
@@ -165,7 +165,7 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
           {plano.analise.length > 0 && (
             <section className="min-w-0">
               <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">O que cada imagem tem</p>
-              <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+              <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
                 {plano.analise.map((a) => {
                   const vista = achar(a.imagem_id);
                   const papel = imagens.filter((i) => i.imagem_id === a.imagem_id)[0];

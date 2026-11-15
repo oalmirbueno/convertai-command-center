@@ -380,7 +380,7 @@ export function MontarOPost({
           </div>
         </div>
         {!post && !destinoFixo && (
-          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
             <CampoDeFormulario rotulo="Onde entra na Agenda">
               <SeletorCompacto modo="lista" rotulo="Item da Agenda" opcoes={opcoesDeDestino} valor={destino} onEscolher={setDestino} className="w-full" />
             </CampoDeFormulario>
@@ -825,7 +825,7 @@ export default function EtapaAgenda() {
         )}
         {/* 28/09: a lista segue a rolagem da região principal (uma rolagem por região). */}
         {pendentes.length > 0 && (
-          <ul className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+          <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-2">
             {pendentes.map((p) => (
               <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
             ))}
@@ -834,7 +834,7 @@ export default function EtapaAgenda() {
         {publicados.length > 0 && (
           <details className="mt-3">
             <summary className="cursor-pointer text-[12px] text-muted-foreground">No ar ({publicados.length})</summary>
-            <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+            <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-2">
               {publicados.map((p) => (
                 <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
               ))}

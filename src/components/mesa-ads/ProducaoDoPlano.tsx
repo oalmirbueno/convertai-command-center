@@ -296,7 +296,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
       </div>
 
       {trocando && !andamento && (
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 border-t border-border pt-3 md:grid-cols-2" aria-label="Trocar a produção">
+        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 border-t border-border pt-3 md:grid-cols-2" aria-label="Trocar a produção">
           <div className="min-w-0">
             <p className="mb-1 text-[12px] font-medium text-muted-foreground">Formatos</p>
             <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Formatos">

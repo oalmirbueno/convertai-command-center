@@ -305,7 +305,7 @@ export default function EstudioEscolherFotoDoRosto({
       </li>
     );
   };
-  const grade = (lista: FotoParaRosto[]) => <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">{lista.map(cartao)}</ul>;
+  const grade = (lista: FotoParaRosto[]) => <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">{lista.map(cartao)}</ul>;
 
   const opcoes = [
     { valor: "acervo", rotulo: "Acervo", icone: <Images className="h-3.5 w-3.5" /> },

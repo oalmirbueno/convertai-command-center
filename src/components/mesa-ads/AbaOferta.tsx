@@ -544,7 +544,7 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
               />
             )}
             {listaDeOfertas.length > 0 && (
-              <div className="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 2xl:grid-cols-2">
                 {listaDeOfertas.map((o) => (
                   <CartaoDaOferta
                     key={o.id}

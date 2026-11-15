@@ -311,7 +311,7 @@ export default function EtapaPreparar() {
           </Cartao>
 
           <Cartao titulo="Gerar a versão tratada" dica="Gera uma derivada nova no acervo; o original não muda. Se o motor não fizer o que o modo exige, a Mesa avisa e não troca por um modo pior. Nada escurece a foto para dar destaque.">
-            <div className="grid min-w-0 grid-cols-2 gap-2">
+            <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
               <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloEscolhido} onChange={setModeloId} qualidade={qualidade} />
               <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
             </div>

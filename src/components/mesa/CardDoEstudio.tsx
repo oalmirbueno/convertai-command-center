@@ -818,7 +818,7 @@ export default function CardDoEstudio({
       {/* Versões: clique mostra a versão na lâmina grande */}
       {ordenadas.length > 0 && aba === "versoes" && (
         <section ref={blocoDeVersoes} className="scroll-mt-2" aria-label={`Versões (${ordenadas.length})`}>
-          <ul className="grid grid-cols-4 gap-2">
+          <ul className="grid grid-cols-4 gap-2 sm:gap-3">
             {ordenadas.slice().reverse().map((v) => (
               <li key={v.versao} className="min-w-0">
                 <button

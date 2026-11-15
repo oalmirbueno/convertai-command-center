@@ -78,7 +78,7 @@ export function CustoCompacto({
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[340px] p-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <div className="rounded-lg bg-muted px-2.5 py-2">
               <p className="text-[11px] text-muted-foreground">Saldo</p>
               <p className={`text-[15px] font-semibold tabular-nums ${negativo ? "text-destructive" : "text-foreground"}`}>{saldoUsd === null ? "?" : usd(saldoUsd)}</p>

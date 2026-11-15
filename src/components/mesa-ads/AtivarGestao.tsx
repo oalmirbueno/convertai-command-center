@@ -129,7 +129,7 @@ export default function AtivarGestao({
 
   const ativa = !!(g && g.disponivel);
   return (
-    <section className={juntar(superficie.painel, "min-w-0 px-4 py-3", className)} aria-label="Gestão de campanhas">
+    <section className={juntar(superficie.painel, "min-w-0 p-5", className)} aria-label="Gestão de campanhas">
       <div className="flex min-w-0 flex-wrap items-center">
         <button type="button" className="mb-1 mr-3 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
           <span className="min-w-0">

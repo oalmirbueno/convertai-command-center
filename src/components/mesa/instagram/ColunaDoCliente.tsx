@@ -103,7 +103,7 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
       <Bloco titulo="Perfil agora">
         <div className="space-y-2">
           <p className="text-[13px] font-semibold text-foreground">{p.username ? `@${p.username}` : "Sem Instagram conectado"}</p>
-          <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
             {[
               ["posts", p.posts],
               ["seguidores", p.seguidores],
@@ -208,7 +208,7 @@ function TelaProximos({ plano, podePublicar, onAbrir }: { plano: Planejamento; p
         {grupos.map((g) => (
           <section key={g.chave} className="min-w-0">
             <p className={juntar(texto.rotulo, "mb-1.5")}>{g.rotulo}</p>
-            <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+            <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
               {g.itens.map((i) => {
                 const estado = estadoNoCalendario(i);
                 const trava = plano.travaDoItem(i);
@@ -240,7 +240,7 @@ function TelaProximos({ plano, podePublicar, onAbrir }: { plano: Planejamento; p
         ))}
       </div>
       <aside className="min-w-0">
-        <div className={juntar(superficie.painel, "px-3 py-3")}>
+        <div className={juntar(superficie.painel, "px-4 py-3.5")}>
           <p className="mb-2 text-[13px] font-semibold">Datas e agendamento</p>
           <PainelDeMudancas plano={plano} podePublicar={podePublicar} compacto />
         </div>

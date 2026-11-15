@@ -201,7 +201,7 @@ function Ajustes({ l, fazendo, onSalvar }: { l: LeituraDaRotina; fazendo: string
   );
   return (
     <form onSubmit={salvar} className="mt-2 min-w-0 space-y-3" aria-label="Ajustes da rotina">
-      <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         {entrada("Teto diário de verba (R$)", teto, setTeto, "sem teto")}
         {entrada("Subida por vez (%)", subida, setSubida, "20")}
         {entrada("Ações por rodada", porRodada, setPorRodada, "3")}
@@ -341,7 +341,7 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
       )}
 
       {ligada && e && (e.fez.length > 0 || e.planeja.length > 0) && (
-        <div className="mb-2 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2" aria-label="Última rodada">
+        <div className="mb-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2" aria-label="Última rodada">
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-muted-foreground">Fez na última rodada{e.rodada_em ? ` (${horaCurta(e.rodada_em)})` : ""}</p>
             {e.fez.length ? (
