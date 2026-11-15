@@ -10,7 +10,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { contentTypeForDeliveryType, isPublishableTask } from "@/lib/taskDeliveryTypes";
-import { somarDias, type ArquivoDaPeca, type PecaFato } from "./esteiraLinha";
+import { somarDias, type ArquivoDaPeca, type PecaFato, type RevisaoInterna } from "./esteiraLinha";
 
 export interface LinhaDePost {
   id: string;
@@ -49,6 +49,7 @@ export interface LinhaDeVinculo {
 }
 
 export interface LinhaDeTrabalho {
+  id?: string;
   task_id: string | null;
   post_id: string | null;
   client_id: string;
@@ -56,6 +57,25 @@ export interface LinhaDeTrabalho {
   entrega_status: string | null;
   file_ids: string[] | null;
   atualizado_em?: string | null;
+  /** Carimbo da revisão interna (fase 2). Ausente enquanto a migration não estiver no banco. */
+  revisado_por?: string | null;
+  revisado_em?: string | null;
+  revisao_decisao?: string | null;
+  revisao_arquivo_id?: string | null;
+}
+
+/** As colunas do carimbo, lidas à parte (ver `lerCarimbos`). */
+export interface LinhaDeCarimbo {
+  id: string;
+  revisado_por: string | null;
+  revisado_em: string | null;
+  revisao_decisao: string | null;
+  revisao_arquivo_id: string | null;
+}
+
+export interface LinhaDeRevisor {
+  id: string;
+  full_name: string | null;
 }
 
 export interface LinhaDeArquivo extends ArquivoDaPeca {
@@ -69,6 +89,8 @@ export interface LinhasDaEsteiraLinha {
   vinculos: LinhaDeVinculo[];
   trabalhos: LinhaDeTrabalho[];
   arquivos: LinhaDeArquivo[];
+  /** Nome de quem carimbou a revisão interna (para o `title` do cartão). */
+  revisores?: LinhaDeRevisor[];
 }
 
 const POST_ATIVO = new Set(["draft", "production", "ready"]);
@@ -80,6 +102,19 @@ function melhorTrabalho(atual: LinhaDeTrabalho | undefined, novo: LinhaDeTrabalh
   if (!atual) return novo;
   if (temArquivos(novo) !== temArquivos(atual)) return temArquivos(novo) ? novo : atual;
   return String(novo.atualizado_em || "") > String(atual.atualizado_em || "") ? novo : atual;
+}
+
+/**
+ * O carimbo da revisão interna, só quando vale para a arte atual: se o
+ * arquivo principal mudou depois da revisão, o carimbo é de uma arte antiga
+ * e não conta.
+ */
+export function revisaoDoTrabalho(t: LinhaDeTrabalho, nomeDe: (id: string) => string | null = () => null): RevisaoInterna | null {
+  if (t.revisao_decisao !== "aprovado" && t.revisao_decisao !== "ajuste") return null;
+  const arquivoAtual = Array.isArray(t.file_ids) && t.file_ids.length > 0 ? t.file_ids[0] : null;
+  if ((t.revisao_arquivo_id ?? null) !== arquivoAtual) return null;
+  const por = t.revisado_por ?? null;
+  return { decisao: t.revisao_decisao, em: t.revisado_em ?? null, por, porNome: por ? nomeDe(por) : null };
 }
 
 const semExtensao = (titulo: string) => titulo.replace(/\.(png|jpe?g|webp|mp4|mov)$/i, "");
@@ -115,12 +150,27 @@ export function juntarPecas(linhas: LinhasDaEsteiraLinha): PecaFato[] {
       if (!id || vistos.has(id)) continue;
       vistos.add(id);
       const arquivo = arquivoPorId.get(id);
-      if (arquivo) saida.push({ approval_status: arquivo.approval_status, agency_approval_status: arquivo.agency_approval_status });
+      if (arquivo) {
+        saida.push({
+          approval_status: arquivo.approval_status,
+          agency_approval_status: arquivo.agency_approval_status,
+          agency_reviewed_by: arquivo.agency_reviewed_by ?? null,
+          agency_reviewed_at: arquivo.agency_reviewed_at ?? null,
+        });
+      }
     }
     return saida;
   };
+  const nomeDoRevisor = new Map((linhas.revisores ?? []).map((r) => [r.id, r.full_name]));
   const trabalhoDaPeca = (t: LinhaDeTrabalho | undefined) =>
-    t ? { status: t.status ?? null, entrega_status: t.entrega_status ?? null, temArquivo: temArquivos(t) } : null;
+    t
+      ? {
+          status: t.status ?? null,
+          entrega_status: t.entrega_status ?? null,
+          temArquivo: temArquivos(t),
+          revisao: revisaoDoTrabalho(t, (id) => nomeDoRevisor.get(id) ?? null),
+        }
+      : null;
 
   const pecas: PecaFato[] = [];
   const tarefasComPost = new Set<string>();
@@ -200,6 +250,30 @@ async function lerEmLotes<T>(ids: string[], montar: (lote: string[]) => Consulta
 }
 
 /**
+ * O carimbo da revisão interna e o nome de quem revisou são lidos à parte e
+ * com tolerância: o painel publica antes de a migration da fase 2 chegar ao
+ * banco, e pedir uma coluna que ainda não existe derrubaria a Esteira
+ * inteira. Se esta leitura falhar, a grade segue sem o carimbo.
+ */
+async function lerCarimbos(db: { from: (tabela: string) => { select: (colunas: string) => { in: (coluna: string, valores: string[]) => Consulta } } }, trabalhoIds: string[]): Promise<{ carimbos: LinhaDeCarimbo[]; revisores: LinhaDeRevisor[] }> {
+  try {
+    const carimbos = (await lerEmLotes<LinhaDeCarimbo>(trabalhoIds, (lote) =>
+      db.from("estudio_trabalhos").select("id, revisado_por, revisado_em, revisao_decisao, revisao_arquivo_id").in("id", lote), "id"))
+      .filter((c) => Boolean(c.revisao_decisao));
+    let revisores: LinhaDeRevisor[] = [];
+    try {
+      revisores = await lerEmLotes<LinhaDeRevisor>(carimbos.map((c) => c.revisado_por || ""), (lote) =>
+        db.from("profiles").select("id, full_name").in("id", lote), "id");
+    } catch {
+      revisores = [];
+    }
+    return { carimbos, revisores };
+  } catch {
+    return { carimbos: [], revisores: [] };
+  }
+}
+
+/**
  * Lê as linhas da semana que começa em `segunda` (YYYY-MM-DD, São Paulo)
  * para os clientes dados. A janela do banco tem um dia de folga de cada
  * lado; quem decide o dia certo é a regra pura, no fuso de São Paulo.
@@ -256,6 +330,11 @@ export async function lerLinhasDaEsteiraLinha(clientIds: string[], segunda: stri
   ]);
   const trabalhoPorId = new Map<string, LinhaDeTrabalho>();
   for (const t of [...trabalhosDasTarefas, ...trabalhosDosPosts]) trabalhoPorId.set(String(t.id), t);
+  const { carimbos, revisores } = await lerCarimbos(db, Array.from(trabalhoPorId.keys()));
+  for (const c of carimbos) {
+    const t = trabalhoPorId.get(String(c.id));
+    if (t) Object.assign(t, { revisado_por: c.revisado_por, revisado_em: c.revisado_em, revisao_decisao: c.revisao_decisao, revisao_arquivo_id: c.revisao_arquivo_id });
+  }
   const trabalhos = Array.from(trabalhoPorId.values());
 
   // 4) A aprovação dos arquivos dessas peças (arte do post, da publicação e capa do Estúdio).
@@ -265,12 +344,31 @@ export async function lerLinhasDaEsteiraLinha(clientIds: string[], segunda: stri
     ...trabalhos.map((t) => (Array.isArray(t.file_ids) ? t.file_ids[0] || "" : "")),
   ];
   const arquivos = await lerEmLotes<LinhaDeArquivo>(fileIds, (lote) =>
-    db.from("staff_files_secure").select("id, approval_status, agency_approval_status").in("id", lote), "id");
+    db.from("staff_files_secure").select("id, approval_status, agency_approval_status, agency_reviewed_by, agency_reviewed_at").in("id", lote), "id");
 
-  return { posts, publicacoes, tarefas, vinculos, trabalhos, arquivos };
+  return { posts, publicacoes, tarefas, vinculos, trabalhos, arquivos, revisores };
 }
 
 /** As peças da semana, prontas para `montarGrade`. */
 export async function lerPecasDaEsteiraLinha(clientIds: string[], segunda: string): Promise<PecaFato[]> {
   return juntarPecas(await lerLinhasDaEsteiraLinha(clientIds, segunda));
+}
+
+/**
+ * A regra de aprovação do cliente que está no cadastro
+ * (profiles.modo_aprovacao_do_cliente), por id. Leitura à parte e tolerante,
+ * pelo mesmo motivo do carimbo: sem a coluna no banco, ou com erro, todo
+ * mundo vale `portal` (o caminho normal, com aprovação do cliente).
+ */
+export async function lerModosDeAprovacao(clientIds: string[]): Promise<Record<string, string>> {
+  if (!clientIds.length) return {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+  try {
+    const linhas = await lerEmLotes<{ id: string; modo_aprovacao_do_cliente: string | null }>(clientIds, (lote) =>
+      db.from("profiles").select("id, modo_aprovacao_do_cliente").in("id", lote), "id");
+    return Object.fromEntries(linhas.filter((l) => l.modo_aprovacao_do_cliente).map((l) => [l.id, String(l.modo_aprovacao_do_cliente)]));
+  } catch {
+    return {};
+  }
 }

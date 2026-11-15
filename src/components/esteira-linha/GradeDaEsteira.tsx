@@ -42,6 +42,15 @@ export default function GradeDaEsteira({ dias, faixas, hoje }: { dias: DiaDaGrad
                 {faixa.diaPrioritario !== null && (
                   <span className={juntar(texto.auxiliar, "mt-0.5 block")}>Dia prioritário: {faixa.nomeDoDiaPrioritario}</span>
                 )}
+                {faixa.aprovacaoDoClienteDispensada && (
+                  <span
+                    className={juntar(texto.auxiliar, "mt-0.5 block")}
+                    data-aprovacao-dispensada=""
+                    title="Regra do cadastro deste cliente: a revisão interna da agência basta. As peças não passam pela aprovação do cliente."
+                  >
+                    Aprovação do cliente dispensada
+                  </span>
+                )}
               </th>
               {faixa.celulas.map((celula) => (
                 <td
