@@ -5,6 +5,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import DadosDaAgencia from "@/components/agencia/DadosDaAgencia";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import VideoDoDiaPrioritarioAdmin from "@/components/dia-prioritario/VideoDoDiaPrioritarioAdmin";
 import { Avatar } from "@/components/ds";
 import { CabecalhoDePagina, Carregando, SeletorCompacto, espaco, foco, juntar, superficie, texto } from "@/components/sistema";
@@ -166,6 +167,7 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [modelosAbertos, setModelosAbertos] = useState(false);
+  const [dadosAbertos, setDadosAbertos] = useState(() => (typeof window !== "undefined" ? window.location.hash === "#dados-da-agencia" : false));
   const [busca] = useSearchParams();
   const secao = busca.get("secao");
   const [abertas, setAbertas] = useState<Record<Aberta, boolean>>(() => ({
@@ -244,10 +246,7 @@ export default function SettingsPage() {
             icone={<Building2 className="h-4 w-4" />}
             rotulo="Dados da agência"
             apoio="Contratada, foro, contato e logo"
-            onClick={() => {
-              const el = typeof document !== "undefined" ? document.getElementById("dados-da-agencia") : null;
-              if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start", behavior: "smooth" });
-            }}
+            onClick={() => setDadosAbertos(true)}
           />
           <LinhaDeAcao icone={<GraduationCap className="h-4 w-4" />} rotulo="Base dos agentes" apoio="O que cada agente aprendeu" onClick={() => navigate("/base-dos-agentes")} />
           <LinhaDeAcao icone={<Plug className="h-4 w-4" />} rotulo="API e integrações" apoio="Documentação, MCP e conexões" onClick={() => navigate("/api-docs")} />
@@ -317,9 +316,13 @@ export default function SettingsPage() {
         )}
       </Grupo>
 
-      <div id="dados-da-agencia" className={juntar(superficie.painel, "min-w-0 p-5 sm:p-7")}>
-        <DadosDaAgencia />
-      </div>
+      {/* v4 (passada estrutural): o formulário longo da agência saiu do pé da tela e abre numa janela, pela linha "Dados da agência". */}
+      <Dialog open={dadosAbertos} onOpenChange={setDadosAbertos}>
+        <DialogContent id="dados-da-agencia" className="max-h-[90dvh] overflow-y-auto overscroll-contain sm:max-w-3xl" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">Dados da agência</DialogTitle>
+          <DadosDaAgencia />
+        </DialogContent>
+      </Dialog>
 
       {notificationsOpen && <NotificationsPanel open={notificationsOpen} onOpenChange={setNotificationsOpen} />}
       {admin && modelosAbertos && (

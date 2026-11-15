@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { useTeamMembers, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Avatar as Foto, AvatarStack, CardSurface, MiniBars, PillTabs, SearchField, StatCard, StatGrid, StatusPill, Toolbar, type Tone } from "@/components/ds";
+import { Avatar as Foto, AvatarStack, CardSurface, PillTabs, SearchField, SegmentBar, StatTrio, StatusPill, Toolbar, type ChartTone, type Tone } from "@/components/ds";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { UserPlus, Loader2, Trash2, Edit3, AlertTriangle, Check, Search, MoreHorizontal, Users, ListChecks, ShieldCheck, Building2 } from "lucide-react";
+import { UserPlus, Loader2, Trash2, Edit3, AlertTriangle, Check, Search, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 import {
@@ -283,11 +283,6 @@ export default function Team() {
     </DropdownMenu>
   );
 
-  const etiquetaDoPapel = (r: string) => {
-    const badge = roleBadge[r] || roleBadge.admin;
-    return <StatusPill tone={badge.tom}>{badge.label}</StatusPill>;
-  };
-
   return (
     <div className="min-w-0 space-y-6 sm:space-y-8">
       <CabecalhoDePagina
@@ -307,25 +302,35 @@ export default function Team() {
         }
       />
 
-      {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a busca e a lista não pulam quando os números chegam. */}
+      {/* v4 (passada estrutural): no lugar de quatro cartões, uma faixa só — três números e a barra dos papéis
+          (como a tela de pessoas das referências). Enquanto carrega, a faixa já ocupa o lugar dela (com "–"). */}
       {((isLoading && !members) || (members && lista.length > 0)) && (
-        <StatGrid cols={4} label="Números da equipe">
-          <StatCard variant="ink" icon={<Users className="h-4 w-4" />} label="Membros" value={members ? lista.length : "–"} hint={`${Object.keys(roleBadge).filter((r) => contagemPorPapel(r) > 0).length} papéis em uso`} chart={members && lista.length > 1 ? <span className="flex justify-end"><AvatarStack people={lista.map((m: any) => ({ name: m.full_name, src: m.avatar_url }))} max={4} label="Pessoas da equipe" /></span> : undefined} chartPosition="side" />
-          <StatCard
-            variant="accent"
-            icon={<ListChecks className="h-4 w-4" />}
-            label="Tarefas abertas"
-            value={members ? tarefasEmAberto : "–"}
-            hint="Somando a equipe"
-            chart={tarefasPorMembro.length > 1 && tarefasEmAberto > 0 ? <MiniBars values={tarefasPorMembro} height={40} label="Tarefas em aberto por membro" /> : undefined}
-            chartPosition="side"
+        <CardSurface as="section" aria-label="Números da equipe" className="flex min-w-0 flex-col p-5 sm:p-6 lg:flex-row lg:items-center">
+          <StatTrio
+            label="Resumo"
+            className="shrink-0 lg:mr-10"
+            items={[
+              { label: "Membros", value: members ? lista.length : "–" },
+              { label: "Tarefas", value: members ? tarefasEmAberto : "–" },
+              { label: "Clientes atribuídos", value: members ? clientesComResponsavel : "–" },
+            ]}
           />
-          <StatCard icon={<Building2 className="h-4 w-4" />} label="Clientes atribuídos" value={members ? clientesComResponsavel : "–"} hint="Com responsável" />
-          <StatCard icon={<ShieldCheck className="h-4 w-4" />} label="Admins" value={members ? contagemPorPapel("admin") : "–"} hint="Veem todos os clientes" />
-        </StatGrid>
+          <div className="mt-5 min-h-[58px] min-w-0 flex-1 lg:mt-0">
+            {members && lista.length > 0 && (
+              <SegmentBar
+                label="Pessoas por papel"
+                segments={Object.keys(roleBadge).map((r, i) => ({ label: roleBadge[r].label, value: contagemPorPapel(r), tone: ((i % 4) + 1) as ChartTone, hatched: r === "manager" }))}
+              />
+            )}
+          </div>
+          {members && lista.length > 1 && (
+            <AvatarStack className="mt-4 hidden shrink-0 lg:ml-8 lg:mt-0 lg:flex" people={lista.map((m: any) => ({ name: m.full_name, src: m.avatar_url }))} max={4} label="Pessoas da equipe" />
+          )}
+        </CardSurface>
       )}
 
       <Toolbar
+        surface
         label="Buscar e filtrar a equipe"
         search={<SearchField value={busca} onChange={setBusca} placeholder="Buscar por nome ou e-mail" label="Buscar membro" />}
         filters={<PillTabs tabs={abasDePapel} value={papel} onChange={setPapel} label="Papel" />}
@@ -352,40 +357,42 @@ export default function Team() {
           acao={<button type="button" className={botao.discreto} onClick={() => { setBusca(""); setPapel("todos"); }}>Limpar filtros</button>}
         />
       ) : (
-        /* Rodada ousada (15/11/2026): um cartão por pessoa, com a foto de iniciais grande, o papel em pílula e os dois números. */
-        <ul aria-label="Membros da equipe" className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
-          {visiveis.map((m: any) => (
-            <CardSurface as="li" key={m.id} className="flex flex-col p-4 sm:p-6">
-              <div className="flex min-w-0 items-start">
-                <Foto name={m.full_name} size="lg" tone={m.role === "admin" ? "ink" : "accent"} />
+        /* v4 (passada estrutural): uma tabela limpa num cartão só (foto, nome, papel com bolinha, números e "…"),
+           com rolagem própria no computador. No celular cada pessoa é uma linha de duas alturas. */
+        <CardSurface className="min-w-0 p-2 sm:p-3">
+          <div aria-hidden="true" className={juntar(texto.auxiliar, "hidden min-w-0 items-center px-4 pb-2 pt-3 sm:flex")}>
+            <span className="min-w-0 flex-1">Pessoa</span>
+            <span className="w-32 shrink-0">Papel</span>
+            <span className="w-24 shrink-0 text-right">Clientes</span>
+            <span className="w-24 shrink-0 text-right">Tarefas</span>
+            <span className="w-10 shrink-0" />
+          </div>
+          <ul aria-label="Membros da equipe" className="min-w-0 lg:max-h-[calc(100dvh-420px)] lg:min-h-[240px] lg:overflow-y-auto lg:overscroll-contain">
+            {visiveis.map((m: any) => (
+              <li key={m.id} className="flex min-w-0 items-center rounded-md px-3 py-3 transition-colors hover:bg-muted/60 sm:px-4">
+                <Foto name={m.full_name} tone={m.role === "admin" ? "ink" : "accent"} />
                 <div className="ml-3 min-w-0 flex-1">
-                  <button type="button" onClick={() => openEdit(m)} className={juntar("block max-w-full truncate rounded text-left text-[15px] font-semibold leading-6 text-foreground hover:underline", foco)}>
+                  <button type="button" onClick={() => openEdit(m)} className={juntar("block max-w-full truncate rounded text-left text-[14px] font-semibold leading-5 text-foreground hover:underline", foco)}>
                     {m.full_name}
                   </button>
                   <p className={juntar(texto.auxiliar, "truncate")}>{m.email}</p>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center tabular-nums sm:hidden")}>
+                    <StatusPill plain tone={(roleBadge[m.role] || roleBadge.admin).tom}>{(roleBadge[m.role] || roleBadge.admin).label}</StatusPill>
+                    <span className="ml-2 min-w-0 truncate">
+                      {m.role === "admin" ? "Todos os clientes" : `${clientesDe(m)} cliente(s)`} · {taskCountFor(m.id)} tarefa(s)
+                    </span>
+                  </p>
                 </div>
-                <span className="-mr-2 -mt-1 ml-1 shrink-0">{menuDaLinha(m)}</span>
-              </div>
-              {/* Celular: papel e os dois números numa linha só (a pessoa cabe em um terço da altura). */}
-              <div className="mt-3 flex min-w-0 flex-wrap items-center sm:mt-4">
-                {etiquetaDoPapel(m.role)}
-                <span className={juntar(texto.auxiliar, "ml-2.5 min-w-0 truncate tabular-nums sm:hidden")}>
-                  {m.role === "admin" ? "Todos os clientes" : `${clientesDe(m)} cliente(s)`} · {taskCountFor(m.id)} tarefa(s)
+                <span className="hidden w-32 shrink-0 sm:block">
+                  <StatusPill plain tone={(roleBadge[m.role] || roleBadge.admin).tom}>{(roleBadge[m.role] || roleBadge.admin).label}</StatusPill>
                 </span>
-              </div>
-              <dl className="mt-4 hidden min-w-0 grid-cols-2 gap-3 sm:grid">
-                <div className={juntar(superficie.poco, "min-w-0 px-4 py-3")}>
-                  <dt className={juntar(texto.auxiliar, "truncate")}>Clientes</dt>
-                  <dd className="mt-0.5 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{m.role === "admin" ? "Todos" : clientesDe(m)}</dd>
-                </div>
-                <div className={juntar(superficie.poco, "min-w-0 px-4 py-3")}>
-                  <dt className={juntar(texto.auxiliar, "truncate")}>Tarefas</dt>
-                  <dd className="mt-0.5 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{taskCountFor(m.id)}</dd>
-                </div>
-              </dl>
-            </CardSurface>
-          ))}
-        </ul>
+                <span className="hidden w-24 shrink-0 text-right text-[14px] font-medium tabular-nums text-foreground sm:block">{m.role === "admin" ? "Todos" : clientesDe(m)}</span>
+                <span className="hidden w-24 shrink-0 text-right text-[14px] font-medium tabular-nums text-foreground sm:block">{taskCountFor(m.id)}</span>
+                <span className="ml-1 flex w-10 shrink-0 justify-end">{menuDaLinha(m)}</span>
+              </li>
+            ))}
+          </ul>
+        </CardSurface>
       )}
 
       {/* Adicionar / editar */}
