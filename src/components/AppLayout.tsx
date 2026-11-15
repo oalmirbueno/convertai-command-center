@@ -27,6 +27,7 @@ import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 import MobileBottomNav, { destinosDaBarra, type DestinoDoCelular } from "@/components/MobileBottomNav";
 import { rotuloDoLugar } from "@/lib/navegacao/lugares";
 import BuscaDoPainel, { type PaginaDaBusca } from "@/components/casca/BuscaDoPainel";
+import { semItensOcultos } from "@/lib/navegacao/itensOcultosDoMenu";
 import { usePreCargaOciosaDasMesas } from "@/lib/mesa/preCarga";
 import { lazyDiscreto, preCarregarModulo, quandoOcioso } from "@/lib/lazyComPreCarga";
 import CronometroDoTopo from "@/components/cronometro/CronometroDoTopo";
@@ -154,13 +155,18 @@ interface NavItem {
   contador?: number;
 }
 
-const adminMainNav: NavItem[] = [
+// 14/11/2026: o que não se usa sai do menu por uma lista só
+// (src/lib/navegacao/itensOcultosDoMenu.ts). As quatro listas abaixo passam
+// pela mesma peneira, e delas saem o menu do computador, a folha "Mais" do
+// celular e a busca: o item escondido não reaparece em nenhuma saída. A rota
+// continua viva em App.tsx; para o item voltar, basta tirá-lo daquela lista.
+const adminMainNav: NavItem[] = semItensOcultos([
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Kanban", url: "/kanban", icon: Columns3 },
   { title: "Agenda", url: "/calendario", icon: CalendarDays },
   { title: "Clientes", url: "/clientes", icon: Users },
-];
+]);
 
 // O menu "mais" agrupado por tema: 18 itens numa lista corrida obrigavam a
 // ler tudo para achar qualquer coisa. Os grupos seguem a pergunta de quem
@@ -271,7 +277,7 @@ const gruposPorPapel = (podeGestao: boolean, podeCriacao = true) =>
   adminMoreGroups
     .map((grupo) => ({
       ...grupo,
-      items: grupo.items.filter((item) => (podeGestao || !item.soGestao) && (podeCriacao || !item.soCriacao)),
+      items: semItensOcultos(grupo.items).filter((item) => (podeGestao || !item.soGestao) && (podeCriacao || !item.soCriacao)),
     }))
     .filter((grupo) => grupo.items.length > 0);
 
@@ -283,7 +289,7 @@ const gruposPorPapel = (podeGestao: boolean, podeCriacao = true) =>
  */
 const LINKS_NO_TOPO_ESTREITO = 3;
 
-const clientMainNav: NavItem[] = [
+const clientMainNav: NavItem[] = semItensOcultos([
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Onde Estamos", url: "/onde-estamos", icon: HeartPulse },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
@@ -291,9 +297,9 @@ const clientMainNav: NavItem[] = [
   { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Agenda", url: "/calendario", icon: CalendarDays },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
-];
+]);
 
-const clientMoreNav: NavItem[] = [
+const clientMoreNav: NavItem[] = semItensOcultos([
   // 13/11/2026: o produto CRM e E-mail é um lugar à parte; daqui o cliente entra nele.
   { title: "CRM e E-mail", url: "/app", icon: Boxes },
   { title: "Área de membros", url: "/membros", icon: BookOpen },
@@ -303,7 +309,26 @@ const clientMoreNav: NavItem[] = [
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Perfil", url: "/perfil", icon: UserCircle },
-];
+]);
+
+/**
+ * O menu de um papel, já peneirado: os links da barra, os grupos do "mais" da
+ * equipe e a lista do "mais". É daqui que saem o menu do computador, a folha
+ * "Mais" do celular e a busca de página. Função pura, exportada para os
+ * testes conferirem o menu montado.
+ */
+export function menuDoPapel(role: string): { principal: NavItem[]; grupos: Array<{ label: string; items: NavItem[] }>; mais: NavItem[] } {
+  const isAdmin = role === "admin";
+  if (!isAdmin && !["design", "traffic", "manager"].includes(role)) {
+    return { principal: clientMainNav, grupos: [], mais: clientMoreNav };
+  }
+  const podeGestao = isAdmin || role === "manager";
+  // 26/10: item só do admin (soAdmin).
+  const grupos = gruposPorPapel(podeGestao, podeGestao || role === "design")
+    .map((grupo) => ({ ...grupo, items: grupo.items.filter((item) => isAdmin || !item.soAdmin) }))
+    .filter((grupo) => grupo.items.length > 0);
+  return { principal: adminMainNav, grupos, mais: grupos.flatMap((grupo) => grupo.items) };
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, logout } = useAuth();
@@ -327,17 +352,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isAdminOrTeam = isAdmin || isTeam;
   const podeGestao = isAdmin || role === "manager";
   const mensagensProntas = useContagemDeMensagensProntas();
-  // 26/10: item só do admin (soAdmin) e o contador das mensagens prontas.
-  const gruposDoMenu = gruposPorPapel(podeGestao, podeGestao || role === "design").map((grupo) => ({
+  // O menu do papel (menuDoPapel) mais o contador das mensagens prontas (26/10).
+  const menu = menuDoPapel(role);
+  const gruposDoMenu = menu.grupos.map((grupo) => ({
     ...grupo,
-    items: grupo.items
-      .filter((item) => isAdmin || !item.soAdmin)
-      .map((item) => (item.url === "/central/mensagens" ? { ...item, contador: mensagensProntas } : item)),
-  })).filter((grupo) => grupo.items.length > 0);
-  const mainNav = isAdminOrTeam ? adminMainNav : clientMainNav;
+    items: grupo.items.map((item) => (item.url === "/central/mensagens" ? { ...item, contador: mensagensProntas } : item)),
+  }));
+  const mainNav = menu.principal;
   const moreNav = isAdminOrTeam
     ? gruposDoMenu.flatMap((grupo) => grupo.items)
-    : clientMoreNav;
+    : menu.mais;
   const { data: notifData } = useNotifications();
   // Quem usa as mesas já tem o código delas antes do clique (src/lib/mesa/preCarga.ts).
   usePreCargaOciosaDasMesas(["admin", "manager", "design"].includes(role));

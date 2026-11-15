@@ -163,6 +163,10 @@ export const CLIENT_SCOPED_LEGACY_TOOLS = [
   'aceleriq_reagendar_publicacao',
   'aceleriq_editar_legenda_publicacao',
   'aceleriq_ajustar_formato_publicacao',
+  // MCP 2.28: cada uma confere o cliente no próprio handler (a leitura filtra a lista).
+  'aceleriq_revisar_trabalho_interno',
+  'aceleriq_listar_precisa_de_voce',
+  'aceleriq_marcar_precisa_de_voce',
 ] as const;
 
 const CLIENT_SCOPED_LEGACY_TOOL_SET = new Set<string>(CLIENT_SCOPED_LEGACY_TOOLS);

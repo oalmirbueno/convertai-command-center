@@ -519,7 +519,7 @@ const ROTULO_DA_ACAO: Record<string, string> = {
   criar_proposta: "Criar proposta", enviar_contrato: "Enviar contrato", ativar_campanha: "Ativar campanha",
   alterar_orcamento: "Alterar orçamento", gastar: "Gastar", alterar_financeiro: "Alterar financeiro",
   alterar_permissoes: "Alterar permissões", exportar_dados: "Exportar dados", excluir_dados: "Excluir dados",
-  mudar_estrategia: "Mudar estratégia", alterar_responsavel: "Alterar responsável", promover_autonomia: "Promover autonomia",
+  mudar_estrategia: "Mudar estratégia", alterar_responsavel: "Alterar responsável", promover_autonomia: "Promover autonomia", pedir_decisao_do_dono: "Decisão do dono",
 };
 
 const AVISO_DO_ESCOPO = "Aprovar registra a decisão nesta versão. Enviar ou publicar é uma etapa à parte.";
