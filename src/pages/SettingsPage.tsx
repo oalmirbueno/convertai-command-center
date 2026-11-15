@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, Brain, Building2, CalendarHeart, ChevronRight, Cpu, KeyRound, Link2, Moon, Palette, Shield, SlidersHorizontal, Sparkles, Sun, User, Users } from "lucide-react";
+import { Bell, Brain, Building2, CalendarHeart, ChevronRight, Cpu, GraduationCap, KeyRound, Link2, Moon, Palette, Plug, Shield, SlidersHorizontal, Sparkles, Sun, User, Users } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -65,9 +65,12 @@ function Grupo({
   variante = "padrao",
   destaque = false,
   cabecalho,
+  colunas = false,
   children,
   ...resto
 }: {
+  /** Tela larga: as linhas em duas colunas (a linha aberta ocupa as duas). */
+  colunas?: boolean;
   titulo: string;
   icone: ReactNode;
   variante?: "padrao" | "tinta";
@@ -87,7 +90,7 @@ function Grupo({
           </>
         )}
       </header>
-      <ul className="min-w-0 space-y-1">{children}</ul>
+      <ul className={juntar("min-w-0", colunas ? "grid grid-cols-1 gap-y-1 lg:grid-cols-2 lg:gap-x-10" : "space-y-1")}>{children}</ul>
     </section>
   );
 }
@@ -130,7 +133,7 @@ function LinhaQueAbre({
 } & Record<`data-${string}`, string | undefined>) {
   const corpo = `config-${id}`;
   return (
-    <li className="min-w-0" id={`secao-${id}`}>
+    <li className={juntar("min-w-0", aberta && "lg:col-span-2")} id={`secao-${id}`}>
       <button
         type="button"
         onClick={onAlternar}
@@ -246,10 +249,12 @@ export default function SettingsPage() {
               if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start", behavior: "smooth" });
             }}
           />
+          <LinhaDeAcao icone={<GraduationCap className="h-4 w-4" />} rotulo="Base dos agentes" apoio="O que cada agente aprendeu" onClick={() => navigate("/base-dos-agentes")} />
+          <LinhaDeAcao icone={<Plug className="h-4 w-4" />} rotulo="API e integrações" apoio="Documentação, MCP e conexões" onClick={() => navigate("/api-docs")} />
         </Grupo>
       </div>
 
-      <Grupo titulo="Sistema" icone={<SlidersHorizontal className="h-5 w-5" />} destaque data-grupo-sistema="">
+      <Grupo titulo="Sistema" icone={<SlidersHorizontal className="h-5 w-5" />} destaque colunas data-grupo-sistema="">
         {admin && (
           <LinhaQueAbre
             id="chaves"

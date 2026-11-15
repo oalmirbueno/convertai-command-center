@@ -307,20 +307,21 @@ export default function Team() {
         }
       />
 
-      {members && lista.length > 0 && (
+      {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a busca e a lista não pulam quando os números chegam. */}
+      {((isLoading && !members) || (members && lista.length > 0)) && (
         <StatGrid cols={4} label="Números da equipe">
-          <StatCard variant="ink" icon={<Users className="h-4 w-4" />} label="Membros" value={lista.length} hint={`${Object.keys(roleBadge).filter((r) => contagemPorPapel(r) > 0).length} papéis em uso`} />
+          <StatCard variant="ink" icon={<Users className="h-4 w-4" />} label="Membros" value={members ? lista.length : "–"} hint={`${Object.keys(roleBadge).filter((r) => contagemPorPapel(r) > 0).length} papéis em uso`} />
           <StatCard
             variant="accent"
             icon={<ListChecks className="h-4 w-4" />}
-            label="Tarefas em aberto"
-            value={tarefasEmAberto}
+            label="Tarefas abertas"
+            value={members ? tarefasEmAberto : "–"}
             hint="Somando a equipe"
             chart={tarefasPorMembro.length > 1 && tarefasEmAberto > 0 ? <MiniBars values={tarefasPorMembro} height={40} label="Tarefas em aberto por membro" /> : undefined}
             chartPosition="side"
           />
-          <StatCard icon={<Building2 className="h-4 w-4" />} label="Clientes com responsável" value={clientesComResponsavel} hint="Atribuídos a alguém" />
-          <StatCard icon={<ShieldCheck className="h-4 w-4" />} label="Admins" value={contagemPorPapel("admin")} hint="Veem todos os clientes" />
+          <StatCard icon={<Building2 className="h-4 w-4" />} label="Clientes atribuídos" value={members ? clientesComResponsavel : "–"} hint="Com responsável" />
+          <StatCard icon={<ShieldCheck className="h-4 w-4" />} label="Admins" value={members ? contagemPorPapel("admin") : "–"} hint="Veem todos os clientes" />
         </StatGrid>
       )}
 
@@ -352,9 +353,9 @@ export default function Team() {
         />
       ) : (
         /* Rodada ousada (15/11/2026): um cartão por pessoa, com a foto de iniciais grande, o papel em pílula e os dois números. */
-        <ul aria-label="Membros da equipe" className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+        <ul aria-label="Membros da equipe" className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
           {visiveis.map((m: any) => (
-            <CardSurface as="li" key={m.id} padded className="flex flex-col">
+            <CardSurface as="li" key={m.id} className="flex flex-col p-4 sm:p-6">
               <div className="flex min-w-0 items-start">
                 <Foto name={m.full_name} size="lg" tone={m.role === "admin" ? "ink" : "accent"} />
                 <div className="ml-3 min-w-0 flex-1">
@@ -365,8 +366,14 @@ export default function Team() {
                 </div>
                 <span className="-mr-2 -mt-1 ml-1 shrink-0">{menuDaLinha(m)}</span>
               </div>
-              <div className="mt-4">{etiquetaDoPapel(m.role)}</div>
-              <dl className="mt-4 grid min-w-0 grid-cols-2 gap-3">
+              {/* Celular: papel e os dois números numa linha só (a pessoa cabe em um terço da altura). */}
+              <div className="mt-3 flex min-w-0 flex-wrap items-center sm:mt-4">
+                {etiquetaDoPapel(m.role)}
+                <span className={juntar(texto.auxiliar, "ml-2.5 min-w-0 truncate tabular-nums sm:hidden")}>
+                  {m.role === "admin" ? "Todos os clientes" : `${clientesDe(m)} cliente(s)`} · {taskCountFor(m.id)} tarefa(s)
+                </span>
+              </div>
+              <dl className="mt-4 hidden min-w-0 grid-cols-2 gap-3 sm:grid">
                 <div className={juntar(superficie.poco, "min-w-0 px-4 py-3")}>
                   <dt className={juntar(texto.auxiliar, "truncate")}>Clientes</dt>
                   <dd className="mt-0.5 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{m.role === "admin" ? "Todos" : clientesDe(m)}</dd>

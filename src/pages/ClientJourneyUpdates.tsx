@@ -38,6 +38,14 @@ import {
 import { CardSurface, Chip, PageHeader, ProgressBar, Sparkline, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 import { Bolha, Legenda } from "@/components/client/pecasOusadas";
 
+/** Rótulo curto dos sinais para o cartão estreito do celular (o texto inteiro continua na tela larga). */
+const ROTULO_CURTO: Record<string, string> = {
+  "Entregas concluídas no mês": "Entregas no mês",
+  "Em produção agora": "Em produção",
+  "Publicações no ar": "No ar",
+  "Esperando você": "Esperando você",
+};
+
 /**
  * O narrador do mês: a IA escreve 3 a 5 frases contando o mês do cliente a
  * partir da linha do tempo real do painel. Cache local de 24 horas por
@@ -561,7 +569,15 @@ export default function ClientJourneyUpdates() {
                 <StatCard
                   key={signal.label}
                   size="xl"
-                  label={signal.label}
+                  label={
+                    // Celular: o rótulo curto cabe inteiro no cartão de meia largura.
+                    ROTULO_CURTO[signal.label] ? (
+                      <>
+                        <span className="sm:hidden">{ROTULO_CURTO[signal.label]}</span>
+                        <span className="max-sm:hidden">{signal.label}</span>
+                      </>
+                    ) : signal.label
+                  }
                   value={<span className={SIGNAL_TONE[signal.tone]}>{signal.value}</span>}
                   to={target || undefined}
                   corner={target ? <ArrowUpRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> : undefined}

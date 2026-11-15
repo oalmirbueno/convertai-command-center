@@ -132,6 +132,7 @@ export default function AdminReports() {
     return normalizar([r.title, getClientName(r), r.project?.name].filter(Boolean).join(" ")).indexOf(termo) >= 0;
   });
   const rascunhos = lista.filter((r) => r.status !== "published").length;
+  const primeiraCarga = isLoading && !reports;
   const filtrando = filtroStatus !== "todos" || !!termo;
 
   return (
@@ -164,13 +165,14 @@ export default function AdminReports() {
       />
 
       {/* Os números da lista (os mesmos do filtro de situação), grandes; clicar filtra. */}
-      {lista.length > 0 && (
+      {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a lista não pula quando os números chegam. */}
+      {(primeiraCarga || lista.length > 0) && (
         <StatGrid cols={3} label="Resumo dos relatórios">
-          <StatCard variant="ink" label="Relatórios" value={lista.length} icon={<FileText className="h-4 w-4" />} onClick={() => setFiltroStatus("todos")} />
+          <StatCard variant="ink" label="Relatórios" value={primeiraCarga ? "–" : lista.length} icon={<FileText className="h-4 w-4" />} onClick={() => setFiltroStatus("todos")} />
           <StatCard
             variant="accent"
             label="Publicados"
-            value={lista.length - rascunhos}
+            value={primeiraCarga ? "–" : lista.length - rascunhos}
             icon={<Send className="h-4 w-4" />}
             onClick={() => setFiltroStatus("publicados")}
             chart={<ProgressBar value={lista.length - rascunhos} max={lista.length} label={`${lista.length - rascunhos} de ${lista.length} publicados`} />}
@@ -178,15 +180,15 @@ export default function AdminReports() {
           <StatCard
             className="max-lg:col-span-2"
             label="Rascunhos"
-            value={rascunhos}
+            value={primeiraCarga ? "–" : rascunhos}
             icon={<Folder className="h-4 w-4" />}
-            hint={rascunhos ? "Ainda não enviados ao cliente" : "Tudo publicado"}
+            hint={primeiraCarga ? "Carregando" : rascunhos ? "Ainda não enviados ao cliente" : "Tudo publicado"}
             onClick={() => setFiltroStatus("rascunhos")}
           />
         </StatGrid>
       )}
 
-      {lista.length > 0 && (
+      {(primeiraCarga || lista.length > 0) && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
           <CampoDeBusca
             valor={busca}
