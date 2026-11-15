@@ -83,7 +83,7 @@ export default function StatCard({ label, value, delta, deltaLabel, invertDelta,
         )}
       </span>
       <span className="mt-2 flex min-w-0 items-end">
-        <span className={juntar(texto.numeroGrande, "min-w-0 truncate", destaque && "text-current", "max-sm:text-[24px] max-sm:leading-8")}>{value}</span>
+        <span className={juntar(texto.numeroGrande, "min-w-0 break-words tabular-nums", destaque && "text-current", "max-sm:text-[20px] max-sm:leading-7")} title={typeof value === "string" ? value : undefined}>{value}</span>
       </span>
       {(typeof delta === "number" || hint || deltaLabel) && (
         <span className="mt-1.5 flex min-w-0 items-center">
