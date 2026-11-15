@@ -50,6 +50,10 @@ const FABRICA = {
       },
     };
   },
+  async google() {
+    // Casca vazia com o id que o ACQ-07 espera; o dono abre a credencial na tela, preenche e faz o login do Google.
+    return { id: 'AcqCredGoogle001', name: 'ACQ Google Agenda', type: 'googleCalendarOAuth2Api', data: {} };
+  },
   async mcp() {
     return { id: 'AcqCredMcp000001', name: 'ACQ MCP Aceleriq (máquina n8n)', type: 'httpBearerAuth', data: { token: env('ACQ_MCP_CHAVE') } };
   },

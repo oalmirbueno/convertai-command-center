@@ -1,0 +1,12 @@
+{
+  "saude_url": "https://n8n-recovery.srv1769409.hstgr.cloud/webhook/acq-saude",
+  "mensais": [
+    { "nome": "Paperclip (Hostinger, AI automation apps)", "dia": 15, "pago_ate": "2026-12-15", "obs": "Plano mensal, sem renovação automática. Sem ele o Paperclip sai do ar." },
+    { "nome": "Servidor do Hermes e do n8n (Hostinger, VPS KVM 4)", "dia": 16, "pago_ate": "2026-12-16", "obs": "Plano mensal. Sem ele param o Hermes, o n8n, o leitor dos grupos e os envios aos grupos." }
+  ],
+  "dominios": [
+    { "nome": "aceleriq.com.br", "rdap": "https://rdap.registro.br/domain/aceleriq.com.br" },
+    { "nome": "aceleriq.com", "rdap": "https://rdap.verisign.com/com/v1/domain/aceleriq.com" },
+    { "nome": "aceleriq.online", "rdap": "https://rdap.radix.host/rdap/domain/aceleriq.online" }
+  ]
+}

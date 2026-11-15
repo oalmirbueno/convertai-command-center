@@ -1,0 +1,14 @@
+[Unit]
+Description=Aceleriq: vigia de saúde do n8n e de vencimentos (avisa só o dono)
+After=network-online.target mercurio-pilot-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/mercurio-pilot/node /opt/aceleriq-vigia/vigia.mjs
+TimeoutStartSec=300
+ProtectSystem=strict
+ReadWritePaths=/var/lib/aceleriq-vigia
+PrivateTmp=yes
+NoNewPrivileges=yes

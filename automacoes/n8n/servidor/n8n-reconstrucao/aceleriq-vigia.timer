@@ -1,0 +1,9 @@
+[Unit]
+Description=Aceleriq: vigia de saúde do n8n e de vencimentos, de hora em hora (minuto 10)
+
+[Timer]
+OnCalendar=*-*-* *:10:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
