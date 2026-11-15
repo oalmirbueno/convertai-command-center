@@ -4,7 +4,7 @@ import { CalendarDays, CalendarPlus, FilePlus2, Flame, Layers, Lightbulb, Loader
 import { toast } from "sonner";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { foco, juntar, superficie, texto } from "@/components/sistema/estilos";
-import { IconButton, StatTrio } from "@/components/ds";
+import { IconButton, OverflowMenu, StatTrio } from "@/components/ds";
 import { supabase } from "@/integrations/supabase/client";
 import { useMesa } from "./MesaContexto";
 import { useKitDaMesa } from "./kitDaMesa";
@@ -160,12 +160,26 @@ export default function TopoDoMes({
             { label: "Em alta", value: hypes.isLoading ? "–" : emAltaNoNicho },
           ]}
         />
-        {/* Ações do mês só em ícone (nome no title), cada uma no seu círculo; o primário da aba é o Agente do mês que flutua. */}
+        {/* v4 E2 (dono, 15/11: "uma ação principal"): Criar conteúdos em pílula verde com nome; Novo calendário em
+            círculo ao lado; Conteúdo rápido e Planejar com o agente no "…". */}
         <div className="flex shrink-0 items-center" aria-label="Ações do mês" role="group">
           <IconButton size="md" tone="soft" className="mr-1.5" onClick={onPeriodo} label="Novo calendário" icon={<CalendarPlus aria-hidden="true" />} />
-          <IconButton size="md" tone="soft" className="mr-1.5" onClick={onRapido} label="Conteúdo rápido" icon={<Zap aria-hidden="true" />} />
-          <IconButton size="md" tone="soft" className="mr-1.5" onClick={() => onConversar("planejar")} label="Planejar com o agente" icon={<MessagesSquare aria-hidden="true" />} />
-          <IconButton size="md" tone="ink" onClick={() => onConversar("criar")} label="Criar conteúdos" icon={<FilePlus2 aria-hidden="true" />} />
+          <OverflowMenu
+            label="Mais ações do mês"
+            className="mr-2"
+            items={[
+              { label: "Conteúdo rápido", icon: <Zap className="h-4 w-4" aria-hidden="true" />, onSelect: onRapido },
+              { label: "Planejar com o agente", icon: <MessagesSquare className="h-4 w-4" aria-hidden="true" />, onSelect: () => onConversar("planejar") },
+            ]}
+          />
+          <button
+            type="button"
+            onClick={() => onConversar("criar")}
+            className={juntar("toque-compacto inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-accent-solid px-4 text-[13px] font-semibold text-on-accent transition-colors hover:bg-accent-solid/85", foco)}
+          >
+            <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+            Criar conteúdos
+          </button>
         </div>
       </header>
 
