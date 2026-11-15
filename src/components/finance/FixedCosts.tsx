@@ -446,14 +446,14 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
           {/* Garantias do Plano Diretor */}
           {(!hasToolsExpense || proLaboreRows.length === 0) && (
             <Secao divisoria titulo="Sugestões do Plano Diretor">
-              <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-6")}>
+              <ul className={juntar(superficie.painel, "overflow-hidden py-1.5 [&>li]:px-4 sm:[&>li]:px-6")}>
                 {!hasToolsExpense && (
                   <li className="flex min-w-0 flex-wrap items-center py-3.5">
                     <IconeDaLinha tom="info"><Wrench className="h-4 w-4" /></IconeDaLinha>
-                    <p className="mr-3 min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground">
+                    <p className="mr-3 min-w-0 flex-1 basis-[180px] text-[13px] leading-5 text-muted-foreground">
                       Ferramentas e sistemas (<span className="tabular-nums">{fmt(toolsReference)}</span>/mês) ainda não estão lançados como custo fixo.
                     </p>
-                    <button type="button" onClick={() => launchExpense("tools")} className={juntar(botaoDeLinha, "my-1")}>
+                    <button type="button" onClick={() => launchExpense("tools")} className={juntar(botaoDeLinha, "my-1 ml-auto")}>
                       Lançar {fmt(toolsReference)}/mês
                     </button>
                   </li>
@@ -461,10 +461,10 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                 {proLaboreRows.length === 0 && (
                   <li className="flex min-w-0 flex-wrap items-center py-3.5">
                     <IconeDaLinha tom="sucesso"><PiggyBank className="h-4 w-4" /></IconeDaLinha>
-                    <p className="mr-3 min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground">
+                    <p className="mr-3 min-w-0 flex-1 basis-[180px] text-[13px] leading-5 text-muted-foreground">
                       O pró-labore de <span className="tabular-nums">{fmt(proLabore)}</span> ainda não é saída recorrente no fluxo.
                     </p>
-                    <button type="button" onClick={() => launchExpense("prolabore")} className={juntar(botaoDeLinha, "my-1")}>
+                    <button type="button" onClick={() => launchExpense("prolabore")} className={juntar(botaoDeLinha, "my-1 ml-auto")}>
                       Lançar {fmt(proLabore)}/mês
                     </button>
                   </li>
@@ -518,14 +518,14 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
               />
             ) : (
               <RegiaoRolavel memoria="financeiro:custos:lista" rotulo="Custos recorrentes" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden")} className="lg:max-h-[70vh]">
-                <ul className="divide-y divide-border/60 [&>li]:px-4 sm:[&>li]:px-6">
+                <ul className="py-1.5 [&>li]:px-4 sm:[&>li]:px-6">
                   {recurringExpenses.map((e: any) => {
                     // O vencimento em destaque, com o atraso dito em dias:
                     // "vence dia 10" não avisa nada em dia 23.
                     const dias = diasAteVencer(e.due_date, todayKey());
                     const venc = dataBr(e.due_date);
                     return (
-                      <li key={e.id} className="flex min-w-0 flex-wrap items-center py-3.5 transition-colors hover:bg-muted/40">
+                      <li key={e.id} className="flex min-w-0 flex-wrap items-center py-3 transition-colors hover:bg-muted/40">
                         <div className="mr-3 min-w-0 flex-1 basis-56">
                           <p className="flex min-w-0 items-center text-[13px] font-medium text-foreground">
                             <span className="min-w-0 truncate">{e.description}</span>
@@ -540,7 +540,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                               onClick={() => setVencModal({ id: e.id, description: e.description, due_date: e.due_date })}
                               title="Alterar a data de vencimento"
                               className={juntar(
-                                "inline-flex h-6 items-center rounded-full px-2.5 text-[11px] font-medium tabular-nums transition-colors",
+                                "toque-compacto inline-flex h-6 items-center rounded-full px-2.5 text-[11px] font-medium tabular-nums transition-colors",
                                 dias < 0 ? "bg-danger-soft text-destructive hover:bg-destructive/25"
                                   : dias <= 3 ? "bg-warning-soft text-warning hover:bg-warning/25"
                                     : "bg-muted text-muted-foreground hover:text-foreground",
@@ -594,7 +594,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
           {historico.length > 0 && (
             <Secao divisoria titulo="Histórico de pagamentos" descricao={`${historico.length} ${historico.length === 1 ? "pagamento" : "pagamentos"}`}>
               <RegiaoRolavel memoria="financeiro:custos:historico" rotulo="Histórico de pagamentos" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden")} className="lg:max-h-[360px]">
-                <ul className="divide-y divide-border/60 [&>li]:px-4 sm:[&>li]:px-6">
+                <ul className="py-1.5 [&>li]:px-4 sm:[&>li]:px-6">
                   {historico.map((h: any) => (
                     <li key={h.id} className="flex min-w-0 flex-wrap items-center py-3 transition-colors hover:bg-muted/40">
                       <span className="mr-3 min-w-0 flex-1 basis-40 truncate text-[13px] text-foreground">{h.description}</span>

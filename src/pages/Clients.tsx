@@ -1193,7 +1193,7 @@ export default function Clients() {
     return (
       <li
         key={c.id}
-        className={juntar("min-w-0 px-4 py-3.5 transition-colors hover:bg-muted/50 sm:px-6 sm:py-5", extra?.apagado && "opacity-80")}
+        className={juntar("min-w-0 px-4 py-3 transition-colors hover:bg-muted/50 sm:px-6 sm:py-4", extra?.apagado && "opacity-80")}
         onContextMenu={(e) => {
           e.preventDefault();
           setMenuCliente({ x: e.clientX, y: e.clientY, cliente: c });
@@ -1212,12 +1212,13 @@ export default function Clients() {
             <span className="ml-3 block min-w-0 flex-1 sm:ml-4">
               <span className="flex min-w-0 items-center">
                 <span className="min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{nome}</span>
-                {(searching || tab === "all") && (
+                {/* v4 (15/11/2026): "Ativo" é o normal da lista e já é a bolinha verde; a pílula só aparece quando o estado é outro. */}
+                {(searching || tab === "all") && (c.plan_status || "active") !== "active" && (
                   <StatusPill tone={tomDoStatus[c.plan_status || "active"] || "neutral"} className="ml-2 hidden sm:inline-flex">
                     {statusLabel[c.plan_status || "active"] || "Sem status"}
                   </StatusPill>
                 )}
-                {tipo && !isMobile && <span className={juntar(etiqueta, "ml-1.5 h-6 px-2.5", tipo.cls)}>{tipo.label}</span>}
+                {tipo && !isMobile && (c.client_type || "recurring") !== "recurring" && <span className={juntar(etiqueta, "ml-1.5 h-6 px-2.5", tipo.cls)}>{tipo.label}</span>}
                 {c.brand && (
                   <span className={juntar(etiqueta, "ml-1.5 hidden h-6 bg-muted px-2.5 text-muted-foreground md:inline-flex")}>
                     {c.brand === "aceleriq" ? "AcelerIQ" : "SiteBolt"}
@@ -1244,7 +1245,7 @@ export default function Clients() {
                   <span
                     className={juntar(
                       "ml-4 hidden h-7 shrink-0 items-center rounded-full px-3 text-[12px] font-medium tabular-nums md:inline-flex",
-                      renovacaoEmAlerta ? juntar(status?.color, "bg-danger-soft") : "bg-muted/60 text-muted-foreground",
+                      renovacaoEmAlerta ? juntar(status?.color, "bg-danger-soft") : "px-0 text-muted-foreground",
                     )}
                     aria-label={`Renovação ${formatBRDate(c.plan_renewal_date)}${renovacaoEmAlerta && status?.label ? `. ${status.label}` : ""}`}
                   >
@@ -1683,7 +1684,7 @@ export default function Clients() {
             <section aria-label={typeFilter === "inactive" ? "Clientes inativos" : "Clientes recorrentes e híbridos"}>
               {principaisVisiveis.length > 0 ? (
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border/60">{principaisVisiveis.map((c) => renderClientRow(c, typeFilter === "inactive" ? { apagado: true } : undefined))}</ul>
+                  <ul className="py-1.5">{principaisVisiveis.map((c) => renderClientRow(c, typeFilter === "inactive" ? { apagado: true } : undefined))}</ul>
                 </Painel>
               ) : (
                 <EstadoVazio compacto titulo={typeFilter === "inactive" ? "Nenhum cliente inativo nestes filtros." : "Nenhum recorrente ou híbrido nestes filtros."} />
@@ -1696,7 +1697,7 @@ export default function Clients() {
                 descricao={isMobile ? `${avulsosVisiveis.length} em andamento` : `${avulsosVisiveis.length} em andamento · ${principaisVisiveis.length + avulsosVisiveis.length} clientes no total`}
               >
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border/60">
+                  <ul className="py-1.5">
                     {avulsosVisiveis.map((c) =>
                       renderClientRow(c, {
                         acao: (
@@ -1726,7 +1727,7 @@ export default function Clients() {
                 recolhidaDeInicio
               >
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border/60">
+                  <ul className="py-1.5">
                     {avulsosDone.map((c) =>
                       renderClientRow(c, {
                         apagado: true,
@@ -1749,7 +1750,7 @@ export default function Clients() {
                 ajuda="Organização interna. Fica fora da contagem, das cobranças e dos alertas."
               >
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border/60">{internasList.map((c) => renderClientRow(c))}</ul>
+                  <ul className="py-1.5">{internasList.map((c) => renderClientRow(c))}</ul>
                 </Painel>
               </Secao>
             )}

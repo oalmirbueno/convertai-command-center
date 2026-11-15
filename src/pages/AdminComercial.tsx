@@ -519,11 +519,11 @@ export default function AdminComercial() {
 
   /* ── As ações da área, na linha do título. ── */
   const seletorDeMes = (
-    <div className="flex h-9 items-center" role="group" aria-label="Mês">
+    <div className="flex h-9 items-center max-sm:[&>button]:w-7" role="group" aria-label="Mês">
       <button type="button" onClick={() => setPeriodo(somarMeses(periodo, -1))} className={botao.icone} aria-label="Mês anterior" title="Mês anterior">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       </button>
-      <span className="min-w-[72px] px-1 text-center text-[13px] font-medium tabular-nums text-foreground sm:min-w-[124px]" aria-live="polite">
+      <span className="min-w-[64px] text-center text-[13px] font-medium tabular-nums text-foreground sm:min-w-[124px] sm:px-1" aria-live="polite">
         <span className="sm:hidden">{mesCurto(periodo)}</span>
         <span className="hidden sm:inline">{mesLegivel(periodo)}</span>
       </span>
@@ -1763,7 +1763,7 @@ export function EditorDeLead({
                       onClick={() => void mover(estagio.id as EstagioId)}
                       title={estagio.ajuda}
                       className={juntar(
-                        "inline-flex h-8 items-center rounded-md border px-2.5 text-[13px] font-medium transition-colors",
+                        "toque-compacto inline-flex h-8 items-center rounded-full border px-3 text-[13px] font-medium transition-colors",
                         foco,
                         estagio.id === "ganho"
                           ? "border-success/40 text-success hover:bg-success/10"

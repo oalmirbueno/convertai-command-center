@@ -15,6 +15,7 @@ import { Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
 import { Avatar, ChartLegend, Donut, ProgressBar, StatusPill } from "@/components/ds";
 import { Numeros, grafico } from "@/components/finance/pecasDoFinanceiro";
 import { moedaDe } from "@/lib/freela/freelaLib";
+import { useLarguraMinima } from "@/hooks/useLarguraMinima";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -228,6 +229,8 @@ export default function AdminProjection() {
     return "bg-info-soft text-info";
   };
 
+  const telaLarga = useLarguraMinima(640);
+
   if (!isAdmin) {
     return <Navigate to="/financeiro" replace />;
   }
@@ -239,7 +242,7 @@ export default function AdminProjection() {
     {
       rotulo: "Projeção",
       valor: fmt(projectedTotal),
-      sub: showMonthly && showIndiv ? `Recorrente ${fmt(recurringTotal)} · Parcelas ${fmt(indivTotal)}` : MONTHS_FULL[nextMonth],
+      sub: MONTHS_FULL[nextMonth],
       icone: <Briefcase className="h-4 w-4" />,
       cor: "text-info",
       corIcone: "text-info",
@@ -251,7 +254,7 @@ export default function AdminProjection() {
   return (
     <div className="min-w-0 space-y-6 pb-4 sm:space-y-8">
       <CabecalhoDePagina
-        titulo={`Projeção de ${MONTHS_FULL[nextMonth]}`}
+        titulo={telaLarga ? `Projeção de ${MONTHS_FULL[nextMonth]}` : `Projeção de ${MONTHS_FULL[nextMonth].slice(0, 3).toLowerCase()}.`}
         descricao={String(nextYear)}
         voltar={{ para: "/financeiro", rotulo: "Financeiro" }}
         ajuda="Receita projetada para o próximo mês (planos ativos e parcelas que vencem) e o que falta para dobrar o faturamento."
@@ -338,8 +341,6 @@ export default function AdminProjection() {
             titulo="Itens projetados"
             descricao={[
               `${allItems.length} ${allItems.length === 1 ? "item" : "itens"}`,
-              showMonthly ? `Recorrente ${fmt(recurringTotal)}` : "",
-              showIndiv ? `Parcelas ${fmt(indivTotal)}` : "",
             ].filter(Boolean).join(" · ")}
             divisoria
           >
@@ -348,9 +349,9 @@ export default function AdminProjection() {
             ) : (
               <div className={juntar(superficie.painel, "overflow-hidden")}>
                 <RegiaoRolavel memoria="projecao:itens" rotulo="Itens projetados" sobre="cartao" className="lg:max-h-[60vh]">
-                  <ul className="divide-y divide-border/60">
+                  <ul className="py-1.5">
                     {allItems.map((item) => (
-                      <li key={item.id} className="flex min-w-0 items-center px-4 py-3.5 transition-colors hover:bg-muted/40 sm:px-6">
+                      <li key={item.id} className="flex min-w-0 items-center px-4 py-3 transition-colors hover:bg-muted/40 sm:px-6">
                         <Avatar name={item.client} className="mr-3 hidden sm:inline-flex" />
                         <div className="mr-3 min-w-0 flex-1">
                           <p className={juntar(texto.corpo, "truncate font-medium")}>{item.label}</p>
@@ -375,9 +376,9 @@ export default function AdminProjection() {
           </Secao>
 
           <Secao titulo="Como dobrar o faturamento" ajuda="Sugestões calculadas com o ticket médio dos planos e dos projetos atuais." divisoria>
-            <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden")}>
+            <ul className={juntar(superficie.painel, "overflow-hidden py-1.5")}>
               {recommendations.map((rec, i) => (
-                <li key={i} className="flex min-w-0 items-start px-4 py-4 sm:px-6 sm:py-5">
+                <li key={i} className="flex min-w-0 items-start px-4 py-3.5 sm:px-6 sm:py-4">
                   <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full sm:mr-4", i === 0 ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground")} aria-hidden="true">
                     <rec.icon className="h-4 w-4" />
                   </span>
@@ -387,8 +388,9 @@ export default function AdminProjection() {
                       <span className={juntar(etiqueta, "h-[22px] capitalize", priorityColor(rec.priority))}>{rec.priority}</span>
                     </div>
                     <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>{rec.description}</p>
+                    <p className="mt-1.5 text-[12px] leading-4 text-muted-foreground sm:hidden">Impacto <span className="font-semibold tabular-nums text-foreground">{rec.impact}</span></p>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="shrink-0 text-right max-sm:hidden">
                     <p className={texto.rotulo}>Impacto</p>
                     <p className="mt-0.5 text-[15px] font-semibold leading-5 tabular-nums text-foreground max-sm:text-[13px]">{rec.impact}</p>
                   </div>

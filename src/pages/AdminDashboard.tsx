@@ -609,7 +609,7 @@ export default function AdminDashboard() {
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuProject(showMenu ? null : p.id); }}
                       aria-label="Ações do projeto"
-                      className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="toque-compacto inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </button>

@@ -38,6 +38,7 @@ import CFOAssistant from "@/components/finance/CFOAssistant";
 // Frente CFO (30/09): o campo do agente financeiro (carrega só quando a aba abre).
 const AreaDoCFO = lazy(() => import("@/components/cfo/AreaDoCFO"));
 import { useFinanceSettings } from "@/hooks/useFinanceV2";
+import { useLarguraMinima } from "@/hooks/useLarguraMinima";
 import { isInternalClient } from "@/lib/clientFlags";
 import { useFinanceBoxes, boxesTotal } from "@/hooks/useFinanceBoxes";
 import FaturamentoDoProduto from "@/components/produto/casa/FaturamentoDoProduto";
@@ -137,10 +138,10 @@ const rascunhoDeCobrancaValido = (v: unknown) =>
   !!v && typeof v === "object" && ["client_id", "type", "amount", "due_date", "description"].every((k) => typeof (v as Record<string, unknown>)[k] === "string");
 
 /** Ação discreta de uma linha de lista (32 px). */
-const acaoDaLinha = `inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-border bg-card px-4 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 ${foco}`;
+const acaoDaLinha = `toque-compacto inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-border bg-card px-4 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 ${foco}`;
 
 /** A ação que resolve a linha (Pagar, Marcar como pago): pílula de tinta. */
-const acaoPrincipalDaLinha = `inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-foreground px-4 text-[12px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:pointer-events-none disabled:opacity-50 ${foco}`;
+const acaoPrincipalDaLinha = `toque-compacto inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-foreground px-4 text-[12px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:pointer-events-none disabled:opacity-50 ${foco}`;
 
 /** Linha das listas do Financeiro: mais ar, fundo suave ao passar o mouse. */
 const linhaDaLista = "flex min-w-0 items-center px-4 py-3.5 transition-colors hover:bg-muted/40 sm:px-6";
@@ -1267,17 +1268,10 @@ function LegacyFinanceiro() {
   };
   const opcoesDasAbas: OpcaoCompacta[] = abasPermitidas.map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: a.icone }));
   const abrirNovaCobranca = () => setNewBillingOpen(true);
+  const telaLarga = useLarguraMinima(640);
 
-  return (
-    <div className="min-w-0 space-y-6 pb-4 sm:space-y-8">
-      <CabecalhoDePagina
-        titulo="Financeiro"
-        ajuda="Cobranças, recebimentos, mensalidades, wallets de anúncios e histórico de pagamentos. A visão geral segue o mês e a marca escolhidos."
-        acoes={
-          (mostrarMes || isAdmin || opcoesDasAbas.length > 1) ? (
+  const seletoresDoTopo = (
             <>
-              {/* Seletores pequenos moram na linha do título (nada de linha própria). */}
-              {isAdmin && <BotaoDoCrescimento />}
               {opcoesDasAbas.length > 1 && (
                 <SeletorCompacto
                   opcoes={opcoesDasAbas}
@@ -1343,6 +1337,20 @@ function LegacyFinanceiro() {
                   onHoje={() => setMesEscolhido({ m: thisMonth, y: thisYear })}
                 />
               )}
+            </>
+  );
+
+  return (
+    <div className="min-w-0 space-y-6 pb-4 sm:space-y-8">
+      <CabecalhoDePagina
+        titulo="Financeiro"
+        ajuda="Cobranças, recebimentos, mensalidades, wallets de anúncios e histórico de pagamentos. A visão geral segue o mês e a marca escolhidos."
+        acoes={
+          (mostrarMes || isAdmin || opcoesDasAbas.length > 1) ? (
+            <>
+              {/* Seletores pequenos moram na linha do título (nada de linha própria). */}
+              {isAdmin && <BotaoDoCrescimento />}
+              {telaLarga && seletoresDoTopo}
               {isAdmin && (
                 // Primário só na visão geral; nas outras áreas cada uma tem o seu (um primário por área).
                 <button type="button" onClick={abrirNovaCobranca} className={aba === "overview" ? botao.primario : botao.secundario} aria-label="Nova cobrança">
@@ -1354,6 +1362,13 @@ function LegacyFinanceiro() {
           ) : undefined
         }
       />
+      {/* v4 (15/11/2026): no celular os seletores ganham a linha deles, que rola de lado por dentro. Na linha do
+          título só cabia "Visão …" cortado; agora o nome da área aparece inteiro. */}
+      {!telaLarga && (mostrarMes || isAdmin || opcoesDasAbas.length > 1) && (
+        <div className="scrollbar-hidden -mx-4 !mt-3 min-w-0 overflow-x-auto overflow-y-hidden px-4 py-1" data-seletores-do-financeiro="">
+          <div className="flex w-max min-w-full items-center [&>*+*]:ml-2 [&>*]:shrink-0">{seletoresDoTopo}</div>
+        </div>
+      )}
 
       <Tabs value={aba} onValueChange={setAba} className="min-w-0">
         {(isAdmin || isManager) && (
@@ -1424,14 +1439,15 @@ function LegacyFinanceiro() {
                     key={n.rotulo}
                     label={n.rotulo}
                     value={billingLoading ? <span className="block h-9 w-32 animate-pulse rounded-full bg-muted" aria-label={`Carregando ${n.rotulo}`} /> : n.valor}
-                    hint={billingLoading ? undefined : n.sub}
+                    hint={billingLoading ? (i === 0 ? undefined : <span aria-hidden="true" className="block h-4 w-24 animate-pulse rounded-full bg-muted" />) : n.sub}
                     icon={n.icone}
                     help={n.ajuda}
                     size={i === 0 ? "xl" : "lg"}
                     variant={i === 0 ? "ink" : i === 1 ? "accent" : "default"}
                     className={juntar(semIconeNoCelular, i === 0 && "max-sm:col-span-2", i === 3 && overdueVal > 0 && "[&_.ds-stat-valor]:text-destructive")}
                     chart={
-                      billingLoading ? undefined : i === 0 && reservedInBoxes > 0 && cashBalance > 0 ? (
+                      // Carregando: a barra reserva o lugar (o cartão não cresce quando o número chega).
+                      billingLoading ? (i >= 1 && i <= 3 ? <span aria-hidden="true" className="block h-2 rounded-full bg-muted" /> : undefined) : i === 0 && reservedInBoxes > 0 && cashBalance > 0 ? (
                         <ProgressBar value={cashBalance - reservedInBoxes} max={cashBalance} striped label={`Livre ${fmt(cashBalance - reservedInBoxes)} de ${fmt(cashBalance)} em caixa`} />
                       ) : i === 1 && previsto > 0 ? (
                         <ProgressBar value={receivedVal} max={previsto} striped label={`Recebido ${fmt(receivedVal)} de ${fmt(previsto)} (recebido mais a receber)`} />

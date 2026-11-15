@@ -210,7 +210,7 @@ function Linha({
         title={feita ? "Reabrir" : "Concluir"}
         aria-label={feita ? `Reabrir ${atividade.title}` : `Concluir ${atividade.title}`}
         className={juntar(
-          "mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+          "toque-compacto mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
           foco,
           feita ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground hover:bg-foreground hover:text-background",
         )}

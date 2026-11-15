@@ -19,7 +19,7 @@ import {
 import {
   AcoesDoDialogo, Etiqueta, GradeDeKpis, IconeDaLinha, Kpi, botaoDeLinha, botaoPrincipalDeLinha, corDoTom, grafico, linhaDeLista, listaDeLinhas, tabela, type Tom,
 } from "@/components/finance/pecasDoFinanceiro";
-import { ChartLegend, ProgressBar } from "@/components/ds";
+import { ChartLegend, OverflowMenu, ProgressBar } from "@/components/ds";
 import NewIncomeModal from "./NewIncomeModal";
 // Frente CFO (30/09): a trava do limite do mês nas despesas novas.
 import { useTravaDeGasto } from "@/components/cfo/TravaDeGasto";
@@ -913,7 +913,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
             const value = Number(boxes[b.key]) || 0;
             const isEditing = editingBox?.key === b.key;
             return (
-              <Kpi key={b.key} rotulo={b.label} ajuda={b.hint} valor={fmt(value)} tom="info" icone={<PiggyBank className="h-4 w-4" />} grafico={reservedTotal > 0 ? <ProgressBar value={value} max={reservedTotal} height={6} tone={5} label={`${b.label}: ${fmt(value)} de ${fmt(reservedTotal)} guardados`} /> : undefined}>
+              <Kpi key={b.key} rotulo={b.label} ajuda={b.hint} valor={fmt(value)} tom="info" icone={<PiggyBank className="h-4 w-4" />} className="max-sm:[&>span:first-child>span[aria-hidden]]:hidden" grafico={reservedTotal > 0 ? <ProgressBar value={value} max={reservedTotal} height={6} tone={5} label={`${b.label}: ${fmt(value)} de ${fmt(reservedTotal)} guardados`} /> : undefined}>
                 {isEditing ? (
                   <div className="mt-2 flex min-w-0 items-center">
                     <input
@@ -932,19 +932,17 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                     </button>
                   </div>
                 ) : (
-                  <div className="-mb-1 mt-2 flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-1.5">
+                  /* v4 (15/11/2026): uma ação à vista (Atualizar); a sugestão foi para o "…" (eram dois botões por cartão). */
+                  <div className="mt-2 flex min-w-0 items-center">
                     <button type="button" onClick={() => setEditingBox({ key: b.key, value: String(value || "") })} className={botaoDeLinha}>
                       Atualizar
                     </button>
                     {b.suggestion > 0 && Math.abs(b.suggestion - value) > 0.5 && (
-                      <button
-                        type="button"
-                        onClick={() => saveBox(b.key, String(b.suggestion))}
-                        title={b.suggestionLabel}
-                        className={juntar(botaoDeLinha, "max-w-full border-info/40 text-info hover:bg-info/10")}
-                      >
-                        <span className="truncate">Usar {fmt(b.suggestion)}</span>
-                      </button>
+                      <OverflowMenu
+                        className="ml-1"
+                        label={`Mais ações de ${b.label}`}
+                        items={[{ label: `Usar ${fmt(b.suggestion)}`, hint: b.suggestionLabel, onSelect: () => saveBox(b.key, String(b.suggestion)) }]}
+                      />
                     )}
                   </div>
                 )}
@@ -1062,9 +1060,9 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                 ))}
               </tbody>
             </table>
-            <ul className="divide-y divide-border/60 px-1 sm:hidden">
+            <ul className="px-1 sm:hidden">
               {dre.map((r, i) => (
-                <li key={i} className="min-w-0 py-3">
+                <li key={i} className="min-w-0 py-2.5">
                   <div className="flex min-w-0 items-center">
                     <span className="mr-2 min-w-0 flex-1 text-[13px] text-foreground">{r.label}</span>
                     <span className={juntar("shrink-0 text-[13px] font-semibold tabular-nums", r.lucro >= 0 ? "text-foreground" : "text-destructive")}>{fmtCompact(r.lucro)}</span>
@@ -1098,7 +1096,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                     <span className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{fmtCompact(byCat.reduce((a, x) => a + x.value, 0))}</span>
                   </div>
                 </div>
-                <ul className="mt-4 divide-y divide-border/60">
+                <ul className="mt-4">
                   {byCat.slice(0, 5).map((c, i) => {
                     const pct = (c.value / byCat.reduce((a, x) => a + x.value, 0)) * 100;
                     return (
@@ -1625,12 +1623,12 @@ function CabecalhoDoBloco({
         onClick={onAlternar}
         aria-expanded={aberto}
         aria-controls={controla}
-        className={juntar("mr-3 flex min-w-0 flex-1 items-center rounded-md text-left", foco)}
+        className={juntar("toque-compacto mr-3 flex min-w-[112px] flex-1 items-center rounded-md py-1 text-left", foco)}
       >
         <ChevronDown className={juntar("mr-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform", !aberto && "-rotate-90")} aria-hidden="true" />
         <span className={juntar(texto.tituloSecao, "truncate")}>{titulo}</span>
       </button>
-      {aberto && seletor ? <div className="mr-4 min-w-0">{seletor}</div> : null}
+      {aberto && seletor ? <div className="min-w-0 sm:mr-4">{seletor}</div> : null}
       <span className="ml-auto flex shrink-0 items-center">
         {valores.map((v, i) => (
           <span key={v.rotulo} className={juntar("text-right", i > 0 && "ml-5")}>
