@@ -12,13 +12,12 @@ import { toast } from "sonner";
 import {
   Check, Plus, GitBranch, Loader2, X, Clock, Circle,
   Calendar, Flag, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Pencil, RefreshCw,
-  GripVertical, AlertCircle, ListTodo, Save, Trash2, User,
+  GripVertical, ListTodo, Save, Trash2, User,
 } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AreaDeTrabalho,
-  CabecalhoDePagina,
   CampoDeEscolha,
   CampoDeFormulario,
   Carregando,
@@ -29,13 +28,14 @@ import {
   campo,
   campoTexto,
   etiqueta,
+  foco,
   juntar,
   lista,
   superficie,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { Card, ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
+import { Card, PageHeader, ProgressBar, StatTrio, StatusPill, type Tone } from "@/components/ds";
 
 
 
@@ -468,58 +468,62 @@ export default function TimelinePage() {
     status === "completed" ? "bg-success/10 text-success" : status === "in_progress" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground";
   const existingMilestones = addMilestoneProject ? (allMilestones || []).filter((m: any) => m.project_id === addMilestoneProject) : [];
 
+  // Números da tela: só o que já foi lido para desenhar os projetos abaixo.
+  const numeros = !carregando && filteredProjects.length > 0 ? (() => {
+    const ids = new Set(filteredProjects.map((p: any) => p.id));
+    const marcos = (allMilestones || []).filter((m: any) => ids.has(m.project_id));
+    const marcosFeitos = marcos.filter((m: any) => m.status === "completed").length;
+    const marcosAtrasados = marcos.filter((m: any) => m.status !== "completed" && daysUntilDate(m.target_date) < 0).length;
+    const tarefas = (allTasks || []).filter((t: any) => ids.has(t.project_id));
+    const tarefasFeitas = tarefas.filter((t: any) => t.status === "done").length;
+    return (
+      <StatTrio
+        label="Linha do tempo em números"
+        items={[
+          { label: "Projetos", value: filteredProjects.length },
+          { label: "Marcos", value: marcosFeitos, hint: `/ ${marcos.length}` },
+          { label: "Tarefas", value: tarefasFeitas, hint: `/ ${tarefas.length}` },
+          { label: "Atrasados", value: marcosAtrasados },
+        ]}
+      />
+    );
+  })() : null;
+
   return (
     <div className="min-w-0">
-      <CabecalhoDePagina
-        titulo="Timeline"
-        className="max-sm:[&>div:first-child]:flex-none"
-        ajuda="Os marcos de cada projeto em ordem, com as tarefas de cada marco. Abra um projeto para ver detalhes, reordenar marcos (arrastando) e criar tarefas."
-        descricao={carregando ? "\u00a0" : `${filteredProjects.length} ${filteredProjects.length === 1 ? "projeto" : "projetos"}`}
-        acoes={
-          <SeletorCompacto
-            rotulo="Projeto"
-            modo="lista"
-            icone={<GitBranch className="h-3.5 w-3.5" />}
-            opcoes={[
-              { valor: "all", rotulo: "Todos os projetos" },
-              ...(projects || []).map((p: any) => ({ valor: p.id, rotulo: p.name })),
-            ]}
-            valor={filterProject}
-            onEscolher={setFilterProject}
-            className="max-w-[240px] max-sm:max-w-[calc(100vw-188px)]"
-          />
+      {/* Cabeçalho como nas referências: sobretítulo, título e os números sem cartão; UMA ação verde. */}
+      <PageHeader
+        eyebrow="Operação"
+        title="Timeline"
+        className="max-sm:[&>div>div:first-child]:flex-none"
+        help="Os marcos de cada projeto em ordem, com as tarefas de cada marco. Abra um projeto para ver detalhes, reordenar marcos (arrastando) e criar tarefas."
+        beside={numeros ? <div className="ml-6 hidden min-w-0 xl:block">{numeros}</div> : undefined}
+        stats={numeros ? <div className="xl:hidden">{numeros}</div> : undefined}
+        actions={
+          <>
+            <SeletorCompacto
+              rotulo="Projeto"
+              modo="lista"
+              icone={<GitBranch className="h-3.5 w-3.5" />}
+              opcoes={[
+                { valor: "all", rotulo: "Todos os projetos" },
+                ...(projects || []).map((p: any) => ({ valor: p.id, rotulo: p.name })),
+              ]}
+              valor={filterProject}
+              onEscolher={setFilterProject}
+              className="max-w-[240px] max-sm:max-w-[calc(100vw-188px)]"
+            />
+            {isAdmin && !carregando && filteredProjects.length === 1 && (
+              <button type="button" onClick={() => handleOpenAddMilestone(filteredProjects[0].id)} className={juntar(botao.primario, "font-semibold")} aria-label="Novo marco">
+                <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Novo marco</span>
+              </button>
+            )}
+          </>
         }
       />
 
       <AreaDeTrabalho className="mt-6 sm:mt-8" rotuloDoPrincipal="Projetos na linha do tempo" memoriaDaRolagem="timeline:lista">
-      {!carregando && filteredProjects.length > 0 && (() => {
-        // Números da tela (rodada ousada, 15/11/2026): só o que já foi lido para desenhar os projetos abaixo.
-        const ids = new Set(filteredProjects.map((p: any) => p.id));
-        const marcos = (allMilestones || []).filter((m: any) => ids.has(m.project_id));
-        const marcosFeitos = marcos.filter((m: any) => m.status === "completed").length;
-        const marcosAtrasados = marcos.filter((m: any) => m.status !== "completed" && daysUntilDate(m.target_date) < 0).length;
-        const tarefas = (allTasks || []).filter((t: any) => ids.has(t.project_id));
-        const tarefasFeitas = tarefas.filter((t: any) => t.status === "done").length;
-        return (
-          <StatGrid cols={4} className="mb-5 sm:mb-6" label="Linha do tempo em números">
-            <StatCard variant="ink" label="Projetos" value={filteredProjects.length} icon={<GitBranch className="h-4 w-4" />} hint={`${marcos.length} ${marcos.length === 1 ? "marco" : "marcos"}`} />
-            <StatCard
-              variant="accent"
-              label="Marcos concluídos"
-              value={`${marcosFeitos}/${marcos.length}`}
-              icon={<Flag className="h-4 w-4" />}
-              chart={marcos.length > 0 ? <ProgressBar value={marcosFeitos} max={marcos.length} tone="current" /> : undefined}
-            />
-            <StatCard
-              label="Tarefas concluídas"
-              value={`${tarefasFeitas}/${tarefas.length}`}
-              icon={<ListTodo className="h-4 w-4" />}
-              chart={tarefas.length > 0 ? <ProgressBar value={tarefasFeitas} max={tarefas.length} striped /> : undefined}
-            />
-            <StatCard label="Marcos atrasados" value={marcosAtrasados} icon={<AlertCircle className="h-4 w-4" />} hint={marcosAtrasados === 0 ? "tudo no prazo" : "passaram da data"} />
-          </StatGrid>
-        );
-      })()}
       {carregando ? (
         <Carregando rotulo="Carregando a linha do tempo" linhas={4} />
       ) : filteredProjects.length === 0 ? (
@@ -554,6 +558,8 @@ export default function TimelinePage() {
             title={project.name}
             collapsible={`timeline:projeto:${project.id}`}
             subtitle={estado}
+            menu={isAdmin ? [{ label: "Novo marco", icon: <Plus className="h-4 w-4" />, onSelect: () => handleOpenAddMilestone(project.id) }] : undefined}
+            menuLabel={`Mais ações de ${project.name}`}
             action={
               <>
                 <span className="hidden items-center sm:flex" aria-hidden="true">
@@ -584,17 +590,6 @@ export default function TimelinePage() {
                       <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
-                )}
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => handleOpenAddMilestone(project.id)}
-                    className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}
-                    aria-label="Novo marco"
-                  >
-                    <Plus className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                    <span className="hidden sm:inline">Marco</span>
-                  </button>
                 )}
                 <button
                   type="button"
@@ -657,54 +652,62 @@ export default function TimelinePage() {
                 })}
               </div>
             ) : (
-              /* Desktop horizontal timeline */
-              <div className="scrollbar-hidden overflow-x-auto pb-2">
-                <div className="flex min-w-max items-start px-2 py-3">
+              /* Trilho horizontal (como na referência): uma linha fina que atravessa o cartão, nós circulares e, no fim, o "+" do novo marco. */
+              <div className="scrollbar-hidden overflow-x-auto overscroll-x-contain pb-1">
+                <div className="flex min-w-max items-start py-2">
                   {visibleMilestones.map((m: any, i: number) => {
                     const mTasks = (allTasks || []).filter((t: any) => t.milestone_id === m.id);
                     const mDone = mTasks.filter((t: any) => t.status === "done").length;
                     const days = daysUntilDate(m.target_date);
+                    const ultimo = i === visibleMilestones.length - 1;
 
                     return (
                       <Fragment key={m.id}>
-                        {i > 0 && (
-                          <div className={`mt-[22px] h-1 w-28 rounded-full transition-colors desk:w-36 ${
-                            milestones[i - 1].status === "completed" ? "bg-accent-solid" : "bg-muted"
-                          }`} />
-                        )}
                         <button
                           type="button"
                           onClick={() => setSelectedMilestone(m)}
-                          className="group relative flex cursor-pointer flex-col items-center border-none bg-transparent p-0"
-                          style={{ minWidth: 168 }}
+                          className="group relative flex w-[220px] shrink-0 cursor-pointer flex-col items-start rounded-md border-none bg-transparent p-0 pr-6 text-left desk:w-[248px]"
                         >
-                          <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full transition-transform group-hover:scale-105 ${
+                          {/* A linha sai do nó e vai até o próximo (ou até o "+"). */}
+                          {(!ultimo || isAdmin) && (
+                            <span aria-hidden="true" className={`absolute left-12 right-0 top-[23px] h-0.5 rounded-full ${m.status === "completed" ? "bg-accent-solid" : "bg-border"}`} />
+                          )}
+                          <span className={`relative mb-4 flex h-12 w-12 items-center justify-center rounded-full transition-transform group-hover:scale-105 ${
                             m.status === "completed"
                               ? "bg-accent-solid text-on-accent"
                               : m.status === "in_progress"
                                 ? "bg-foreground text-background"
-                                : "bg-muted text-muted-foreground"
+                                : "border border-border bg-card text-muted-foreground"
                           }`}>
                             {m.status === "completed" && <Check className="h-5 w-5" />}
                             {m.status === "in_progress" && <Clock className="h-5 w-5" />}
                             {m.status !== "completed" && m.status !== "in_progress" && <Circle className="h-4 w-4" />}
-                          </div>
-                          <div className="text-center">
-                            <p className="whitespace-nowrap text-[13px] font-semibold text-foreground">{m.title}</p>
-                            <p className="mt-0.5 text-[12px] tabular-nums text-muted-foreground">{formatDateShort(m.target_date)}</p>
+                          </span>
+                          <span className="block w-full min-w-0">
+                            <span className="block text-[12px] tabular-nums leading-4 text-muted-foreground">
+                              {formatDateShort(m.target_date)}
+                              {m.status !== "completed" && days < 0 && <span className="text-destructive"> · Atrasado</span>}
+                            </span>
+                            <span className="mt-1 line-clamp-2 text-[15px] font-medium leading-5 tracking-[-0.01em] text-foreground">{m.title}</span>
                             {mTasks.length > 0 && (
-                              <p className="mt-0.5 text-[12px] tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{mDone}</span>/{mTasks.length} tarefas</p>
-                            )}
-                            {m.status !== "completed" && days < 0 && (
-                              <span className="mt-0.5 flex items-center justify-center text-[11px] text-destructive">
-                                <AlertCircle className="mr-0.5 h-2.5 w-2.5" aria-hidden="true" /> Atrasado
+                              <span className="mt-2.5 flex items-center">
+                                <ProgressBar value={mDone} max={mTasks.length} height={4} className="w-20" />
+                                <span className="ml-2 text-[12px] tabular-nums text-muted-foreground"><span className="font-medium text-foreground">{mDone}</span>/{mTasks.length}</span>
                               </span>
                             )}
-                            {mTasks.length > 0 && (
-                              <ProgressBar value={mDone} max={mTasks.length} height={6} className="mx-auto mt-2 w-24" />
-                            )}
-                          </div>
+                          </span>
                         </button>
+                        {ultimo && isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddMilestone(project.id)}
+                            title="Novo marco"
+                            aria-label={`Novo marco em ${project.name}`}
+                            className={juntar("inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-transform hover:scale-105", foco)}
+                          >
+                            <Plus className="h-5 w-5" aria-hidden="true" />
+                          </button>
+                        )}
                       </Fragment>
                     );
                   })}
