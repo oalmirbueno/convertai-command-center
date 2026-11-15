@@ -38,3 +38,20 @@
   src: url("../assets/fonts/jetbrains-mono-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
+
+/*
+ * v4 (15/11/2026, dono: "mobile dançando"): enquanto a Outfit não chega (primeira visita, rede lenta), o texto
+ * aparece numa fonte do aparelho AJUSTADA para ocupar a mesma largura e a mesma altura de linha da Outfit. Quando
+ * a Outfit entra, as linhas não mudam de tamanho nem quebram em outro lugar: nada pula. Medido no navegador:
+ * a Outfit tem 97,4% da largura da Arial, subida de 100% e descida de 26% do corpo, sem entrelinha extra.
+ */
+@font-face {
+  font-family: "Outfit Fallback";
+  font-style: normal;
+  font-weight: 300 800;
+  src: local("Arial"), local("Helvetica Neue"), local("Helvetica"), local("Roboto"), local("Liberation Sans");
+  size-adjust: 97.4%;
+  ascent-override: 102.7%;
+  descent-override: 26.7%;
+  line-gap-override: 0%;
+}

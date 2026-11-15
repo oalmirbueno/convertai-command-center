@@ -87,7 +87,7 @@ export default function StatCard({
     superficie.painel,
     tipo === "accent" && superficie.destaque,
     tipo === "ink" && superficie.tinta,
-    (to || onClick) && juntar("transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0", foco),
+    (to || onClick) && juntar("transition-transform duration-200 [@media(hover:hover)]:hover:-translate-y-0.5 active:translate-y-0", foco),
     className,
   );
   // Texto e número cabem numa linha: a letra sai da largura do cartão dividida

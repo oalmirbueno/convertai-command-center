@@ -20,7 +20,7 @@ export default {
         desk: "1440px",
       },
       fontFamily: {
-        outfit: ["Outfit", "sans-serif"],
+        outfit: ["Outfit", "Outfit Fallback", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
       },
       colors: {

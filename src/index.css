@@ -444,19 +444,24 @@
  * automática, o conteúdo desliza nos dois sentidos; nos outros, abre na hora
  * como sempre abriu. Nenhuma lógica muda.
  */
-@supports (interpolate-size: allow-keywords) {
-  :root {
-    interpolate-size: allow-keywords;
-  }
-  details::details-content {
-    block-size: 0;
-    overflow-y: clip;
-    opacity: 0;
-    transition: block-size 0.24s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease, content-visibility 0.24s allow-discrete;
-  }
-  details[open]::details-content {
-    block-size: auto;
-    opacity: 1;
+/* v4: a altura só desliza no computador e para quem não pediu menos movimento.
+   No celular o conteúdo aparece na hora, só com a opacidade (animar altura de
+   bloco grande em tela pequena era parte do "dançando"). */
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  @supports (interpolate-size: allow-keywords) {
+    :root {
+      interpolate-size: allow-keywords;
+    }
+    details::details-content {
+      block-size: 0;
+      overflow-y: clip;
+      opacity: 0;
+      transition: block-size 0.24s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease, content-visibility 0.24s allow-discrete;
+    }
+    details[open]::details-content {
+      block-size: auto;
+      opacity: 1;
+    }
   }
 }
 summary {
@@ -479,13 +484,30 @@ summary::-webkit-details-marker {
 .ds-abrir {
   animation: ds-abrir-suave 0.2s ease-out;
 }
-@supports (interpolate-size: allow-keywords) {
-  @keyframes ds-abrir-altura {
-    from { height: 0; opacity: 0; overflow: clip; }
-    to { height: auto; opacity: 1; overflow: clip; }
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  @supports (interpolate-size: allow-keywords) {
+    @keyframes ds-abrir-altura {
+      from { height: 0; opacity: 0; overflow: clip; }
+      to { height: auto; opacity: 1; overflow: clip; }
+    }
+    .ds-abrir {
+      animation: ds-abrir-altura 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+    }
   }
-  .ds-abrir {
-    animation: ds-abrir-altura 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Faixa de abas (ui/tabs): quando não cabe, rola por dentro começando do início
+   (centralizar uma faixa que transborda deixava as primeiras abas inalcançáveis). */
+.abas-do-painel {
+  justify-content: safe center;
+}
+
+/* Esqueleto de carregamento: pulso só de opacidade, parado para quem pediu menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-spin,
+  .pulse-dot {
+    animation: none !important;
   }
 }
 
