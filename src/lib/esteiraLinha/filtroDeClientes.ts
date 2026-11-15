@@ -1,10 +1,10 @@
 import { dataEmSP, diaDaSemanaDaData } from "@/lib/diaPrioritario";
-import type { CartaoDaEsteira, FaixaDaEsteira } from "./esteiraLinha";
+import type { FaixaDaEsteira } from "./esteiraLinha";
 
 /*
  * Organização da Esteira (pedido do Almir, 14/11/2026, 21h08): quais faixas
- * aparecem e quantos cartões cada célula mostra antes do "+N". Tudo puro e
- * testável; a tela só guarda o estado e chama daqui.
+ * aparecem. Tudo puro e testável; a tela só guarda o estado e chama daqui.
+ * (O "+N" da célula saiu em 21h55: cada dia passou a rolar por dentro.)
  *
  * O filtro só esconde faixas, nunca reordena: a ordem continua a de
  * montarGrade (nome em pt-BR).
@@ -120,20 +120,6 @@ export function buscarClientesPeloNome<F extends Pick<FaixaDaEsteira, "nome">>(f
   const alvo = semAcento(termo);
   if (!alvo) return [...faixas];
   return faixas.filter((f) => semAcento(f.nome).includes(alvo));
-}
-
-/** Quantos cartões uma célula mostra antes do "+N". */
-export const TETO_DE_CARTOES_NA_CELULA = 3;
-
-/** Os cartões à vista numa célula e quantos ficam atrás do "+N" (já vêm ordenados por etapa e título). */
-export function cartoesAVista(
-  cartoes: readonly CartaoDaEsteira[],
-  expandida: boolean,
-  teto: number = TETO_DE_CARTOES_NA_CELULA,
-): { visiveis: CartaoDaEsteira[]; escondidos: number; temMais: boolean } {
-  const temMais = cartoes.length > teto;
-  const visiveis = expandida || !temMais ? [...cartoes] : cartoes.slice(0, teto);
-  return { visiveis, escondidos: cartoes.length - visiveis.length, temMais };
 }
 
 /*

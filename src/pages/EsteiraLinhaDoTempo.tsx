@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type RefObject } from "react";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
-import { CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, botao, espaco, juntar, larguraDaMesa } from "@/components/sistema";
+import {
+  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, SeletorCompacto, botao, juntar, larguraDaMesa, useAlturaQueCabe,
+} from "@/components/sistema";
 import CaixaPrecisaDeVoce from "@/components/esteira-linha/CaixaPrecisaDeVoce";
 import GradeDaEsteira from "@/components/esteira-linha/GradeDaEsteira";
 import LegendaDasEtapas from "@/components/esteira-linha/LegendaDasEtapas";
@@ -11,7 +13,14 @@ import { dataEmSP } from "@/lib/diaPrioritario";
 import {
   ajustarFiltroACarteira, aplicarFiltroDeClientes, diaDaSemanaEmSP, escolherModo, gravarFiltro, lerFiltroGuardado, type FiltroDeClientes,
 } from "@/lib/esteiraLinha/filtroDeClientes";
-import { diasDaSemana, msAteProximaMeiaNoiteSP, rotuloDaSemana, segundaDaSemana, somarDias } from "@/lib/esteiraLinha/esteiraLinha";
+import {
+  diasDaSemana, diasDoPeriodoValido, msAteProximaMeiaNoiteSP, rotuloDaSemana, segundaDaSemana, somarDias,
+  type CartaoDaEsteira, type DiasDoPeriodo,
+} from "@/lib/esteiraLinha/esteiraLinha";
+import { armazenamentoDoAparelho, gravarPeriodo, lerPeriodoGuardado } from "@/lib/esteiraLinha/preferenciasDaEsteira";
+
+/** O painel da peça só carrega quando um cartão é aberto (a ficha da Agenda e a janela da tarefa são grandes). */
+const PainelDaPeca = lazy(() => import("@/components/esteira-linha/PainelDaPeca"));
 
 /** Teto do cochilo do relógio: aba em segundo plano pode adiar o timeout, então ele reconfere de poucos em poucos minutos. */
 const RECONFERIR_A_CADA_MS = 5 * 60_000;
@@ -33,38 +42,108 @@ function useAgoraEmSP(agora?: Date): Date {
   return agora ?? relogio;
 }
 
-const armazenamento = (): Storage | null => {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
-};
-
 /** Quais clientes aparecem, lembrado neste aparelho (localStorage). */
 function useFiltroDeClientes() {
-  const [filtro, setFiltro] = useState<FiltroDeClientes>(() => lerFiltroGuardado(armazenamento()));
+  const [filtro, setFiltro] = useState<FiltroDeClientes>(() => lerFiltroGuardado(armazenamentoDoAparelho()));
   const mudar = useCallback((novo: FiltroDeClientes) => {
     setFiltro(novo);
-    gravarFiltro(armazenamento(), novo);
+    gravarFiltro(armazenamentoDoAparelho(), novo);
   }, []);
   return [filtro, mudar] as const;
 }
 
+/** Uma ou duas semanas, lembrado neste aparelho (localStorage). */
+function usePeriodo() {
+  const [dias, setDias] = useState<DiasDoPeriodo>(() => lerPeriodoGuardado(armazenamentoDoAparelho()).dias);
+  const mudar = useCallback((novo: DiasDoPeriodo) => {
+    setDias(novo);
+    gravarPeriodo(armazenamentoDoAparelho(), novo);
+  }, []);
+  return [dias, mudar] as const;
+}
+
+/** Abaixo disto a página volta a rolar um pouco (tela muito baixa): a grade nunca some. */
+const ALTURA_MINIMA_NO_CELULAR = 380;
+const FOLGA_EMBAIXO = 12;
+
+/**
+ * A página cabe na tela (pedido do Almir, 14/11/2026, 21h55): a altura vai
+ * de onde a Esteira começa até o fim da área visível, e a grade fica com o
+ * que sobra embaixo da barra e dos avisos.
+ * - De 1024 px para cima é a medida do sistema (useAlturaQueCabe), que
+ *   também tira o recuo de baixo do painel.
+ * - Abaixo disso o sistema deixa a página rolar; aqui a Esteira mede sozinha
+ *   pela casca do painel (no celular, a camada entre o topo e a barra de
+ *   baixo; no tablet, a janela).
+ */
+function useAlturaDaEsteira(): { ref: RefObject<HTMLDivElement>; altura: number | null } {
+  const { ref, altura: alturaLarga } = useAlturaQueCabe(true);
+  const [alturaEstreita, setAlturaEstreita] = useState<number | null>(null);
+
+  useEffect(() => {
+    const medir = () => {
+      const el = ref.current;
+      if (!el || (window.innerWidth || 0) >= 1024) {
+        setAlturaEstreita(null);
+        return;
+      }
+      const casca = typeof el.closest === "function" ? (el.closest('[data-casca="conteudo"]') as HTMLElement | null) : null;
+      const estilo = casca ? window.getComputedStyle(casca) : null;
+      const cascaRola = Boolean(estilo && (estilo.overflowY === "auto" || estilo.overflowY === "scroll"));
+      let fundo: number;
+      let topo: number;
+      if (casca && estilo && cascaRola) {
+        fundo = casca.getBoundingClientRect().top + casca.clientHeight - (parseFloat(estilo.paddingBottom) || 0);
+        topo = el.getBoundingClientRect().top + casca.scrollTop;
+      } else {
+        fundo = (window.innerHeight || 800) - FOLGA_EMBAIXO;
+        topo = el.getBoundingClientRect().top + (window.pageYOffset || 0);
+      }
+      const nova = Math.max(ALTURA_MINIMA_NO_CELULAR, Math.round(fundo - topo));
+      setAlturaEstreita((a) => (a !== null && Math.abs(a - nova) < 2 ? a : nova));
+    };
+    medir();
+    const t1 = window.setTimeout(medir, 250);
+    const t2 = window.setTimeout(medir, 900);
+    window.addEventListener("resize", medir);
+    window.addEventListener("orientationchange", medir);
+    const RO = (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    const obs = RO ? new RO(() => medir()) : null;
+    if (obs) obs.observe(document.body);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("orientationchange", medir);
+      if (obs) obs.disconnect();
+    };
+  }, [ref]);
+
+  return { ref, altura: alturaLarga ?? alturaEstreita };
+}
+
+const OPCOES_DO_PERIODO = [
+  { valor: "7", rotulo: "1 semana" },
+  { valor: "14", rotulo: "2 semanas" },
+];
+
 /*
- * Esteira (fase 1, 14/11/2026): linha do tempo só de leitura. Os dias da
- * semana em cima, uma faixa por cliente ativo e um cartão por peça, com a
- * etapa em que ela está; o dia prioritário de cada cliente fica marcado e
- * avisa quando está sem peça. O cartão abre a Agenda ou o Estúdio.
+ * Esteira (fase 1, 14/11/2026): linha do tempo das peças. Os dias em cima,
+ * uma faixa por cliente ativo e um cartão por peça, com a etapa em que ela
+ * está; o dia prioritário de cada cliente fica marcado e avisa quando está
+ * sem peça.
  *
  * Fase 2 (14/11/2026): no topo, a caixa "Precisa de você", só com o que
- * depende do dono, cada item com o link de onde se resolve; e o cartão passa
- * a mostrar a revisão interna da agência. A grade continua só de leitura.
+ * depende do dono; e o cartão mostra a revisão interna da agência.
  *
- * Organização (14/11/2026, 21h08): seletor "Clientes da Esteira" (Todos, Só
- * prioritários hoje ou clientes escolhidos, lembrado no aparelho), cada
- * cliente num bloco próprio com logo, dias grudados no topo ao descer, e
- * célula sem rolagem por dentro: acima de 3 peças, "+N" abre o resto.
+ * Limpeza (14/11/2026, 21h53 a 21h55, pedidos do Almir):
+ * - uma barra só no topo: clientes, período (1 ou 2 semanas, lembrado no
+ *   aparelho) e a navegação; a legenda foi para o "?" do título;
+ * - "Precisa de você" nasce recolhida, só com o contador;
+ * - o clique no cartão abre o painel da peça aqui mesmo (a ficha da Agenda
+ *   ou a janela da tarefa); a página completa fica no menu "…";
+ * - a página cabe na tela: a área das faixas rola por dentro e cada dia
+ *   rola o próprio excesso (substitui o "+N" e o "sem rolagem" de 21h08).
  *
  * Não é a tela do Ciclo (/ciclo, AdminEsteira): aquela continua como está.
  */
@@ -72,11 +151,12 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
   const referencia = useAgoraEmSP(agora);
   const hoje = useMemo(() => dataEmSP(referencia), [referencia]);
   const semanaAtual = useMemo(() => segundaDaSemana(referencia), [referencia]);
-  // A semana visível é do usuário: o relógio não a avança sozinho. Se ela
-  // deixar de ser a atual, o botão "Semana atual" fica habilitado para o clique.
+  // O período visível é do usuário: o relógio não o avança sozinho. Se ele
+  // deixar de começar na semana atual, o botão "Semana atual" fica habilitado.
   const [segunda, setSegunda] = useState(semanaAtual);
-  const dias = useMemo(() => diasDaSemana(segunda), [segunda]);
-  const { faixas, carregando, atualizando, erro, semClientes, recarregar } = useEsteiraLinha(segunda);
+  const [quantosDias, mudarQuantosDias] = usePeriodo();
+  const dias = useMemo(() => diasDaSemana(segunda, quantosDias), [segunda, quantosDias]);
+  const { faixas, carregando, atualizando, erro, semClientes, recarregar } = useEsteiraLinha(segunda, quantosDias);
   const dono = usePrecisaDeVoceDaEsteira();
   const [filtroGuardado, mudarFiltro] = useFiltroDeClientes();
   const diaDeHoje = useMemo(() => diaDaSemanaEmSP(referencia), [referencia]);
@@ -86,42 +166,93 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
     [filtroGuardado, faixas],
   );
   const visiveis = useMemo(() => aplicarFiltroDeClientes(faixas, filtro, diaDeHoje), [faixas, filtro, diaDeHoje]);
+  const [aberto, setAberto] = useState<{ cartao: CartaoDaEsteira; nomeDoCliente: string } | null>(null);
+  const { ref, altura } = useAlturaDaEsteira();
+
+  const duas = quantosDias === 14;
+  const rotuloDoPeriodo = rotuloDaSemana(segunda, quantosDias);
+  const andar = (sentido: -1 | 1) => setSegunda((s) => somarDias(s, sentido * quantosDias));
+
+  const barra = (
+    <>
+      {!carregando && !erro && !semClientes && (
+        <SeletorDeClientes faixas={faixas} filtro={filtro} diaDeHoje={diaDeHoje} onMudar={mudarFiltro} />
+      )}
+      <SeletorCompacto
+        rotulo="Período"
+        modo="segmentado"
+        opcoes={OPCOES_DO_PERIODO}
+        valor={String(quantosDias)}
+        onEscolher={(v) => mudarQuantosDias(diasDoPeriodoValido(Number(v)))}
+      />
+      <span className="inline-flex items-center" role="group" aria-label="Navegar no período" data-navegacao-do-periodo="">
+        <button type="button" className={botao.icone} onClick={() => andar(-1)} title={duas ? "Duas semanas antes" : "Semana anterior"} aria-label={duas ? "Duas semanas antes" : "Semana anterior"}>
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setSegunda(semanaAtual)} disabled={segunda === semanaAtual}>Semana atual</button>
+        <button type="button" className={botao.icone} onClick={() => andar(1)} title={duas ? "Próximas duas semanas" : "Próxima semana"} aria-label={duas ? "Próximas duas semanas" : "Próxima semana"}>
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </span>
+      <button type="button" className={botao.icone} onClick={() => { recarregar(); dono.recarregar(); }} title="Atualizar" aria-label="Atualizar">
+        <RefreshCw className={juntar("h-4 w-4", atualizando && "animate-spin")} aria-hidden="true" />
+      </button>
+    </>
+  );
 
   return (
-    <div className={juntar(larguraDaMesa, espaco.pagina, "pb-10")} data-esteira-linha="">
-      <CabecalhoDePagina
-        titulo="Esteira"
-        descricao={`Semana de ${rotuloDaSemana(segunda)}`}
-        ajuda="As peças da semana de cada cliente ativo, no dia em que saem (ou no prazo da tarefa), com a etapa em que estão: pauta, arte, revisão, aprovação, agendado e no ar. O dia prioritário do cliente fica marcado e avisa quando está sem peça. O cartão abre a Agenda ou o Estúdio. No topo, Precisa de você traz só o que depende da sua decisão, com o link de onde se resolve. Em Clientes da Esteira você escolhe quem aparece (Todos, Só prioritários hoje ou clientes um a um), e a escolha fica lembrada neste aparelho. Dia com mais de 3 peças mostra +N para abrir o resto. Aqui nada é alterado."
-        acoes={<>
-          <button type="button" className={botao.icone} onClick={() => setSegunda((s) => somarDias(s, -7))} title="Semana anterior" aria-label="Semana anterior"><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
-          <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setSegunda(semanaAtual)} disabled={segunda === semanaAtual}>Semana atual</button>
-          <button type="button" className={botao.icone} onClick={() => setSegunda((s) => somarDias(s, 7))} title="Próxima semana" aria-label="Próxima semana"><ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
-          <button type="button" className={botao.icone} onClick={() => { recarregar(); dono.recarregar(); }} title="Atualizar" aria-label="Atualizar"><RefreshCw className={juntar("h-4 w-4", atualizando && "animate-spin")} aria-hidden="true" /></button>
-        </>}
-      />
-
-      {/* O cabeçalho esconde a linha de apoio no celular; a semana visível precisa aparecer sempre. */}
-      <p className="text-[13px] font-medium text-foreground sm:hidden" aria-hidden="true">Semana de {rotuloDaSemana(segunda)}</p>
+    <div
+      ref={ref}
+      style={altura !== null ? { height: altura } : undefined}
+      className={juntar(larguraDaMesa, "flex flex-col gap-3 sm:gap-4")}
+      data-esteira-linha=""
+      data-cabe-na-tela={altura !== null ? "sim" : undefined}
+    >
+      <div className="shrink-0" data-barra-da-esteira="">
+        <CabecalhoDePagina
+          titulo="Esteira"
+          descricao={rotuloDoPeriodo}
+          ajuda={<>
+            <p>Cada cartão é uma peça, no dia em que sai. Clique para ver e resolver aqui mesmo.</p>
+            <LegendaDasEtapas />
+          </>}
+          acoes={barra}
+        />
+        {/* O cabeçalho esconde a linha de apoio no celular; o período visível precisa aparecer sempre. */}
+        <p className="mt-1 text-[12px] font-medium text-muted-foreground sm:hidden" aria-hidden="true">{rotuloDoPeriodo}</p>
+      </div>
 
       <CaixaPrecisaDeVoce pedidos={dono.pedidos} carregando={dono.carregando} incompleta={dono.incompleta} />
 
-      {carregando ? <Carregando linhas={5} rotulo="Lendo a Esteira da semana" />
+      {carregando ? <Carregando linhas={5} rotulo="Lendo a Esteira do período" />
         : erro ? <EstadoDeErro titulo="Não foi possível ler a Esteira." descricao={erro.message} acao={<button type="button" className={botao.secundario} onClick={recarregar}>Tentar de novo</button>} />
           : semClientes ? <EstadoVazio titulo="Nenhum cliente ativo." descricao="A Esteira mostra uma faixa para cada cliente com plano ativo." />
-            : <>
-              <SeletorDeClientes faixas={faixas} filtro={filtro} diaDeHoje={diaDeHoje} onMudar={mudarFiltro} />
-              {visiveis.length > 0 ? <GradeDaEsteira dias={dias} faixas={visiveis} hoje={hoje} />
-                : (
-                  <EstadoVazio
-                    titulo="Nenhum cliente tem dia prioritário hoje"
-                    descricao={diaDeHoje > 5 ? "Fim de semana não é dia prioritário de nenhum cliente." : "Nenhum cliente ativo tem o dia prioritário neste dia da semana."}
-                    acao={<button type="button" className={botao.secundario} onClick={() => mudarFiltro(escolherModo("todos"))}>Ver todos os clientes</button>}
-                  />
-                )}
-            </>}
+            : visiveis.length > 0 ? (
+              <GradeDaEsteira
+                dias={dias}
+                faixas={visiveis}
+                hoje={hoje}
+                aoAbrirCartao={(cartao, faixa) => setAberto({ cartao, nomeDoCliente: faixa.nome })}
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Nenhum cliente tem dia prioritário hoje"
+                descricao={diaDeHoje > 5 ? "Fim de semana não é dia prioritário de nenhum cliente." : "Nenhum cliente ativo tem o dia prioritário neste dia da semana."}
+                acao={<button type="button" className={botao.secundario} onClick={() => mudarFiltro(escolherModo("todos"))}>Ver todos os clientes</button>}
+              />
+            )}
 
-      <LegendaDasEtapas />
+      {aberto && (
+        <Suspense fallback={null}>
+          <PainelDaPeca
+            key={aberto.cartao.chave}
+            cartao={aberto.cartao}
+            nomeDoCliente={aberto.nomeDoCliente}
+            aoFechar={() => setAberto(null)}
+            aoMudar={recarregar}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

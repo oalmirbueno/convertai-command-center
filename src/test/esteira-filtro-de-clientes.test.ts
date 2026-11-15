@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { CartaoDaEsteira } from "@/lib/esteiraLinha/esteiraLinha";
 import {
-  CHAVE_DO_FILTRO_DE_CLIENTES, CORES_DE_APOIO_DO_CLIENTE, FILTRO_TODOS, TETO_DE_CARTOES_NA_CELULA, ajustarFiltroACarteira, alternarCliente,
-  aplicarFiltroDeClientes, buscarClientesPeloNome, cartoesAVista, corDeApoioDoCliente, diaDaSemanaEmSP, escolherModo, gravarFiltro,
+  CHAVE_DO_FILTRO_DE_CLIENTES, CORES_DE_APOIO_DO_CLIENTE, FILTRO_TODOS, ajustarFiltroACarteira, alternarCliente,
+  aplicarFiltroDeClientes, buscarClientesPeloNome, corDeApoioDoCliente, diaDaSemanaEmSP, escolherModo, gravarFiltro,
   lerFiltroDeClientes, lerFiltroGuardado, prioritariosDeHoje,
 } from "@/lib/esteiraLinha/filtroDeClientes";
 import { ESTILO_DA_ETAPA } from "@/components/esteira-linha/estilosDaEtapa";
 
-/** Organização da Esteira (14/11/2026, 21h08): o filtro de clientes e o "+N", sem tela. */
+/** Organização da Esteira (14/11/2026, 21h08): o filtro de clientes, sem tela. O "+N" saiu em 21h55 (cada dia rola por dentro). */
 
 // Já na ordem da grade (nome pt-BR).
 const FAIXAS = [
@@ -94,29 +93,6 @@ describe("filtro de clientes: localStorage", () => {
     expect(lerFiltroGuardado(quebrado)).toEqual(FILTRO_TODOS);
     expect(() => gravarFiltro(quebrado, FILTRO_TODOS)).not.toThrow();
     expect(lerFiltroGuardado(null)).toEqual(FILTRO_TODOS);
-  });
-});
-
-describe("+N na célula", () => {
-  const cartoes = (n: number): CartaoDaEsteira[] => Array.from({ length: n }, (_, i) => ({
-    chave: `k${i}`, titulo: `T${i}`, formato: "Post", etapa: "pauta", rotuloDaEtapa: "Pauta", link: "/x", destino: "agenda",
-  }));
-
-  it("o teto é 3", () => expect(TETO_DE_CARTOES_NA_CELULA).toBe(3));
-
-  it("com 3 ou menos, nada de controle", () => {
-    for (const n of [0, 1, 3]) expect(cartoesAVista(cartoes(n), false)).toEqual({ visiveis: cartoes(n), escondidos: 0, temMais: false });
-  });
-
-  it("com 5, mostra 3 e +2; expandida mostra os 5 na mesma ordem; recolhida volta ao teto", () => {
-    const fechada = cartoesAVista(cartoes(5), false);
-    expect(fechada.visiveis.map((c) => c.chave)).toEqual(["k0", "k1", "k2"]);
-    expect(fechada.escondidos).toBe(2);
-    expect(fechada.temMais).toBe(true);
-    const aberta = cartoesAVista(cartoes(5), true);
-    expect(aberta.visiveis.map((c) => c.chave)).toEqual(["k0", "k1", "k2", "k3", "k4"]);
-    expect(aberta).toMatchObject({ escondidos: 0, temMais: true });
-    expect(cartoesAVista(cartoes(5), false).visiveis).toHaveLength(3);
   });
 });
 

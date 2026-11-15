@@ -1,65 +1,102 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
-import { botao, etiqueta, juntar, texto } from "@/components/sistema";
+import { ArrowRight, ChevronDown } from "lucide-react";
+import { botao, etiqueta, foco, juntar, texto } from "@/components/sistema";
 import { ROTULO_DO_TIPO, type PedidoDoDono } from "@/lib/esteiraLinha/precisaDeVoce";
+import {
+  armazenamentoDoAparelho, contadorDoPrecisaDeVoce, gravarAvisos, lerAvisosGuardados,
+} from "@/lib/esteiraLinha/preferenciasDaEsteira";
 
-/** Quantos pedidos ficam à vista antes do "Ver todos": a caixa não pode empurrar a grade para fora da tela. */
-const A_VISTA = 4;
+/**
+ * Teto da lista aberta: passou disso, rola por dentro da caixa (pedido do
+ * Almir, 14/11/2026, 21h55), e a grade continua à vista embaixo.
+ */
+export const CLASSES_DA_LISTA_DO_AVISO = "max-h-[200px] overflow-y-auto overscroll-contain sm:max-h-[260px]";
+
+/** Aberta ou recolhida, lembrado neste aparelho. O padrão é recolhida. */
+function useAvisoAberto() {
+  const [aberta, setAberta] = useState(() => lerAvisosGuardados(armazenamentoDoAparelho()).precisaDeVoce);
+  const alternar = () => {
+    setAberta((atual) => {
+      const nova = !atual;
+      gravarAvisos(armazenamentoDoAparelho(), { v: 1, precisaDeVoce: nova });
+      return nova;
+    });
+  };
+  return [aberta, alternar] as const;
+}
 
 /**
  * "Precisa de você", no topo da Esteira: só o que a equipe não decide sozinha
  * (dinheiro e verba, cliente novo ou plano, decisão pedida por agente e peça
  * que o cliente rejeitou mais de uma vez). Cada item leva ao lugar onde se
- * resolve; a caixa não decide nada. Sem pedido, vira uma linha discreta.
+ * resolve; a caixa não decide nada.
+ *
+ * Recolhida (14/11/2026, 21h53): nasce fechada, só com o contador ("3 itens
+ * precisam de você"), e abre no clique. Sem pedido, não ocupa espaço; só a
+ * leitura incompleta deixa uma linha discreta.
  */
 export default function CaixaPrecisaDeVoce({ pedidos, carregando, incompleta }: { pedidos: PedidoDoDono[]; carregando: boolean; incompleta: boolean }) {
-  const [aberta, setAberta] = useState(false);
+  const [aberta, alternar] = useAvisoAberto();
   if (carregando) return null;
 
   if (pedidos.length === 0) {
+    if (!incompleta) return null;
     return (
-      <p className={juntar(texto.auxiliar)} data-precisa-de-voce="vazia" role="status">
-        {incompleta ? "Precisa de você: parte da lista não pôde ser lida agora." : "Nada esperando você."}
+      <p className={juntar(texto.auxiliar, "shrink-0")} data-precisa-de-voce="vazia" role="status">
+        Precisa de você: parte da lista não pôde ser lida agora.
       </p>
     );
   }
 
-  const visiveis = aberta ? pedidos : pedidos.slice(0, A_VISTA);
-  const escondidos = pedidos.length - visiveis.length;
   return (
-    <section aria-labelledby="precisa-de-voce-titulo" className="rounded-md border border-warning/40 bg-warning/5 p-3" data-precisa-de-voce={pedidos.length}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 id="precisa-de-voce-titulo" className="text-[14px] font-medium leading-5 text-foreground">
-          Precisa de você
-          <span className={juntar(etiqueta, "ml-2 bg-warning/15 text-warning")}>{pedidos.length}</span>
-        </h2>
-        <p className={texto.auxiliar}>
-          Só o que depende da sua decisão.{incompleta && " Parte da lista não pôde ser lida agora."}
-        </p>
-      </div>
-      <ul className="mt-2 divide-y divide-border rounded-md border border-border bg-background">
-        {visiveis.map((p) => (
-          <li key={p.chave} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5 px-3 py-2" data-pedido-do-dono={p.chave} data-tipo={p.tipo}>
-            <div className="min-w-0 flex-1 basis-64">
-              <p className="flex flex-wrap items-center gap-1.5">
-                <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{ROTULO_DO_TIPO[p.tipo]}</span>
-                {p.cliente && <span className="text-[12px] font-medium text-foreground">{p.cliente}</span>}
-              </p>
-              <p className="mt-1 break-words text-[13px] font-medium leading-5 text-foreground">{p.oQue}</p>
-              {p.porQue && <p className={juntar(texto.auxiliar, "mt-0.5 break-words")}>{p.porQue}</p>}
-            </div>
-            <Link to={p.link} className={juntar(botao.secundario, "h-8 shrink-0")} aria-label={`Resolver em ${p.onde}: ${p.oQue}`}>
-              {p.onde}
-              <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            </Link>
-          </li>
-        ))}
-      </ul>
-      {(escondidos > 0 || aberta) && pedidos.length > A_VISTA && (
-        <button type="button" className={juntar(botao.discreto, "mt-2 h-8")} onClick={() => setAberta((a) => !a)} aria-expanded={aberta}>
-          {aberta ? "Mostrar menos" : `Ver todos (mais ${escondidos})`}
+    <section
+      aria-labelledby="precisa-de-voce-titulo"
+      className="shrink-0 rounded-md border border-warning/40 bg-warning/5"
+      data-precisa-de-voce={pedidos.length}
+      data-aviso-recolhido={aberta ? undefined : "sim"}
+    >
+      <h2 id="precisa-de-voce-titulo" className="text-[13px] font-medium leading-5 text-foreground">
+        <button
+          type="button"
+          onClick={alternar}
+          aria-expanded={aberta}
+          aria-controls="precisa-de-voce-lista"
+          className={juntar("toque-compacto flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-1.5 text-left", foco)}
+          data-alternar-aviso=""
+        >
+          <span className={juntar(etiqueta, "bg-warning/15 text-warning")} aria-hidden="true">{pedidos.length}</span>
+          <span className="min-w-0 flex-1 truncate">
+            <span className="sr-only">Precisa de você: </span>
+            {contadorDoPrecisaDeVoce(pedidos.length)}
+            {incompleta && <span className={juntar(texto.auxiliar, "ml-2")}>(parte da lista não pôde ser lida)</span>}
+          </span>
+          <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", aberta && "rotate-180")} aria-hidden="true" />
         </button>
+      </h2>
+      {aberta && (
+        <ul
+          id="precisa-de-voce-lista"
+          className={juntar("mx-2 mb-2 divide-y divide-border rounded-md border border-border bg-background", CLASSES_DA_LISTA_DO_AVISO)}
+          data-rolagem-do-aviso=""
+        >
+          {pedidos.map((p) => (
+            <li key={p.chave} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5 px-3 py-2" data-pedido-do-dono={p.chave} data-tipo={p.tipo}>
+              <div className="min-w-0 flex-1 basis-64">
+                <p className="flex flex-wrap items-center gap-1.5">
+                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{ROTULO_DO_TIPO[p.tipo]}</span>
+                  {p.cliente && <span className="text-[12px] font-medium text-foreground">{p.cliente}</span>}
+                </p>
+                <p className="mt-1 break-words text-[13px] font-medium leading-5 text-foreground">{p.oQue}</p>
+                {p.porQue && <p className={juntar(texto.auxiliar, "mt-0.5 break-words")}>{p.porQue}</p>}
+              </div>
+              <Link to={p.link} className={juntar(botao.secundario, "h-8 shrink-0")} aria-label={`Resolver em ${p.onde}: ${p.oQue}`}>
+                {p.onde}
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

@@ -273,28 +273,50 @@ export interface DiaDaGrade {
   rotuloLongo: string;
 }
 
-/** Os sete dias (segunda a domingo) da semana que começa em `segunda`. */
-export function diasDaSemana(segunda: string): DiaDaGrade[] {
-  return CURTOS.map((curto, i) => {
+/**
+ * Quantos dias a grade mostra: uma semana ou duas (pedido do Almir,
+ * 14/11/2026, 21h53). Sempre começa numa segunda-feira.
+ */
+export type DiasDoPeriodo = 7 | 14;
+
+/** Só 7 ou 14; qualquer outra coisa vale uma semana. */
+export const diasDoPeriodoValido = (dias: unknown): DiasDoPeriodo => (dias === 14 ? 14 : 7);
+
+/** Os dias do período que começa em `segunda`: sete (segunda a domingo) ou catorze. */
+export function diasDaSemana(segunda: string, quantos: DiasDoPeriodo = 7): DiaDaGrade[] {
+  return Array.from({ length: diasDoPeriodoValido(quantos) }, (_, i) => {
     const data = somarDias(segunda, i);
     const [, mes, dia] = data.split("-");
+    const naSemana = i % 7;
     return {
       data,
-      diaDaSemana: i + 1,
-      rotulo: `${curto} ${Number(dia)}`,
-      rotuloLongo: `${NOMES[i]}, ${dia}/${mes}`,
+      diaDaSemana: naSemana + 1,
+      rotulo: `${CURTOS[naSemana]} ${Number(dia)}`,
+      rotuloLongo: `${NOMES[naSemana]}, ${dia}/${mes}`,
     };
   });
 }
 
-/** "16 a 22 de novembro de 2026" (ou "30 de novembro a 6 de dezembro de 2026"). */
-export function rotuloDaSemana(segunda: string): string {
-  const domingo = somarDias(segunda, 6);
+/**
+ * "16 a 22 de novembro de 2026" (ou "30 de novembro a 6 de dezembro de
+ * 2026"). Com 14 dias, vai até o domingo da segunda semana.
+ */
+export function rotuloDaSemana(segunda: string, quantos: DiasDoPeriodo = 7): string {
+  const domingo = somarDias(segunda, diasDoPeriodoValido(quantos) - 1);
   const parte = (data: string, opcoes: Intl.DateTimeFormatOptions) =>
     new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", ...opcoes }).format(new Date(`${data}T12:00:00Z`));
   const mesmoMes = segunda.slice(0, 7) === domingo.slice(0, 7);
   const inicio = mesmoMes ? String(Number(segunda.slice(8, 10))) : parte(segunda, { day: "numeric", month: "long" });
   return `${inicio} a ${parte(domingo, { day: "numeric", month: "long", year: "numeric" })}`;
+}
+
+/**
+ * A janela que a leitura pede ao banco para o período: um dia de folga de
+ * cada lado (o fuso de São Paulo decide o dia certo depois, na regra pura).
+ * `ate` é exclusivo nos instantes e inclusivo no prazo da tarefa, como antes.
+ */
+export function janelaDeLeitura(segunda: string, quantos: DiasDoPeriodo = 7): { de: string; ate: string } {
+  return { de: somarDias(segunda, -1), ate: somarDias(segunda, diasDoPeriodoValido(quantos) + 1) };
 }
 
 // ------------------------------------------------------------------ dia prioritário
@@ -351,6 +373,19 @@ export function linkDoCartao(
   return `/calendario?client=${cliente}`;
 }
 
+/**
+ * O Estúdio da peça (/mesa na tarefa), quando ela tem trabalho do Estúdio e
+ * tarefa e o papel pode abrir /mesa. Vai no menu "…" do cartão; com post, o
+ * link principal continua sendo a Agenda.
+ */
+export function linkDoEstudio(
+  peca: Pick<PecaFato, "clientId" | "tarefa" | "trabalho">,
+  opcoes: { podeAbrirEstudio?: boolean } = {},
+): string | null {
+  if (!peca.trabalho || !peca.tarefa || opcoes.podeAbrirEstudio === false) return null;
+  return `/mesa?client=${encodeURIComponent(peca.clientId)}&aba=estudio&task=${encodeURIComponent(peca.tarefa.id)}`;
+}
+
 /** Papéis que a rota /mesa aceita (src/App.tsx). */
 const PAPEIS_DO_ESTUDIO = new Set(["admin", "manager", "design"]);
 export const podeAbrirEstudio = (papel: string | null | undefined): boolean => PAPEIS_DO_ESTUDIO.has(String(papel ?? ""));
@@ -365,6 +400,16 @@ export interface CartaoDaEsteira {
   destino: "agenda" | "estudio";
   /** Quem fez a revisão interna e quando, quando há carimbo (vai no `title`). */
   revisao?: string | null;
+  /**
+   * O que o painel da peça precisa para abrir na própria Esteira (pedido do
+   * Almir, 14/11/2026, 21h54): o cliente, o post (abre a ficha da Agenda) e a
+   * tarefa (abre a janela da tarefa quando não há post).
+   */
+  clientId?: string;
+  postId?: string | null;
+  taskId?: string | null;
+  /** O Estúdio desta peça, quando há trabalho e o papel pode abrir /mesa. */
+  linkDoEstudio?: string | null;
 }
 
 export interface CelulaDaEsteira {
@@ -443,7 +488,7 @@ export function clienteContaComoDiaPrioritario(cliente: Pick<ClienteDaFaixa, "id
 const ORDEM_DA_ETAPA: Record<EtapaDaPeca, number> = { pauta: 0, arte: 1, revisao: 2, aprovacao: 3, agendado: 4, no_ar: 5 };
 
 /**
- * Monta a grade da semana: uma faixa por cliente (mesmo sem peça, para o
+ * Monta a grade do período (uma ou duas semanas): uma faixa por cliente (mesmo sem peça, para o
  * alerta do dia prioritário aparecer) e, em cada dia, os cartões das peças
  * com data naquele dia.
  */
@@ -452,10 +497,12 @@ export function montarGrade(entrada: {
   pecas: PecaFato[];
   diasPrioritarios: RegistroDoDiaPrioritario[];
   segunda: string;
+  /** Uma semana (padrão) ou duas. */
+  dias?: DiasDoPeriodo;
   /** O usuário pode abrir /mesa? Sem informar, vale o comportamento da fase 1 (pode). */
   podeAbrirEstudio?: boolean;
 }): FaixaDaEsteira[] {
-  const dias = diasDaSemana(entrada.segunda);
+  const dias = diasDaSemana(entrada.segunda, entrada.dias ?? 7);
   const datas = new Set(dias.map((d) => d.data));
   const porCelula = new Map<string, CartaoDaEsteira[]>();
   for (const peca of entrada.pecas) {
@@ -475,6 +522,10 @@ export function montarGrade(entrada: {
       link,
       destino: link.startsWith("/mesa") ? "estudio" : "agenda",
       revisao: textoDaRevisaoInterna(peca.trabalho?.revisao),
+      clientId: peca.clientId,
+      postId: peca.post?.id ?? null,
+      taskId: peca.tarefa?.id ?? null,
+      linkDoEstudio: linkDoEstudio(peca, { podeAbrirEstudio: entrada.podeAbrirEstudio }),
     });
     porCelula.set(chave, lista);
   }

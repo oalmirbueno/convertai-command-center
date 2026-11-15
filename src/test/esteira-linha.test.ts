@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CLIENTES_COM_DIA_PRIORITARIO_SUSPENSO_TEMPORARIAMENTE, aprovacaoDoClienteDispensada, clienteContaComoDiaPrioritario, dataDaPeca, decidirEtapa, diaCivilEmSP,
-  diaPrioritarioDefinido, diasDaSemana, linkDoCartao, meiaNoiteEmSP, montarGrade, msAteProximaMeiaNoiteSP, podeAbrirEstudio, rotuloDaSemana,
+  diaPrioritarioDefinido, diasDaSemana, diasDoPeriodoValido, janelaDeLeitura, linkDoCartao, linkDoEstudio, meiaNoiteEmSP, montarGrade, msAteProximaMeiaNoiteSP, podeAbrirEstudio, rotuloDaSemana,
   rotuloDoFormato, segundaDaSemana, somarDias, textoDaRevisaoInterna, type PecaFato, type RevisaoInterna,
 } from "@/lib/esteiraLinha/esteiraLinha";
 import { juntarPecas, revisaoDoTrabalho, type LinhasDaEsteiraLinha } from "@/lib/esteiraLinha/esteiraLinhaFatos";
@@ -463,5 +463,66 @@ describe("regra de aprovação do cliente no cadastro (Softy)", () => {
     const etapas = (f: typeof softy) => f.celulas[1].cartoes.map((c) => `${c.etapa}:${c.rotuloDaEtapa}`);
     expect(etapas(softy)).toEqual(["revisao:Revisado pela agência", "aprovacao:Aguardando o cliente"]);
     expect(etapas(softy)).toEqual(etapas(alfa));
+  });
+});
+
+/*
+ * Período de uma ou duas semanas e o que o cartão leva para o painel da peça
+ * (pedidos do Almir, 14/11/2026, 21h53 e 21h54).
+ */
+describe("período de 7 ou 14 dias", () => {
+  it("diasDaSemana e rotuloDaSemana aceitam duas semanas; o padrão continua uma", () => {
+    expect(diasDaSemana(SEGUNDA)).toHaveLength(7);
+    const duas = diasDaSemana(SEGUNDA, 14);
+    expect(duas.map((d) => d.rotulo)).toEqual([
+      "Seg 16", "Ter 17", "Qua 18", "Qui 19", "Sex 20", "Sáb 21", "Dom 22",
+      "Seg 23", "Ter 24", "Qua 25", "Qui 26", "Sex 27", "Sáb 28", "Dom 29",
+    ]);
+    expect(duas.map((d) => d.diaDaSemana)).toEqual([1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7]);
+    expect(duas[13].rotuloLongo).toBe("domingo, 29/11");
+    expect(rotuloDaSemana(SEGUNDA, 14)).toBe("16 a 29 de novembro de 2026");
+    expect(rotuloDaSemana("2026-11-23", 14)).toBe("23 de novembro a 6 de dezembro de 2026");
+    // Valor fora de 7/14 vale uma semana.
+    expect(diasDaSemana(SEGUNDA, 30 as never)).toHaveLength(7);
+    expect(diasDoPeriodoValido(14)).toBe(14);
+    expect(diasDoPeriodoValido("14")).toBe(7);
+  });
+
+  it("a janela de leitura acompanha o período", () => {
+    expect(janelaDeLeitura(SEGUNDA)).toEqual({ de: "2026-11-15", ate: "2026-11-24" });
+    expect(janelaDeLeitura(SEGUNDA, 14)).toEqual({ de: "2026-11-15", ate: "2026-12-01" });
+  });
+
+  it("montarGrade com 14 dias põe a peça da segunda semana e alerta o dia prioritário das duas", () => {
+    const pecas = [peca({ chave: "task:t2", post: null, tarefa: { id: "t2", status: "todo", due_date: "2026-11-24" } })];
+    const entrada = { clientes: [{ id: "c1", nome: "Alfa" }], pecas, diasPrioritarios: [{ client_id: "c1", dia: 2, situacao: "confirmado" }], segunda: SEGUNDA };
+    const [uma] = montarGrade(entrada);
+    expect(uma.celulas).toHaveLength(7);
+    expect(uma.celulas.flatMap((c) => c.cartoes)).toHaveLength(0);
+    const [duas] = montarGrade({ ...entrada, dias: 14 });
+    expect(duas.celulas).toHaveLength(14);
+    expect(duas.celulas.map((c) => c.data)[13]).toBe("2026-11-29");
+    // Terça 17 sem peça alerta; terça 24 tem a peça e só destaca.
+    expect(duas.celulas[1]).toMatchObject({ prioritario: true, alerta: true });
+    expect(duas.celulas[8]).toMatchObject({ data: "2026-11-24", prioritario: true, alerta: false });
+    expect(duas.celulas[8].cartoes.map((c) => c.chave)).toEqual(["task:t2"]);
+  });
+});
+
+describe("o cartão leva o que o painel da peça precisa", () => {
+  it("com post: cliente, post e tarefa; o Estúdio só com trabalho e papel que abre /mesa", () => {
+    const comTrabalho = peca({ tarefa: tarefaT1, trabalho: { status: "pronto", entrega_status: null, temArquivo: true } });
+    const grade = (pode?: boolean) => montarGrade({ clientes: [{ id: "c1", nome: "Alfa" }], diasPrioritarios: [], segunda: SEGUNDA, pecas: [comTrabalho], podeAbrirEstudio: pode })[0].celulas[1].cartoes[0];
+    expect(grade(true)).toMatchObject({ clientId: "c1", postId: "p1", taskId: "t1", link: "/calendario?client=c1&content=p1", linkDoEstudio: "/mesa?client=c1&aba=estudio&task=t1" });
+    expect(grade(false).linkDoEstudio).toBeNull();
+    // Sem informar o papel, vale a fase 1 (pode).
+    expect(grade().linkDoEstudio).toBe("/mesa?client=c1&aba=estudio&task=t1");
+  });
+
+  it("só tarefa: sem post; sem trabalho do Estúdio, nada de Estúdio", () => {
+    const soTarefa = peca({ chave: "task:t1", post: null, tarefa: tarefaT1 });
+    const [faixa] = montarGrade({ clientes: [{ id: "c1", nome: "Alfa" }], diasPrioritarios: [], segunda: SEGUNDA, pecas: [soTarefa], podeAbrirEstudio: true });
+    expect(faixa.celulas[1].cartoes[0]).toMatchObject({ clientId: "c1", postId: null, taskId: "t1", linkDoEstudio: null, destino: "agenda" });
+    expect(linkDoEstudio(soTarefa, { podeAbrirEstudio: true })).toBeNull();
   });
 });
