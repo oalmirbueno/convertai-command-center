@@ -8,15 +8,14 @@ import { juntar, superficie } from "@/components/sistema/estilos";
  */
 export default function EsqueletoDoPainel() {
   return (
-    <div aria-busy="true" aria-label="Carregando o painel" className={juntar("min-w-0 overflow-hidden", superficie.painel)} data-esqueleto-do-painel="">
-      <div className="grid grid-cols-2 lg:grid-cols-4">
-        {/* Alturas da faixa compacta: no celular a 1ª linha não tem apoio (62 px) e a 2ª tem (81 px); de 1024 px para cima, uma linha de 80 px. */}
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className={juntar("px-4 py-2.5 lg:h-20", i < 2 ? "h-[62px]" : "h-[81px]")}>
-            <div className="h-full animate-pulse rounded-md bg-muted" />
-          </div>
-        ))}
-      </div>
+    <div aria-busy="true" aria-label="Carregando o painel" className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4" data-esqueleto-do-painel="">
+      {/* A forma dos quatro cartões de número (2 por linha até 1280 px). */}
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className={juntar(superficie.painel, "h-[132px] min-w-0 p-5 sm:h-[148px] sm:p-6")}>
+          <div className="h-4 w-2/3 animate-pulse rounded-md bg-muted" />
+          <div className="mt-5 h-9 w-1/2 animate-pulse rounded-md bg-muted" />
+        </div>
+      ))}
     </div>
   );
 }
