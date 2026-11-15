@@ -1,4 +1,4 @@
-import { ArrowUpRight, CalendarDays } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { MenuMais, juntar, superficie, texto, type ItemDoMenu } from "@/components/sistema";
 import type { ProjetoDoLab } from "@/lib/laboratorio/api";
 import { TIPOS_DE_NO, type CanvasDoLab } from "@/lib/laboratorio/nos";
@@ -87,8 +87,8 @@ export function dataCurta(iso: string, agora: Date = new Date()): string {
 
 /**
  * Cartão de projeto (v4, 15/11/2026): capa pastel de altura fixa (a miniatura do canvas ou a prévia, nunca
- * muda de tamanho ao carregar) com o cliente numa etiqueta e a seta de abrir em círculo; embaixo, o nome,
- * a data numa pílula, a contagem de nós e as ações no "…".
+ * muda de tamanho ao carregar) com a seta de abrir em círculo; embaixo, o nome e uma linha cinza com
+ * cliente, data e nós, e as ações no "…".
  */
 export function CartaoDeProjeto({ projeto, clientes, onAbrir, acoes }: { projeto: ProjetoDoLab; clientes: ClienteDoLab[]; onAbrir: () => void; acoes?: ItemDoMenu[] }) {
   const cliente = nomeDoCliente(clientes, projeto.client_id, projeto.cliente_nome || "Livre");
@@ -101,28 +101,21 @@ export function CartaoDeProjeto({ projeto, clientes, onAbrir, acoes }: { projeto
           {projeto.previa_url ? (
             <img src={projeto.previa_url} alt="" className="block h-36 w-full object-cover" loading="lazy" />
           ) : (
-            <span className="block px-3 pt-7">
+            <span className="block px-3 pt-4">
               <PreviaDoCanvas canvas={projeto.canvas} total={projeto.total_nos} />
             </span>
           )}
-          <span className="absolute left-2.5 top-2.5 inline-flex h-[22px] max-w-[65%] items-center rounded-full bg-card px-2 text-[11px] font-medium leading-none text-foreground">
-            <span className="truncate">{cliente}</span>
-          </span>
           <span className="absolute right-2.5 top-2.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-card text-foreground transition-colors group-hover:bg-foreground group-hover:text-background" aria-hidden="true">
             <ArrowUpRight className="h-4 w-4" />
           </span>
         </span>
         <span className="mt-3 block truncate px-1.5 text-[15px] font-semibold leading-5 text-foreground">{projeto.nome}</span>
       </button>
-      <div className="mt-1.5 flex min-w-0 items-center pb-1 pl-1.5">
-        <span className="flex min-w-0 flex-1 items-center" title={`${cliente}${quando ? ` · ${quando}` : ""} · ${projeto.total_nos} nó(s)`}>
-          {quando ? (
-            <span className="mr-2 inline-flex h-6 shrink-0 items-center rounded-full border border-border px-2 text-[11px] font-medium tabular-nums text-muted-foreground">
-              <CalendarDays className="mr-1 h-3 w-3" aria-hidden="true" />
-              {quando}
-            </span>
-          ) : null}
-          <span className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>{projeto.total_nos} nó(s)</span>
+      {/* Passada estrutural: uma linha só, em cinza (cliente · quando · nós), sem etiqueta na capa nem pílula de data. */}
+      <div className="mt-0.5 flex min-w-0 items-center pb-0.5 pl-1.5">
+        <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate tabular-nums")} title={`${cliente}${quando ? ` · ${quando}` : ""} · ${projeto.total_nos} nó(s)`}>
+          {cliente}
+          {quando ? ` · ${quando}` : ""} · {projeto.total_nos} nó(s)
         </span>
         {acoes && acoes.length ? <MenuMais rotulo={`Ações do projeto ${projeto.nome}`} itens={acoes} /> : null}
       </div>

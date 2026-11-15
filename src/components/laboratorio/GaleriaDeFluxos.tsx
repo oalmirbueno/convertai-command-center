@@ -169,10 +169,8 @@ function CartaoDoFluxo({ f, usando, onUsar }: { f: FluxoDaGaleria; usando: strin
   const cor = pastelDe(f.oficial ? f.categoria : "pessoal");
   return (
     <article className={juntar(superficie.painel, "flex min-w-0 flex-col p-3")} data-template={f.id} data-categoria={f.categoria}>
-      <div className="relative min-w-0 overflow-hidden rounded-[18px] px-2 pb-1 pt-8" style={{ backgroundColor: tom(cor, 0.14) }}>
-        <span className="absolute left-2.5 top-2.5 inline-flex h-[22px] max-w-[70%] items-center rounded-full bg-card px-2 text-[11px] font-medium leading-none text-foreground">
-          <span className="truncate">{f.oficial ? f.categoria : "Seu fluxo"}</span>
-        </span>
+      {/* Passada estrutural: a categoria já está no filtro de cima; a capa fica só com a miniatura (o nome dela vai no title). */}
+      <div className="relative min-w-0 overflow-hidden rounded-[18px] px-2 py-3" style={{ backgroundColor: tom(cor, 0.14) }} title={f.oficial ? f.categoria : "Seu fluxo"}>
         <MiniaturaDoFluxo canvas={f.canvas} semFundo />
       </div>
       <div className="mt-3 flex min-w-0 items-center px-1.5">
@@ -183,8 +181,8 @@ function CartaoDoFluxo({ f, usando, onUsar }: { f: FluxoDaGaleria; usando: strin
       </div>
       <p className={juntar(texto.auxiliar, "mt-1.5 line-clamp-2 min-h-[32px] px-1.5")} title={f.descricao || undefined}>{f.descricao}</p>
       <div className="mt-auto flex min-w-0 items-center justify-between px-1.5 pb-1.5 pt-3">
-        <span className="inline-flex h-6 min-w-0 items-center rounded-full bg-muted px-2.5 text-[11px] font-medium tabular-nums text-foreground">
-          <span className="truncate">{nos} {nos === 1 ? "nó" : "nós"}</span>
+        <span className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>
+          {nos} {nos === 1 ? "nó" : "nós"}
         </span>
         <button type="button" className={juntar(botaoDeTinta, "ml-2 h-8 px-3.5")} onClick={() => onUsar(f.id)} disabled={!!usando} data-usar-fluxo={f.id}>
           {usando === f.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
@@ -195,7 +193,11 @@ function CartaoDoFluxo({ f, usando, onUsar }: { f: FluxoDaGaleria; usando: strin
   );
 }
 
-function Chip({ ativo, icone: Icone, rotulo, total, onClick, dados }: { ativo: boolean; icone: Icone; rotulo: string; total: number; onClick: () => void; dados: Record<string, string> }) {
+/**
+ * Filtro de categoria (passada estrutural): pílula só com o nome, como nas referências; a ativa em verde vivo
+ * com texto escuro e a contagem ao lado em tom apagado (sem bolha). O ícone fica no title da pílula.
+ */
+function Chip({ ativo, rotulo, total, onClick, dados }: { ativo: boolean; icone?: Icone; rotulo: string; total: number; onClick: () => void; dados: Record<string, string> }) {
   return (
     <button
       type="button"
@@ -203,14 +205,13 @@ function Chip({ ativo, icone: Icone, rotulo, total, onClick, dados }: { ativo: b
       aria-pressed={ativo}
       className={juntar(
         toqueCompacto,
-        "mb-2 mr-2 inline-flex h-9 shrink-0 items-center rounded-full pl-3 pr-1.5 text-[13px] font-medium transition-colors",
-        ativo ? "bg-foreground text-background" : "bg-card text-foreground shadow-card hover:bg-muted",
+        "mb-2 mr-1.5 inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-[13px] font-medium transition-colors",
+        ativo ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-card hover:text-foreground",
       )}
       {...dados}
     >
-      <Icone className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
       {rotulo}
-      <span className={juntar("ml-2 inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums", ativo ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>{total}</span>
+      <span className={juntar("ml-1.5 text-[12px] tabular-nums", ativo ? "opacity-70" : "opacity-60")}>{total}</span>
     </button>
   );
 }
@@ -243,9 +244,6 @@ export default function GaleriaDeFluxos({
     <section className="flex min-h-0 min-w-0 flex-col lg:h-full" aria-label="Fluxos" data-galeria-de-fluxos="">
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between">
         <h2 className={juntar(texto.tituloSecao, "mb-2 mr-3 flex items-center")}>
-          <CirculoDoIcone tamanho="sm" className="mr-2.5">
-            <LayoutTemplate className="h-4 w-4" />
-          </CirculoDoIcone>
           Fluxos
         </h2>
         <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar fluxo" rotulo="Buscar fluxo" className="mb-2 w-full sm:w-56" />

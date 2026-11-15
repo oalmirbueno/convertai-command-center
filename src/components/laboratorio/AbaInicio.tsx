@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, FolderOpen, Wallet, Workflow } from "lucide-react";
+import { FolderOpen, Wallet, Workflow } from "lucide-react";
 import { espaco, juntar, lista as estiloDaLista, superficie, texto } from "@/components/sistema";
 import { MiniBars, ProgressBar } from "@/components/ds";
 import { usd } from "@/lib/mesa/api";
@@ -72,10 +72,7 @@ function LinhaDeRecente({ p, clientes, onAbrir }: { p: ProjetoDoLab; clientes: C
           </span>
         </span>
         {quando ? (
-          <span className="ml-2 inline-flex h-6 shrink-0 items-center rounded-full border border-border px-2 text-[11px] font-medium tabular-nums text-muted-foreground">
-            <CalendarDays className="mr-1 h-3 w-3" aria-hidden="true" />
-            {quando}
-          </span>
+          <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">{quando}</span>
         ) : null}
       </button>
     </li>
