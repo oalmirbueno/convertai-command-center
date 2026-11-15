@@ -568,6 +568,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useLayoutEffect(() => {
     const el = conteudoRef.current;
     if (el && el.scrollTop > 0) el.scrollTop = 0;
+    // No computador quem rola é a janela (hotfix): também volta ao topo.
+    if (window.scrollY > 0) window.scrollTo(0, 0);
     setRolou(false);
   }, [location.pathname]);
   const aoRolarConteudo = useCallback((e: React.UIEvent<HTMLElement>) => {
