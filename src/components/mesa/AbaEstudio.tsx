@@ -1,6 +1,5 @@
 import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ControlesDaPauta } from "./ControlesDaPauta";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -86,7 +85,7 @@ import EstudioEntrega from "./EstudioEntrega";
 import EstudioArteRapida, { type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
 // 22/10/2026: a peça de campanha aberta no Estúdio ganha "Voltar à campanha".
 import VoltarACampanha from "./VoltarACampanha";
-import { ModoDoEstudio, SeletorDeFormatoCompacto, SeletorDeQualidadeCompacto } from "./EstudioControles";
+import { LinhaDoAjuste, ModoDoEstudio, PainelDeAjustes, ROTULO_DA_QUALIDADE, SeletorDeFormatoCompacto, SeletorDeQualidadeCompacto } from "./EstudioControles";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA, tituloDoAviso } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import EstudioFotos from "./EstudioFotos";
@@ -142,6 +141,7 @@ import {
   proporcaoDoFormato,
   versaoForaDoFormato,
   type FormatoDoPost,
+  FORMATOS_DO_POST,
   enviarUmParaAprovacao,
   AVISO_CONTINUO_SEM_MODELO,
   gravarTrabalhoNoCache,
@@ -1405,20 +1405,20 @@ export function DetalheDoItem({
     </div>
   );
 
-  /** Pedido do dono (24/09): o diretor de arte à mão, para conversar sobre estilo, cenário e luz. */
+  /** Pedido do dono (24/09): o diretor de arte à mão, para conversar sobre estilo, cenário e luz (v4 E2: dentro dos Ajustes). */
   const botaoDoDiretor = (
     <Button
       type="button"
       size="sm"
       variant={ferramenta === "diretor" ? "secondary" : "ghost"}
-      className="h-8 w-8 shrink-0 p-0"
+      className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-[12px]"
       onClick={() => abrirFerramenta("diretor")}
       aria-pressed={ferramenta === "diretor"}
       aria-label="Conversar com o diretor"
       title="Diretor: converse com o diretor de arte para mudar o estilo, o cenário, a luz ou as cores. Ele lê o conteúdo e propõe mudanças que você aplica com um clique."
     >
-      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"). */}
       <MessageSquare className="h-4 w-4" aria-hidden="true" />
+      Conversar
     </Button>
   );
 
@@ -1439,7 +1439,8 @@ export function DetalheDoItem({
             // Gerar mostra a contagem ao lado do ícone e o preço continua.
             <>
               {semImagem.length ? <Wand2 className="h-4 w-4" aria-hidden="true" /> : <RotateCw className="h-4 w-4" aria-hidden="true" />}
-              {semImagem.length > 0 && <span className="tabular-nums" aria-hidden="true">{semImagem.length}</span>}
+              {/* v4 E2: a ação principal com nome (Gerar 5), verde vivo; Refazer segue só o ícone. */}
+              {semImagem.length > 0 && <span className="tabular-nums" aria-hidden="true">Gerar {semImagem.length}</span>}
               <span className="sr-only">
                 {semImagem.length
                   ? semImagem.length === cardsDaDirecao.length
@@ -1457,7 +1458,7 @@ export function DetalheDoItem({
               : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
           fecharAoConfirmar
           variant={semImagem.length ? "default" : "ghost"}
-          className={colunas ? "h-8 gap-1 px-2 text-[12px]" : "h-8 gap-1 px-2 text-[12px] max-sm:h-11 max-sm:min-w-[120px] max-sm:px-4 max-sm:text-[13px]"}
+          className={colunas ? (semImagem.length ? "h-9 gap-1.5 rounded-full px-4 text-[13px] font-semibold" : "h-8 gap-1 px-2 text-[12px]") : "h-9 gap-1.5 rounded-full px-4 text-[13px] font-semibold max-sm:h-11 max-sm:min-w-[120px] max-sm:px-4 max-sm:text-[13px]"}
           disabled={ocupado || entregue || semTipografia}
           partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
@@ -1483,6 +1484,7 @@ export function DetalheDoItem({
   // Frente AE-3 (dono, 28/09: "uma linha no computador, duas no máximo em telas menores, sem cartão em volta"):
   // o item, os ajustes da geração, a ação principal e a tela cheia (só o ícone) numa faixa só, que quebra
   // em duas quando não cabe. Nenhuma função saiu: a explicação de cada chave está no "?" ou na dica.
+  const rotuloDoFormato = (FORMATOS_DO_POST.find((f) => f.valor === formato) || { rotulo: "4:5" }).rotulo;
   const barraDoItem = (
     <div className="shrink-0 border-b border-border">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5 sm:px-5" data-barra-do-item="">
@@ -1509,24 +1511,22 @@ export function DetalheDoItem({
             </p>
           </div>
         </div>
-        {/* Os ajustes da geração, do mesmo tamanho (h-8), lado a lado. */}
+        {/* v4 E2 (dono, 15/11: "muito poluído"): formato, qualidade, gerador, correção e estilo moram num botão só,
+            "Ajustes", que mostra o resumo (4:5 · Padrão). O Diretor saiu daqui porque já está no trilho de ferramentas. */}
         {estado === "producao" && (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1" data-ajustes-da-geracao="">
-            <div className="shrink-0" title="Formato do post (vale para todas as lâminas)">
+          <PainelDeAjustes
+            rotulo={`Ajustes da geração: ${rotuloDoFormato}, ${ROTULO_DA_QUALIDADE[qualidade].rotulo}`}
+            resumo={<><span className="tabular-nums">{rotuloDoFormato}</span><span aria-hidden="true" className="text-muted-foreground">·</span><span>{ROTULO_DA_QUALIDADE[qualidade].rotulo}</span></>}
+          >
+            <LinhaDoAjuste rotulo="Formato">
               <SeletorDeFormatoCompacto valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
-            </div>
-            {seletorDeQualidade}
-            {seletorDeGerador}
-            {botaoDoDiretor}
-            <Popover>
-              <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Ajustes da geração" title="Correção automática e estilo do cliente"><SlidersHorizontal className="h-4 w-4" /></Button></PopoverTrigger>
-              <PopoverContent align="end" className="w-80 space-y-3">
-                <p className="text-[13px] font-semibold">Ajustes da geração</p>
-                {chaveCorrigirSozinho}
-                {trabalho && <BotaoDoEstilo compacto trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="shrink-0" />}
-              </PopoverContent>
-            </Popover>
-          </div>
+            </LinhaDoAjuste>
+            <LinhaDoAjuste rotulo="Qualidade">{seletorDeQualidade}</LinhaDoAjuste>
+            <LinhaDoAjuste rotulo="Gerador">{seletorDeGerador}</LinhaDoAjuste>
+            <LinhaDoAjuste rotulo="Diretor de arte">{botaoDoDiretor}</LinhaDoAjuste>
+            <div className="border-t border-border pt-3">{chaveCorrigirSozinho}</div>
+            {trabalho && <BotaoDoEstilo compacto trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="shrink-0" />}
+          </PainelDeAjustes>
         )}
         {controlesDaPauta}
         {estado === "producao" && acaoPrincipal}

@@ -1,4 +1,5 @@
-import { ListChecks, Zap } from "lucide-react";
+import { ChevronDown, ListChecks, SlidersHorizontal, Zap } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { foco, juntar } from "@/components/sistema/estilos";
 import type { Qualidade } from "@/lib/mesa/api";
@@ -119,5 +120,76 @@ export function SeletorDeQualidadeCompacto({
       valor={valor}
       onEscolher={(v) => !disabled && onMudar(v as Qualidade)}
     />
+  );
+}
+
+/**
+ * v4 E2 (dono, 15/11: "muito poluído, uma ação principal"): os ajustes da geração (formato, qualidade,
+ * gerador, diretor, correção e estilo) num botão só com o resumo (4:5 · Padrão). O painel fica montado e
+ * só se esconde (classe), para os seletores de dentro manterem o estado e o leitor de tela/testes acharem
+ * cada controle pelo nome de sempre. Fecha com Esc ou clique fora (os menus dos seletores, que abrem em
+ * portal, contam como dentro).
+ */
+export function PainelDeAjustes({ resumo, rotulo, children }: { resumo: ReactNode; rotulo: string; children: ReactNode }) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      const alvo = e.target as Element | null;
+      if (!alvo || (caixa.current && caixa.current.contains(alvo))) return;
+      if (alvo.closest && alvo.closest("[data-radix-popper-content-wrapper],[role=listbox],[role=option]")) return;
+      setAberto(false);
+    };
+    const tecla = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setAberto(false);
+    };
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("mousedown", fora);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [aberto]);
+  return (
+    <div ref={caixa} className="relative shrink-0" data-ajustes-da-geracao="">
+      <button
+        type="button"
+        aria-expanded={aberto}
+        aria-label={rotulo}
+        title="Formato, qualidade, gerador, diretor, correção automática e estilo do cliente"
+        onClick={() => setAberto((v) => !v)}
+        className={juntar(
+          "toque-compacto inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-foreground transition-colors hover:bg-muted",
+          aberto && "bg-muted",
+          foco,
+        )}
+      >
+        <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
+        {resumo}
+        <ChevronDown className={juntar("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150", aberto && "rotate-180")} aria-hidden="true" />
+      </button>
+      <div
+        role="group"
+        aria-label="Ajustes da geração"
+        className={juntar(
+          "absolute right-0 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] space-y-3 rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18)]",
+          aberto ? "" : "hidden",
+        )}
+      >
+        <p className="text-[13px] font-semibold">Ajustes da geração</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Linha do painel de ajustes: rótulo cinza à esquerda, controle à direita. */
+export function LinhaDoAjuste({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3">
+      <span className="shrink-0 text-[12px] text-muted-foreground">{rotulo}</span>
+      <div className="flex min-w-0 justify-end">{children}</div>
+    </div>
   );
 }
