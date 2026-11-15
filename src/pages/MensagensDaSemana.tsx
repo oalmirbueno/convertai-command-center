@@ -31,7 +31,7 @@ import {
   superficie,
   texto,
 } from "@/components/sistema";
-import { ProgressBar, StatCard, StatGrid } from "@/components/ds";
+import { StatTrio } from "@/components/ds";
 
 /*
  * Mensagens da semana (26/10/2026): todas as mensagens prontas dos rituais de
@@ -228,21 +228,18 @@ export default function MensagensDaSemana() {
     const nomeCliente = nomeDe(m);
     return (
       <li key={m.chave} className={juntar(superficie.painel, "flex min-w-0 flex-col p-5 sm:p-6")} data-mensagem={m.situacao}>
-        <div className="flex min-w-0 items-center">
+        <div className="flex min-w-0 items-center max-sm:flex-wrap">
           <LogoDoCliente url={identidades.data?.get(m.clientId)?.profile_picture_url ?? null} clienteId={m.clientId} nome={nomeCliente} tamanho={44} className="mr-3" />
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 max-sm:basis-[calc(100%-56px)]">
             <p className="truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{nomeCliente}</p>
-            <p className={juntar(texto.auxiliar, "truncate")}>{NOME_DO_RITUAL[m.ritual] || m.report.title}</p>
+            <p className={juntar(texto.auxiliar, "flex min-w-0 items-center")} title={m.canal === "whatsapp" ? `WhatsApp · ${m.destinatario}` : "Portal do cliente"}>
+              <span className="mr-1.5 inline-flex shrink-0" aria-label={m.canal === "whatsapp" ? "WhatsApp" : "Portal"}>{m.canal === "whatsapp" ? <MessageCircle className="h-3.5 w-3.5" /> : <MonitorSmartphone className="h-3.5 w-3.5" />}</span>
+              <span className="min-w-0 truncate">{NOME_DO_RITUAL[m.ritual] || m.report.title}{m.canal === "whatsapp" && m.destinatario ? ` · ${m.destinatario}` : ""}</span>
+            </p>
           </div>
-          <span className="ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground" title={m.canal === "whatsapp" ? `WhatsApp · ${m.destinatario}` : "Portal do cliente"} aria-label={m.canal === "whatsapp" ? "WhatsApp" : "Portal"}>
-            {m.canal === "whatsapp" ? <MessageCircle className="h-4 w-4" /> : <MonitorSmartphone className="h-4 w-4" />}
-          </span>
+          <span className="ml-2 shrink-0 max-sm:ml-0 max-sm:mt-3 max-sm:w-full"><Situacao m={m} agora={agora} /></span>
         </div>
-        <div className="mt-4 flex min-w-0 items-center">
-          <Situacao m={m} agora={agora} />
-          {m.canal === "whatsapp" && <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>{m.destinatario}</span>}
-        </div>
-        <div className="mt-4 min-w-0">
+        <div className="mt-5 min-w-0">
           <Balao texto={decide ? textoDe(m) : m.report.summary || ""} canal={m.canal} hora={horaDe(m.report.created_at)} editada={decide && editada(m)} linhas={decide ? 6 : 4} />
         </div>
         {decide && (
@@ -262,7 +259,6 @@ export default function MensagensDaSemana() {
     <div className={juntar(larguraDaMesa, espaco.pagina, "pb-10")} data-mensagens-da-semana="">
       <CabecalhoDePagina
         titulo="Mensagens da semana"
-        descricao={`${mensagens.filter((m) => m.situacao === "pronta").length} prontas${vencidas ? ` · ${vencidas} ${vencidas === 1 ? "vencida" : "vencidas"}` : ""}`}
         ajuda="Todas as mensagens dos rituais de segunda, quarta e sexta, de todos os clientes. Edite o texto ou peça o ajuste ao agente, e aprove. No WhatsApp, o Hermes envia no grupo e registra; no portal, a aprovação já publica. Pular registra que esta não vai. Nada sai sem você."
         voltar={{ para: "/central", rotulo: "Central" }}
         className="max-sm:[&>div:first-child]:max-w-[calc(100%-96px)] max-sm:[&>div:first-child]:flex-none max-sm:[&>[data-acoes-do-cabecalho]]:justify-end max-sm:[&_h1]:text-[20px]"
@@ -270,7 +266,7 @@ export default function MensagensDaSemana() {
           <button type="button" onClick={() => void atualizar()} className={botao.icone} title="Atualizar" aria-label="Atualizar"><RefreshCw className={juntar("h-4 w-4", (pedidos.isFetching || rascunhos.isFetching) && "animate-spin")} aria-hidden="true" /></button>
           {prontas.length > 1 && (
             <BotaoComIcone
-              variante={confirmarTodas ? "primario" : "secundario"}
+              variante="primario"
               icone={emLote ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
               rotulo={emLote ? `Aprovando ${emLote.feitas}/${emLote.total}` : confirmarTodas ? `Confirmar: aprovar ${prontas.length}` : `Aprovar todas (${prontas.length})`}
               onClick={() => void aprovarTodas()}
@@ -284,11 +280,9 @@ export default function MensagensDaSemana() {
       {carregando ? (
         // O mesmo espaço dos números e dos cartões que chegam: as Cobranças, embaixo, não pulam.
         <div aria-busy="true" aria-label="Carregando as mensagens da semana" className={espaco.pagina} data-esqueleto-das-mensagens="">
-          <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3">
-            {[0, 1, 2].map((i) => <div key={i} className={juntar("animate-pulse rounded-lg bg-muted motion-reduce:animate-none lg:h-[192px]", i === 0 ? "col-span-2 h-[160px] lg:col-span-1" : "h-[162px]")} />)}
-          </div>
+          <div className="h-[52px] w-[260px] max-w-full animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
           <div className={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4")}>
-            {[0, 1, 2].map((i) => <div key={i} className={juntar("h-[440px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none", i > 0 && "max-sm:hidden", i > 1 && "max-xl:hidden")} />)}
+            {[0, 1, 2].map((i) => <div key={i} className={juntar("h-[330px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none max-sm:h-[640px]", i > 0 && "max-sm:hidden", i > 1 && "max-xl:hidden")} />)}
           </div>
         </div>
       )
@@ -300,18 +294,14 @@ export default function MensagensDaSemana() {
                 const paraAprovar = mensagens.filter((m) => m.situacao === "pronta").length;
                 const aprovadas = mensagens.filter((m) => m.situacao === "aprovada").length;
                 return (
-                  <StatGrid cols={3} label="Mensagens da semana em números" className="max-lg:[&>*:first-child]:col-span-2">
-                    <StatCard variant="ink" size="xl" label="Para aprovar" value={paraAprovar} icon={<Send className="h-4 w-4" />} hint={paraAprovar === 1 ? "mensagem pronta" : "mensagens prontas"} />
-                    <StatCard size="xl" label="Vencidas" value={vencidas} icon={<AlertTriangle className="h-4 w-4" />} hint={vencidas ? "passaram do prazo" : "nenhuma atrasada"} />
-                    <StatCard
-                      variant="accent"
-                      size="xl"
-                      label="Aprovadas"
-                      value={`${aprovadas}/${mensagens.length}`}
-                      icon={<CheckCheck className="h-4 w-4" />}
-                      chart={<ProgressBar value={aprovadas} max={mensagens.length} tone="current" label={`${aprovadas} de ${mensagens.length} mensagens aprovadas`} />}
-                    />
-                  </StatGrid>
+                  <StatTrio
+                    label="Mensagens da semana em números"
+                    items={[
+                      { label: "Para aprovar", value: paraAprovar, hint: paraAprovar === 1 ? "pronta" : "prontas" },
+                      { label: "Vencidas", value: vencidas, hint: vencidas ? "fora do prazo" : undefined },
+                      { label: "Aprovadas", value: `${aprovadas}/${mensagens.length}` },
+                    ]}
+                  />
                 );
               })()}
               {SECOES.map((s) => {

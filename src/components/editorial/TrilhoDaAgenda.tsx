@@ -108,7 +108,10 @@ export default function TrilhoDaAgenda({
   const feitos = doDia.filter((l) => l.publicado).length;
 
   return (
-    <aside className="hidden w-[272px] shrink-0 xl:block" aria-label="Mês em miniatura e o dia" data-trilho-da-agenda="">
+    // Rolagem (S1, 15/11): a lateral tem a altura do calendário ao lado (estica na linha e não empurra a
+    // altura dela) e rola por dentro, com barra fina; só existe de 1280 px para cima, onde a página não rola.
+    <aside className="relative hidden w-[272px] shrink-0 self-stretch xl:block" aria-label="Mês em miniatura e o dia" data-trilho-da-agenda="">
+      <div className="rolagem-fina absolute -inset-x-2 -top-1 bottom-0 overflow-y-auto overflow-x-hidden px-2 pb-3 pt-1" data-rolagem-do-trilho="">
       <div className={juntar(superficie.painel, superficie.tinta, "p-5")}>
         <div className="mb-3 flex items-center">
           <p className="min-w-0 flex-1 truncate text-[15px] font-medium leading-6 tracking-[-0.01em] first-letter:uppercase">
@@ -171,7 +174,7 @@ export default function TrilhoDaAgenda({
         ) : doDia.length === 0 ? (
           <p className="ds-hatch flex h-[84px] items-center justify-center rounded-md text-[12px] leading-4 text-muted-foreground">Nada marcado</p>
         ) : (
-          <ul className="-mx-2 max-h-[220px] min-w-0 overflow-y-auto overscroll-contain">
+          <ul className="-mx-2 min-w-0">
             {doDia.map((l) => <LinhaDoDia key={l.id} linha={l} onAbrir={onAbrir} />)}
           </ul>
         )}
@@ -185,6 +188,7 @@ export default function TrilhoDaAgenda({
           </ul>
         </div>
       )}
+      </div>
     </aside>
   );
 }

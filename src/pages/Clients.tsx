@@ -48,7 +48,7 @@ import {
   useEstadoDaTela,
   useReservaFlutuante,
 } from "@/components/sistema";
-import { CardSurface, Chip, ProgressBar, StatCard, StatusDot, StatusPill } from "@/components/ds";
+import { CardSurface, Chip, OverflowMenu, ProgressBar, StatCard, StatusDot, StatusPill } from "@/components/ds";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
@@ -1474,18 +1474,22 @@ export default function Clients() {
           <Rows3 className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
-      <button type="button" onClick={() => navigate("/ver-como-cliente")} className={botao.icone} aria-label="Ver como cliente" title="Ver como cliente">
-        <Eye className="h-4 w-4" aria-hidden="true" />
-      </button>
-      <button type="button" onClick={() => setBriefingOpen(true)} data-tour="clients-briefing-btn" className={botao.icone} aria-label="Link do briefing" title="Link do briefing">
-        <Link2 className="h-4 w-4" aria-hidden="true" />
-      </button>
-      {/* No celular o Novo cliente é o "+" flutuante (16/10/2026). */}
+      {/* v4 C2: uma ação verde (Novo cliente); ver como cliente e link do briefing no "…". */}
       {!isMobile && (
-        <button type="button" onClick={() => setCreateOpen(true)} data-tour="clients-create-btn" className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label="Novo cliente" title="Novo cliente">
-          <UserPlus className="h-4 w-4" aria-hidden="true" />
+        <button type="button" onClick={() => setCreateOpen(true)} data-tour="clients-create-btn" className={botao.primario} aria-label="Novo cliente">
+          <UserPlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Novo cliente
         </button>
       )}
+      <span data-tour="clients-briefing-btn" className="inline-flex">
+      <OverflowMenu
+        label="Mais ações de clientes"
+        items={[
+          { label: "Ver como cliente", icon: <Eye className="h-4 w-4" />, onSelect: () => navigate("/ver-como-cliente") },
+          { label: "Link do briefing", icon: <Link2 className="h-4 w-4" />, onSelect: () => setBriefingOpen(true) },
+        ]}
+      />
+      </span>
     </>
   ) : null;
 

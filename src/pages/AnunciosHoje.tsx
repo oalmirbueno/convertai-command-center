@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle, ArrowRight, Bot, CalendarClock, CheckCircle2, ExternalLink, FileText, History, ListChecks, Megaphone, RefreshCw, Users, Wallet,
+  AlertTriangle, ArrowRight, Bot, CheckCircle2, ChevronDown, ExternalLink, FileText, History, ListChecks, Megaphone, RefreshCw, Users, Wallet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -15,7 +15,6 @@ import {
   EstadoVazio,
   JanelaCentral,
   MenuMais,
-  Secao,
   SeletorCompacto,
   botao,
   espaco,
@@ -235,10 +234,10 @@ export default function AnunciosHoje() {
         acoes={<>
           {/* Celular: o seletor fica só com o ícone (o nome do cliente já está nos cartões). O secundário mora no "…". */}
           {todos.length > 1 && <SeletorCompacto opcoes={opcoesDeCliente} valor={cliente} onEscolher={(v) => { setCliente(v); setPagina(1); }} rotulo="Filtrar por cliente" modo="lista" icone={<Users className="h-3.5 w-3.5" />} className={juntar("max-w-[240px] max-sm:px-3 max-sm:[&>span.truncate]:hidden", cliente && "max-sm:border-foreground")} />}
-          <button type="button" onClick={atualizar} className={botao.icone} title="Atualizar" aria-label="Atualizar"><RefreshCw className={juntar("h-4 w-4", (boletins.isFetching || acoes.isFetching || campanhas.isFetching) && "animate-spin")} aria-hidden="true" /></button>
           <MenuMais
             rotulo="Mais ações dos anúncios"
             itens={[
+              { rotulo: "Atualizar", icone: <RefreshCw className="h-3.5 w-3.5" />, aoEscolher: atualizar },
               { rotulo: "Todas as mudanças nas contas", icone: <ListChecks className="h-3.5 w-3.5" />, aoEscolher: () => setMudancasDe("") },
               { rotulo: "Abrir Anúncios", icone: <Megaphone className="h-3.5 w-3.5" />, dica: "Contas e campanhas", aoEscolher: () => navigate("/anuncios") },
             ]}
@@ -248,14 +247,13 @@ export default function AnunciosHoje() {
 
       {/* Enquanto lê: o mesmo espaço dos números e do boletim, para nada pular quando chegam. */}
       {carregando && <EsqueletoDosNumeros />}
-      {boletins.isLoading && <div aria-hidden="true" className="h-[90px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />}
+      {boletins.isLoading && <div aria-hidden="true" className="h-[72px] animate-pulse rounded-[28px] bg-muted motion-reduce:animate-none" />}
 
       {!carregando && !campanhas.error && todos.length > 0 && (
         <div data-numeros-da-carteira="" role="group" aria-label="Números da carteira">
           <StatGrid cols={4}>
             <StatCard
               variant="ink"
-              size="xl"
               label="Gasto hoje"
               value={brl(carteira.gastoHoje)}
               icon={<Wallet className="h-4 w-4" />}
@@ -264,44 +262,43 @@ export default function AnunciosHoje() {
             />
             <StatCard
               variant="accent"
-              size="xl"
               label="Resultados em 7 dias"
               value={carteira.resultados.toLocaleString("pt-BR")}
               icon={<CheckCircle2 className="h-4 w-4" />}
               hint={`${brl(carteira.gastoSemana)} investidos`}
             />
-            <StatCard size="xl" label="Custo médio" value={carteira.custoMedio === null ? "-" : brl(carteira.custoMedio, true)} icon={<Megaphone className="h-4 w-4" />} hint="por resultado, 7 dias" />
-            <StatCard size="xl" label="Pede você" value={String(carteira.alertas)} icon={<AlertTriangle className="h-4 w-4" />} hint={carteira.alertas ? "saldo, proposta, campanha, custo" : "tudo em ordem"} />
+            <StatCard label="Custo médio" value={carteira.custoMedio === null ? "-" : brl(carteira.custoMedio, true)} icon={<Megaphone className="h-4 w-4" />} hint="por resultado, 7 dias" />
+            <StatCard label="Pede você" value={String(carteira.alertas)} icon={<AlertTriangle className="h-4 w-4" />} hint={carteira.alertas ? "saldo, proposta, campanha, custo" : "tudo em ordem"} />
           </StatGrid>
         </div>
       )}
 
       {/* Boletim do agente: uma linha; abre o resumo curto. */}
       {(ultimo || boletins.data?.ausente || boletins.error) && (
-        <div className={juntar(superficie.painel, "min-w-0 px-4 py-3 sm:px-5")} data-boletim-linha="">
+        <div className={juntar("min-w-0 border border-border bg-card px-2 py-1.5 shadow-card", boletimAberto || !ultimo ? "rounded-lg" : "rounded-[28px]")} data-boletim-linha="">
           {boletins.error ? <EstadoDeErro titulo="Não foi possível ler o boletim." descricao={(boletins.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void boletins.refetch()}>Tentar de novo</button>} />
             : !ultimo ? <EstadoVazio compacto titulo="O boletim ainda não chega a este painel." descricao="Falta ligar a gravação do boletim no servidor." />
               : <>
                 <div className="flex min-w-0 items-center">
-                  <button type="button" onClick={() => setBoletimAberto(!boletimAberto)} aria-expanded={boletimAberto} className={juntar(lista.linha, "-ml-2 flex-1 text-left")} title={boletimAberto ? "Recolher o boletim" : "Abrir o resumo do boletim"}>
-                    <span className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground text-background"><FileText className="h-4 w-4" aria-hidden="true" /></span>
+                  <button type="button" onClick={() => setBoletimAberto(!boletimAberto)} aria-expanded={boletimAberto} className={juntar(lista.linha, "flex-1 rounded-full text-left")} title={boletimAberto ? "Recolher o boletim" : "Abrir o resumo do boletim"}>
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background"><FileText className="h-4 w-4" aria-hidden="true" /></span>
                     <span className="shrink-0 text-[15px] font-semibold leading-5 text-foreground">{nomeDoPeriodo(ultimo.periodo)}</span>
                     <span className={juntar(texto.auxiliar, "ml-2 hidden shrink-0 sm:inline")}>{quando(ultimo.criado_em)}</span>
-                    {!boletimAberto && ultimo.resumo && <span className={juntar(texto.auxiliar, "ml-3 min-w-0 flex-1 truncate")}>{ultimo.resumo}</span>}
-                    {boletimAberto && <span className="flex-1" />}
+                    {!boletimAberto && ultimo.resumo && <span className={juntar(texto.auxiliar, "ml-3 min-w-0 flex-1 truncate max-sm:hidden")}>{ultimo.resumo}</span>}
+                    <span className={juntar("flex-1", !boletimAberto && ultimo.resumo && "sm:hidden")} />
                     {ultimo.alertas.length > 0 && <span className={juntar(etiqueta, "ml-2", TOM_DO_NIVEL[ultimo.alertas[0].nivel])}>{ultimo.alertas.length} {ultimo.alertas.length === 1 ? "alerta" : "alertas"}</span>}
                   </button>
                   {(boletins.data?.linhas.length ?? 0) > 1 && <button type="button" onClick={() => setHistoricoAberto(true)} className={juntar(botao.icone, "ml-1")} title={`Boletins anteriores (${(boletins.data?.linhas.length ?? 1) - 1})`} aria-label="Boletins anteriores"><History className="h-4 w-4" aria-hidden="true" /></button>}
                 </div>
-                {boletimAberto && <div className="mt-3 min-w-0 pb-2 sm:pl-[52px]"><ResumoDoBoletim boletim={ultimo} nomeDe={nomeDe} alertas={alertasGerais} aoLerCompleto={() => setAberto(ultimo)} /></div>}
+                {boletimAberto && <div className="mt-2 min-w-0 px-3 pb-3 sm:pl-[60px]"><ResumoDoBoletim boletim={ultimo} nomeDe={nomeDe} alertas={alertasGerais} aoLerCompleto={() => setAberto(ultimo)} /></div>}
               </>}
         </div>
       )}
 
-      <Secao titulo="Clientes" recolher="anuncios-hoje:clientes">
+      <div className="min-w-0" data-clientes-dos-anuncios="">
         {carregando ? (
           <div aria-busy="true" aria-label="Lendo as contas de anúncio" className={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-3")}>
-            {[0, 1, 2].map((i) => <div key={i} className={juntar("h-[480px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none", i > 0 && "max-sm:hidden", i > 1 && "max-xl:hidden")} />)}
+            {[0, 1, 2].map((i) => <div key={i} className={juntar("h-[350px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none", i > 0 && "max-sm:hidden", i > 1 && "max-xl:hidden")} />)}
           </div>
         )
           : campanhas.error ? <EstadoDeErro titulo="Não foi possível ler as campanhas." descricao={(campanhas.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void campanhas.refetch()}>Tentar de novo</button>} />
@@ -324,7 +321,7 @@ export default function AnunciosHoje() {
                   </button>
                 )}
               </>}
-      </Secao>
+      </div>
 
       <JanelaCentral
         aberta={mudancasDe !== null}
@@ -478,22 +475,27 @@ function CartaoDeAnuncio({ cartao: c, nome, logo, aoVerMudancas }: { cartao: Car
   const urgentes = c.alertas.filter((a) => a.nivel !== "info");
   const a = c.ultimaAcao;
 
+  const fora = c.campanhas.filter((k) => k.situacao !== "ativa").length;
+  const [aberto, setAberto] = useState(false);
+
   return (
     <li className={juntar(superficie.painel, "flex min-w-0 flex-col p-5 sm:p-6")} data-cartao-de-anuncio={c.clientId}>
-      {/* Cabeçalho: logo, nome e o que pede atenção. */}
+      {/* Cabeçalho: logo, nome, o que pede atenção e o "…". */}
       <div className="flex min-w-0 items-center">
         <LogoDoCliente url={logo} clienteId={c.clientId} nome={nome} tamanho={44} className="mr-3" />
         <p className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")} title={nome}>{nome}</p>
         {c.saldoBaixo && <Wallet className="ml-2 h-4 w-4 shrink-0 text-destructive" aria-label="Saldo baixo" />}
         {urgentes.length > 0 && <AlertTriangle className={juntar("ml-2 h-4 w-4 shrink-0", urgentes.some((x) => x.nivel === "critico") ? "text-destructive" : "text-warning")} aria-label={urgentes.map((x) => x.texto).join("; ")} />}
+        <MenuMais
+          className="ml-1"
+          rotulo={`Mais ações de ${nome}`}
+          itens={[{ rotulo: "Mudanças deste cliente", icone: <History className="h-3.5 w-3.5" />, aoEscolher: aoVerMudancas }]}
+        />
       </div>
 
-      {/* Gasto contra o teto, com o desenho da semana ao lado. */}
+      {/* Gasto de hoje contra o teto, com o desenho da semana ao lado. */}
       <div className="mt-5 flex min-w-0 items-end">
-        <div className="min-w-0 flex-1 space-y-3.5">
-          <Medida rotulo="Hoje" valor={c.gastoHoje} teto={c.tetoDia} />
-          <Medida rotulo="7 dias" valor={c.gastoSemana} teto={c.tetoSemana} />
-        </div>
+        <div className="min-w-0 flex-1"><Medida rotulo="Hoje" valor={c.gastoHoje} teto={c.tetoDia} /></div>
         <div className="ml-5"><MiniBarras serie={c.serie} /></div>
       </div>
 
@@ -514,48 +516,60 @@ function CartaoDeAnuncio({ cartao: c, nome, logo, aoVerMudancas }: { cartao: Car
         </div>
       </div>
 
-      {/* Campanhas (até 3) e saldo. */}
-      <ul className="mt-4 min-w-0 space-y-2" aria-label={`Campanhas de ${nome}`}>
-        {c.campanhas.slice(0, 3).map((k) => (
-          <li key={k.chave} className={juntar(texto.auxiliar, "flex min-w-0 items-center")} data-campanha={k.situacao}>
-            <span className={juntar("mr-2.5 h-2 w-2 shrink-0 rounded-full", PONTO_DA_SITUACAO[k.situacao])} aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate text-foreground" title={k.nome}>{k.nome}</span>
-            <span className={juntar("ml-2 shrink-0", k.situacao === "terminada" ? "text-destructive" : k.situacao === "terminando" ? "text-warning" : "")}>{situacaoEmTexto(k.situacao, k.fim)}</span>
-          </li>
-        ))}
-        {c.campanhas.length > 3 && <li className={texto.auxiliar}>+{c.campanhas.length - 3} {c.campanhas.length - 3 === 1 ? "campanha" : "campanhas"}</li>}
-      </ul>
-      {c.saldo !== null && (
-        <p className={juntar(texto.auxiliar, "mt-3 flex min-w-0 items-center", c.saldoBaixo && "text-destructive")} data-saldo={c.saldoBaixo ? "baixo" : "ok"}>
-          <Wallet className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 truncate">Saldo {brl(c.saldo, true)}{c.diasQueCobre !== null ? ` · cobre ${String(c.diasQueCobre).replace(".", ",")} ${c.diasQueCobre === 1 ? "dia" : "dias"}` : ""}</span>
-        </p>
-      )}
-
-      {/* A última mudança do agente: antes → depois, com prova. */}
-      <div className="mt-4 min-w-0 rounded-md bg-muted/60 px-4 py-3" data-ultima-mudanca="">
-        {a ? (
-          <>
-            <p className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
-              <Bot className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate">{a.quem} · {quando(a.quando)}</span>
-              {a.provaUrl && <a href={a.provaUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex shrink-0 items-center text-primary" title="Abrir a prova" aria-label="Abrir a prova"><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></a>}
-              <button type="button" onClick={aoVerMudancas} className="ml-2 inline-flex shrink-0 items-center hover:text-foreground" title="Todas as mudanças deste cliente" aria-label={`Todas as mudanças de ${nome}`}><History className="h-3.5 w-3.5" aria-hidden="true" /></button>
-            </p>
-            <p className={juntar(texto.corpo, "mt-1 min-w-0 truncate")} title={a.motivo || undefined}><span className="font-medium">{a.acao}</span> <span className="text-muted-foreground">{a.alvoNome}</span></p>
-            {(a.antes || a.depois) && <AntesDepois antes={a.antes} depois={a.depois} />}
-          </>
-        ) : (
-          <p className={juntar(texto.auxiliar, "flex items-center")}><CheckCircle2 className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />Nenhuma mudança do agente ainda</p>
-        )}
+      {/* Uma ação à vista; o detalhe (semana, campanhas, saldo, última mudança) abre embaixo. */}
+      <div className="mt-5 flex min-w-0 items-center">
+        <Link to={destino} className={juntar(acao.primaria ? botao.primario : botao.secundario, "h-10 min-w-0")} data-acao-do-cartao="">
+          {acao.icone}<span className="min-w-0 truncate">{acao.rotulo}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setAberto(!aberto)}
+          aria-expanded={aberto}
+          className={juntar(botao.discreto, "ml-auto h-10 shrink-0 pr-2.5", fora > 0 && "text-warning")}
+          title={aberto ? "Recolher o detalhe" : "Semana, campanhas, saldo e a última mudança"}
+        >
+          {c.campanhas.length} {c.campanhas.length === 1 ? "campanha" : "campanhas"}
+          <ChevronDown className={juntar("ml-1 h-4 w-4 transition-transform duration-200", aberto && "rotate-180")} aria-hidden="true" />
+        </button>
       </div>
 
-      {/* Uma ação. */}
-      <div className="mt-auto flex min-w-0 items-center pt-5">
-        <Link to={destino} className={juntar(acao.primaria ? botao.primario : botao.secundario, "h-9")} data-acao-do-cartao="">
-          {acao.icone}{acao.rotulo}
-        </Link>
-        {c.campanhas.some((k) => k.situacao !== "ativa") && <CalendarClock className="ml-auto h-4 w-4 shrink-0 text-warning" aria-label="Campanha terminando ou terminada" />}
+      <div hidden={!aberto} className="mt-4 min-w-0" data-detalhe-do-cartao="">
+        <Medida rotulo="7 dias" valor={c.gastoSemana} teto={c.tetoSemana} />
+
+        {/* Campanhas (até 3) e saldo. */}
+        <ul className="mt-4 min-w-0 space-y-2" aria-label={`Campanhas de ${nome}`}>
+          {c.campanhas.slice(0, 3).map((k) => (
+            <li key={k.chave} className={juntar(texto.auxiliar, "flex min-w-0 items-center")} data-campanha={k.situacao}>
+              <span className={juntar("mr-2.5 h-2 w-2 shrink-0 rounded-full", PONTO_DA_SITUACAO[k.situacao])} aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-foreground" title={k.nome}>{k.nome}</span>
+              <span className={juntar("ml-2 shrink-0", k.situacao === "terminada" ? "text-destructive" : k.situacao === "terminando" ? "text-warning" : "")}>{situacaoEmTexto(k.situacao, k.fim)}</span>
+            </li>
+          ))}
+          {c.campanhas.length > 3 && <li className={texto.auxiliar}>+{c.campanhas.length - 3} {c.campanhas.length - 3 === 1 ? "campanha" : "campanhas"}</li>}
+        </ul>
+        {c.saldo !== null && (
+          <p className={juntar(texto.auxiliar, "mt-3 flex min-w-0 items-center", c.saldoBaixo && "text-destructive")} data-saldo={c.saldoBaixo ? "baixo" : "ok"}>
+            <Wallet className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate">Saldo {brl(c.saldo, true)}{c.diasQueCobre !== null ? ` · cobre ${String(c.diasQueCobre).replace(".", ",")} ${c.diasQueCobre === 1 ? "dia" : "dias"}` : ""}</span>
+          </p>
+        )}
+
+        {/* A última mudança do agente: antes → depois, com prova. */}
+        <div className="mt-4 min-w-0 rounded-md bg-muted/60 px-4 py-3" data-ultima-mudanca="">
+          {a ? (
+            <>
+              <p className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+                <Bot className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{a.quem} · {quando(a.quando)}</span>
+                {a.provaUrl && <a href={a.provaUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex shrink-0 items-center text-primary" title="Abrir a prova" aria-label="Abrir a prova"><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></a>}
+              </p>
+              <p className={juntar(texto.corpo, "mt-1 min-w-0 truncate")} title={a.motivo || undefined}><span className="font-medium">{a.acao}</span> <span className="text-muted-foreground">{a.alvoNome}</span></p>
+              {(a.antes || a.depois) && <AntesDepois antes={a.antes} depois={a.depois} />}
+            </>
+          ) : (
+            <p className={juntar(texto.auxiliar, "flex items-center")}><CheckCircle2 className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />Nenhuma mudança do agente ainda</p>
+          )}
+        </div>
       </div>
     </li>
   );

@@ -69,7 +69,7 @@ export default function Card({
       titulo={title && icon ? (
         <span className="flex min-w-0 items-center">
           <span aria-hidden="true" className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">{icon}</span>
-          <span className="min-w-0 truncate">{title}</span>
+          <span className="min-w-0 line-clamp-2 break-words [text-wrap:balance]">{title}</span>
         </span>
       ) : title}
       descricao={subtitle}

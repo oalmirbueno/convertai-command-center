@@ -7,11 +7,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   KeyRound, Link2, Server, Plus, Eye, EyeOff, Copy, ExternalLink,
-  Pencil, Trash2, Loader2, Globe, Bot, ShieldCheck,
+  Pencil, Trash2, Loader2, Globe, Bot,
 } from "lucide-react";
 import { agentesPodemUsar } from "@/hooks/usePedidosDeAcesso";
 import ConfirmModal from "@/components/ui/ConfirmModal";
-import { OverflowMenu, StatCard, StatGrid } from "@/components/ds";
+import { OverflowMenu, PillTabs } from "@/components/ds";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   CampoDeFormulario,
@@ -128,6 +128,8 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   // Ícone do site que não carregou: cai no globo (em vez de um quadrado vazio).
   const [semIcone, setSemIcone] = useState<Record<string, boolean>>({});
+  // v4 F2: as quatro caixas de números viraram abas em pílula que filtram o cofre (Tudo, Senhas, Links...).
+  const [abaDoCofre, setAbaDoCofre] = useState<string>("todos");
   const [saving, setSaving] = useState(false);
 
   const { data: items, isLoading, isError, refetch, isFetching } = useQuery({
@@ -215,6 +217,8 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
     { password: [], link: [], system: [] }
   );
 
+  // A aba escolhida some quando o grupo fica vazio: volta para "Tudo" em vez de mostrar o cofre vazio.
+  const abaCofre = abaDoCofre !== "todos" && !(grouped[abaDoCofre as Category] || []).length ? "todos" : abaDoCofre;
   const total = (items || []).length;
   const novoItem = canManage ? (
     <button type="button" onClick={() => setEditing({ category: "password" })} className={botao.primario}>
@@ -256,20 +260,25 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
               {novoItem}
             </div>
           )}
-          {/* Quantos acessos há em cada grupo: os mesmos números dos títulos dos grupos, grandes. */}
+          {/* Quantos acessos há em cada grupo, em abas com a contagem: tocar mostra só aquele grupo. */}
           {amplo && (
-          <StatGrid cols={4} className="mb-6 sm:mb-8" label="Resumo do cofre">
-            <StatCard variant="ink" label="Tudo" value={total} icon={<ShieldCheck className="h-4 w-4" />} />
-            {(Object.keys(CATEGORY_META) as Category[]).map((cat, i) => {
-              const M = CATEGORY_META[cat];
-              return <StatCard key={cat} variant={i === 0 ? "accent" : "default"} label={M.plural} value={(grouped[cat] || []).length} icon={<M.icon className="h-4 w-4" />} />;
-            })}
-          </StatGrid>
+            <PillTabs
+              className="mb-6 sm:mb-8"
+              label="Grupos do cofre"
+              value={abaCofre}
+              onChange={setAbaDoCofre}
+              tabs={[{ value: "todos", label: "Tudo", count: total }].concat(
+                (Object.keys(CATEGORY_META) as Category[])
+                  .filter((cat) => (grouped[cat] || []).length > 0)
+                  .map((cat) => ({ value: cat as string, label: CATEGORY_META[cat].plural, count: (grouped[cat] || []).length })),
+              )}
+            />
           )}
           <div className="space-y-6 sm:space-y-8">
             {(Object.keys(CATEGORY_META) as Category[]).map((cat) => {
               const list = grouped[cat];
               if (!list || list.length === 0) return null;
+              if (amplo && abaCofre !== "todos" && abaCofre !== cat) return null;
               return (
                 <GrupoDoCofre key={cat} clientId={clientId} categoria={cat} total={list.length}>
                   <ul className={juntar(espaco.grade, "grid-cols-1", amplo && "xl:grid-cols-2")}>

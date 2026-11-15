@@ -35,7 +35,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { CardSurface, Chip, PageHeader, ProgressBar, Sparkline, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
+import { CardSurface, Chip, OverflowMenu, PageHeader, PillTabs, ProgressBar, Sparkline, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 import { Bolha, Legenda } from "@/components/client/pecasOusadas";
 
 /** Rótulo curto dos sinais para o cartão estreito do celular (o texto inteiro continua na tela larga). */
@@ -487,6 +487,14 @@ export default function ClientJourneyUpdates() {
     [snapshot],
   );
 
+  // v4 F2 (passada estrutural): o que vem depois do retrato fica em abas, no lugar de sete seções empilhadas.
+  const [abaSalva, setAba] = useEstadoDaTela("onde-estamos:aba", "andamento", {
+    validar: (v) => v === "andamento" || v === "resultados" || v === "diario" || v === "atualizacoes",
+  });
+
+  // "Atualizações" só existe com rituais: sem eles, a aba salva volta para "Andamento".
+  const aba = abaSalva === "atualizacoes" && rituals.length === 0 ? "andamento" : abaSalva;
+
   // Todos os hooks já rodaram: agora sim o staff sem "Ver como Cliente" sai.
   if (deveRedirecionar) {
     return <Navigate to="/central" replace />;
@@ -497,19 +505,18 @@ export default function ClientJourneyUpdates() {
       title="Onde estamos"
       subtitle={narrative ? narrative.phase : undefined}
       help="O retrato do seu trabalho agora: o que já foi entregue, o que está em produção e qual é o próximo passo. Esta página se atualiza sozinha."
-      actions={ATALHOS.map((atalho) => (
-        <button
-          key={atalho.to}
-          type="button"
-          onClick={() => navigate(atalho.to)}
-          className={juntar(botao.secundario, "px-2.5 max-sm:h-8 max-sm:w-8 max-sm:px-0 sm:px-3.5")}
-          aria-label={atalho.label}
-          title={atalho.label}
-        >
-          <atalho.icon className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-          <span className="hidden sm:inline">{atalho.label}</span>
-        </button>
-      ))}
+      actions={
+        <>
+          <button type="button" onClick={() => navigate(ATALHOS[0].to)} className={botao.primario} aria-label={ATALHOS[0].label}>
+            <FileCheck className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">{ATALHOS[0].label}</span>
+          </button>
+          <OverflowMenu
+            label="Mais atalhos"
+            items={ATALHOS.slice(1).map((atalho) => ({ label: atalho.label, icon: <atalho.icon className="h-4 w-4" />, onSelect: () => navigate(atalho.to) }))}
+          />
+        </>
+      }
     />
   );
 
@@ -588,6 +595,19 @@ export default function ClientJourneyUpdates() {
         </Secao>
       )}
 
+      <PillTabs
+        label="Partes da página"
+        value={aba}
+        onChange={(v) => setAba(v)}
+        tabs={[
+          { value: "andamento", label: "Andamento" },
+          { value: "resultados", label: "Resultados" },
+          { value: "diario", label: "Diário" },
+          ...(rituals.length > 0 ? [{ value: "atualizacoes", label: "Atualizações", count: rituals.length }] : []),
+        ]}
+      />
+
+      {aba === "andamento" && (<>
       {/* ── O narrador do mês: a IA conta o mês com os fatos reais ── */}
       {clientId && <MonthNarrative clientId={clientId} recolhida={pequena} />}
       {clientId && <WeekBackstage clientId={clientId} recolhida={pequena} />}
@@ -675,6 +695,9 @@ export default function ClientJourneyUpdates() {
       {/* ── Instagram em números REAIS, coletados da Meta toda semana ── */}
       {clientId && <InstagramRealBlock clientId={clientId} recolhida={pequena} />}
 
+      </>)}
+
+      {aba === "resultados" && (<>
       {/* ── O case vivo: de onde saímos para onde chegamos ── */}
       {(() => {
         const projects = (snapshot?.projects || []) as any[];
@@ -929,6 +952,9 @@ export default function ClientJourneyUpdates() {
         );
       })()}
 
+      </>)}
+
+      {aba === "diario" && (<>
       {/* ── A história da parceria, capítulo a capítulo ── */}
       {clientId && <ClientHistory clientId={clientId} recolhida={pequena} />}
 
@@ -937,6 +963,9 @@ export default function ClientJourneyUpdates() {
         <ProjectJournal clientId={clientId} canWrite={false} />
       )}
 
+      </>)}
+
+      {aba === "atualizacoes" && (<>
       {/* ── Atualizações escritas pela Aceleriq ── */}
       {rituals.length > 0 && (
         <Secao divisoria titulo="Atualizações da Aceleriq" descricao={`${rituals.length} ${rituals.length === 1 ? "atualização" : "atualizações"}`}>
@@ -998,6 +1027,7 @@ export default function ClientJourneyUpdates() {
           </ul>
         </Secao>
       )}
+      </>)}
     </div>
   );
 }
