@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useClients, useProjects, useAllFiles } from "@/hooks/useSupabaseData";
@@ -399,6 +400,8 @@ function SelectDeCampo({
 }
 
 export default function AdminFiles() {
+  // Celular: a visualização vira lista suspensa (o segmentado de dois deixava a busca com 130 px).
+  const telaPequena = useTelaPequena();
   const { user, profile, loading: loadingAuth } = useAuth();
   const confirmDialog = useConfirm();
   const isStaff = profile?.role === "admin"
@@ -1595,6 +1598,7 @@ export default function AdminFiles() {
           acoes={
             <SeletorCompacto
               rotulo="Visualização"
+              modo={telaPequena ? "lista" : "segmentado"}
               valor={viewMode}
               onEscolher={(v) => setViewMode(v === "list" ? "list" : "grid")}
               opcoes={[

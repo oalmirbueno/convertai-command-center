@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { MessageCircle, Check, X, AlertTriangle, Zap, ArrowRight, Clock } from "lucide-react";
 import { AjudaRecolhida, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, espaco, juntar, superficie, texto } from "@/components/sistema";
-import { Card, CardSurface, Chip, List, ListRow, PageHeader, ProgressBar, StatCard, StatusPill, type Tone } from "@/components/ds";
+import { Card, CardSurface, Chip, List, ListRow, MiniBars, PageHeader, ProgressBar, StatCard, StatusPill, type Tone } from "@/components/ds";
 import { Bolha, type TomDaBolha } from "@/components/client/pecasOusadas";
 import { getProjectBrand } from "@/lib/brandHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -43,6 +43,8 @@ function receivedOf(row: any) {
 
 // DATE ("AAAA-MM-DD") lido como dia de calendário: `new Date(d)` mostrava o vencimento um dia antes em UTC-3.
 const formatDate = (d: string) => dataDoPortal(d);
+
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 /** Valor em reais com os centavos apagados e menores (o número que importa fica na frente). */
 function Dinheiro({ valor }: { valor: number }) {
@@ -248,6 +250,14 @@ export default function ClientFinanceiro() {
 
   // ===== RENDER =====
   const temRecargaPendente = pendingRecharges.length > 0;
+  // A próxima cobrança em aberto (a de vencimento mais próximo) e a série das últimas cobranças, da mais antiga
+  // à mais recente: tudo já está na lista "Pagamentos" desta tela; aqui só ganha destaque.
+  const proximaCobranca = [...(billing || [])]
+    .filter((b: any) => b.status === "pending" || b.status === "partial")
+    .sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date)))[0] as any;
+  const ultimasCobrancas = [...(billing || [])].sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date))).slice(-6);
+  const mostrarProxima = !temRecargaPendente && !!proximaCobranca;
+  const aoLadoDoPlano = temRecargaPendente || mostrarProxima;
   const corDoPlano = planStatus === "active" ? "text-primary" : planStatus === "warning" ? "text-warning" : "text-destructive";
   const iconeDoPagamento = (status: string, tone: Tone) =>
     status === "paid" ? <Check className="h-4 w-4" /> : tone === "danger" ? <AlertTriangle className="h-4 w-4" /> : <Clock className="h-4 w-4" />;
@@ -283,8 +293,8 @@ export default function ClientFinanceiro() {
       ) : (
       <>
       {/* ========== SEÇÃO 1: MEU PLANO (cartão de tinta) + SEÇÃO 3: RECARGAS PARA CONFIRMAR (cartão sólido) ========== */}
-      <div className={juntar(espaco.grade, "grid-cols-1 items-stretch", temRecargaPendente && "lg:grid-cols-5")}>
-        <Card title="Plano" variant="ink" collapsible={false} className={temRecargaPendente ? "lg:col-span-3" : undefined}>
+      <div className={juntar(espaco.grade, "grid-cols-1 items-stretch", aoLadoDoPlano && "lg:grid-cols-5")}>
+        <Card title="Plano" variant="ink" collapsible={false} className={aoLadoDoPlano ? "lg:col-span-3" : undefined}>
           {latestPlan ? (
             <>
               <div className="flex min-w-0 flex-wrap items-end justify-between">
@@ -321,6 +331,41 @@ export default function ClientFinanceiro() {
             <p className={texto.auxiliar}>Nenhum plano encontrado</p>
           )}
         </Card>
+
+        {mostrarProxima && (() => {
+          const st = statusDoPagamento(proximaCobranca.status, proximaCobranca.due_date);
+          const falta = proximaCobranca.status === "partial" ? Math.max(Number(proximaCobranca.amount) - receivedOf(proximaCobranca), 0) : Number(proximaCobranca.amount);
+          return (
+            <CardSurface variant="accent" padded className="flex flex-col lg:col-span-2" data-proxima-cobranca="">
+              <div className="flex min-w-0 items-center">
+                <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-foreground">
+                  <Clock className="h-4 w-4" />
+                </span>
+                <h2 className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-muted-foreground">Próximo pagamento</h2>
+                <StatusPill tone={st.tone} className="ml-2">{st.label}</StatusPill>
+              </div>
+              <p className="mt-5 text-[48px] font-semibold leading-[52px] tracking-[-0.04em] tabular-nums text-foreground max-sm:text-[36px] max-sm:leading-10">
+                <Dinheiro valor={falta} />
+              </p>
+              <p className="mt-1.5 min-w-0 text-[13px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                {proximaCobranca.description || typeLabels[proximaCobranca.type] || proximaCobranca.type} · vence em {formatDate(proximaCobranca.due_date)}
+              </p>
+              {ultimasCobrancas.length >= 3 && (
+                <div className="mt-auto min-w-0 pt-5">
+                  <MiniBars
+                    values={ultimasCobrancas.map((b: any) => Number(b.amount) || 0)}
+                    highlightIndex={ultimasCobrancas.findIndex((b: any) => b.id === proximaCobranca.id)}
+                    height={56}
+                    tone="current"
+                    showLabels
+                    labels={ultimasCobrancas.map((b: any) => MESES_CURTOS[Number(String(b.due_date).slice(5, 7)) - 1] || "")}
+                    label={`Valor das últimas ${ultimasCobrancas.length} cobranças; a próxima em destaque`}
+                  />
+                </div>
+              )}
+            </CardSurface>
+          );
+        })()}
 
         {temRecargaPendente && (
           <Card

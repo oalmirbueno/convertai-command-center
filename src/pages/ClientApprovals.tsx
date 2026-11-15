@@ -448,7 +448,7 @@ export default function ClientApprovals() {
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >
                 <CarouselPreview key={f.id} images={images} grande />
-                <span className="absolute left-3 top-3 z-[1] flex rounded-full bg-card shadow-card"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
+                <span className="absolute left-3 top-3 z-[1] flex rounded-full bg-card shadow-card [&>[data-status-pill]]:!bg-transparent"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
               </div>
               <div className="mt-4 min-w-0">
                 <p className="min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]">{f.file_name}</p>
@@ -527,7 +527,7 @@ export default function ClientApprovals() {
                     <CarouselPreview images={images} small />
                   </div>
                 </div>
-                <span className="absolute left-4 top-4 z-[1] flex rounded-full bg-card shadow-card"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
+                <span className="absolute left-4 top-4 z-[1] flex rounded-full bg-card shadow-card [&>[data-status-pill]]:!bg-transparent"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
                 <div className="min-w-0 p-5">
                   <p className="min-w-0 truncate text-[15px] font-semibold leading-5 text-foreground">{f.file_name}</p>
                   <p className={juntar(texto.auxiliar, "mt-1 truncate")}>

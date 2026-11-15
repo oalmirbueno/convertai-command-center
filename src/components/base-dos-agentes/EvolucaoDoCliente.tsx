@@ -55,7 +55,7 @@ export default function EvolucaoDoCliente({ clientes }: { clientes: { id: string
       }
       acao={
         clientes.length > 0 ? (
-          <select aria-label="Cliente" className={juntar(campo, "w-48")} value={clienteId} onChange={(e) => setEscolhido(e.target.value)}>
+          <select aria-label="Cliente" className={juntar(campo, "w-[104px] sm:w-48")} value={clienteId} onChange={(e) => setEscolhido(e.target.value)}>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         ) : undefined

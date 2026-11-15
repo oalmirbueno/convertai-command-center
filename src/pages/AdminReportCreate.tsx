@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -90,6 +91,8 @@ const CHART_TYPES = [
 ];
 
 export default function AdminReportCreate({ editId }: { editId?: string }) {
+  // Celular: o tipo de gráfico vira lista (o segmentado de três espremia o título do cartão para "G…").
+  const pequena = useTelaPequena();
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -472,6 +475,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
             action={
               <SeletorCompacto
                 rotulo="Tipo de gráfico"
+                modo={pequena ? "lista" : "segmentado"}
                 opcoes={CHART_TYPES.map((ct) => ({ valor: ct.value, rotulo: ct.label, icone: <ct.icon className="h-3.5 w-3.5" /> }))}
                 valor={chartType}
                 onEscolher={setChartType}

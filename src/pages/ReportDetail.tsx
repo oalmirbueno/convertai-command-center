@@ -693,7 +693,8 @@ export default function ReportDetail() {
       <div className="min-w-0">
         {botaoVoltar}
         <CabecalhoDePagina
-          titulo={report.title}
+          // Título do relatório inteiro à vista: quebra em até 3 linhas no celular em vez de cortar com reticências.
+          titulo={<span className="block whitespace-normal [overflow-wrap:anywhere] max-sm:line-clamp-3" title={report.title}>{report.title}</span>}
           descricao={descricao || undefined}
           ajuda={
             isClientView
@@ -783,8 +784,9 @@ export default function ReportDetail() {
                       valor={item.valor}
                       apoio={
                         <span className="block truncate">
-                          <span className="sm:hidden">{grupo.nome}{item.apoio ? " · " : ""}</span>
-                          {item.apoio}
+                          {/* Celular: só a categoria (o nome longo da métrica não cabe em meia largura e repete o rótulo). */}
+                          <span className="sm:hidden">{grupo.nome}</span>
+                          <span className="max-sm:hidden">{item.apoio}</span>
                         </span>
                       }
                     >
