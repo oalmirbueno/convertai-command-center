@@ -36,7 +36,7 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
         const titulo = tituloDaEtapa.getBoundingClientRect();
         const portal = tituloDaEtapa.closest(".membros-portal");
         const limiteDoMenu = window.innerWidth < 768
-          ? Math.max(0, ...Array.from(portal?.querySelectorAll(".membros-topo, .membros-menu") ?? [], (item) => item.getBoundingClientRect().bottom))
+          ? Math.max(0, ...Array.from(portal?.querySelectorAll(".membros-topo, .membros-menu") ?? [], (item) => { const caixa = item.getBoundingClientRect(); return caixa.top < window.innerHeight / 2 ? caixa.bottom : 0; }))
           : 0;
         const limiteSuperior = Math.max(0, limiteDoMenu, area?.top ?? 0);
         const limiteInferior = Math.min(window.innerHeight, area?.bottom ?? window.innerHeight);

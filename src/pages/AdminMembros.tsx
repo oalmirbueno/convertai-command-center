@@ -51,6 +51,7 @@ import { ProviderAparenciaMembros, BotaoAparenciaMembros } from "@/components/me
 import "@/components/membros/membros.css";
 import "@/components/membros/membros-experiencia.css";
 import "@/components/membros/membros-admin-experiencia.css";
+import "@/components/membros/membros-v4.css";
 
 const campo =
   "w-full min-h-11 rounded-lg bg-muted px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring";
