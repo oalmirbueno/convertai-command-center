@@ -39,7 +39,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { Card, CardSurface, Donut, List, ListRow, PageHeader, ProgressBar, StatCard, StatGrid, StatusPill, chartColor, type ChartTone, type Tone } from "@/components/ds";
+import { Card, CardSurface, Donut, List, ListRow, PageHeader, StatCard, StatGrid, StatusPill, chartColor, type ChartTone, type Tone } from "@/components/ds";
 import CircularProgress from "./CircularProgress";
 import { AvisoEmFaixa, Azulejo, Bolha, Legenda, Metrica, Trilha } from "./pecasOusadas";
 import { FadeUp, StaggerContainer } from "./motion";
@@ -520,15 +520,15 @@ export default function ClientJourneyDashboard({
             value={totalFiles}
             hint={approvedFiles ? `${approvedFiles} aprovada(s)` : "Aguardando decisões"}
             icon={<PackageCheck className="h-4 w-4" />}
-            chart={totalFiles > 0 ? <ProgressBar value={approvedFiles || 0} max={totalFiles} tone={1} label={`${approvedFiles || 0} de ${totalFiles} entregas aprovadas`} /> : undefined}
+            progress={totalFiles > 0 ? { value: approvedFiles || 0, max: totalFiles } : undefined}
           />
           <StatCard
             size="xl"
             label="Etapas concluídas"
             value={completedMilestonesCount}
-            hint={`${totalMilestones} etapa(s) no total`}
+            hint={`de ${totalMilestones} etapa(s)`}
             icon={<CheckCircle2 className="h-4 w-4" />}
-            chart={totalMilestones > 0 ? <ProgressBar value={completedMilestonesCount || 0} max={totalMilestones} tone={1} striped label={`${completedMilestonesCount || 0} de ${totalMilestones} etapas concluídas`} /> : undefined}
+            progress={totalMilestones > 0 ? { value: completedMilestonesCount || 0, max: totalMilestones } : undefined}
           />
           <StatCard
             size="xl"

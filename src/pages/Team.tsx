@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTeamMembers, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Avatar as Foto, CardSurface, MiniBars, PillTabs, SearchField, StatCard, StatGrid, StatusPill, Toolbar, type Tone } from "@/components/ds";
+import { Avatar as Foto, AvatarStack, CardSurface, MiniBars, PillTabs, SearchField, StatCard, StatGrid, StatusPill, Toolbar, type Tone } from "@/components/ds";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserPlus, Loader2, Trash2, Edit3, AlertTriangle, Check, Search, MoreHorizontal, Users, ListChecks, ShieldCheck, Building2 } from "lucide-react";
@@ -310,7 +310,7 @@ export default function Team() {
       {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a busca e a lista não pulam quando os números chegam. */}
       {((isLoading && !members) || (members && lista.length > 0)) && (
         <StatGrid cols={4} label="Números da equipe">
-          <StatCard variant="ink" icon={<Users className="h-4 w-4" />} label="Membros" value={members ? lista.length : "–"} hint={`${Object.keys(roleBadge).filter((r) => contagemPorPapel(r) > 0).length} papéis em uso`} />
+          <StatCard variant="ink" icon={<Users className="h-4 w-4" />} label="Membros" value={members ? lista.length : "–"} hint={`${Object.keys(roleBadge).filter((r) => contagemPorPapel(r) > 0).length} papéis em uso`} chart={members && lista.length > 1 ? <span className="flex justify-end"><AvatarStack people={lista.map((m: any) => ({ name: m.full_name, src: m.avatar_url }))} max={4} label="Pessoas da equipe" /></span> : undefined} chartPosition="side" />
           <StatCard
             variant="accent"
             icon={<ListChecks className="h-4 w-4" />}

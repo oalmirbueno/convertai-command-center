@@ -155,10 +155,10 @@ export default function BaseDosAgentes() {
             </optgroup>
           ))}
         </select>
-        <nav aria-label="Agentes" className="hidden min-w-0 space-y-4 lg:block">
+        <nav aria-label="Agentes" className={juntar(superficie.painel, "hidden min-w-0 space-y-4 self-start p-3 lg:block")}>
           {mesas.map(([mesa, lista]) => (
             <div key={mesa} className="min-w-0">
-              <p className={juntar(texto.rotulo, "mb-1 px-2")}>{mesa}</p>
+              <p className={juntar(texto.rotulo, "mb-1 px-3")}>{mesa}</p>
               <ul className="space-y-0.5">
                 {lista.map((a) => {
                   const r = resumo.data?.[a.chave];
@@ -170,13 +170,13 @@ export default function BaseDosAgentes() {
                         onClick={() => setChave(a.chave)}
                         aria-current={atual ? "true" : undefined}
                         className={juntar(
-                          "flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] transition-colors",
-                          atual ? "bg-secondary font-semibold text-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                          "flex w-full min-w-0 items-center rounded-full px-3 py-2 text-left text-[13px] transition-colors",
+                          atual ? "bg-foreground font-semibold text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         <GraduationCap className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden />
                         <span className="min-w-0 flex-1 truncate">{a.nome}</span>
-                        <span className="ml-2 shrink-0 text-[12px] tabular-nums">{r?.ativas ?? 0}</span>
+                        <span className={juntar("ml-2 inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums", atual ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground")}>{r?.ativas ?? 0}</span>
                       </button>
                     </li>
                   );
@@ -396,7 +396,7 @@ function CaixaDeEnsino({ agente, clientes, aoTerminar }: { agente: AgenteComBase
   ];
 
   return (
-    <div className="min-w-0 space-y-3" data-ensinar="">
+    <div className={juntar(superficie.painel, "min-w-0 space-y-3 p-4 sm:p-5")} data-ensinar="">
       <div className="-m-0.5 flex flex-wrap" role="tablist" aria-label="Como ensinar">
         {MODOS.map((m) => (
           <button
