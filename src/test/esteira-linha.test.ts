@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  CLIENTES_COM_DIA_PRIORITARIO_SUSPENSO_TEMPORARIAMENTE, clienteContaComoDiaPrioritario, dataDaPeca, decidirEtapa, diaCivilEmSP,
-  diaPrioritarioDefinido, diasDaSemana, linkDoCartao, meiaNoiteEmSP, montarGrade, msAteProximaMeiaNoiteSP, rotuloDaSemana,
-  rotuloDoFormato, segundaDaSemana, somarDias, type PecaFato,
+  CLIENTES_COM_DIA_PRIORITARIO_SUSPENSO_TEMPORARIAMENTE, aprovacaoDoClienteDispensada, clienteContaComoDiaPrioritario, dataDaPeca, decidirEtapa, diaCivilEmSP,
+  diaPrioritarioDefinido, diasDaSemana, linkDoCartao, meiaNoiteEmSP, montarGrade, msAteProximaMeiaNoiteSP, podeAbrirEstudio, rotuloDaSemana,
+  rotuloDoFormato, segundaDaSemana, somarDias, textoDaRevisaoInterna, type PecaFato, type RevisaoInterna,
 } from "@/lib/esteiraLinha/esteiraLinha";
-import { juntarPecas, type LinhasDaEsteiraLinha } from "@/lib/esteiraLinha/esteiraLinhaFatos";
+import { juntarPecas, revisaoDoTrabalho, type LinhasDaEsteiraLinha } from "@/lib/esteiraLinha/esteiraLinhaFatos";
 import { dataEmSP } from "@/lib/diaPrioritario";
 
 /**
@@ -322,5 +322,146 @@ describe("juntar as linhas em peças", () => {
     const p2 = pecas.find((p) => p.chave === "post:p2")!;
     expect(p2.publicacoes).toHaveLength(1);
     expect(dataDaPeca(p2)).toBe("2026-11-19");
+  });
+});
+
+// ------------------------------------------------------------------ fase 2
+
+const tarefaT1 = { id: "t1", status: "todo", due_date: "2026-11-17" };
+const revisao = (decisao: RevisaoInterna["decisao"], extra: Partial<RevisaoInterna> = {}): RevisaoInterna => ({ decisao, em: "2026-11-15T00:04:00Z", por: "u9", porNome: null, ...extra });
+
+describe("Double-Gate: a agência vem antes do cliente (P2 da fase 1)", () => {
+  it("entrega aguardando o cliente com o portão da agência pendente no arquivo fica em Revisão", () => {
+    const p = peca({ trabalho: { status: "entregue", entrega_status: "aguardando_cliente", temArquivo: true }, arquivos: [{ approval_status: "pending", agency_approval_status: "pending" }] });
+    expect(decidirEtapa(p)).toEqual({ etapa: "revisao", rotulo: "Revisão da agência" });
+  });
+
+  it("um arquivo com o cliente e outro ainda com a agência: a peça fica em Revisão", () => {
+    const p = peca({ post: comArquivo, arquivos: [{ approval_status: "pending", agency_approval_status: "approved" }, { approval_status: "none", agency_approval_status: "pending" }] });
+    expect(decidirEtapa(p)).toEqual({ etapa: "revisao", rotulo: "Revisão da agência" });
+    // A ordem dos arquivos não muda a resposta.
+    expect(decidirEtapa({ ...p, arquivos: [...p.arquivos].reverse() })?.etapa).toBe("revisao");
+  });
+
+  it("com a agência resolvida, o pedido ao cliente volta a aparecer; estágios seguintes continuam ganhando", () => {
+    expect(decidirEtapa(peca({ trabalho: { status: "entregue", entrega_status: "aguardando_cliente", temArquivo: true }, arquivos: [{ approval_status: "pending", agency_approval_status: "approved" }] }))?.rotulo).toBe("Aguardando o cliente");
+    expect(decidirEtapa(peca({ publicacoes: [pub("scheduled", "2026-11-17T12:00:00Z")], arquivos: [{ approval_status: "none", agency_approval_status: "pending" }] }))?.etapa).toBe("agendado");
+  });
+});
+
+describe("tarefa concluída ligada a post em rascunho (P2 da fase 1)", () => {
+  it("post em rascunho sem arte, com tarefa concluída, continua Pauta; tarefa concluída sem post continua Concluída", () => {
+    for (const status of ["done", "completed"]) {
+      expect(decidirEtapa(peca({ tarefa: { id: "t1", status, due_date: "2026-11-17" } }))).toEqual({ etapa: "pauta", rotulo: "Pauta" });
+      expect(decidirEtapa(peca({ post: null, chave: "task:t1", tarefa: { id: "t1", status, due_date: "2026-11-17" } }))).toEqual({ etapa: "arte", rotulo: "Concluída" });
+    }
+  });
+});
+
+describe("carimbo da revisão interna", () => {
+  const trabalho = (entrega_status: string | null, r: RevisaoInterna | null) => ({ status: "entregue", entrega_status, temArquivo: true, revisao: r });
+
+  it("aprovada pela equipe: Revisado pela agência, ainda na etapa de revisão", () => {
+    expect(decidirEtapa(peca({ trabalho: trabalho("aguardando_agencia", revisao("aprovado")), arquivos: [{ approval_status: "none", agency_approval_status: "approved" }] }))).toEqual({ etapa: "revisao", rotulo: "Revisado pela agência" });
+    // Sem pedido de envio registrado no trabalho, o carimbo sozinho sustenta a etapa.
+    expect(decidirEtapa(peca({ post: null, chave: "task:t1", tarefa: tarefaT1, trabalho: { status: "pronto", entrega_status: null, temArquivo: false, revisao: revisao("aprovado") } }))).toEqual({ etapa: "revisao", rotulo: "Revisado pela agência" });
+  });
+
+  it("o portão da agência no arquivo manda: pendente continua Revisão da agência, mesmo com carimbo de aprovado", () => {
+    expect(decidirEtapa(peca({ trabalho: trabalho("aguardando_agencia", revisao("aprovado")), arquivos: [{ approval_status: "none", agency_approval_status: "pending" }] }))).toEqual({ etapa: "revisao", rotulo: "Revisão da agência" });
+  });
+
+  it("ajuste pedido volta para a arte com o rótulo da agência, com ou sem rejeição no arquivo", () => {
+    const ajuste = { etapa: "arte", rotulo: "Ajuste pedido pela agência" };
+    expect(decidirEtapa(peca({ trabalho: trabalho("reprovado", revisao("ajuste")), arquivos: [{ approval_status: "none", agency_approval_status: "rejected" }] }))).toEqual(ajuste);
+    expect(decidirEtapa(peca({ trabalho: trabalho("aguardando_agencia", revisao("ajuste")), arquivos: [{ approval_status: "none", agency_approval_status: "pending" }] }))).toEqual(ajuste);
+    expect(decidirEtapa(peca({ trabalho: trabalho(null, revisao("ajuste")) }))).toEqual(ajuste);
+    // Sem carimbo, a rejeição continua com o texto da fase 1.
+    expect(decidirEtapa(peca({ trabalho: trabalho("reprovado", null) }))).toEqual({ etapa: "arte", rotulo: "Ajustes na arte" });
+  });
+
+  it("nunca vira aprovação do cliente: Aguardando o cliente e Aprovado só vêm do pedido e da resposta dele", () => {
+    const revisada = peca({ trabalho: trabalho("aguardando_agencia", revisao("aprovado")), arquivos: [{ approval_status: "none", agency_approval_status: "approved" }] });
+    expect(decidirEtapa(revisada)?.etapa).not.toBe("aprovacao");
+    expect(decidirEtapa(peca({ trabalho: trabalho("aguardando_cliente", revisao("aprovado")), arquivos: [{ approval_status: "pending", agency_approval_status: "approved" }] }))).toEqual({ etapa: "aprovacao", rotulo: "Aguardando o cliente" });
+    expect(decidirEtapa(peca({ trabalho: trabalho("aprovado", revisao("aprovado")), arquivos: [{ approval_status: "approved", agency_approval_status: "approved" }] }))).toEqual({ etapa: "aprovacao", rotulo: "Aprovado" });
+    // O carimbo também não segura o que já andou.
+    expect(decidirEtapa(peca({ trabalho: trabalho("agendado", revisao("ajuste")), publicacoes: [pub("scheduled", "2026-11-17T12:00:00Z")] }))?.etapa).toBe("agendado");
+  });
+
+  it("o texto do carimbo traz quem e quando, no horário de São Paulo", () => {
+    expect(textoDaRevisaoInterna(null)).toBeNull();
+    expect(textoDaRevisaoInterna(revisao("aprovado", { porNome: "Ana" }))).toBe("Revisão interna: aprovada por Ana em 14/11, 21:04");
+    expect(textoDaRevisaoInterna(revisao("ajuste", { em: null }))).toBe("Revisão interna: ajuste pedido");
+    const [faixa] = montarGrade({
+      clientes: [{ id: "c1", nome: "Alfa" }], diasPrioritarios: [], segunda: SEGUNDA,
+      pecas: [peca({ post: null, chave: "task:t1", tarefa: tarefaT1, trabalho: { status: "entregue", entrega_status: "aguardando_agencia", temArquivo: true, revisao: revisao("aprovado", { porNome: "Ana" }) } })],
+    });
+    const cartao = faixa.celulas[1].cartoes[0];
+    expect(cartao.rotuloDaEtapa).toBe("Revisado pela agência");
+    expect(cartao.revisao).toContain("por Ana");
+  });
+
+  it("carimbo de arte antiga não vale; a leitura leva o carimbo e o portão do arquivo para a peça", () => {
+    const base = { task_id: "t1", post_id: null, client_id: "c1", status: "entregue", entrega_status: "aguardando_agencia", file_ids: ["f2"], revisado_por: "u9", revisado_em: "2026-11-15T00:04:00Z", revisao_decisao: "aprovado" };
+    expect(revisaoDoTrabalho({ ...base, revisao_arquivo_id: "f2" })?.decisao).toBe("aprovado");
+    expect(revisaoDoTrabalho({ ...base, revisao_arquivo_id: "f1" })).toBeNull();
+    expect(revisaoDoTrabalho({ ...base, revisao_arquivo_id: null })).toBeNull();
+    expect(revisaoDoTrabalho({ ...base, file_ids: [], revisao_arquivo_id: null })?.decisao).toBe("aprovado");
+    expect(revisaoDoTrabalho({ ...base, revisao_decisao: "qualquer", revisao_arquivo_id: "f2" })).toBeNull();
+
+    const [p] = juntarPecas({
+      posts: [], publicacoes: [], vinculos: [],
+      tarefas: [{ id: "t1", client_id: "c1", title: "Reel", status: "todo", due_date: "2026-11-17", delivery_type: "reel", source: null }],
+      trabalhos: [{ ...base, revisao_arquivo_id: "f2" }],
+      arquivos: [{ id: "f2", approval_status: "none", agency_approval_status: "approved", agency_reviewed_by: "u9", agency_reviewed_at: "2026-11-15T00:04:00Z" }],
+      revisores: [{ id: "u9", full_name: "Ana" }],
+    });
+    expect(p.trabalho?.revisao).toEqual({ decisao: "aprovado", em: "2026-11-15T00:04:00Z", por: "u9", porNome: "Ana" });
+    expect(p.arquivos[0].agency_reviewed_by).toBe("u9");
+    expect(decidirEtapa(p)?.rotulo).toBe("Revisado pela agência");
+  });
+});
+
+describe("link do cartão para quem não abre o Estúdio (P2 da fase 1)", () => {
+  const trabalho = { status: "pronto", entrega_status: null, temArquivo: true };
+  it("tráfego não é mandado para /mesa: vai para a Agenda do cliente", () => {
+    expect(podeAbrirEstudio("admin") && podeAbrirEstudio("manager") && podeAbrirEstudio("design")).toBe(true);
+    expect(podeAbrirEstudio("traffic") || podeAbrirEstudio(null) || podeAbrirEstudio("client")).toBe(false);
+    const p = peca({ post: null, chave: "task:t1", tarefa: tarefaT1, trabalho });
+    expect(linkDoCartao(p, { podeAbrirEstudio: false })).toBe("/calendario?client=c1");
+    expect(linkDoCartao(p, { podeAbrirEstudio: true })).toBe("/mesa?client=c1&aba=estudio&task=t1");
+    // Com post o destino já era a Agenda e não muda.
+    expect(linkDoCartao(peca({ tarefa: tarefaT1, trabalho }), { podeAbrirEstudio: false })).toBe("/calendario?client=c1&content=p1");
+    const grade = (pode: boolean) => montarGrade({ clientes: [{ id: "c1", nome: "Alfa" }], diasPrioritarios: [], segunda: SEGUNDA, pecas: [p], podeAbrirEstudio: pode })[0].celulas[1].cartoes[0];
+    expect(grade(false)).toMatchObject({ link: "/calendario?client=c1", destino: "agenda" });
+    expect(grade(true)).toMatchObject({ link: "/mesa?client=c1&aba=estudio&task=t1", destino: "estudio" });
+  });
+});
+
+describe("regra de aprovação do cliente no cadastro (Softy)", () => {
+  const SOFTY = "3d08338c-0c3b-453f-a64f-79a55c5711e8";
+  it("só o valor exato dispensada conta", () => {
+    expect(aprovacaoDoClienteDispensada({ modoAprovacao: "dispensada" })).toBe(true);
+    for (const modo of ["portal", "", null, undefined, "Dispensada", "qualquer"]) expect(aprovacaoDoClienteDispensada({ modoAprovacao: modo })).toBe(false);
+  });
+
+  it("o modo vira aviso na faixa e não pula etapa: as etapas são as mesmas de qualquer cliente", () => {
+    const pecasDe = (clientId: string): PecaFato[] => [
+      peca({ clientId, chave: `${clientId}:a`, titulo: "A", post: null, tarefa: tarefaT1, trabalho: { status: "entregue", entrega_status: "aguardando_agencia", temArquivo: true, revisao: revisao("aprovado") }, arquivos: [{ approval_status: "none", agency_approval_status: "approved" }] }),
+      peca({ clientId, chave: `${clientId}:b`, titulo: "B", post: null, tarefa: tarefaT1, trabalho: { status: "entregue", entrega_status: "aguardando_cliente", temArquivo: true }, arquivos: [{ approval_status: "pending", agency_approval_status: "approved" }] }),
+    ];
+    const faixas = montarGrade({
+      clientes: [{ id: SOFTY, nome: "Softy Móveis", modoAprovacao: "dispensada" }, { id: "c1", nome: "Alfa", modoAprovacao: "portal" }, { id: "c2", nome: "Beta" }],
+      pecas: [...pecasDe(SOFTY), ...pecasDe("c1")], diasPrioritarios: [], segunda: SEGUNDA,
+    });
+    const softy = faixas.find((f) => f.clientId === SOFTY)!;
+    const alfa = faixas.find((f) => f.clientId === "c1")!;
+    expect(softy.aprovacaoDoClienteDispensada).toBe(true);
+    expect(alfa.aprovacaoDoClienteDispensada).toBe(false);
+    expect(faixas.find((f) => f.clientId === "c2")!.aprovacaoDoClienteDispensada).toBe(false);
+    const etapas = (f: typeof softy) => f.celulas[1].cartoes.map((c) => `${c.etapa}:${c.rotuloDaEtapa}`);
+    expect(etapas(softy)).toEqual(["revisao:Revisado pela agência", "aprovacao:Aguardando o cliente"]);
+    expect(etapas(softy)).toEqual(etapas(alfa));
   });
 });

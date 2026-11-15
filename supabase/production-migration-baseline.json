@@ -3097,6 +3097,14 @@
       "remote_name": "extras_do_cliente",
       "remote_statements_sha256": "54b681dcacaeff91606847afa85312acfd8bf08b1a1cf404e52949a874a93c4b",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114210000",
+      "path": "supabase/migrations/20261114210000_esteira_revisao_interna_e_modo_aprovacao.sql",
+      "local_sha256": "3d7a7a30f9270f9faabf540c97dc7c15a0819e39f510309862b48377769d922c",
+      "remote_name": "esteira_revisao_interna_e_modo_aprovacao",
+      "remote_statements_sha256": "7233412125ee4bbd744ce73dd0ece81109bbde77c81627839bc3677d02b5fad9",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

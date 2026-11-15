@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDiasPrioritarios } from "@/lib/diaPrioritarioApi";
-import { montarGrade, type ClienteDaFaixa, type FaixaDaEsteira } from "@/lib/esteiraLinha/esteiraLinha";
-import { lerPecasDaEsteiraLinha } from "@/lib/esteiraLinha/esteiraLinhaFatos";
+import { montarGrade, podeAbrirEstudio, type ClienteDaFaixa, type FaixaDaEsteira } from "@/lib/esteiraLinha/esteiraLinha";
+import { lerModosDeAprovacao, lerPecasDaEsteiraLinha } from "@/lib/esteiraLinha/esteiraLinhaFatos";
 
 interface ClienteCadastrado {
   id: string;
@@ -39,9 +39,25 @@ export function useEsteiraLinha(segunda: string) {
     queryFn: () => lerPecasDaEsteiraLinha(ids, segunda),
   });
 
+  // A regra de aprovação do cliente no cadastro (hoje só a Softy é `dispensada`).
+  // Leitura tolerante: sem ela, todo mundo segue o caminho normal.
+  const modos = useQuery({
+    queryKey: ["esteira-linha-modo-aprovacao", user?.id, ids.join(",")],
+    enabled: Boolean(user?.id) && ids.length > 0,
+    staleTime: 10 * 60_000,
+    queryFn: () => lerModosDeAprovacao(ids),
+  });
+
+  const podeEstudio = podeAbrirEstudio(profile?.role);
   const faixas = useMemo<FaixaDaEsteira[]>(
-    () => montarGrade({ clientes: ativos, pecas: pecas.data ?? [], diasPrioritarios: dias.data ?? [], segunda }),
-    [ativos, pecas.data, dias.data, segunda],
+    () => montarGrade({
+      clientes: ativos.map((c) => ({ ...c, modoAprovacao: modos.data?.[c.id] ?? null })),
+      pecas: pecas.data ?? [],
+      diasPrioritarios: dias.data ?? [],
+      segunda,
+      podeAbrirEstudio: podeEstudio,
+    }),
+    [ativos, modos.data, pecas.data, dias.data, segunda, podeEstudio],
   );
 
   const carregando = clientes.isLoading || dias.isLoading || (ids.length > 0 && pecas.isLoading);

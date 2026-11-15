@@ -1,11 +1,16 @@
 /**
- * Esteira em linha do tempo (fase 1, 14/11/2026): regras puras.
+ * Esteira em linha do tempo (fase 1 e fase 2, 14/11/2026): regras puras.
  *
  * Não confundir com a Esteira do Ciclo (src/lib/esteira/, rota /ciclo), que é
  * a lista da semana de cada cliente. Aqui a tela é uma grade só de leitura:
  * os dias em cima, uma faixa por cliente e um cartão por peça, com a etapa em
  * que ela está. Nada neste arquivo toca o banco; a leitura mora em
  * esteiraLinhaFatos.ts e a tela usa as mesmas contas dos testes.
+ *
+ * Fase 2: a etapa de revisão passa a ler o carimbo da revisão interna
+ * (estudio_trabalhos.revisao_decisao, gravado por revisar_trabalho_interno) e
+ * a faixa mostra a regra de aprovação do cliente que está no cadastro. A
+ * caixa "Precisa de você" mora em precisaDeVoceDaEsteira.ts.
  */
 
 import { dataEmSP, diaDaSemanaDaData, ehDiaUtil, nomeDoDia } from "@/lib/diaPrioritario";
@@ -16,7 +21,7 @@ export type EtapaDaPeca = "pauta" | "arte" | "revisao" | "aprovacao" | "agendado
 export const ETAPAS_DA_ESTEIRA: Array<{ etapa: EtapaDaPeca; rotulo: string; descricao: string }> = [
   { etapa: "pauta", rotulo: "Pauta", descricao: "tem tarefa ou rascunho, ainda sem arte" },
   { etapa: "arte", rotulo: "Arte", descricao: "em produção no Estúdio ou com arquivo" },
-  { etapa: "revisao", rotulo: "Revisão", descricao: "aguardando a agência" },
+  { etapa: "revisao", rotulo: "Revisão", descricao: "com a agência ou já revisada por ela" },
   { etapa: "aprovacao", rotulo: "Aprovação", descricao: "com o cliente ou já aprovado" },
   { etapa: "agendado", rotulo: "Agendado", descricao: "com data e hora para sair" },
   { etapa: "no_ar", rotulo: "No ar", descricao: "publicado" },
@@ -33,6 +38,21 @@ export interface PublicacaoDaPeca {
 export interface ArquivoDaPeca {
   approval_status: string | null;
   agency_approval_status: string | null;
+  /** Quem da agência decidiu o portão do arquivo, e quando (Double-Gate). */
+  agency_reviewed_by?: string | null;
+  agency_reviewed_at?: string | null;
+}
+
+/**
+ * Carimbo da revisão interna da peça. Só chega aqui quando vale para a arte
+ * atual: carimbo de uma arte que já foi trocada é descartado na leitura.
+ */
+export interface RevisaoInterna {
+  decisao: "aprovado" | "ajuste";
+  em: string | null;
+  por: string | null;
+  /** Nome de quem revisou, quando a leitura conseguiu trazer. */
+  porNome?: string | null;
 }
 
 export interface PecaFato {
@@ -51,7 +71,7 @@ export interface PecaFato {
   /** Só as publicações do post; as canceladas são ignoradas pelas regras. */
   publicacoes: PublicacaoDaPeca[];
   tarefa: { id: string; status: string | null; due_date: string | null } | null;
-  trabalho: { status: string | null; entrega_status: string | null; temArquivo: boolean } | null;
+  trabalho: { status: string | null; entrega_status: string | null; temArquivo: boolean; revisao?: RevisaoInterna | null } | null;
   arquivos: ArquivoDaPeca[];
 }
 
@@ -77,11 +97,14 @@ export function pecaEstaForaDaEsteira(peca: PecaFato): boolean {
  * A etapa atual: a mais avançada que os fatos sustentam, avaliada do fim para
  * o começo. Devolve null para peça arquivada ou cancelada.
  *
- * Revisão só aparece com sinal real (agência com a aprovação pendente); a
- * fase 1 não tem carimbo de quem revisou e não inventa "revisão interna".
- * No mesmo arquivo a agência vem antes do cliente (Double-Gate): com a
- * agência ainda pendente, a peça fica em Revisão mesmo que o pedido ao
- * cliente já esteja aberto.
+ * Double-Gate: a agência vem antes do cliente. Com o portão da agência
+ * pendente em qualquer arquivo, a peça fica em Revisão, mesmo que o trabalho
+ * já diga "aguardando o cliente" ou que outro arquivo esteja com o cliente.
+ *
+ * O carimbo da revisão interna (fase 2) refina a revisão: "Revisado pela
+ * agência" quando a equipe aprovou, "Ajuste pedido pela agência" quando pediu
+ * mudança. Ele nunca vira aprovação do cliente: "Aguardando o cliente" e
+ * "Aprovado" continuam vindo só do pedido ao cliente e da resposta dele.
  */
 export function decidirEtapa(peca: PecaFato): EtapaDecidida | null {
   if (pecaEstaForaDaEsteira(peca)) return null;
@@ -90,30 +113,58 @@ export function decidirEtapa(peca: PecaFato): EtapaDecidida | null {
   if (publicacoes.some((p) => p.status === "scheduled")) return { etapa: "agendado", rotulo: "Agendado" };
 
   const entrega = peca.trabalho?.entrega_status ?? null;
-  const agenciaPendente = (a: ArquivoDaPeca) => a.agency_approval_status === "pending";
+  const revisao = peca.trabalho?.revisao ?? null;
+  const ajustePedido = revisao?.decisao === "ajuste";
+  const agenciaPendente = peca.arquivos.some((a) => a.agency_approval_status === "pending");
   const reprovado =
     entrega === "reprovado" ||
     peca.arquivos.some((a) => a.approval_status === "rejected" || a.agency_approval_status === "rejected");
 
   if (!reprovado) {
-    if (entrega === "aguardando_cliente" || peca.arquivos.some((a) => a.approval_status === "pending" && !agenciaPendente(a))) {
+    if (agenciaPendente) {
+      return ajustePedido ? { etapa: "arte", rotulo: ROTULO_DO_AJUSTE } : { etapa: "revisao", rotulo: "Revisão da agência" };
+    }
+    if (entrega === "aguardando_cliente" || peca.arquivos.some((a) => a.approval_status === "pending")) {
       return { etapa: "aprovacao", rotulo: "Aguardando o cliente" };
     }
-    if (entrega === "aguardando_agencia" || peca.arquivos.some(agenciaPendente)) {
-      return { etapa: "revisao", rotulo: "Revisão da agência" };
+    if (ajustePedido) return { etapa: "arte", rotulo: ROTULO_DO_AJUSTE };
+    if (entrega === "aguardando_agencia") {
+      return { etapa: "revisao", rotulo: revisao?.decisao === "aprovado" ? ROTULO_DO_REVISADO : "Revisão da agência" };
     }
     if (entrega === "aprovado" || peca.arquivos.some((a) => a.approval_status === "approved")) {
       return { etapa: "aprovacao", rotulo: "Aprovado" };
     }
+    // Revisada pela equipe e ainda não enviada ao cliente: para na revisão.
+    if (revisao?.decisao === "aprovado") return { etapa: "revisao", rotulo: ROTULO_DO_REVISADO };
   }
 
   const temArte =
     Boolean(peca.trabalho) || Boolean(peca.post?.temArquivo) || peca.post?.production_status === "production";
-  if (temArte) return { etapa: "arte", rotulo: reprovado ? "Ajustes na arte" : "Arte" };
-  // Tarefa de conteúdo já concluída (sem post, trabalho ou arquivo): a pauta
-  // foi feita, então não volta para "Pauta". Fica em arte, como "Concluída".
-  if (tarefaConcluida(peca)) return { etapa: "arte", rotulo: "Concluída" };
+  if (temArte) return { etapa: "arte", rotulo: ajustePedido ? ROTULO_DO_AJUSTE : reprovado ? "Ajustes na arte" : "Arte" };
+  // Tarefa de conteúdo já concluída e que nunca virou post (sem trabalho nem
+  // arquivo): a pauta foi feita, então não volta para "Pauta". Fica em arte,
+  // como "Concluída". Com post, mesmo em rascunho e sem arte, vale o post: Pauta.
+  if (!peca.post && tarefaConcluida(peca)) return { etapa: "arte", rotulo: "Concluída" };
   return { etapa: "pauta", rotulo: "Pauta" };
+}
+
+const ROTULO_DO_REVISADO = "Revisado pela agência";
+const ROTULO_DO_AJUSTE = "Ajuste pedido pela agência";
+
+const DATA_E_HORA_EM_SP = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+});
+
+/**
+ * Uma linha sobre a revisão interna, para o `title` do cartão: quem e quando.
+ * "Revisão interna: aprovada por Ana em 14/11, 21:04".
+ */
+export function textoDaRevisaoInterna(revisao: RevisaoInterna | null | undefined): string | null {
+  if (!revisao) return null;
+  const instante = revisao.em ? new Date(revisao.em) : null;
+  const quando = instante && !Number.isNaN(instante.getTime()) ? ` em ${DATA_E_HORA_EM_SP.format(instante)}` : "";
+  const quem = revisao.porNome ? ` por ${revisao.porNome}` : "";
+  return `Revisão interna: ${revisao.decisao === "aprovado" ? "aprovada" : "ajuste pedido"}${quem}${quando}`;
 }
 
 /** `done` é o status de tarefa concluída neste painel; `completed` entra por defesa. */
@@ -284,13 +335,25 @@ export const rotuloDoFormato = (contentType: string | null | undefined): string 
  * Para onde o cartão leva. Com post, a Agenda já aberta nele; sem post e com
  * trabalho do Estúdio, o Estúdio na tarefa; só tarefa, a Agenda do cliente
  * (onde o prazo dela aparece).
+ *
+ * O Estúdio (/mesa) só abre para admin, gestor e design. Quem não pode abrir
+ * (tráfego) vai para a Agenda do cliente em vez de cair no painel inicial.
  */
-export function linkDoCartao(peca: Pick<PecaFato, "clientId" | "post" | "tarefa" | "trabalho">): string {
+export function linkDoCartao(
+  peca: Pick<PecaFato, "clientId" | "post" | "tarefa" | "trabalho">,
+  opcoes: { podeAbrirEstudio?: boolean } = {},
+): string {
   const cliente = encodeURIComponent(peca.clientId);
   if (peca.post) return `/calendario?client=${cliente}&content=${encodeURIComponent(peca.post.id)}`;
-  if (peca.trabalho && peca.tarefa) return `/mesa?client=${cliente}&aba=estudio&task=${encodeURIComponent(peca.tarefa.id)}`;
+  if (peca.trabalho && peca.tarefa && opcoes.podeAbrirEstudio !== false) {
+    return `/mesa?client=${cliente}&aba=estudio&task=${encodeURIComponent(peca.tarefa.id)}`;
+  }
   return `/calendario?client=${cliente}`;
 }
+
+/** Papéis que a rota /mesa aceita (src/App.tsx). */
+const PAPEIS_DO_ESTUDIO = new Set(["admin", "manager", "design"]);
+export const podeAbrirEstudio = (papel: string | null | undefined): boolean => PAPEIS_DO_ESTUDIO.has(String(papel ?? ""));
 
 export interface CartaoDaEsteira {
   chave: string;
@@ -300,6 +363,8 @@ export interface CartaoDaEsteira {
   rotuloDaEtapa: string;
   link: string;
   destino: "agenda" | "estudio";
+  /** Quem fez a revisão interna e quando, quando há carimbo (vai no `title`). */
+  revisao?: string | null;
 }
 
 export interface CelulaDaEsteira {
@@ -318,6 +383,11 @@ export interface FaixaDaEsteira {
   diaPrioritario: number | null;
   /** "segunda-feira" */
   nomeDoDiaPrioritario: string;
+  /**
+   * O cadastro deste cliente dispensa a aprovação dele (hoje só a Softy). É
+   * um aviso na faixa: as etapas das peças continuam vindo dos fatos.
+   */
+  aprovacaoDoClienteDispensada: boolean;
   celulas: CelulaDaEsteira[];
 }
 
@@ -326,7 +396,13 @@ export interface ClienteDaFaixa {
   nome: string;
   /** profiles.plan_status; quando vem, um status de pausa tira o dia prioritário. */
   planStatus?: string | null;
+  /** profiles.modo_aprovacao_do_cliente: `portal` (padrão) ou `dispensada`. */
+  modoAprovacao?: string | null;
 }
+
+/** Só o valor exato `dispensada` conta; vazio, ausente ou desconhecido é `portal`. */
+export const aprovacaoDoClienteDispensada = (cliente: Pick<ClienteDaFaixa, "modoAprovacao">): boolean =>
+  cliente.modoAprovacao === "dispensada";
 
 /** Status de plano que, por defesa, não contam como dia prioritário (o hook já filtra só `active`). */
 const PLANOS_SEM_DIA_PRIORITARIO = new Set(["standby", "paused", "pausado", "inactive"]);
@@ -376,6 +452,8 @@ export function montarGrade(entrada: {
   pecas: PecaFato[];
   diasPrioritarios: RegistroDoDiaPrioritario[];
   segunda: string;
+  /** O usuário pode abrir /mesa? Sem informar, vale o comportamento da fase 1 (pode). */
+  podeAbrirEstudio?: boolean;
 }): FaixaDaEsteira[] {
   const dias = diasDaSemana(entrada.segunda);
   const datas = new Set(dias.map((d) => d.data));
@@ -385,7 +463,7 @@ export function montarGrade(entrada: {
     if (!decidida) continue;
     const data = dataDaPeca(peca);
     if (!data || !datas.has(data)) continue;
-    const link = linkDoCartao(peca);
+    const link = linkDoCartao(peca, { podeAbrirEstudio: entrada.podeAbrirEstudio });
     const chave = `${peca.clientId}|${data}`;
     const lista = porCelula.get(chave) ?? [];
     lista.push({
@@ -396,6 +474,7 @@ export function montarGrade(entrada: {
       rotuloDaEtapa: decidida.rotulo,
       link,
       destino: link.startsWith("/mesa") ? "estudio" : "agenda",
+      revisao: textoDaRevisaoInterna(peca.trabalho?.revisao),
     });
     porCelula.set(chave, lista);
   }
@@ -411,6 +490,7 @@ export function montarGrade(entrada: {
         nome: cliente.nome,
         diaPrioritario,
         nomeDoDiaPrioritario: nomeDoDia(diaPrioritario),
+        aprovacaoDoClienteDispensada: aprovacaoDoClienteDispensada(cliente),
         celulas: dias.map((dia) => {
           const cartoes = (porCelula.get(`${cliente.id}|${dia.data}`) ?? []).sort(
             (a, b) => ORDEM_DA_ETAPA[a.etapa] - ORDEM_DA_ETAPA[b.etapa] || a.titulo.localeCompare(b.titulo, "pt-BR"),
