@@ -857,19 +857,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => setBuscaAberta(true)}
                 aria-label="Buscar página"
-                className="toque-compacto flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="toque-compacto ml-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <Search className="h-5 w-5" />
+                <Search className="h-[18px] w-[18px]" />
               </button>
               <button
                 type="button"
                 onClick={() => setNotifOpen(true)}
                 aria-label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações"}
-                className="toque-compacto relative flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="toque-compacto relative ml-1.5 mr-1 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <Bell className="h-5 w-5" />
+                <Bell className="h-[18px] w-[18px]" />
                 {unreadCount > 0 && (
-                  <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold tabular-nums text-primary-foreground">
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-background">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
