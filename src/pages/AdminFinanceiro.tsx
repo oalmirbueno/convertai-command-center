@@ -1438,13 +1438,15 @@ function LegacyFinanceiro() {
                   <StatCard
                     key={n.rotulo}
                     label={n.rotulo}
-                    value={billingLoading ? <span className="block h-9 w-32 animate-pulse rounded-full bg-muted" aria-label={`Carregando ${n.rotulo}`} /> : n.valor}
+                    // v4 (15/11/2026): enquanto carrega, o lugar do número é texto do mesmo tamanho ("R$ --.---,--"), apagado e pulsando.
+                    // O bloco cinza que havia aqui tinha outra altura de linha e o cartão pulava quando o número chegava.
+                    value={billingLoading ? "R$ --.---,--" : n.valor}
                     hint={billingLoading ? (i === 0 ? undefined : <span aria-hidden="true" className="block h-4 w-24 animate-pulse rounded-full bg-muted max-sm:mb-4" />) : i === 0 ? n.sub : <span className="block max-sm:min-h-[32px]">{n.sub}</span>}
                     icon={n.icone}
                     help={n.ajuda}
                     size={i === 0 ? "xl" : "lg"}
                     variant={i === 0 ? "ink" : i === 1 ? "accent" : "default"}
-                    className={juntar(semIconeNoCelular, i === 0 && "max-sm:col-span-2", i === 3 && overdueVal > 0 && "[&_.ds-stat-valor]:text-destructive")}
+                    className={juntar(semIconeNoCelular, i === 0 && "max-sm:col-span-2", billingLoading ? "[&_.ds-stat-valor]:animate-pulse [&_.ds-stat-valor]:text-muted-foreground/40" : i === 3 && overdueVal > 0 && "[&_.ds-stat-valor]:text-destructive")}
                     chart={
                       // Carregando: a barra reserva o lugar (o cartão não cresce quando o número chega).
                       billingLoading ? (i >= 1 && i <= 3 ? <span aria-hidden="true" className="block h-2 rounded-full bg-muted" /> : undefined) : i === 0 && reservedInBoxes > 0 && cashBalance > 0 ? (

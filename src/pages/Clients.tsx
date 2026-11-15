@@ -821,7 +821,7 @@ export default function Clients() {
   });
   // KPIs calculados da MESMA fonte real do Financeiro (mensalistas + cobranças),
   // para os cards ficarem sempre sincronizados com a operação.
-  const { data: kpiBilling } = useBilling();
+  const { data: kpiBilling, isLoading: carregandoCobrancas } = useBilling();
   // KPIs em real. Cobrança em dólar (freela) não infla o recebido nem o em aberto.
   const kpiBillingEmReal = (kpiBilling || []).filter((b: any) => moedaDe(b) === "BRL");
   const { data: kpiPayments } = useQuery({
@@ -1537,12 +1537,13 @@ export default function Clients() {
                 com a barra do recebido sobre o previsto. Os cinco números são os mesmos de antes. */}
             <div role="group" aria-label="Números dos clientes" className="grid min-w-0 grid-cols-2 gap-5 xl:grid-cols-12">
               <StatCard
-                className="xl:col-span-3"
+                // v4 (15/11/2026): carregando, o lugar do número é texto do mesmo tamanho, apagado e pulsando (o bloco cinza tinha outra altura e o cartão pulava).
+                className={juntar("xl:col-span-3", isLoading && "[&_.ds-stat-valor]:animate-pulse [&_.ds-stat-valor]:opacity-40")}
                 variant="accent"
                 size="xl"
                 icon={<Users className="h-5 w-5" />}
                 label={kpiCards[0].label}
-                value={isLoading ? <span className="block h-10 w-20 animate-pulse rounded-md bg-muted" aria-label={`Carregando ${kpiCards[0].label}`} /> : kpiCards[0].value}
+                value={isLoading ? "--" : kpiCards[0].value}
                 hint={kpiCards[0].helper}
                 chart={
                   carteiraTotal > 0 ? (
@@ -1553,16 +1554,19 @@ export default function Clients() {
                         <span className="ml-2 shrink-0 font-medium tabular-nums text-foreground">{activeClientCount} de {carteiraTotal}</span>
                       </span>
                     </span>
+                  ) : isLoading ? (
+                    // v4 (15/11/2026): a barra reserva o lugar enquanto a carteira chega (o cartão crescia 32 px depois).
+                    <span aria-hidden="true" className="block min-w-0"><span className="block h-2.5 rounded-full bg-foreground/10" /><span className="mt-2 block h-4" /></span>
                   ) : undefined
                 }
               />
               <StatCard
-                className="xl:col-span-3"
+                className={juntar("xl:col-span-3", isLoading && "[&_.ds-stat-valor]:animate-pulse [&_.ds-stat-valor]:opacity-40")}
                 variant="ink"
                 size="xl"
                 icon={<Repeat className="h-5 w-5" />}
                 label={kpiCards[1].label}
-                value={isLoading ? <span className="block h-10 w-28 animate-pulse rounded-md bg-muted" aria-label={`Carregando ${kpiCards[1].label}`} /> : kpiCards[1].value}
+                value={isLoading ? "R$ --.---,--" : kpiCards[1].value}
                 hint={kpiCards[1].helper}
                 chart={
                   activeClientCount > 0 ? (
@@ -1573,6 +1577,9 @@ export default function Clients() {
                         <span className="ml-2 shrink-0 font-medium tabular-nums text-foreground">{payingClients.length} de {activeClientCount}</span>
                       </span>
                     </span>
+                  ) : isLoading ? (
+                    // v4 (15/11/2026): a barra reserva o lugar enquanto a carteira chega (o cartão crescia 32 px depois).
+                    <span aria-hidden="true" className="block min-w-0"><span className="block h-2.5 rounded-full bg-foreground/10" /><span className="mt-2 block h-4" /></span>
                   ) : undefined
                 }
               />
@@ -1584,7 +1591,7 @@ export default function Clients() {
                       {kpiCards[2].label}
                     </p>
                     <p className={juntar(texto.numeroGrande, "mt-3 truncate xl:text-[48px] xl:leading-[52px]")}>
-                      {isLoading ? <span className="block h-10 w-40 animate-pulse rounded-md bg-muted" aria-label={`Carregando ${kpiCards[2].label}`} /> : kpiCards[2].value}
+                      {isLoading ? <span className="inline-block h-[0.7em] w-40 max-w-full animate-pulse rounded-md bg-muted align-baseline" aria-label={`Carregando ${kpiCards[2].label}`} /> : kpiCards[2].value}
                     </p>
                   </div>
                   {previstoNoMes > 0 && (
@@ -1593,6 +1600,8 @@ export default function Clients() {
                     </Chip>
                   )}
                 </div>
+                {/* v4 (15/11/2026): a barra reserva o lugar enquanto as cobranças chegam (o cartão crescia 32 px depois). */}
+                {(isLoading || carregandoCobrancas) && !(previstoNoMes > 0) && <span aria-hidden="true" className="mt-5 block h-3 rounded-full bg-muted" />}
                 {previstoNoMes > 0 && (
                   <ProgressBar className="mt-5" value={receivedThisMonth} max={previstoNoMes} height={12} tone={1} striped label={`Recebido ${formatCurrency(receivedThisMonth)} de ${formatCurrency(previstoNoMes)} previstos no mês`} />
                 )}

@@ -489,13 +489,14 @@ export default function AdminComercial() {
 
   let descricao: ReactNode = null;
   if (aba === "visao") {
-    descricao = carregandoLeads ? undefined : `${resumo.abertos} em conversa · ${resumo.ganhosNoMes} ${resumo.ganhosNoMes === 1 ? "ganho" : "ganhos"} no mês`;
+    // v4 (15/11/2026): carregando, a linha de estado já ocupa o lugar dela (um espaço), para a tela não descer 30 px quando os leads chegam.
+    descricao = carregandoLeads ? "\u00a0" : `${resumo.abertos} em conversa · ${resumo.ganhosNoMes} ${resumo.ganhosNoMes === 1 ? "ganho" : "ganhos"} no mês`;
   } else if (aba === "crm") {
     const alerta = aviso([
       resumo.atrasados > 0 && `${resumo.atrasados} ${resumo.atrasados === 1 ? "atrasado" : "atrasados"}`,
       resumo.semProximoPasso > 0 && `${resumo.semProximoPasso} sem próximo passo`,
     ]);
-    descricao = carregandoLeads ? undefined : (
+    descricao = carregandoLeads ? "\u00a0" : (
       <>
         {visaoDoCrm === "empresas" ? `${empresas.length} ${empresas.length === 1 ? "empresa" : "empresas"}` : `${resumo.abertos} em aberto`}
         {alerta && visaoDoCrm === "negocios" ? <> · {alerta}</> : null}
@@ -507,7 +508,7 @@ export default function AdminComercial() {
   } else if (aba === "metas") {
     descricao = `${metasDefinidas} de ${METRICAS.length} metas definidas`;
   } else if (aba === "campanhas") {
-    descricao = carregandoCampanhas ? undefined : `${campanhasAtivas} ${campanhasAtivas === 1 ? "ativa" : "ativas"} de ${campanhas.length}`;
+    descricao = carregandoCampanhas ? "\u00a0" : `${campanhasAtivas} ${campanhasAtivas === 1 ? "ativa" : "ativas"} de ${campanhas.length}`;
   } else if (aba === "marketing") {
     descricao = `${leadsNoMes} ${leadsNoMes === 1 ? "lead novo" : "leads novos"} no mês`;
   } else if (aba === "caixa") {
