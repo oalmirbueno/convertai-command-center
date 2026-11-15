@@ -24,6 +24,8 @@ import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMess
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
 import FaixaDeAchados from "@/components/achados/FaixaDeAchados";
+import { AnelDeProgresso } from "@/components/execucao/Visuais";
+import PrimeiraLeitura, { EsqueletoDeCartoes } from "@/components/execucao/PrimeiraLeitura";
 import { useAchados } from "@/hooks/useAchados";
 import RadarDeIdeias from "@/components/central/RadarDeIdeias";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
@@ -194,6 +196,9 @@ interface DraftPreview {
   clientName: string;
   draft: any;
 }
+
+/** v4 (15/11): leituras que a aba Carteira espera responder UMA vez antes de aparecer (ver PrimeiraLeitura). */
+const LEITURAS_DA_CARTEIRA = [["achados"], ["dia-prioritario"], ["cycle-rituals-central"], ["exp-pending-approvals"], ["exp-ads-wallets"]] as const;
 
 export default function AdminExperience({ cycleReview = false }: { cycleReview?: boolean }) {
   const navigate = useNavigate();
@@ -2536,6 +2541,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           <RegiaoRolavel modo="lg" rotulo="Carteira" memoria="central:carteira" className="lg:pb-4 lg:pr-1">
             {/* 16/10/2026 (dono): "colocar abas onde a gente muda do Dia Prioritário para a Saúde da
                 carteira, do lado, para não ficar muito extenso". */}
+            {/* v4 (15/11): a aba aparece inteira depois da primeira leitura (os achados chegavam depois e empurravam o resto). */}
+            <PrimeiraLeitura chaves={LEITURAS_DA_CARTEIRA} aguardar={carregandoClientes} limiteMs={2500} esqueleto={<EsqueletoDeCartoes rotulo="Carregando a carteira" alturas={[28, 150, 32, 120, 180]} />}>
             {/* 20/10/2026: achados com número, frase curta e uma ação, acima das partes da carteira. */}
             <FaixaDeAchados
               className="mb-4"
@@ -2596,9 +2603,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           {row.alerts.slice(0, 1).map((a) => (
                             <span key={a.label} className={juntar(etiqueta, "ml-2 hidden bg-destructive/10 text-destructive sm:inline-flex")}>{a.label}</span>
                           ))}
-                          <span className={`ml-3 w-10 shrink-0 text-right text-[13px] font-semibold tabular-nums ${meta.cls}`}>
-                            {row.score === null ? "s/ dado" : row.score}
-                          </span>
+                          {/* v4 (15/11): a nota num anel (0 a 100), na cor da faixa. */}
+                          {row.score === null ? (
+                            <span className={`ml-3 w-11 shrink-0 text-right text-[12px] font-semibold tabular-nums ${meta.cls}`}>s/ dado</span>
+                          ) : (
+                            <AnelDeProgresso valor={row.score} total={100} tamanho={40} espessura={4} cor="currentColor" rotulo={`Saúde: ${row.score} de 100`} className={`ml-3 ${meta.cls}`}>{row.score}</AnelDeProgresso>
+                          )}
                           <ChevronDown className={`ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
                         </button>
                         {open && (
@@ -2646,6 +2656,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               )}
               </div>
             )}
+            </PrimeiraLeitura>
           </RegiaoRolavel>
         )}
 
