@@ -936,10 +936,11 @@ export default function ContextoAutomatico({
       {/* A parte aberta. Cada uma mantém o id da antiga seção (âncora e testes). */}
       {aberta === "ctx-marca" && (
         <section id="ctx-marca" aria-label="Marca" className="min-w-0">
+          {/* v4: até o kit da tabela chegar fica o esqueleto (o kit provisório do "ler" trocava a paleta duas vezes e a tela pulava). */}
           <CartaoMarca
-            kit={kit}
+            kit={kitQuery.isLoading ? null : kit}
             candidatos={dados ? dados.candidatos_a_logo : []}
-            carregando={carregandoKit}
+            carregando={carregandoKit || kitQuery.isLoading}
             onEditar={onIrPara ? () => onIrPara("marca") : undefined}
           />
         </section>
