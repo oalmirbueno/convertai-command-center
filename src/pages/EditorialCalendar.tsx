@@ -314,8 +314,7 @@ function FaixaDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
   const total = publications.length;
   const fatia = (n: number) => <ProgressBar value={n} max={total} height={6} label={`${n} de ${total} publicações`} />;
   return (
-    // Some na tela baixa: o calendário é o assunto e precisa da altura.
-    <div className="mb-5 hidden min-w-0 lg:block [@media(max-height:820px)]:hidden" data-faixa-do-calendario="" role="group" aria-label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}>
+    <div className="mb-5 hidden min-w-0 lg:block" data-faixa-do-calendario="" role="group" aria-label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}>
       <StatGrid cols={falhas > 0 ? 5 : 4} className={falhas > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4"}>
         <StatCard variant="ink" label={posts.length === 1 ? "Conteúdo" : "Conteúdos"} value={posts.length} deltaLabel={`${total} ${total === 1 ? "publicação" : "publicações"}`} icon={<CalendarDays className="h-4 w-4" />} />
         <StatCard variant="accent" label="Publicados" value={publicados} chartPosition="side" chart={fatia(publicados)} icon={<CheckCircle2 className="h-4 w-4" />} />
