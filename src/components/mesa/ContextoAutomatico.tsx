@@ -899,9 +899,10 @@ export default function ContextoAutomatico({
       )}
 
       {montando && (
-        <p className="flex items-center text-[12px] text-muted-foreground">
+        // v4: aviso passageiro flutua por cima (não empurra a paleta para baixo e de volta).
+        <p className="absolute z-10 flex max-w-[calc(100%-2rem)] items-center rounded-full bg-card px-3 py-1.5 text-[12px] text-muted-foreground shadow-card" role="status">
           <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
-          Montando o contexto a partir do que o cliente já tem...
+          <span className="min-w-0 truncate">Montando o contexto...</span>
         </p>
       )}
       {erroDoMontar && erroDoMontar.clientId === clientId && <AvisoDeErro erro={erroDoMontar.erro} />}
@@ -915,7 +916,7 @@ export default function ContextoAutomatico({
           </button>
         </div>
       )}
-      {dados && !temMaterial && !contextoMontado && (
+      {dados && !kitQuery.isLoading && !temMaterial && !contextoMontado && (
         <div className="flex min-w-0 items-center text-[12px] text-muted-foreground">
           <p className="min-w-0 truncate">Sem documentos, dossiê nem artes aprovadas no painel</p>
           <AjudaRecolhida className="ml-1" rotulo="Como começar o contexto">

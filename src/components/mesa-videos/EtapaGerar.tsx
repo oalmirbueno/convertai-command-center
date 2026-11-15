@@ -273,7 +273,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
       <JeitosDeCriarVideo modo={modo} onEscolher={escolherModo} />
       {outroModo ? (
         <section aria-label={outroModo.titulo} data-gerar-modo={modo}>
-          <Suspense fallback={<Carregando linhas={4} rotulo="Abrindo" />}>
+          <Suspense fallback={<div className="min-h-[100dvh] lg:min-h-[406px]"><Carregando linhas={4} rotulo="Abrindo" /></div>}>
             {modo === "livre" && <GeradorLivre simplificado irResultados={() => irPara("resultados")} />}
             {modo === "angulo" && <FerramentaDeAngulo />}
             {modo === "continuar" && <ContinuarVideo />}

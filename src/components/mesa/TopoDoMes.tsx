@@ -108,6 +108,7 @@ export default function TopoDoMes({
   });
   const resumo = resumoDoMes({ posts: itens ? itens.length : null, datas: principais.length, emAlta: emAltaNoNicho });
   const nome = nomeDoMes(mes);
+  const carregando = agenda.isLoading || hypes.isLoading;
 
   const [misturando, setMisturando] = useState(false);
   // A sugestão proativa vira cartão com Confirmar e Desfazer na conversa do agente (nada muda antes).
@@ -142,9 +143,9 @@ export default function TopoDoMes({
         <div className="min-w-0 flex-1">
         <h2 className={juntar(texto.tituloPagina, "truncate")} data-mes-do-topo="">{nome.charAt(0).toUpperCase() + nome.slice(1)}</h2>
         {/* 14/11/2026 (dono: "uma linha de estado no máximo"): nicho, cliente e resumo numa linha só; o resto fica no title. */}
-        <p className={juntar(texto.auxiliar, "mt-1 truncate")} title={[nicho, clientName, resumo].filter(Boolean).join(" · ")}>
-          <span data-nicho-do-topo="">{nicho ? <><span className="font-medium text-foreground">{nicho}</span> · </> : null}{clientName}</span>
-          {resumo ? <> · <span data-resumo-do-mes="">{resumo}</span></> : <span data-resumo-do-mes="" />}
+        <p className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-baseline")} title={[nicho, clientName, resumo].filter(Boolean).join(" · ")}>
+          <span className="min-w-0 max-w-[60%] shrink-0 truncate" data-nicho-do-topo="">{nicho ? <><span className="font-medium text-foreground">{nicho}</span> · </> : null}{clientName}</span>
+          {resumo ? <span className="min-w-0 flex-1 truncate" data-resumo-do-mes="">{"\u00a0· "}{resumo}</span> : <span data-resumo-do-mes="" />}
         </p>
         </div>
         {/* Ações do mês só em ícone (nome no title); o primário da aba é o Agente do mês que flutua. */}
@@ -156,7 +157,23 @@ export default function TopoDoMes({
         </div>
       </header>
 
-      {sugestoes.length > 0 && (
+      {/* v4: enquanto a agenda e a leitura carregam, três linhas do tamanho final guardam o lugar (nada empurra o calendário depois). */}
+      {carregando ? (
+        <section className="min-w-0" aria-hidden="true" data-o-que-fazer-carregando="">
+          <div className="flex h-6 items-center"><span className="h-4 w-40 rounded-full bg-muted" /></div>
+          <ul className={juntar(lista.aberta, lista.divisoria, "mt-1")}>
+            {[0, 1, 2].map((i) => (
+              <li key={i} className={juntar(lista.linha, "h-[73px] py-2 sm:h-[53px]")}>
+                <span className="mr-3 h-8 w-8 shrink-0 rounded-full bg-muted" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <span className="block h-3 w-4/5 rounded-full bg-muted" />
+                  <span className="block h-2.5 w-24 rounded-full bg-muted/70" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : sugestoes.length > 0 && (
         <section className="min-w-0" aria-label="O que fazer agora" data-o-que-fazer="">
           <div className="flex min-w-0 items-center">
             <h3 className={juntar(texto.tituloSecao, "flex items-center")}>

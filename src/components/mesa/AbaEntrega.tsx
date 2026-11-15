@@ -552,7 +552,23 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
     }
   };
 
-  if (previsao.isLoading) return null;
+  // v4: enquanto a previsão carrega, um bloco do tamanho final guarda o lugar (a lista de artes não pula depois).
+  if (previsao.isLoading)
+    return (
+      <section className={`border-y border-border py-4 ${recolhido ? "h-[86px]" : "h-[379px] lg:h-[238px]"}`} aria-hidden="true" data-publicacao-carregando="">
+        <span className="block h-5 w-44 rounded-full bg-muted" />
+        {!recolhido && (
+          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-6 lg:max-w-[50%]">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="space-y-2">
+                <span className="block h-2.5 w-16 rounded-full bg-muted/70" />
+                <span className="block h-5 w-24 rounded-full bg-muted" />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
   if (previsao.isError) return <p className="rounded-md bg-destructive/10 p-3 text-[13px] text-destructive">{textoDoErro(previsao.error)}</p>;
 
   const tipos = melhores.data ? Object.keys(melhores.data.por_tipo).filter((k) => !!melhores.data!.por_tipo[k]) : [];

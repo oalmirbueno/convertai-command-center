@@ -43,7 +43,8 @@ export function CabecalhoDaParte({
   // dentro no celular). Promovido em 26/09 (frente C); o nome local fica.
   return (
     <CabecalhoDeSecao
-      className={juntar(recolhido ? "items-center py-0.5" : "mb-3 items-center py-0.5", className)}
+      // v4: no celular, ação larga desce para a linha de baixo em vez de espremer o título em "Result…".
+      className={juntar(recolhido ? "items-center py-0.5" : "mb-3 items-center py-0.5", "max-sm:flex-wrap max-sm:[&>*:first-child]:basis-44 max-sm:[&>*:last-child]:max-w-full", className)}
       titulo={titulo}
       ajuda={ajuda}
       descricao={descricao}

@@ -364,7 +364,7 @@ export default function MesaPublicidade() {
               }
             >
               {/* Uma região por etapa e cliente: trocar de etapa e voltar devolve a rolagem. */}
-              <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-publicidade:${valor.clientId}:${etapa}`} className="pb-6 lg:pr-1" data-regiao-da-etapa={etapa}>
+              <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-publicidade:${valor.clientId}:${etapa}`} className="pb-6 max-lg:min-h-[calc(100dvh-230px)] lg:pr-1" data-regiao-da-etapa={etapa}>
                 <Suspense fallback={<EsqueletoDaEtapa />}>
                   {valorDaPublicidade.carregando ? (
                     <EsqueletoDaEtapa />

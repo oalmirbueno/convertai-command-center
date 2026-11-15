@@ -449,7 +449,7 @@ export default function EstudioLista({
   const topo = (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 pb-2 pt-1">
       {inicio}
-      <div className="w-[176px] shrink-0">
+      <div className="min-w-[124px] flex-1 sm:w-[176px] sm:flex-none sm:shrink-0">
         <Select value={janela} onValueChange={onJanela}>
           <SelectTrigger className="toque-compacto h-10 min-w-0 rounded-full px-4 text-[13px] font-medium first-letter:uppercase" aria-label="Período da lista">
             <SelectValue />
@@ -463,7 +463,7 @@ export default function EstudioLista({
         </Select>
       </div>
       {/* Os números do Estúdio moram aqui: cada filtro é uma pílula com a contagem grande; o aberto é a pílula de tinta com a contagem em verde. */}
-      <div className="grid h-10 shrink-0 grid-cols-3 gap-0.5 rounded-full border border-border bg-card p-[3px]" role="tablist" aria-label="Filtro das pautas">
+      <div className="scrollbar-hidden flex h-10 min-w-0 max-w-full shrink items-center overflow-x-auto rounded-full border border-border bg-card p-[3px] sm:grid sm:shrink-0 sm:grid-cols-3 sm:gap-0.5 sm:overflow-visible" role="tablist" aria-label="Filtro das pautas">
         {FILTROS_DO_ESTUDIO.map((f) => (
           <button
             key={f.valor}
@@ -472,12 +472,12 @@ export default function EstudioLista({
             onClick={() => onFiltro(f.valor)}
             aria-selected={filtro === f.valor}
             title={f.dica}
-            className={`toque-compacto flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded-full pl-3.5 pr-1 text-[12px] font-medium transition-colors duration-200 ${
+            className={`toque-compacto flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full pl-2.5 pr-1 text-[12px] sm:min-w-0 sm:pl-3.5 font-medium transition-colors duration-200 ${
               filtro === f.valor ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <span>{f.rotulo}</span>
-            <span className={`ml-2 inline-flex h-6 min-w-[28px] items-center justify-center rounded-full px-1.5 text-[15px] font-semibold leading-none tracking-[-0.02em] tabular-nums ${filtro === f.valor ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`}>{contagem[f.valor]}</span>
+            <span className={`ml-1.5 inline-flex h-6 min-w-[26px] sm:ml-2 sm:min-w-[28px] items-center justify-center rounded-full px-1.5 text-[15px] font-semibold leading-none tracking-[-0.02em] tabular-nums ${filtro === f.valor ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`}>{contagem[f.valor]}</span>
           </button>
         ))}
       </div>
