@@ -82,8 +82,8 @@ const quando = (iso: string): string => {
   return d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
 
-const COR_DA_FAIXA: Record<Faixa, string> = { quente: "bg-primary/15 text-primary", morno: "bg-warning/15 text-warning", frio: "bg-muted text-muted-foreground" };
-const COR_DO_ENVIO: Record<string, string> = { enviado: "bg-primary/15 text-primary", simulado: "bg-info/15 text-info", pendente: "bg-muted text-muted-foreground", erro: "bg-destructive/15 text-destructive" };
+const COR_DA_FAIXA: Record<Faixa, string> = { quente: "bg-accent-soft text-primary", morno: "bg-warning-soft text-warning", frio: "bg-muted text-muted-foreground" };
+const COR_DO_ENVIO: Record<string, string> = { enviado: "bg-accent-soft text-primary", simulado: "bg-info-soft text-info", pendente: "bg-muted text-muted-foreground", erro: "bg-danger-soft text-destructive" };
 const caixinha = "h-4 w-4 shrink-0 accent-[hsl(var(--primary))]";
 
 function BlocoDeCopia({ rotulo, valor, onde }: { rotulo: string; valor: string; onde?: string }) {
@@ -590,7 +590,7 @@ function ParteWhatsapp({ i, guardar, salvando }: DaParte) {
             <div key={t.chave} className="min-w-0" data-template-sugerido={t.chave}>
               <div className="mb-1 flex min-w-0 items-center">
                 <span className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{t.rotulo}</span>
-                <span className={juntar(etiqueta, "ml-2", t.obrigatorio ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")}>{t.obrigatorio ? "Necessário" : "Opcional"}</span>
+                <span className={juntar(etiqueta, "ml-2", t.obrigatorio ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{t.obrigatorio ? "Necessário" : "Opcional"}</span>
               </div>
               <BlocoDeCopia rotulo={`Nome: ${t.nome} · ${t.categoria}`} valor={t.texto} onde={t.variaveis.map((v, n) => `{{${n + 1}}} ${v}`).join(" · ")} />
               {t.botoes.length > 0 && <span className={juntar(texto.auxiliar, "mt-1 block leading-5")} data-botoes-do-template="">Botões, nesta ordem: {t.botoes.join(" · ")}</span>}
@@ -881,7 +881,7 @@ interface RascunhoDoVendedor {
 }
 
 const chip = (ligado: boolean) =>
-  juntar("toque-compacto mb-1.5 mr-1.5 inline-flex h-8 items-center rounded-md border px-2.5 text-[12px] font-medium transition-colors", foco, ligado ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted");
+  juntar("toque-compacto mb-1.5 mr-1.5 inline-flex h-8 items-center rounded-md border px-2.5 text-[12px] font-medium transition-colors", foco, ligado ? "border-primary/40 bg-accent-soft text-primary" : "border-border text-muted-foreground hover:bg-muted");
 
 function ParteVendedores({ i, nicho }: DaParte) {
   const qc = useQueryClient();
@@ -953,7 +953,7 @@ function ParteVendedores({ i, nicho }: DaParte) {
                     {convidado ? (
                       <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")}>Convite pendente</span>
                     ) : v.recebe_leads ? (
-                      <span className={juntar(etiqueta, "ml-2", v.no_expediente ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")} data-no-expediente={v.no_expediente ? "sim" : "nao"}>{v.no_expediente ? "No expediente" : "Fora do expediente"}</span>
+                      <span className={juntar(etiqueta, "ml-2", v.no_expediente ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")} data-no-expediente={v.no_expediente ? "sim" : "nao"}>{v.no_expediente ? "No expediente" : "Fora do expediente"}</span>
                     ) : null}
                   </span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>

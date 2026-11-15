@@ -1726,9 +1726,9 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
 
 function LauncherChoice({ icon, tone, title, desc, onClick }: any) {
   const iconTone: any = {
-    success: "bg-success/15 text-success",
-    danger: "bg-destructive/15 text-destructive",
-    primary: "bg-primary/15 text-primary",
+    success: "bg-success-soft text-success",
+    danger: "bg-danger-soft text-destructive",
+    primary: "bg-accent-soft text-primary",
   };
   return (
     <li>

@@ -29,17 +29,17 @@ const formVazio = {
 };
 
 const corDoStatus: Record<string, string> = {
-  kickoff: "bg-info/15 text-info",
-  em_andamento: "bg-warning/15 text-warning",
-  entrega: "bg-primary/10 text-primary",
-  pago: "bg-success/15 text-success",
+  kickoff: "bg-info-soft text-info",
+  em_andamento: "bg-warning-soft text-warning",
+  entrega: "bg-accent-soft text-primary",
+  pago: "bg-success-soft text-success",
   arquivado: "bg-muted text-muted-foreground",
 };
 
 const corDaParcela: Record<string, string> = {
-  aberta: "bg-warning/15 text-warning",
-  atrasada: "bg-destructive/15 text-destructive",
-  paga: "bg-success/15 text-success",
+  aberta: "bg-warning-soft text-warning",
+  atrasada: "bg-danger-soft text-destructive",
+  paga: "bg-success-soft text-success",
   cancelada: "bg-muted text-muted-foreground",
 };
 

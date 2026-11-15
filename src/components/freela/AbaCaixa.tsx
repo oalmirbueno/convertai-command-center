@@ -8,9 +8,9 @@ import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dados
 import { dataBR, fmtMoeda, hojeISO, ROTULO_STATUS_PARCELA, statusVisualDaParcela, type Moeda } from "@/lib/freela/freelaLib";
 
 const corDaParcela: Record<string, string> = {
-  aberta: "bg-warning/15 text-warning",
-  atrasada: "bg-destructive/15 text-destructive",
-  paga: "bg-success/15 text-success",
+  aberta: "bg-warning-soft text-warning",
+  atrasada: "bg-danger-soft text-destructive",
+  paga: "bg-success-soft text-success",
   cancelada: "bg-muted text-muted-foreground",
 };
 

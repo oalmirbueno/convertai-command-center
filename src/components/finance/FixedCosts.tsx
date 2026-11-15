@@ -540,8 +540,8 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                               title="Alterar a data de vencimento"
                               className={juntar(
                                 "inline-flex h-5 items-center rounded px-1.5 text-[11px] font-medium tabular-nums transition-colors",
-                                dias < 0 ? "bg-destructive/15 text-destructive hover:bg-destructive/25"
-                                  : dias <= 3 ? "bg-warning/15 text-warning hover:bg-warning/25"
+                                dias < 0 ? "bg-danger-soft text-destructive hover:bg-destructive/25"
+                                  : dias <= 3 ? "bg-warning-soft text-warning hover:bg-warning/25"
                                     : "bg-muted text-muted-foreground hover:text-foreground",
                               )}
                             >

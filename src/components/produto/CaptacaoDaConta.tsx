@@ -379,7 +379,7 @@ const PASSOS_DA_META = [
   "Cole o ID e o token aqui e salve. O token fica guardado no cofre e não aparece de novo.",
 ];
 
-const COR_DA_SITUACAO: Record<string, string> = { enviado: "bg-primary/15 text-primary", pendente: "bg-muted text-muted-foreground", erro: "bg-destructive/15 text-destructive" };
+const COR_DA_SITUACAO: Record<string, string> = { enviado: "bg-accent-soft text-primary", pendente: "bg-muted text-muted-foreground", erro: "bg-danger-soft text-destructive" };
 const NOME_DA_SITUACAO: Record<string, string> = { enviado: "Enviado", pendente: "Na fila", erro: "Erro" };
 
 function Meta() {

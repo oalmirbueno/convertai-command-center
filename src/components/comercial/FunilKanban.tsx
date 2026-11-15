@@ -578,7 +578,7 @@ function Cartao({
           aria-hidden="true"
           className={juntar(
             "mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold sm:hidden",
-            atrasado ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary",
+            atrasado ? "bg-warning-soft text-warning" : "bg-accent-soft text-primary",
           )}
         >
           {(lead.name.trim().charAt(0) || "?").toUpperCase()}
@@ -605,7 +605,7 @@ function Cartao({
             <p className={juntar("mt-0.5 truncate text-[11px] leading-4 max-sm:hidden", lead.owner_id ? "text-muted-foreground" : "font-medium text-warning")} data-responsavel-no-cartao="">
               {lead.faixa && (
                 <span
-                  className={juntar("mr-1.5 inline-flex h-4 items-center rounded px-1 text-[10px] font-semibold uppercase leading-none", lead.faixa === "quente" ? "bg-destructive/15 text-destructive" : lead.faixa === "morno" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}
+                  className={juntar("mr-1.5 inline-flex h-4 items-center rounded px-1 text-[10px] font-semibold uppercase leading-none", lead.faixa === "quente" ? "bg-danger-soft text-destructive" : lead.faixa === "morno" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground")}
                   title={`Nota ${lead.nota ?? 0} de 100${lead.nota_motivos && lead.nota_motivos.length ? `: ${lead.nota_motivos.join("; ")}` : ""}`}
                   data-faixa-do-lead={lead.faixa}
                 >

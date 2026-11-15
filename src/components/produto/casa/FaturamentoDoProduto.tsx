@@ -138,7 +138,7 @@ export default function FaturamentoDoProduto({ compacto = false }: { compacto?: 
                     {ROTULO_DO_ESTADO[c.estado]} · {c.usuarios} {c.usuarios === 1 ? "usuário" : "usuários"} · {reais(c.mensal)} por mês
                   </span>
                 </span>
-                {c.aberto > 0 && <span className={juntar(etiqueta, "ml-2 bg-warning/10 text-warning")}>{reais(c.aberto)} em aberto</span>}
+                {c.aberto > 0 && <span className={juntar(etiqueta, "ml-2 bg-warning-soft text-warning")}>{reais(c.aberto)} em aberto</span>}
                 <span className="ml-3 w-[96px] shrink-0 text-right">
                   <span className={juntar(texto.corpo, "block tabular-nums")}>{reais(c.recebido)}</span>
                   {c.custo > 0 && <span className={juntar(texto.auxiliar, "block tabular-nums")}>custo {reais(c.custo)}</span>}

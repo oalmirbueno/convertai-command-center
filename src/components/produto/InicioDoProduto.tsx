@@ -165,7 +165,7 @@ function Numero({ icone, rotulo, valor, apoio, lado, para, alerta }: { icone: Re
   const miolo = (
     <>
       <span className="flex min-w-0 items-center">
-        <span className={juntar("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", alerta ? "bg-warning/10 text-warning" : "bg-primary/10 text-primary")}>{icone}</span>
+        <span className={juntar("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", alerta ? "bg-warning-soft text-warning" : "bg-accent-soft text-primary")}>{icone}</span>
         <span className={juntar(texto.rotulo, "ml-3 min-w-0 flex-1 truncate")}>{rotulo}</span>
         {lado}
       </span>
@@ -380,7 +380,7 @@ export default function InicioDoProduto({ estado }: { estado: EstadoDoProduto })
                       <span className={juntar(texto.corpo, "block truncate")}>{c.title}</span>
                       {c.lead && <span className={juntar(texto.auxiliar, "block truncate")}>{c.lead}</span>}
                     </span>
-                    {c.atrasado && <span className={juntar(etiqueta, "ml-2 bg-warning/10 text-warning")}>Atrasado</span>}
+                    {c.atrasado && <span className={juntar(etiqueta, "ml-2 bg-warning-soft text-warning")}>Atrasado</span>}
                   </Link>
                 </li>
               ))}

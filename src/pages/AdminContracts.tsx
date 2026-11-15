@@ -84,9 +84,9 @@ type Contract = {
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   draft: { label: "Rascunho", cls: "bg-muted text-muted-foreground" },
-  sent: { label: "Aguardando cliente", cls: "bg-warning/15 text-warning" },
-  signed: { label: "Em revisão", cls: "bg-primary/15 text-primary" },
-  completed: { label: "Assinado", cls: "bg-success/15 text-success" },
+  sent: { label: "Aguardando cliente", cls: "bg-warning-soft text-warning" },
+  signed: { label: "Em revisão", cls: "bg-accent-soft text-primary" },
+  completed: { label: "Assinado", cls: "bg-success-soft text-success" },
   cancelled: { label: "Cancelado", cls: "bg-muted text-muted-foreground" },
   substituido: { label: "Substituído", cls: "bg-muted text-muted-foreground" },
 };

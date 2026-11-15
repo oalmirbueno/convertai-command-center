@@ -19,22 +19,22 @@ import { AjudaRecolhida, JanelaCentral, SeletorCompacto, botao, juntar, texto } 
 
 function getNotifIcon(type: string) {
   switch (categoriaDoAviso(type)) {
-    case "decisao": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
-    case "pedido": return { icon: <Package className="w-4 h-4" />, bg: "bg-info/10 text-info" };
-    case "projeto": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-success/10 text-success" };
-    case "cobranca": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
-    case "tarefa": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info/10 text-info" };
-    case "relatorio": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-accent/50 text-accent-foreground" };
+    case "decisao": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
+    case "pedido": return { icon: <Package className="w-4 h-4" />, bg: "bg-info-soft text-info" };
+    case "projeto": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-success-soft text-success" };
+    case "cobranca": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning-soft text-warning" };
+    case "tarefa": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info-soft text-info" };
+    case "relatorio": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-muted text-foreground" };
     // Post no ar: o aviso que leva para fora do painel merece cara própria.
-    case "publicacao": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-success/10 text-success" };
-    case "entrega": return { icon: <FileArchive className="w-4 h-4" />, bg: "bg-success/10 text-success" };
-    case "alerta": return { icon: <AlertTriangle className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
-    case "agente": return { icon: <Bot className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
-    case "comercial": return { icon: <Briefcase className="w-4 h-4" />, bg: "bg-info/10 text-info" };
-    case "anuncios": return { icon: <Megaphone className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
+    case "publicacao": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-success-soft text-success" };
+    case "entrega": return { icon: <FileArchive className="w-4 h-4" />, bg: "bg-success-soft text-success" };
+    case "alerta": return { icon: <AlertTriangle className="w-4 h-4" />, bg: "bg-warning-soft text-warning" };
+    case "agente": return { icon: <Bot className="w-4 h-4" />, bg: "bg-muted text-muted-foreground" };
+    case "comercial": return { icon: <Briefcase className="w-4 h-4" />, bg: "bg-info-soft text-info" };
+    case "anuncios": return { icon: <Megaphone className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
     // 26/10: o resumo do dia (um por dia) leva à tela Hoje.
-    case "resumo": return { icon: <Sunrise className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
-    default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
+    case "resumo": return { icon: <Sunrise className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
+    default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-muted text-muted-foreground" };
   }
 }
 
@@ -191,15 +191,15 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
         {/* Lista: a única rolagem da janela */}
         <div className="pb-2">
           {isError ? <button type="button" className="m-5 text-[13px] text-warning" onClick={() => void refetch()}>Não foi possível ler os avisos. Tentar novamente</button> : groups.length === 0 ? (
-            <p className="py-8 text-center text-[13px] text-muted-foreground">Nenhuma notificação.</p>
+            <p className="py-12 text-center text-[13px] text-muted-foreground">Nenhuma notificação.</p>
           ) : (
             groups.map((group) => {
               const aberto = grupoAberto(group);
               return (
-              <section key={group.categoria} aria-label={group.nome} data-grupo-do-sino={group.categoria} className="border-b border-border/50 last:border-b-0">
-                <div className="flex min-w-0 items-center px-5 py-2">
+              <section key={group.categoria} aria-label={group.nome} data-grupo-do-sino={group.categoria} className="border-b border-border/60 last:border-b-0">
+                <div className="flex min-w-0 items-center px-5 pb-1 pt-3">
                   <button type="button" aria-expanded={aberto} onClick={() => setAbertos((x) => ({ ...x, [group.categoria]: !aberto }))} className="flex min-w-0 flex-1 items-center text-left">
-                    <ChevronDown className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", !aberto && "-rotate-90")} aria-hidden="true" />
+                    <ChevronDown className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200", !aberto && "-rotate-90")} aria-hidden="true" />
                     <span className={juntar(texto.etiqueta, "min-w-0 truncate", group.pedeDecisao ? "text-primary" : "text-muted-foreground")}>{group.nome}</span>
                     <span className={juntar(texto.etiqueta, "ml-1.5 shrink-0 tabular-nums text-muted-foreground")}>{group.naoLidos > 0 ? `${group.naoLidos} não ${group.naoLidos === 1 ? "lido" : "lidos"}` : group.itens.length}</span>
                   </button>
@@ -218,7 +218,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                       onClick={() => handleClick(n)}
                       data-pede-decisao={destaque ? "" : undefined}
                       className={`px-5 py-3 cursor-pointer transition-colors ${
-                        destaque ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-secondary/30"
+                        destaque ? "bg-accent-soft/60 hover:bg-accent-soft" : "hover:bg-muted/40"
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -226,13 +226,13 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                           {icon}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-[13px] leading-snug ${n.read ? "text-muted-foreground" : destaque ? "text-foreground font-medium" : "text-foreground"}`}>
+                          <p className={`text-[13px] leading-5 ${n.read ? "text-muted-foreground" : destaque ? "text-foreground font-medium" : "text-foreground"}`}>
                             {n.message}
                           </p>
                           {area === "agentes" && n.link && <ContextoDoAviso link={n.link} />}
-                          <p className="text-[11px] text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>
+                          <p className="text-[11px] leading-4 text-muted-foreground mt-0.5">{timeAgo(n.created_at)}</p>
                           {n.link && (
-                            <p className="text-[11px] text-primary mt-1">{getLinkLabel(n)}</p>
+                            <p className="text-[12px] font-medium leading-4 text-primary mt-1">{getLinkLabel(n)}</p>
                           )}
                         </div>
                         {!n.read && <div className={`w-2 h-2 rounded-full shrink-0 mt-2 ${destaque ? "bg-primary" : "bg-muted-foreground/40"}`} />}

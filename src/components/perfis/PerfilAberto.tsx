@@ -391,7 +391,7 @@ export default function PerfilAberto({
                       type="button"
                       aria-pressed={filtros.fora}
                       onClick={() => setFiltros({ ...filtros, fora: !filtros.fora })}
-                      className={juntar(botao.secundario, "mb-2 h-9", filtros.fora && "border-primary bg-primary/10 text-primary hover:bg-primary/15")}
+                      className={juntar(botao.secundario, "mb-2 h-9", filtros.fora && "border-primary bg-accent-soft text-primary hover:bg-primary/15")}
                     >
                       Fora da curva
                     </button>

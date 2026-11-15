@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { atualizandoPorVersao, isChunkError } from "@/lib/appRefresh";
+import { botao } from "@/components/sistema/estilos";
 
 /**
  * Barreira de erro POR TELA.
@@ -73,22 +74,21 @@ class RouteErrorBoundaryInner extends Component<Props, State> {
 
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-        <p className="text-[20px] leading-7 font-semibold text-foreground">Algo travou nesta tela</p>
+        <p className="text-[20px] leading-7 font-semibold tracking-[-0.01em] text-foreground">Algo travou nesta tela</p>
         <p className="max-w-[420px] text-[13px] leading-relaxed text-muted-foreground">
-          O resto do painel continua funcionando. Você pode tentar abrir esta tela de novo
-          ou voltar para o início.
+          O resto do painel continua funcionando. Tente abrir de novo ou volte para o início.
         </p>
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
             onClick={this.reset}
-            className="rounded-xl bg-primary px-5 py-2.5 text-[13px] leading-5 font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+            className={botao.primario}
           >
             Tentar de novo
           </button>
           <Link
             to="/dashboard"
-            className="rounded-xl border border-border px-5 py-2.5 text-[13px] leading-5 font-medium text-foreground hover:border-primary/50 transition-colors"
+            className={botao.secundario}
           >
             Voltar para o painel
           </Link>

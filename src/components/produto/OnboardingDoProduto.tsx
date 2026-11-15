@@ -101,7 +101,7 @@ type Passo = "nicho" | "objetivo" | "empresa" | "funil" | "acesso";
 function Opcao({ marcada, onClick, icone, titulo, linha, dado }: { marcada: boolean; onClick: () => void; icone?: ReactNode; titulo: string; linha?: string; dado: string }) {
   return (
     <button type="button" role="radio" aria-checked={marcada} onClick={onClick} data-opcao={dado} className={juntar("produto-opcao flex min-w-0 items-center rounded-lg p-3 text-left sm:p-3.5", foco)}>
-      {icone && <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", marcada ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")}>{icone}</span>}
+      {icone && <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", marcada ? "bg-primary text-primary-foreground" : "bg-accent-soft text-primary")}>{icone}</span>}
       <span className="min-w-0 flex-1">
         <span className={juntar(texto.corpo, "block truncate font-medium")}>{titulo}</span>
         {linha && <span className={juntar(texto.auxiliar, "block truncate")}>{linha}</span>}
@@ -320,7 +320,7 @@ export default function OnboardingDoProduto({ modo, testeDias: testeDiasDeFora, 
           <ol className="mt-5 min-w-0 space-y-1.5" data-funil-do-onboarding="">
             {ETAPAS_DO_FUNIL.filter((id) => id !== "perdido").map((id, i) => (
               <li key={id} className="flex min-w-0 items-center">
-                <span className={juntar("mr-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", id === "ganho" ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")}>{id === "ganho" ? <Check className="h-3 w-3" aria-hidden="true" /> : i + 1}</span>
+                <span className={juntar("mr-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", id === "ganho" ? "bg-primary text-primary-foreground" : "bg-accent-soft text-primary")}>{id === "ganho" ? <Check className="h-3 w-3" aria-hidden="true" /> : i + 1}</span>
                 <input
                   value={nomeDaEtapa(id)}
                   onChange={(e) => mudar({ etapas: { ...r.etapas, [id]: e.target.value.slice(0, 24) } })}

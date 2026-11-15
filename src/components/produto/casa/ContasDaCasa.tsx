@@ -42,11 +42,11 @@ import {
 
 export const COR_DO_ESTADO: Record<EstadoDaConta, string> = {
   teste: "bg-muted text-muted-foreground",
-  ativa: "bg-primary/10 text-primary",
-  atrasada: "bg-warning/10 text-warning",
-  suspensa: "bg-destructive/10 text-destructive",
+  ativa: "bg-accent-soft text-primary",
+  atrasada: "bg-warning-soft text-warning",
+  suspensa: "bg-danger-soft text-destructive",
   cancelada: "bg-muted text-muted-foreground",
-  cortesia: "bg-primary/10 text-primary",
+  cortesia: "bg-accent-soft text-primary",
 };
 
 const ESTADOS_QUE_A_CASA_DEFINE: EstadoDaConta[] = ["teste", "ativa", "cortesia", "suspensa", "cancelada"];
@@ -374,7 +374,7 @@ function FichaDaConta({ conta, planos, onFechar, onMudou }: { conta: ContaNaCasa
                   <span className={juntar(texto.corpo, "block truncate")}>{m.nome || m.email}</span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>{m.email}{m.entrou_em ? ` · entrou em ${diaLegivel(m.entrou_em)}` : ""}</span>
                 </span>
-                <span className={juntar(etiqueta, "ml-2", m.papel === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{m.papel === "admin" ? "Administra" : "Usuário"}</span>
+                <span className={juntar(etiqueta, "ml-2", m.papel === "admin" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{m.papel === "admin" ? "Administra" : "Usuário"}</span>
                 {m.estado === "convidado" && (
                   <button
                     type="button"

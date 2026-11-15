@@ -157,7 +157,7 @@ export default function JanelaDoGanho({ lead, clientes, onCancelar, onConcluido 
         {resultado ? (
           <div className="min-w-0 space-y-4" data-ganho-pronto="">
             <div className="flex min-w-0 items-center">
-              <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success" aria-hidden="true">
+              <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success-soft text-success" aria-hidden="true">
                 <Check className="h-5 w-5" />
               </span>
               <div className="min-w-0">

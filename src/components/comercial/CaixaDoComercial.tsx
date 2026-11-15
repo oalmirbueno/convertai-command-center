@@ -131,7 +131,7 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
     >
       <div className="min-w-0">
         <div className="flex min-w-0 items-center">
-          <span className={juntar(texto.etiqueta, "mr-2 shrink-0 rounded px-1.5 leading-5", item.tipo === "fechou" ? "bg-success/15 text-success" : "bg-primary/15 text-primary")}>
+          <span className={juntar(texto.etiqueta, "mr-2 shrink-0 rounded px-1.5 leading-5", item.tipo === "fechou" ? "bg-success-soft text-success" : "bg-accent-soft text-primary")}>
             {item.tipo === "fechou" ? "Fechou" : "Avançou"}
           </span>
           <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{item.lead ? item.lead.company || item.lead.name : "Lead"}</h3>

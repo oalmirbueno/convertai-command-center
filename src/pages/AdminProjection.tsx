@@ -222,9 +222,9 @@ export default function AdminProjection() {
   }, [activeClients, gap, projectPayments]);
 
   const priorityColor = (p: string) => {
-    if (p === "alta") return "bg-destructive/10 text-destructive";
-    if (p === "média") return "bg-warning/10 text-warning";
-    return "bg-info/10 text-info";
+    if (p === "alta") return "bg-danger-soft text-destructive";
+    if (p === "média") return "bg-warning-soft text-warning";
+    return "bg-info-soft text-info";
   };
 
   if (!isAdmin) {

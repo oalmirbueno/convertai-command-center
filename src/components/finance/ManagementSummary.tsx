@@ -190,7 +190,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
           className={botao.discreto}
         >
           <span className="hidden sm:inline">{panelOpen ? "Recolher" : "Mostrar"}</span>
-          <ChevronDown className={juntar("h-4 w-4 transition-transform sm:ml-1", panelOpen && "rotate-180")} aria-hidden="true" />
+          <ChevronDown className={juntar("h-4 w-4 transition-transform duration-200 sm:ml-1", panelOpen && "rotate-180")} aria-hidden="true" />
         </button>
       }
     >
@@ -210,7 +210,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                 />
                 <Linha
                   icone={<PiggyBank className="h-3.5 w-3.5 text-primary" />}
-                  rotulo={<>Pró-labore proporcional <span className={juntar(etiqueta, "ml-1 bg-primary/10 text-primary")}>escada</span></>}
+                  rotulo={<>Pró-labore proporcional <span className={juntar(etiqueta, "ml-1 bg-accent-soft text-primary")}>escada</span></>}
                   valor={`− ${fmt(proLaboreProp)}`}
                   corDoValor="text-primary"
                 />
@@ -223,15 +223,15 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                   corDoValor="text-info"
                 />
               </ul>
-              <div className="mt-2 flex min-w-0 items-center border-t border-border pt-2.5">
+              <div className="mt-2 flex min-w-0 items-center border-t border-border/60 pt-3">
                 <span className={juntar(texto.corpo, "min-w-0 flex-1 font-medium")}>Lucro do mês</span>
-                <span className={juntar("shrink-0 text-[15px] font-semibold tabular-nums", result >= 0 ? "text-success" : "text-destructive")}>{fmt(result)}</span>
+                <span className={juntar("shrink-0 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums", result >= 0 ? "text-success" : "text-destructive")}>{fmt(result)}</span>
               </div>
 
               {grossReceived > 0 ? (
                 <div className="mt-4 min-w-0">
                   <p className={juntar(texto.rotulo, "mb-1.5")}>Como o dinheiro que entrou se divide</p>
-                  <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
+                  <div className="flex h-2 overflow-hidden rounded-full bg-muted [&>*+*]:ml-0.5">
                     {segs.map((s) => (
                       <div key={s.label} className={s.cls} style={{ width: `${(s.value / totalDaBarra) * 100}%` }} title={`${s.label}: ${fmt(s.value)}`} />
                     ))}
@@ -267,7 +267,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
             </div>
 
             {/* Coluna 2: meta, ponto de equilíbrio e pró-labore pela escada */}
-            <div className="min-w-0 divide-y divide-border border-t border-border md:border-l md:border-t-0">
+            <div className="min-w-0 divide-y divide-border/60 border-t border-border/60 md:border-l md:border-t-0">
               <div className="min-w-0 p-4 sm:p-5">
                 <div className="flex min-w-0 items-center">
                   <Target className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
@@ -283,7 +283,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                 {monthlyGoal && monthlyGoal > 0 ? (
                   <>
                     <div className="mt-1 flex min-w-0 items-baseline">
-                      <span className="text-[15px] font-semibold tabular-nums text-foreground">{fmt(operationalReceived)}</span>
+                      <span className="text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(operationalReceived)}</span>
                       <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>de {fmt(monthlyGoal)}</span>
                       <span className={juntar("ml-auto shrink-0 pl-2 text-[12px] tabular-nums", goalProgress! >= 1 ? "text-success" : "text-muted-foreground")}>
                         {Math.round(goalProgress! * 100)}%
@@ -307,7 +307,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                   <span className={juntar(texto.rotulo, "min-w-0 truncate")}>Ponto de equilíbrio</span>
                 </div>
                 <div className="mt-1 flex min-w-0 items-baseline">
-                  <span className="shrink-0 text-[15px] font-semibold tabular-nums text-foreground">{fmt(breakEvenOperational)}</span>
+                  <span className="shrink-0 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(breakEvenOperational)}</span>
                   <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>por mês · {fmt(breakEvenGross)} brutos</span>
                 </div>
                 <p className={juntar("mt-1 text-[12px] leading-4", operationalReceived >= breakEvenOperational ? "text-success" : "text-warning")}>
@@ -326,7 +326,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                   </AjudaRecolhida>
                 </div>
                 <div className="mt-1 flex min-w-0 flex-wrap items-center">
-                  <span className="mr-2 text-[15px] font-semibold tabular-nums text-foreground">{fmt(proLaboreProp)}</span>
+                  <span className="mr-2 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(proLaboreProp)}</span>
                   <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Oficial {fmt(proLabore)}</span>
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
@@ -377,16 +377,16 @@ function Linha({ icone, rotulo, apoio, ajuda, valor, corDoValor = "text-muted-fo
   separada?: boolean;
 }) {
   return (
-    <li className={juntar("flex min-w-0 items-start py-1.5", separada && "mb-1 border-b border-border pb-2.5")}>
-      <span className="mr-2 mt-0.5 inline-flex shrink-0" aria-hidden="true">{icone}</span>
+    <li className={juntar("flex min-w-0 items-start py-1.5", separada && "mb-1.5 border-b border-border/60 pb-3")}>
+      <span className="mr-2.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted" aria-hidden="true">{icone}</span>
       <div className="mr-3 min-w-0 flex-1">
         <div className="flex min-w-0 items-center">
-          <span className={juntar("min-w-0 text-[13px] leading-5", forte ? "font-medium text-foreground" : "text-muted-foreground")}>{rotulo}</span>
+          <span className={juntar("min-w-0 text-[13px] leading-6", forte ? "font-medium text-foreground" : "text-muted-foreground")}>{rotulo}</span>
           {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
         </div>
         {apoio && <p className="truncate text-[12px] leading-4 text-muted-foreground">{apoio}</p>}
       </div>
-      <span className={juntar("shrink-0 text-[13px] leading-5 tabular-nums", forte && !corDoValor.includes("success") ? "text-foreground" : corDoValor)}>{valor}</span>
+      <span className={juntar("shrink-0 text-[13px] leading-6 tabular-nums", forte && "font-medium", forte && !corDoValor.includes("success") ? "text-foreground" : corDoValor)}>{valor}</span>
     </li>
   );
 }

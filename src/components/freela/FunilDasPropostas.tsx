@@ -158,7 +158,7 @@ function Cartao({ proposta: p, contato, virouProjeto, onAbrir, onTransformar, on
       {p.status === "aceita" && (
         <div {...soOBotao} className="mt-2 space-y-1.5">
           {convertida ? (
-            <Link to="/clientes" className={juntar(etiqueta, "inline-flex bg-success/15 text-success")}>Virou cliente</Link>
+            <Link to="/clientes" className={juntar(etiqueta, "inline-flex bg-success-soft text-success")}>Virou cliente</Link>
           ) : (
             <>
               <button type="button" onClick={() => onTransformar(p)} className={juntar(botao.primario, "w-full justify-center")}>
@@ -171,7 +171,7 @@ function Cartao({ proposta: p, contato, virouProjeto, onAbrir, onTransformar, on
                   Só projeto, sem cliente
                 </button>
               ) : (
-                <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>Virou projeto</span>
+                <span className={juntar(etiqueta, "bg-accent-soft text-primary")}>Virou projeto</span>
               )}
             </>
           )}
