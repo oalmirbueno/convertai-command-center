@@ -44,6 +44,19 @@ function receivedOf(row: any) {
 // DATE ("AAAA-MM-DD") lido como dia de calendário: `new Date(d)` mostrava o vencimento um dia antes em UTC-3.
 const formatDate = (d: string) => dataDoPortal(d);
 
+/** Valor em reais com os centavos apagados e menores (o número que importa fica na frente). */
+function Dinheiro({ valor }: { valor: number }) {
+  const escrito = formatCurrency(valor);
+  const virgula = escrito.lastIndexOf(",");
+  if (virgula < 0) return <>{escrito}</>;
+  return (
+    <>
+      {escrito.slice(0, virgula)}
+      <span className="text-[0.6em] font-medium tracking-normal text-muted-foreground">{escrito.slice(virgula)}</span>
+    </>
+  );
+}
+
 export default function ClientFinanceiro() {
   const { user, profile: authProfile } = useAuth();
   const { clientId, profile, isImpersonating } = useClientIdentity();
@@ -68,7 +81,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: wallets, isError: erroNasWallets } = useQuery({
+  const { data: wallets, isLoading: loadingWallets, isError: erroNasWallets } = useQuery({
     queryKey: ["ads-wallet-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -82,7 +95,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: rechargeRequests, isError: erroNasRecargas } = useQuery({
+  const { data: rechargeRequests, isLoading: loadingRecargas, isError: erroNasRecargas } = useQuery({
     queryKey: ["recharge-requests-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -97,7 +110,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: myProjectPayments } = useQuery({
+  const { data: myProjectPayments, isLoading: loadingProjetos } = useQuery({
     queryKey: ["client-project-payments", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -264,7 +277,8 @@ export default function ClientFinanceiro() {
       )}
 
       {/* ===== LOADING ===== */}
-      {loadingBilling ? (
+      {/* Espera a primeira carga de tudo: saldo e projetos chegando depois empurravam "Pagamentos" para baixo. */}
+      {loadingBilling || loadingWallets || loadingRecargas || loadingProjetos ? (
         <Carregando forma="aba" rotulo="Carregando dados financeiros" />
       ) : (
       <>
@@ -277,7 +291,7 @@ export default function ClientFinanceiro() {
                 <div className="mr-4 min-w-0">
                   <p className={juntar(texto.rotulo, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
                   <p className="mt-2 text-[48px] font-semibold leading-[52px] tracking-[-0.04em] tabular-nums text-foreground max-sm:text-[32px] max-sm:leading-10">
-                    {formatCurrency(Number(latestPlan.amount))}
+                    <Dinheiro valor={Number(latestPlan.amount)} />
                     <span className="ml-1.5 text-[15px] font-normal tracking-normal text-muted-foreground">/mês</span>
                   </p>
                 </div>
@@ -294,7 +308,7 @@ export default function ClientFinanceiro() {
                     {daysLeft > 0 ? (
                       <>
                         <span className="mr-1.5 text-[20px] font-semibold leading-7 tabular-nums text-foreground">{daysLeft}</span>
-                        dias restantes
+                        {daysLeft === 1 ? "dia restante" : "dias restantes"}
                       </>
                     ) : (
                       "Período vencido"
@@ -375,7 +389,7 @@ export default function ClientFinanceiro() {
                   size="xl"
                   icon={<Zap className="h-4 w-4" />}
                   label={platformLabels[w.platform] || w.platform}
-                  value={formatCurrency(balance)}
+                  value={<Dinheiro valor={balance} />}
                   corner={<StatusPill tone={statusTone}>{statusText}</StatusPill>}
                   chart={
                     <>
@@ -409,17 +423,17 @@ export default function ClientFinanceiro() {
                         <p className="mr-2 truncate text-[15px] font-semibold leading-5 text-foreground">{pp.project?.name || "Projeto"}</p>
                         <Chip>{getProjectBrand(pp.project?.project_type)}</Chip>
                       </div>
-                      <p className={juntar(texto.numeroGrande, "mt-2")}>{formatCurrency(Number(pp.total_value))}</p>
+                      <p className={juntar(texto.numeroGrande, "mt-2")}><Dinheiro valor={Number(pp.total_value)} /></p>
                     </div>
-                    <div className="mt-2 text-right tabular-nums">
-                      <p className="text-[13px] font-medium leading-5 text-success">{formatCurrency(paid)} pago</p>
-                      {remaining > 0 && <p className="text-[13px] leading-5 text-warning">{formatCurrency(remaining)} restante</p>}
+                    <div className="mt-2 flex min-w-0 flex-wrap items-center tabular-nums sm:flex-col sm:items-end">
+                      <Chip tone="success" dot className="mr-2 sm:mr-0">{formatCurrency(paid)} pago</Chip>
+                      {remaining > 0 && <Chip tone="warning" dot className="sm:mt-1.5">{formatCurrency(remaining)} restante</Chip>}
                     </div>
                   </div>
 
                   <div className="mt-5">
                     <ProgressBar value={paid} max={Number(pp.total_value)} height={10} tone={1} striped label={`${pct}% pago`} />
-                    <p className={juntar(texto.auxiliar, "mt-2")}>{pct}% concluído</p>
+                    <p className={juntar(texto.auxiliar, "mt-2")}>{pct}% pago</p>
                   </div>
 
                   <List className="mt-3" label={`Parcelas de ${pp.project?.name || "Projeto"}`}>

@@ -135,7 +135,7 @@ export default function ClientJourneyDashboard({
     validar: (v) => typeof v === "boolean",
   });
   const recolhidoNoCelular = pequena && !maisDetalhes;
-  const { loadingProjects, errorProjects, refetchProjects, errorAprovacoes, refetchAprovacoes, data } = useClientDashboardData(clientId);
+  const { loadingProjects, loadingDetails, errorProjects, refetchProjects, errorAprovacoes, refetchAprovacoes, data } = useClientDashboardData(clientId);
   const {
     activeProjects,
     doneProjects,
@@ -311,7 +311,8 @@ export default function ClientJourneyDashboard({
           }
         : null;
 
-  if (loadingProjects) {
+  // Espera a primeira carga de tudo: a tela entra inteira, sem bloco chegando depois e empurrando o resto.
+  if (loadingProjects || loadingDetails) {
     return <Carregando forma="aba" rotulo="Carregando o seu painel" />;
   }
 
@@ -330,6 +331,7 @@ export default function ClientJourneyDashboard({
   const temProjetos = activeProjects.length > 0 || doneProjects.length > 0;
   const projetosComPrazo = [...closedProjects, ...doneProjects];
   const temPendencia = pendingFiles.length > 0;
+  const diaRecorrente = !!clientProfile && ehRecorrenteParaODia({ id: String(clientId), ...clientProfile });
   // Rosca do ciclo: as publicações que a tela já tem, separadas por situação.
   const publicadosAntes = Math.max(0, published.length - publishedThisMonth.length);
   const totalDePublicacoes = scheduled.length + published.length;
@@ -368,11 +370,14 @@ export default function ClientJourneyDashboard({
 
       {/* 1b · Dia Prioritário (12/10/2026): o dia fixo de atenção estratégica; sem dia confirmado, estado neutro */}
       {/* 23/10/2026: no celular recolhido ele vira uma linha, sempre à vista (antes sumia em "Mais detalhes" e o cliente não via o dia). */}
-      <CartaoDoDiaPrioritario
-        clientId={clientId}
-        recorrente={!!clientProfile && ehRecorrenteParaODia({ id: String(clientId), ...clientProfile })}
-        compacto={recolhidoNoCelular}
-      />
+      {diaRecorrente && recolhidoNoCelular ? (
+        // Cliente recorrente sempre tem a linha do dia: o lugar dela fica guardado enquanto o dia carrega (nada pula).
+        <div className="min-h-[84px] min-w-0 min-[380px]:min-h-[68px] [&>[data-compacto]]:min-h-[84px] min-[380px]:[&>[data-compacto]]:min-h-[68px]">
+          <CartaoDoDiaPrioritario clientId={clientId} recorrente compacto />
+        </div>
+      ) : (
+        <CartaoDoDiaPrioritario clientId={clientId} recorrente={diaRecorrente} compacto={recolhidoNoCelular} />
+      )}
 
       {/* 2 · Avisos importantes: atraso e renovação chegando */}
       {overdueBills.length > 0 && (
@@ -420,14 +425,13 @@ export default function ClientJourneyDashboard({
           <section aria-label="Aprovações pendentes" className="min-w-0">
           <CardSurface variant="accent" className="overflow-hidden">
             <div className="flex min-w-0 flex-wrap items-center p-5 sm:flex-nowrap sm:p-6">
-              <span className="mr-4 shrink-0 text-[48px] font-semibold leading-[52px] tracking-[-0.04em] tabular-nums text-foreground max-sm:text-[40px] max-sm:leading-[44px]" aria-hidden="true">
+              <span className="mr-4 shrink-0 text-[64px] font-medium leading-[64px] tracking-[-0.05em] tabular-nums text-foreground max-sm:text-[56px] max-sm:leading-[56px]" aria-hidden="true">
                 {pendingFiles.length}
               </span>
               <div className="flex min-w-0 flex-1 items-center sm:mr-4">
                 <h2 className="min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
-                  {pendingFiles.length === 1
-                    ? "1 entrega aguarda a sua aprovação"
-                    : `${pendingFiles.length} entregas aguardam a sua aprovação`}
+                  <span className="sr-only">{pendingFiles.length} </span>
+                  {pendingFiles.length === 1 ? "entrega aguarda a sua aprovação" : "entregas aguardam a sua aprovação"}
                 </h2>
                 <AjudaRecolhida className="ml-1.5">
                   Sua aprovação libera o agendamento da publicação. Aprovou, a Aceleriq programa na data planejada.

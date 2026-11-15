@@ -195,6 +195,28 @@ export default function ClientRequests() {
         </StatGrid>
       )}
 
+      {/* Celular: os três números numa faixa só; tocar filtra (tocar de novo volta para todos). */}
+      {!isLoading && pequena && todos.length > 0 && (
+        <div role="group" aria-label="Resumo dos pedidos" className="grid min-w-0 grid-cols-3 gap-2">
+          {([
+            { chave: "abertos", rotulo: "Abertos", classe: "bg-accent-solid text-on-accent", apagado: "text-on-accent/80" },
+            { chave: "andamento", rotulo: "Andamento", classe: "bg-foreground text-background", apagado: "text-background/70" },
+            { chave: "concluidos", rotulo: "Concluídos", classe: "bg-card text-foreground shadow-sm", apagado: "text-muted-foreground" },
+          ] as const).map((n) => (
+            <button
+              key={n.chave}
+              type="button"
+              aria-pressed={filtro === n.chave}
+              onClick={() => setFiltro(filtro === n.chave ? "todos" : n.chave)}
+              className={juntar("flex min-w-0 flex-col rounded-[20px] px-3.5 py-3 text-left transition-transform active:scale-[0.98]", n.classe, filtro === n.chave && "ring-2 ring-ring ring-offset-2 ring-offset-background", foco)}
+            >
+              <span className="text-[26px] font-semibold leading-8 tabular-nums tracking-[-0.02em]">{contagem[n.chave]}</span>
+              <span className={juntar("min-w-0 truncate text-[12px] font-medium leading-4", n.apagado)}>{n.rotulo}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {isLoading ? (
         <Carregando linhas={3} rotulo="Carregando pedidos" />
       ) : isError && todos.length === 0 ? (
@@ -231,12 +253,15 @@ export default function ClientRequests() {
                   >
                     <Bolha tom={tomDaBolhaDoStatus[status.tone]} className="mr-3"><MessageSquarePlus className="h-4 w-4" /></Bolha>
                     <span className="min-w-0 flex-1">
-                      <span className="block min-w-0 truncate text-[14px] font-medium leading-5 text-foreground">{r.title}</span>
-                      <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
-                        {formatDate(r.created_at)} · Prioridade {prio.label.toLowerCase()}
+                      <span className="block min-w-0 text-[14px] font-medium leading-5 text-foreground line-clamp-2 [overflow-wrap:anywhere]">{r.title}</span>
+                      <span className="mt-1.5 flex min-w-0 items-center">
+                        <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                        <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>
+                          {formatDate(r.created_at)}
+                          {(r.priority === "high" || r.priority === "urgent") && ` · ${prio.label}`}
+                        </span>
                       </span>
                     </span>
-                    <StatusPill tone={status.tone} className="ml-2">{status.label}</StatusPill>
                     <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   </button>
                 </li>
