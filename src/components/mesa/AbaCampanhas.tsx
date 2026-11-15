@@ -417,7 +417,7 @@ export default function AbaCampanhas({
   ) : campanhas.isError && !listaAoLado ? (
     <AvisoDeErro erro={campanhas.error} />
   ) : (
-    <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" lista={lista} contagem={conteudosDe} carregando={campanhas.isLoading} onNova={() => comecarNova()} onAbrir={(id) => abrir(id)} />
+    <EstadoVazio lista={lista} contagem={conteudosDe} carregando={campanhas.isLoading} onNova={() => comecarNova()} onAbrir={(id) => abrir(id)} />
   );
 
   const agente = escolhida ? (
