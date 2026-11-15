@@ -73,6 +73,7 @@ export default function CanvasStudio({
   onRecolher,
   onEtapa,
   onGerar,
+  painel = false,
 }: {
   projetoId: string;
   nosNoQuadro: number;
@@ -94,6 +95,8 @@ export default function CanvasStudio({
   onEtapa?: (aberta: boolean) => void;
   /** Depois de montar, confere o custo dos nós novos/alterados; não publica nem refaz peças intactas. */
   onGerar?: (ids: string[]) => Promise<void>;
+  /** No painel lateral do editor (computador): caixa alta e atalhos em lista com nome. */
+  painel?: boolean;
 }) {
   const [pedido, setPedido] = useState("");
   const [modelo, setModelo] = useState(MODELO_PADRAO_DO_LAB);
@@ -243,7 +246,7 @@ export default function CanvasStudio({
   if (recolhido) {
     // Recolhido: uma linha fina (abrir, o que está acontecendo e o Desfazer); o canvas ganha a altura.
     return (
-      <div className="mx-auto mb-1 flex w-full min-w-0 max-w-[880px] items-center" data-canvas-studio="" data-studio-recolhido="">
+      <div className={juntar("flex w-full min-w-0 items-center", painel ? "rounded-full bg-muted/60 p-1" : "mx-auto mb-1 max-w-[880px]")} data-canvas-studio="" data-studio-recolhido="">
         <button type="button" className={juntar(botao.icone, "mr-1 h-7 w-7")} onClick={() => onRecolher && onRecolher(false)} aria-label="Abrir o Canvas Studio" title="Abrir o Canvas Studio (a caixa de pedido)" aria-expanded={false} data-abrir-studio="">
           <PanelTopOpen className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -254,10 +257,11 @@ export default function CanvasStudio({
   }
 
   return (
-    <div className="mx-auto mb-2 w-full min-w-0 max-w-[880px]" data-canvas-studio="">
+    <div className={juntar("w-full min-w-0", painel ? "" : "mx-auto mb-2 max-w-[880px]")} data-canvas-studio="">
       <CaixaDoPedido
         ref={campo}
         compacta
+        painel={painel}
         valor={pedido}
         onMudar={(v) => {
           setPedido(v);
@@ -273,7 +277,7 @@ export default function CanvasStudio({
         atalhos={ATALHOS_DO_CANVAS}
         onAtalho={escolherAtalho}
         rotulo="Pedido para o Canvas Studio"
-        placeholder={nosNoQuadro ? "Canvas Studio: peça um ajuste ou um projeto inteiro…" : "Canvas Studio: quero montar uma empresa, um produto low ticket, um funil de vendas…"}
+        placeholder={painel ? (nosNoQuadro ? "Peça um ajuste ou um projeto inteiro…" : "Quero montar uma empresa, um produto low ticket, um funil…") : nosNoQuadro ? "Canvas Studio: peça um ajuste ou um projeto inteiro…" : "Canvas Studio: quero montar uma empresa, um produto low ticket, um funil de vendas…"}
         tituloDoEnviar={gerarDepois && onGerar ? "Montar e conferir o custo para gerar os conteúdos" : "Montar os nós no canvas"}
         extra={
           <>

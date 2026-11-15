@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Archive, Copy, FolderOpen, Loader2, Plus, SearchX, Trash2, Workflow } from "lucide-react";
@@ -67,6 +67,7 @@ export default function AbaProjetos({
   clientes,
   telaCheia,
   onTelaCheia,
+  creditos,
 }: {
   projetoAberto: string | null;
   onAbrir: (id: string | null) => void;
@@ -74,6 +75,8 @@ export default function AbaProjetos({
   clientes: ClienteDoLab[];
   telaCheia?: boolean;
   onTelaCheia?: (v: boolean) => void;
+  /** O chip de créditos do cabeçalho: com o projeto aberto ele mora na barra do editor. */
+  creditos?: ReactNode;
 }) {
   const queryClient = useQueryClient();
   const q = useQuery({ queryKey: chaveDosProjetos, queryFn: listarProjetos, enabled: !projetoAberto });
@@ -83,7 +86,7 @@ export default function AbaProjetos({
   const [excluir, setExcluir] = useState<{ id: string; nome: string } | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
 
-  if (projetoAberto) return <EditorDoProjeto projetoId={projetoAberto} clientes={clientes} onVoltar={() => onAbrir(null)} onAbrirOutro={(id) => onAbrir(id)} telaCheia={telaCheia} onTelaCheia={onTelaCheia} />;
+  if (projetoAberto) return <EditorDoProjeto projetoId={projetoAberto} clientes={clientes} onVoltar={() => onAbrir(null)} onAbrirOutro={(id) => onAbrir(id)} telaCheia={telaCheia} onTelaCheia={onTelaCheia} creditos={creditos} />;
 
   const novo = async () => {
     setCriando(true);

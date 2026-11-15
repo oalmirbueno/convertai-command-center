@@ -476,7 +476,7 @@ export default function QuadroDoLab({
 
   const estilo = {
     // Fundo um pouco cinza (tokens do tema) para os cartões se destacarem.
-    "--xy-background-color": theme === "light" ? "hsl(var(--muted))" : "hsl(var(--muted) / 0.18)",
+    "--xy-background-color": theme === "light" ? "hsl(var(--card))" : "hsl(var(--muted) / 0.18)",
     "--xy-edge-stroke-default": "hsl(var(--muted-foreground))",
     "--xy-connectionline-stroke-default": "hsl(var(--primary))",
     "--xy-connectionline-stroke-width-default": 2.5,

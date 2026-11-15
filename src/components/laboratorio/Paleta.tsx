@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronsLeft, ChevronsRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, PanelLeftClose, Plus } from "lucide-react";
 import { botao, juntar, useEstadoDaTela } from "@/components/sistema";
 import { TIPOS_DE_NO, gruposDaPaleta, type TipoDeNo } from "@/lib/laboratorio/nos";
 import { IconeDoNo } from "./icones";
@@ -28,7 +28,7 @@ export default function Paleta({ onPor, vertical = true }: { onPor: (t: TipoDeNo
 
   if (vertical && recolhida)
     return (
-      <div className="flex h-full min-h-0 flex-col items-center" data-paleta-do-lab="" data-recolhida="">
+      <div className="pointer-events-auto flex min-h-0 flex-col items-center" data-paleta-do-lab="" data-recolhida="">
         <button type="button" className="toque-compacto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-foreground shadow-card transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setRecolhida(false)} aria-label="Abrir a paleta" title="Abrir a paleta de nós" aria-expanded={false}>
           <ChevronsRight className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -49,9 +49,9 @@ export default function Paleta({ onPor, vertical = true }: { onPor: (t: TipoDeNo
         onClick={() => onPor(t)}
         className={juntar(
           "toque-compacto group/tipo inline-flex shrink-0 items-center text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          larga ? "w-full min-w-0 rounded-2xl px-1.5 py-1.5 hover:bg-muted" : juntar("h-9 w-9 justify-center rounded-full", vertical ? "my-[3px]" : "m-[3px]"),
+          larga ? "w-full min-w-0 rounded-xl px-1.5 py-1.5 hover:bg-muted" : vertical ? "my-1 h-11 w-11 justify-center rounded-full bg-card shadow-card hover:bg-muted dark:bg-muted dark:hover:bg-muted/70" : "m-[3px] h-9 w-9 justify-center rounded-full",
         )}
-        style={larga ? undefined : { backgroundColor: tom(d.cor, 0.14) }}
+        style={larga || vertical ? undefined : { backgroundColor: tom(d.cor, 0.14) }}
         aria-label={d.rotulo}
         title={`${d.rotulo}: ${d.dica}`}
         data-por-no={t}
@@ -71,7 +71,7 @@ export default function Paleta({ onPor, vertical = true }: { onPor: (t: TipoDeNo
 
   return (
     <div
-      className={juntar("min-w-0", vertical && "flex h-full min-h-0 flex-col rounded-[26px] bg-card p-1.5 shadow-card", vertical && (larga ? "w-[248px] items-stretch" : "w-12 items-center"))}
+      className={juntar("min-w-0", vertical && "pointer-events-auto flex max-h-full min-h-0 flex-col", vertical && (larga ? "w-[256px] items-stretch rounded-[26px] bg-card p-2 shadow-pop" : "w-[52px] items-center"))}
       data-paleta-do-lab=""
       data-com-nomes={larga ? "" : undefined}
     >
@@ -79,10 +79,11 @@ export default function Paleta({ onPor, vertical = true }: { onPor: (t: TipoDeNo
         <div className={juntar("mb-1 flex shrink-0 items-center", larga ? "justify-between px-1" : "flex-col")}>
           {larga ? <span className="text-[13px] font-semibold leading-5 text-foreground">Nós</span> : null}
           <span className={juntar("inline-flex items-center", !larga && "flex-col")}>
-            <button type="button" className={botao.icone} onClick={() => setComNomes(!comNomes)} aria-label={larga ? "Mostrar só os ícones" : "Mostrar os nomes dos nós"} title={larga ? "Mostrar só os ícones" : "Mostrar os nomes dos nós"} aria-pressed={larga} data-nomes-da-paleta="">
-              {larga ? <PanelLeftClose className="h-4 w-4" aria-hidden="true" /> : <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />}
+            {/* Só ícones: o primeiro círculo é o "+" de tinta das referências e abre a lista com os nomes. */}
+            <button type="button" className={larga ? botao.icone : "toque-compacto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-foreground text-background shadow-card transition-colors hover:bg-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"} onClick={() => setComNomes(!comNomes)} aria-label={larga ? "Mostrar só os ícones" : "Mostrar os nomes dos nós"} title={larga ? "Mostrar só os ícones" : "Adicionar um nó: ver a lista com os nomes"} aria-pressed={larga} data-nomes-da-paleta="">
+              {larga ? <PanelLeftClose className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-5 w-5" aria-hidden="true" />}
             </button>
-            <button type="button" className={botao.icone} onClick={() => setRecolhida(true)} aria-label="Recolher a paleta" title="Recolher a paleta" aria-expanded>
+            <button type="button" className={juntar(botao.icone, !larga && "mt-1 h-7 w-7 bg-card/80")} onClick={() => setRecolhida(true)} aria-label="Recolher a paleta" title="Recolher a paleta" aria-expanded>
               <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
             </button>
           </span>
@@ -94,7 +95,7 @@ export default function Paleta({ onPor, vertical = true }: { onPor: (t: TipoDeNo
         aria-orientation={vertical ? "vertical" : "horizontal"}
         className={juntar(
           "nowheel scrollbar-hidden min-w-0",
-          vertical ? juntar("flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain pb-1", larga ? "items-stretch" : "items-center") : "flex items-center overflow-x-auto overscroll-contain rounded-full bg-card p-1 shadow-card",
+          vertical ? juntar("flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain pb-1", larga ? "items-stretch" : "w-full items-center px-1") : "flex items-center overflow-x-auto overscroll-contain rounded-full bg-card p-1 shadow-card",
         )}
         data-rolagem-da-paleta=""
       >
@@ -123,7 +124,7 @@ export default function Paleta({ onPor, vertical = true }: { onPor: (t: TipoDeNo
                   <span className="ml-2 tabular-nums">{g.tipos.length}</span>
                 </span>
               ) : i > 0 ? (
-                <span role="separator" aria-orientation={vertical ? "horizontal" : "vertical"} className={vertical ? "my-1.5 block h-px w-5 bg-border" : "mx-1 block h-5 w-px bg-border"} />
+                <span role="separator" aria-orientation={vertical ? "horizontal" : "vertical"} className={vertical ? "my-1 block h-px w-4 bg-transparent" : "mx-1 block h-5 w-px bg-border"} />
               ) : null}
               {fechado ? null : g.tipos.map(botaoDoTipo)}
             </div>
