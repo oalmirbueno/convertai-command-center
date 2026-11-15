@@ -2588,8 +2588,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         {/* 16/10/2026 (dono, celular: "lista de app"): abaixo de 640 px a linha ganha a foto
                             com o ponto da saúde, o nome e uma linha de apoio (o alerta principal ou a faixa). */}
                         <button type="button" aria-expanded={open} onClick={() => setExpandedHealth(open ? null : row.client.id)} className={juntar(linhaDeLista, "max-sm:min-h-[60px]")}>
-                          <span className={`mr-3 hidden h-2 w-2 shrink-0 rounded-full sm:block ${meta.dot}`} aria-hidden="true" />
-                          <span className="relative mr-3 inline-flex shrink-0 sm:hidden" aria-hidden="true">
+                          {/* v4 (15/11): a foto com o ponto da saúde vale em toda largura (antes só no celular). */}
+                          <span className="relative mr-3 inline-flex shrink-0" aria-hidden="true">
                             <FotoDoCliente nome={nomeDoCliente(row.client)} fotos={fotosDe({ id: String(row.client.id), nome: nomeDoCliente(row.client), avatar_url: row.client.avatar_url })} tamanho="md" />
                             <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background ${meta.dot}`} />
                           </span>
