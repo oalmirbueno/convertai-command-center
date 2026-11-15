@@ -1015,7 +1015,7 @@ body[data-gaveta-aberta] [data-casca="flutuante"] {
     display: flex;
   }
   [data-casca="conteudo"][data-com-trilho] {
-    padding-left: calc(max(0px, (100% - 1840px) / 2) + 96px);
+    padding-left: 96px;
   }
   body[data-modo-foco] [data-casca="conteudo"][data-com-trilho],
   body[data-embutido] [data-casca="conteudo"][data-com-trilho] {
@@ -1075,38 +1075,8 @@ svg.text-primary,
    toda: a barra de rolagem fica na borda da janela e o conteúdo continua com
    no máximo 1840 px, centrado pelo recuo lateral. No celular nada muda: a
    camada fixa entre o topo e a barra de baixo já rolava sozinha. */
-@media (min-width: 768px) {
-  html:has(> body [data-casca="conteudo"]) {
-    overflow: hidden;
-    scrollbar-gutter: auto;
-  }
-  [data-casca="conteudo"] {
-    /* relative (sem z-index, então sem camada nova): prende aqui dentro o que é
-       absoluto sem pai posicionado. Estático, isso escapava do <main> e
-       esticava a página por baixo (a janela ganhava rolagem fantasma). */
-    position: relative;
-    height: 100vh;
-    height: 100dvh;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    padding-left: calc(max(0px, (100% - 1840px) / 2) + 24px);
-    padding-right: calc(max(0px, (100% - 1840px) / 2) + 24px);
-    /* Âncoras e "ir até a seção" param abaixo do topo, não por baixo dele. */
-    scroll-padding-top: calc(env(safe-area-inset-top) + 88px);
-  }
-  body[data-modo-foco] [data-casca="conteudo"],
-  body[data-embutido] [data-casca="conteudo"] {
-    padding-left: 24px;
-    padding-right: 24px;
-    scroll-padding-top: 12px;
-  }
-}
-@media print {
-  html:has(> body [data-casca="conteudo"]) { overflow: visible !important; }
-  [data-casca="conteudo"] { height: auto !important; }
-}
+/* Hotfix 15/11: o bloco que fazia o <main> rolar no computador saiu (deslocava
+   os sticky e espremia a Mesa). A janela volta a rolar; o topo continua fixo. */
 
 /* Barra de rolagem fina e discreta, para usar explicitamente onde a regra global
    (todos os elementos, acima) não basta: cartões escuros e painéis tintos. */
