@@ -413,7 +413,7 @@
   }
   .ds-stat-valor[data-cabe] {
     white-space: nowrap;
-    font-size: clamp(20px, calc(100cqi / var(--ds-chars, 8) / 0.57), var(--ds-valor-max));
+    font-size: clamp(15px, calc(100cqi / var(--ds-chars, 8) / 0.57), var(--ds-valor-max));
   }
 }
 
