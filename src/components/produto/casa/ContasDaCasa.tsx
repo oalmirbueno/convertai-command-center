@@ -1,3 +1,4 @@
+import NumerosOusados from "@/components/admin/NumerosOusados";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -26,7 +27,6 @@ import {
   Carregando,
   EstadoDeErro,
   EstadoVazio,
-  FaixaDeNumeros,
   GrupoDeCampos,
   JanelaCentral,
   Secao,
@@ -95,9 +95,8 @@ export default function ContasDaCasa() {
 
   return (
     <div className="min-w-0 space-y-5" data-contas-da-casa="">
-      <FaixaDeNumeros
-        tamanho="compacto"
-        apoioAoLado
+      <NumerosOusados
+        solido={1}
         rotulo="Empresas no produto"
         itens={[
           { rotulo: "Receita recorrente", valor: reais(pagantes.reduce((s, c) => s + c.valor_mensal, 0)), apoio: "por mês" },

@@ -1,3 +1,4 @@
+import NumerosOusados from "@/components/admin/NumerosOusados";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +17,6 @@ import {
   Carregando,
   EstadoDeErro,
   EstadoVazio,
-  FaixaDeNumeros,
   JanelaCentral,
   RegiaoRolavel,
   SeletorCompacto,
@@ -282,9 +282,9 @@ export default function AdminQuizSubmissions() {
       />
 
       {/* Números: uma faixa só (sem um cartão por número) */}
-      <FaixaDeNumeros
+      <NumerosOusados
+        solido={3}
         rotulo="Números dos diagnósticos"
-        colunas={5}
         itens={numeros.map((n) => ({ rotulo: n.rotulo, valor: submissions ? n.valor : "-", corDoValor: n.cor }))}
       />
 

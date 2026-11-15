@@ -1,8 +1,9 @@
+import NumerosOusados from "@/components/admin/NumerosOusados";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, History, KeyRound, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { AjudaRecolhida, Carregando, EstadoDeErro, FaixaDeNumeros, JanelaCentral, MenuMais, botao, campo, juntar, lista, texto } from "@/components/sistema";
+import { AjudaRecolhida, Carregando, EstadoDeErro, JanelaCentral, MenuMais, botao, campo, juntar, lista, texto } from "@/components/sistema";
 import {
   CHAVE_DAS_CHAVES,
   COR_DO_ESTADO,
@@ -379,8 +380,7 @@ function Totais({ q, onAbrir }: { q: QuadroDasChaves; onAbrir: (id: string) => v
   const maior = maiorCliente(q.por_cliente);
   return (
     <div className="mb-3 min-w-0" data-totais-das-chaves="">
-      <FaixaDeNumeros
-        tamanho="compacto"
+      <NumerosOusados
         colunas={3}
         itens={[
           { rotulo: "Gasto do mês", valor: dolar(q.mes_total_usd), apoio: "todos os provedores", chave: "mes" },

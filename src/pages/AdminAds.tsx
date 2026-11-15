@@ -259,7 +259,10 @@ function Metrica({
   dica,
   corDoValor,
   grande = false,
+  variante = "default",
 }: {
+  /** No resumo grande: o cartão de tinta ou o sólido na cor da marca (um de cada por fileira). */
+  variante?: "default" | "ink" | "accent";
   icone: ReactNode;
   valor: string;
   unidade: string;
@@ -271,28 +274,28 @@ function Metrica({
   // Resumo do cliente (redesenho de 14/11/2026): cartão de indicador, rótulo pequeno em cima e número grande.
   if (grande) {
     return (
-      <div className={juntar(superficie.painel, "flex min-w-0 items-start px-4 py-3.5 sm:px-5 sm:py-4")} title={dica} data-metrica="">
-        <div className="min-w-0 flex-1">
-          <p className={juntar(texto.rotulo, "truncate font-normal")}>{unidade}</p>
-          <p className={juntar("mt-1.5 flex min-w-0 items-center text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums max-sm:text-[20px] max-sm:leading-7", corDoValor || "text-foreground")}>
-            <span className="min-w-0 truncate">{valor}</span>
-            {seta}
-          </p>
+      <div className={juntar(superficie.painel, variante === "ink" && superficie.tinta, variante === "accent" && superficie.destaque, "flex min-w-0 flex-col p-5 sm:p-6")} title={dica} data-metrica="">
+        <div className="flex min-w-0 items-center">
+          <span className={juntar("mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground max-sm:mr-2 max-sm:h-8 max-sm:w-8", variante === "default" ? "bg-muted" : "bg-foreground/10")} aria-hidden="true">{icone}</span>
+          <p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-muted-foreground first-letter:uppercase">{unidade}</p>
         </div>
-        <span className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground max-sm:hidden" aria-hidden="true">{icone}</span>
+        <p className={juntar("mt-5 flex min-w-0 items-center text-[32px] font-semibold leading-10 tracking-[-0.035em] tabular-nums max-sm:mt-4 max-sm:text-[24px] max-sm:leading-8", (variante === "default" && corDoValor) || "text-foreground")}>
+          <span className="min-w-0 truncate">{valor}</span>
+          {seta}
+        </p>
       </div>
     );
   }
   return (
     <div className="flex min-w-0 items-center" title={dica} data-metrica="">
       <span
-        className={juntar("mr-2 inline-flex shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground", grande ? "h-9 w-9" : "h-7 w-7")}
+        className="mr-2.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
         aria-hidden="true"
       >
         {icone}
       </span>
       <div className="min-w-0">
-        <p className={juntar("flex min-w-0 items-center font-semibold tabular-nums", grande ? "text-[20px] leading-7" : "text-[15px] leading-5", corDoValor || "text-foreground")}>
+        <p className={juntar("flex min-w-0 items-center font-semibold tabular-nums", "text-[18px] leading-6 tracking-[-0.02em] max-sm:text-[15px] max-sm:leading-5", corDoValor || "text-foreground")}>
           <span className="min-w-0 truncate">{valor}</span>
           {seta}
         </p>
@@ -332,10 +335,11 @@ function NumerosDoCliente({ dados, grande = false }: { dados: NumerosDoClienteDa
   const custo = p && p.custoPorResultado != null && p.custoPorResultado > 0 ? p.custoPorResultado : null;
   const icone = grande ? "h-[18px] w-[18px]" : "h-4 w-4";
   return (
-    <div className={juntar("grid min-w-0 grid-cols-2", grande ? "gap-3 md:grid-cols-4 md:gap-4" : "gap-x-4 gap-y-3 lg:grid-cols-4")}>
-      <Metrica grande={grande} icone={<Wallet className={icone} />} valor={dinheiro(dados.investido)} unidade="investido" dica={EXPLICACOES.investido} />
+    <div className={juntar("grid min-w-0 grid-cols-2", grande ? "gap-3 sm:gap-5 xl:grid-cols-4" : "gap-x-4 gap-y-3 lg:grid-cols-4")}>
+      <Metrica grande={grande} variante="ink" icone={<Wallet className={icone} />} valor={dinheiro(dados.investido)} unidade="investido" dica={EXPLICACOES.investido} />
       <Metrica
         grande={grande}
+        variante="accent"
         icone={<Target className={icone} />}
         valor={p ? numero(p.resultados) : "-"}
         unidade={p ? (p.resultados === 1 ? p.singular : p.plural) : "sem resultado"}
@@ -689,7 +693,7 @@ function ClientAdsDetail({
         voltar={{ para: "/anuncios", rotulo: "Anúncios" }}
         titulo={
           <span className="flex min-w-0 items-center">
-            <LogoDoCliente url={logoUrl} clienteId={clientId} nome={clientName} tamanho={28} className="mr-2.5" />
+            <LogoDoCliente url={logoUrl} clienteId={clientId} nome={clientName} tamanho={40} className="mr-3" />
             <span className="min-w-0 truncate">{clientName}</span>
           </span>
         }
@@ -1615,7 +1619,7 @@ export default function AdminAds() {
                           <button
                             type="button"
                             onClick={() => abrirCliente(clientId)}
-                            className={juntar(lista.linha, "group w-full flex-wrap py-3 text-left md:flex-nowrap", foco)}
+                            className={juntar(lista.linha, "group w-full flex-wrap px-3 py-4 text-left sm:px-4 md:flex-nowrap", foco)}
                           >
                             <span className="flex min-w-0 flex-1 basis-full items-center md:mr-4 md:basis-0">
                               {/* Mesma marca da grade de Métricas: reconhecer o cliente não pode depender da tela. */}
@@ -1623,11 +1627,11 @@ export default function AdminAds() {
                                 url={identidades?.get(clientId)?.profile_picture_url}
                                 clienteId={clientId}
                                 nome={nomes.get(clientId)}
-                                tamanho={36}
-                                className="mr-2.5"
+                                tamanho={44}
+                                className="mr-3"
                               />
                               <span className="block min-w-0 flex-1">
-                                <span className="block truncate text-[13px] font-semibold text-foreground">{nomes.get(clientId) || "Cliente"}</span>
+                                <span className="block truncate text-[15px] font-semibold leading-6 text-foreground">{nomes.get(clientId) || "Cliente"}</span>
                                 <span className={juntar(texto.auxiliar, "block truncate")}>
                                   {linhas.length === 0
                                     ? "Conta ligada · sem gasto nos últimos 30 dias"
@@ -1639,10 +1643,12 @@ export default function AdminAds() {
                               </span>
                               <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground md:hidden" aria-hidden="true" />
                             </span>
-                            <span className="mt-2.5 block min-w-0 basis-full pl-[46px] md:mt-0 md:w-3/5 md:shrink-0 md:basis-auto md:pl-0">
+                            <span className="mt-3 block min-w-0 basis-full pl-[56px] md:mt-0 md:w-3/5 md:shrink-0 md:basis-auto md:pl-0">
                               <NumerosDoCliente dados={dados} />
                             </span>
-                            <ChevronRight className="ml-3 hidden h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary md:block" aria-hidden="true" />
+                            <span className="ml-3 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-foreground group-hover:text-background md:inline-flex" aria-hidden="true">
+                              <ChevronRight className="h-4 w-4" />
+                            </span>
                           </button>
                         </li>
                       );

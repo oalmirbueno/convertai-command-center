@@ -1,3 +1,4 @@
+import NumerosOusados from "@/components/admin/NumerosOusados";
 import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -62,7 +63,7 @@ import {
   type Vendedor,
 } from "@/lib/produto/integracoes";
 import { Switch } from "@/components/ui/switch";
-import { CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, GrupoDeCampos, JanelaCentral, Secao, SeletorCompacto, botao, campo, etiqueta, foco, juntar, lista, texto } from "@/components/sistema";
+import { CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, JanelaCentral, Secao, SeletorCompacto, botao, campo, etiqueta, foco, juntar, lista, texto } from "@/components/sistema";
 import { Foto } from "./pecas";
 
 type Guardar = (dados: MudancaDaIntegracao, aviso: string) => Promise<boolean>;
@@ -212,9 +213,8 @@ function Visao({ i, guardar, salvando, irPara, nicho }: DaParte) {
         {i.ultimo_erro && <span className={juntar(texto.auxiliar, "mt-3 block leading-5 text-destructive")} role="alert" data-ultimo-erro="">Último erro: {i.ultimo_erro}</span>}
       </Secao>
 
-      <FaixaDeNumeros
+      <NumerosOusados
         rotulo="Números da integração"
-        colunas={5}
         data-numeros-da-integracao=""
         itens={[
           { rotulo: "Leads em 7 dias", valor: i.numeros.leads_7_dias },

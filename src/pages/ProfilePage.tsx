@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Save, Lock, Camera } from "lucide-react";
 import { toast } from "sonner";
-import { CabecalhoDePagina, CampoDeFormulario, GrupoDeCampos, Painel, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
+import { CabecalhoDePagina, CampoDeFormulario, GrupoDeCampos, Painel, botao, campo, foco, juntar, superficie, texto } from "@/components/sistema";
+import { StatusPill } from "@/components/ds";
 
 export default function ProfilePage() {
   const { user, profile } = useAuth();
@@ -99,16 +100,46 @@ export default function ProfilePage() {
   const papel = profile?.role === "admin" ? "Administrador" : profile?.role === "client" ? "Cliente" : profile?.role;
 
   return (
-    <div className="min-w-0 space-y-5">
+    <div className="min-w-0 space-y-6 sm:space-y-8">
       <CabecalhoDePagina
         titulo="Perfil"
         ajuda="Seus dados de acesso ao painel. O e-mail é o do login e só a equipe Aceleriq pode trocar."
       />
 
-      <div className="max-w-3xl space-y-5">
+      {/* Rodada ousada (15/11/2026): quem é você no cartão de tinta, com a foto grande; os dados e a senha ao lado. */}
+      <div className="grid min-w-0 max-w-5xl grid-cols-1 items-start gap-5 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
+        <section aria-label="Você" className={juntar(superficie.painel, superficie.tinta, "flex min-w-0 flex-col items-center p-6 text-center sm:p-8")}>
+          <div className="relative h-24 w-24 shrink-0">
+            <Avatar className="h-full w-full">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt={profile?.full_name} />}
+              <AvatarFallback className="bg-muted text-[32px] font-semibold text-foreground">{initials}</AvatarFallback>
+            </Avatar>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              aria-label="Trocar foto"
+              title="Trocar foto"
+              className={juntar(
+                "toque-compacto absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full border-2 border-card bg-primary text-primary-foreground transition-transform hover:scale-105",
+                foco,
+              )}
+            >
+              {uploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+          </div>
+          <p className="mt-5 max-w-full truncate text-[24px] font-semibold leading-8 tracking-[-0.03em] text-foreground">{profile?.full_name}</p>
+          <p className={juntar(texto.auxiliar, "mt-1 max-w-full truncate")}>{profile?.email}</p>
+          {papel && <StatusPill tone="success" className="mt-4">{papel}</StatusPill>}
+          {profile?.company_name && <p className={juntar(texto.auxiliar, "mt-4 max-w-full truncate")}>{profile.company_name}</p>}
+        </section>
+
+        <div className="min-w-0 space-y-5">
         <Painel
           as="section"
           aria-label="Seus dados"
+          titulo="Seus dados"
           rodape={
             <button type="button" onClick={handleSave} disabled={saving} className={botao.primario}>
               {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
@@ -116,34 +147,6 @@ export default function ProfilePage() {
             </button>
           }
         >
-          <div className="mb-5 flex min-w-0 items-center">
-            <div className="relative mr-4 h-14 w-14 shrink-0 sm:h-16 sm:w-16">
-              <Avatar className="h-full w-full">
-                {avatarUrl && <AvatarImage src={avatarUrl} alt={profile?.full_name} />}
-                <AvatarFallback className="bg-primary/15 text-[20px] font-semibold text-primary">{initials}</AvatarFallback>
-              </Avatar>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingAvatar}
-                aria-label="Trocar foto"
-                title="Trocar foto"
-                className={juntar(
-                  "absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted",
-                  foco,
-                )}
-              >
-                {uploadingAvatar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className={juntar(texto.tituloSecao, "truncate")}>{profile?.full_name}</p>
-              <p className={juntar(texto.auxiliar, "truncate")}>{profile?.email}</p>
-              {papel && <span className={juntar(etiqueta, "mt-1.5 bg-primary/10 text-primary")}>{papel}</span>}
-            </div>
-          </div>
-
           <GrupoDeCampos>
             <CampoDeFormulario rotulo="Nome completo" obrigatorio>
               <input value={fullName} onChange={e => setFullName(e.target.value)} autoComplete="name" className={campo} />
@@ -182,6 +185,7 @@ export default function ProfilePage() {
             </CampoDeFormulario>
           </GrupoDeCampos>
         </Painel>
+        </div>
       </div>
     </div>
   );
