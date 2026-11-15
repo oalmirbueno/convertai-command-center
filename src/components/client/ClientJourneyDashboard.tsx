@@ -913,7 +913,7 @@ export default function ClientJourneyDashboard({
             help="Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo."
           >
             <div className="flex min-w-0 flex-wrap items-center">
-              <div role="radiogroup" aria-label="Nota de 1 a 5" className="mr-4 inline-grid grid-cols-5 gap-2 sm:gap-3">
+              <div role="radiogroup" aria-label="Nota de 1 a 5" className="mr-4 inline-grid grid-cols-5 gap-1.5 sm:gap-3">
                 {[1, 2, 3, 4, 5].map((score) => (
                   <button
                     key={score}
@@ -923,7 +923,7 @@ export default function ClientJourneyDashboard({
                     onClick={() => setPulseScore(score)}
                     aria-label={`Nota ${score}`}
                     className={juntar(
-                      "flex h-12 w-12 items-center justify-center rounded-full text-[18px] font-semibold tabular-nums transition-colors",
+                      "flex h-10 w-10 items-center justify-center rounded-full text-[18px] sm:h-12 sm:w-12 font-semibold tabular-nums transition-colors",
                       foco,
                       pulseScore === score
                         ? "bg-accent-solid text-on-accent"
