@@ -193,20 +193,9 @@ export default function ClientVaultPage() {
         actions={
           <>
             {podeLimpar && (
-              <button
-                type="button"
-                onClick={() => setConfirmClearId(effectiveClientId)}
-                className={juntar(botao.discreto, "hidden hover:text-destructive sm:inline-flex")}
-                title="Limpar todo o cofre deste cliente"
-              >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                Limpar cofre
-              </button>
-            )}
-            {podeLimpar && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className={juntar(botao.icone, "sm:hidden")} aria-label="Mais ações">
+                  <button type="button" className={botao.icone} aria-label="Mais ações">
                     <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </DropdownMenuTrigger>

@@ -190,7 +190,7 @@ export default function AgendaComercial({
       <div className="grid min-w-0 gap-5 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
         <RegiaoRolavel rotulo="Calendário do mês" memoria="comercial:agenda:mes" className="lg:pr-1">
           <Painel
-            titulo={inicialMaiuscula(mesAberto.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }))}
+            titulo={inicialMaiuscula(mesAberto.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })).replace(" de ", " ")}
             descricao={
               abertasAtrasadas > 0 ? (
                 <span className="text-warning">
@@ -272,7 +272,7 @@ export default function AgendaComercial({
                 <EstadoVazio compacto titulo="Nenhum compromisso neste dia." />
               </div>
             ) : (
-              <ul className="divide-y divide-border/60 px-2 pb-2">
+              <ul className="px-2 pb-2">
                 {doDia.map((atividade) => {
                   const lead = atividade.lead_id ? porLead.get(atividade.lead_id) : null;
                   const feita = Boolean(atividade.done_at);
@@ -289,7 +289,7 @@ export default function AgendaComercial({
                         aria-label={feita ? `Reabrir ${atividade.title}` : `Concluir ${atividade.title}`}
                         aria-pressed={feita}
                         className={juntar(
-                          "mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors",
+                          "toque-compacto mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors",
                           foco,
                           feita ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground hover:bg-foreground hover:text-background",
                         )}

@@ -616,14 +616,15 @@ export default function AdminApprovals() {
         />
 
       {/* Os números da fila aberta (os mesmos do seletor "Situação"), grandes; clicar num deles filtra. Só no computador. */}
-      {!isLoading && approvalFiles.length > 0 && (
+      {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a lista não pula quando os números chegam. */}
+      {(isLoading || approvalFiles.length > 0) && (
         <StatGrid cols={4} label="Resumo da fila" className="mt-6 hidden lg:grid">
           {tabs.slice(0, 4).map((t, i) => (
             <StatCard
               key={t.id}
               variant={t.id === "pending" ? "accent" : i === 0 ? "ink" : "default"}
               label={t.label}
-              value={contagemDaAba(t.id)}
+              value={isLoading ? "–" : contagemDaAba(t.id)}
               onClick={() => setActiveTab(t.id)}
               chart={t.id !== "all" && approvalFiles.length > 0 ? <ProgressBar value={contagemDaAba(t.id)} max={approvalFiles.length} tone={t.id === "pending" ? "current" : 1} label={`${contagemDaAba(t.id)} de ${approvalFiles.length}`} /> : undefined}
             />

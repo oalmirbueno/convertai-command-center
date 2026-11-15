@@ -618,7 +618,7 @@ export default function AdminRequests() {
                 )}
               >
                 <Avatar name={client?.company_name || client?.full_name || "?"} tone={aberto ? "solid" : "neutral"} className="mr-3 mt-0.5" />
-                <span className="mr-3 min-w-0 flex-1">
+                <span className="min-w-0 flex-1 sm:mr-3">
                   <span className="block text-[15px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">
                     {request.title}
                   </span>
@@ -630,12 +630,19 @@ export default function AdminRequests() {
                   <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>
                     {client?.company_name || client?.full_name || "-"}
                     <span className="mx-1.5" aria-hidden="true">·</span>
-                    {project?.name || "Sem projeto"}
-                    <span className="mx-1.5" aria-hidden="true">·</span>
+                    <span className="max-sm:hidden">
+                      {project?.name || "Sem projeto"}
+                      <span className="mx-1.5" aria-hidden="true">·</span>
+                    </span>
                     <span className="tabular-nums">{formatDate(request.created_at)}</span>
                   </span>
+                  {/* Celular: estado e prioridade embaixo do texto (ao lado, espremiam o título). */}
+                  <span className="mt-2 flex min-w-0 flex-wrap items-center sm:hidden [&>*+*]:ml-1.5">
+                    <span className={juntar(etiqueta, "h-6 px-2.5 text-[12px]", status.cls)}><span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />{status.label}</span>
+                    <span className={juntar(etiqueta, "h-6 px-2.5", priority.cls)}>{priority.label}</span>
+                  </span>
                 </span>
-                <span className="flex shrink-0 flex-col items-end [&>*+*]:mt-1 sm:flex-row sm:items-center sm:[&>*+*]:ml-1.5 sm:[&>*+*]:mt-0">
+                <span className="hidden shrink-0 items-center sm:flex [&>*+*]:ml-1.5">
                   <span className={juntar(etiqueta, "h-6 px-2.5", priority.cls)}>{priority.label}</span>
                   <span className={juntar(etiqueta, "h-6 px-2.5 text-[12px]", status.cls)}><span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />{status.label}</span>
                 </span>
@@ -670,14 +677,15 @@ export default function AdminRequests() {
       />
 
       {/* Os números do filtro de status, grandes; clicar filtra. Só no computador (a tela tem a altura da janela). */}
-      {todos.length > 0 && (
+      {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a lista não pula quando os números chegam. */}
+      {(isLoading || todos.length > 0) && (
         <StatGrid cols={filters.length >= 5 ? 5 : 4} label="Resumo dos pedidos" className="mt-6 hidden lg:grid">
           {filters.slice(0, 5).map((item, i) => (
             <StatCard
               key={item.value}
               variant={i === 0 ? "ink" : i === 1 ? "accent" : "default"}
               label={item.label}
-              value={contagemStatus(item.value)}
+              value={isLoading ? "–" : contagemStatus(item.value)}
               onClick={() => setFilter(item.value)}
             />
           ))}

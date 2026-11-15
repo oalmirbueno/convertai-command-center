@@ -126,6 +126,8 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
   const [editing, setEditing] = useState<Partial<VaultItem> | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  // Ícone do site que não carregou: cai no globo (em vez de um quadrado vazio).
+  const [semIcone, setSemIcone] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
 
   const { data: items, isLoading, isError, refetch, isFetching } = useQuery({
@@ -245,10 +247,11 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
         <EstadoVazio compacto titulo="Cofre vazio." descricao="Nenhum acesso guardado ainda." acao={novoItem} />
       ) : (
         <>
-          {!titulo && (
+          {/* Com a fileira de números (amplo) a contagem em texto seria a mesma coisa duas vezes. */}
+          {!titulo && (!amplo || novoItem) && (
             <div className="mb-3 flex min-w-0 items-center justify-between">
               <p className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate tabular-nums")}>
-                {total} {total === 1 ? "item" : "itens"}
+                {amplo ? "" : `${total} ${total === 1 ? "item" : "itens"}`}
               </p>
               {novoItem}
             </div>
@@ -256,7 +259,7 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
           {/* Quantos acessos há em cada grupo: os mesmos números dos títulos dos grupos, grandes. */}
           {amplo && (
           <StatGrid cols={4} className="mb-6 sm:mb-8" label="Resumo do cofre">
-            <StatCard variant="ink" label="Itens guardados" value={total} icon={<ShieldCheck className="h-4 w-4" />} />
+            <StatCard variant="ink" label="Tudo" value={total} icon={<ShieldCheck className="h-4 w-4" />} />
             {(Object.keys(CATEGORY_META) as Category[]).map((cat, i) => {
               const M = CATEGORY_META[cat];
               return <StatCard key={cat} variant={i === 0 ? "accent" : "default"} label={M.plural} value={(grouped[cat] || []).length} icon={<M.icon className="h-4 w-4" />} />;
@@ -276,9 +279,9 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
                       return (
                         <li key={it.id} className={juntar(superficie.painel, "min-w-0 p-5")}>
                           <div className="flex min-w-0 items-center">
-                            <div className="mr-3 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
-                              {fav ? (
-                                <img src={fav} alt="" className="h-6 w-6 object-contain" onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
+                            <div className="mr-3 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
+                              {fav && !semIcone[it.id] ? (
+                                <img src={fav} alt="" width={24} height={24} className="h-6 w-6 object-contain" onError={() => setSemIcone((m) => ({ ...m, [it.id]: true }))} />
                               ) : (
                                 <Globe className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                               )}

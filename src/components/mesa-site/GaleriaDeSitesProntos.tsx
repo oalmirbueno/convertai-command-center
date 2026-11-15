@@ -100,7 +100,7 @@ export default function GaleriaDeSitesProntos({
                   Prévia
                 </a>
               )}
-              <a href={m.repositorio} target="_blank" rel="noopener noreferrer" className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate underline-offset-2 hover:text-foreground hover:underline")} title={`${m.repositorio} (commit ${m.commit.slice(0, 7)}) · ${m.autor}`}>
+              <a href={m.repositorio} target="_blank" rel="noopener noreferrer" className={juntar(texto.auxiliar, "ml-2 inline-flex h-8 min-w-0 items-center truncate underline-offset-2 hover:text-foreground hover:underline")} title={`${m.repositorio} (commit ${m.commit.slice(0, 7)}) · ${m.autor}`}>
                 Repositório
               </a>
               {acao && <span className="ml-auto flex shrink-0 items-center pl-2">{acao(m)}</span>}

@@ -659,7 +659,8 @@ export default function MesaFoto() {
             >
               <div key={valor.clientId} className={emColuna ? "relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : "relative min-w-0 pb-6"} data-etapa-da-mesa-foto={etapa}>
                 {/* A faixa das peças do mês fica fora do Canvas (o quadro precisa da altura); a janela da peça vale em todas. */}
-                <Suspense fallback={null}>
+                {/* v4: a faixa guarda o lugar enquanto o código dela chega (a etapa não desce depois). */}
+                <Suspense fallback={noCanvas ? null : <div className="mb-4 h-11 sm:h-8" aria-hidden="true" />}>
                   <EsteiraDoMes mostrarFaixa={!noCanvas} pedido={pedidoDePeca} onPedidoAtendido={() => setPedidoDePeca(null)} />
                 </Suspense>
                 <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>

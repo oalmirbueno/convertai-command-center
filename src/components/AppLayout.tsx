@@ -544,13 +544,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav. data-casca: o modo foco (src/lib/modoFoco.ts + index.css) esconde a barra, o que flutua e tira o recuo do conteúdo. */}
       {/* Só de 768 px para cima (16/10/2026): o celular tem o topo enxuto logo abaixo. */}
-      {!celular && <nav data-casca="topo" className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-full flex items-center pl-4 pr-2 gap-2 lg:gap-4 border border-border bg-card/95 text-foreground shadow-card backdrop-blur-xl"
+      {!celular && <nav data-casca="topo" className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-full grid grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)] items-center pl-4 pr-2 gap-2 lg:gap-4 border border-border bg-card/95 text-foreground shadow-card backdrop-blur-xl"
         style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
       >
         {/* Clip the square bitmap's transparent padding to the navbar so it
             cannot intercept clicks on the page below. Keep menus unclipped. */}
-        <div className="flex h-full items-center shrink-0 overflow-hidden">
-          <img src={aceleriqLogo} alt="Aceleriq" className="logo-do-topo h-28 w-auto" />
+        {/* v4: três colunas (logo | links | ícones). Os links ficam parados no centro mesmo
+            quando o lado direito ganha ou perde um ícone (cronômetro, gerações, versão nova). */}
+        <div className="flex h-[50px] min-w-0 items-center overflow-hidden">
+          <img src={aceleriqLogo} alt="Aceleriq" width={112} height={112} decoding="async" className="logo-do-topo h-28 w-28 max-w-none shrink-0" />
         </div>
 
         {/* Center: Nav links (desktop) */}
@@ -659,7 +661,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Right: Icons */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="col-start-3 flex items-center justify-end gap-1">
           {/* Voltar para onde eu estava (29/09): o lugar anterior num toque, com a lista dos últimos. */}
           {isAdminOrTeam && <VoltarParaOndeEstava />}
           {/* Cronômetro por cliente (frente CR): o cliente em foco e o tempo do mês nele; clicar abre Horas e custos. */}
@@ -778,7 +780,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 aria-hidden={rolou ? "true" : undefined}
                 className={cn("absolute inset-0 flex items-center overflow-hidden transition-opacity duration-200", rolou ? "opacity-0" : "opacity-100")}
               >
-                <img src={aceleriqLogo} alt="Aceleriq" className="logo-do-topo -ml-2 h-24 w-auto max-w-none" />
+                <img src={aceleriqLogo} alt="Aceleriq" width={96} height={96} decoding="async" className="logo-do-topo -ml-2 h-24 w-24 max-w-none shrink-0" />
               </div>
               <p
                 aria-hidden={rolou ? undefined : "true"}

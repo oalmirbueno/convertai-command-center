@@ -123,8 +123,9 @@ export function PaletaDaMarca({ paleta, carregando = false }: { paleta: CorDoKit
               aria-label={valida ? `Copiar ${hex}${temTexto(c.nome) ? `, ${c.nome}` : ""}` : `Cor inválida: ${c.hex}`}
               className={`group flex w-full min-w-0 flex-col overflow-hidden text-left transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${superficie.painel}`}
             >
-              <span className="relative flex h-16 w-full items-end px-2.5 pb-2 sm:h-[72px]" style={{ backgroundColor: cor }}>
-                <span className="font-mono text-[12px] font-semibold tracking-wide" style={{ color: tinta }}>
+              <span className="relative flex h-16 w-full items-end px-1.5 pb-1.5 sm:h-[72px]" style={{ backgroundColor: cor }}>
+                {/* v4: o código fica numa plaquinha (cores médias, como o laranja, não davam 4,5:1 nem com preto nem com branco). */}
+                <span className="rounded-md px-1.5 py-0.5 font-mono text-[12px] font-semibold tracking-wide" style={{ color: tinta, backgroundColor: tinta === "#FFFFFF" ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.7)" }}>
                   {valida ? hex : String(c.hex || "?")}
                 </span>
                 <span

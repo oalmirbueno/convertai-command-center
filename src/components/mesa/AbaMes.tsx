@@ -1025,7 +1025,7 @@ export default function AbaMes({
           <SeletorCompacto
             rotulo="Como planejar"
             opcoes={[
-              { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
+              { valor: "automatico", rotulo: "Preencher a agenda" },
               { valor: "proposta", rotulo: "Uma proposta por vez" },
             ]}
             valor={modo}

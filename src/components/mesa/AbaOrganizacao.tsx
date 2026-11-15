@@ -168,7 +168,7 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
         </aside>
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="relative min-w-0 flex-1"><span className="sr-only">Buscar arquivos</span><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><Input className="rounded-full pl-9" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(60); }} placeholder="Buscar arquivos…" /></label>
+            <label className="relative min-w-[160px] flex-1"><span className="sr-only">Buscar arquivos</span><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><Input className="rounded-full pl-9" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(60); }} placeholder="Buscar arquivos…" /></label>
             <Button variant="outline" size="sm" onClick={() => setOrganizador(true)} disabled={!consulta.isSuccess} title="Organizar as pastas e os arquivos do Workspace, com prévia antes de confirmar"><Wand2 className="mr-1.5 h-4 w-4" />Organizar com IA</Button>
           </div>
           <p className={texto.auxiliar}>{nomeDaPasta || (selecao === "todos" ? "Todos os arquivos" : selecao === "workspace" ? "Workspace do cliente" : selecao.startsWith("arquivos:") ? selecao.slice(9) : "Arquivos do painel")} · {visiveis.length} arquivo{visiveis.length === 1 ? "" : "s"}</p>

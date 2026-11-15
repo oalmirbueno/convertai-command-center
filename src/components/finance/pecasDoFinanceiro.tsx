@@ -38,20 +38,26 @@ export const fundoDoTom: Record<Tom, string> = {
 
 /** Botão pequeno de ação de linha (32 px), para listas densas. */
 export const botaoDeLinha = juntar(
-  "inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-border bg-card px-3.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50",
+  "toque-compacto inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-border bg-card px-3.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50",
   foco,
 );
 
 /** A ação que resolve a linha (Pagar, Receber, Lançar): pílula de tinta, 32 px. */
 export const botaoPrincipalDeLinha = juntar(
-  "inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-foreground px-3.5 text-[12px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:pointer-events-none disabled:opacity-50",
+  "toque-compacto inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-foreground px-3.5 text-[12px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:pointer-events-none disabled:opacity-50",
   foco,
 );
 
 /** Linha de lista do Financeiro (dentro de um Painel sem espaço): mais ar e fundo suave ao passar o mouse. */
 export const linhaDeLista = "flex min-w-0 flex-wrap items-center px-4 py-3.5 transition-colors hover:bg-muted/40 sm:px-6";
-/** A lista dessas linhas: traço fino entre elas. */
-export const listaDeLinhas = "divide-y divide-border/60";
+/** A lista dessas linhas. v4 (15/11/2026): sem traço em cada linha; o respiro e o fundo ao passar o mouse separam. */
+export const listaDeLinhas = "py-1.5";
+
+/**
+ * v4 (15/11/2026): no celular o cartão tem meia tela e o rótulo era cortado ("Saldo em cai…").
+ * Com isto o rótulo do StatCard quebra em duas linhas em vez de virar reticências.
+ */
+export const rotuloInteiroNoCelular = "max-sm:[&>span:first-child_.truncate]:whitespace-normal";
 
 /** Onde o Kpi mora: solto, numa grade de cartões ou numa grade de poços (dentro de um Painel). */
 const DentroDaGrade = createContext<{ naGrade: boolean; emPoco: boolean; indice: number; destacar: boolean }>({ naGrade: false, emPoco: false, indice: -1, destacar: false });
@@ -171,7 +177,7 @@ export function Kpi({
       variant={tipo}
       size={tamanho || (poco ? "md" : "lg")}
       chart={grafico || children ? <>{grafico}{children}</> : undefined}
-      className={juntar(poco && cascaDePoco, tom === "perigo" && tipo === "default" && "[&_.ds-stat-valor]:text-destructive", className)}
+      className={juntar(rotuloInteiroNoCelular, poco && cascaDePoco, tom === "perigo" && tipo === "default" && "[&_.ds-stat-valor]:text-destructive", className)}
     />
   );
 }
@@ -273,7 +279,7 @@ export function Numeros({
             onClick={item.aoClicar}
             variant={tipo}
             size={tamanho || (emPoco ? "md" : c >= 5 ? "md" : "lg")}
-            className={juntar(emPoco && cascaDePoco, tipo === "default" && /destructive/.test(item.corDoValor || "") && "[&_.ds-stat-valor]:text-destructive")}
+            className={juntar(rotuloInteiroNoCelular, emPoco && cascaDePoco, tipo === "default" && /destructive/.test(item.corDoValor || "") && "[&_.ds-stat-valor]:text-destructive")}
           />
         );
       })}
@@ -283,14 +289,14 @@ export function Numeros({
 
 /**
  * Tabela limpa (rodada ousada): cabeçalho numa faixa em pílula, linhas com
- * traço fino e fundo suave ao passar o mouse, números à direita.
+ * sem traço (v4) e com fundo suave ao passar o mouse, números à direita.
  */
 export const tabela = {
   /** Quem rola para o lado no celular. */
   moldura: "min-w-0 overflow-x-auto",
   tabela: "w-full border-separate border-spacing-0 text-[13px] leading-5",
   cabeca: "text-left [&_th]:whitespace-nowrap [&_th]:bg-muted [&_th]:px-4 [&_th]:py-3 [&_th]:text-[12px] [&_th]:font-medium [&_th]:text-muted-foreground [&_th:first-child]:rounded-l-full [&_th:last-child]:rounded-r-full",
-  corpo: "[&_td]:border-b [&_td]:border-border/60 [&_td]:px-4 [&_td]:py-3.5 [&_tr:last-child>td]:border-b-0 [&_tr]:transition-colors [&_tr:hover>td]:bg-muted/40",
+  corpo: "[&_td]:px-4 [&_td]:py-3 [&_tr]:transition-colors [&_tr:hover>td]:bg-muted/40 [&_tr>td:first-child]:rounded-l-xl [&_tr>td:last-child]:rounded-r-xl",
   numero: "text-right tabular-nums",
 } as const;
 

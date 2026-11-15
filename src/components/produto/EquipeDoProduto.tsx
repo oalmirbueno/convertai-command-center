@@ -447,7 +447,7 @@ function PerfilDaPessoa({ m, linha, estado, aoFechar, admin, gestor }: { m: Memb
           <Foto nome={nomeDe(m)} foto={foto} tamanho="gg" />
           {editaPerfil && (
             <>
-              <button type="button" onClick={() => arquivo.current && arquivo.current.click()} className={juntar("absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground", foco)} aria-label="Trocar a foto" title="Trocar a foto">
+              <button type="button" onClick={() => arquivo.current && arquivo.current.click()} className={juntar("toque-compacto absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground", foco)} aria-label="Trocar a foto" title="Trocar a foto">
                 <Camera className="h-4 w-4" aria-hidden="true" />
               </button>
               <input ref={arquivo} type="file" accept="image/*" className="hidden" onChange={(e) => void escolherFoto(e.target.files ? e.target.files[0] : undefined)} />

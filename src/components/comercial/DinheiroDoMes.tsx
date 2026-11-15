@@ -64,6 +64,7 @@ export default function DinheiroDoMes({ recebido, caixa }: { recebido?: Recebido
         />
         <StatCard
           size="md"
+          className="max-sm:[&>span:first-child_.truncate]:whitespace-normal"
           variant={saldoNegativo ? "default" : "ink"}
           icon={<Wallet className="h-4 w-4" />}
           label="Saldo em caixa"

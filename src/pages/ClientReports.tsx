@@ -172,38 +172,42 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                           <TrendingUp className="h-5 w-5" />
                         </Bolha>
                         <span className="block min-w-0 flex-1">
-                          <span className="block truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground max-sm:text-[15px] max-sm:leading-5">{r.title}</span>
-                          <span className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-center")}>
-                            <span className="truncate">{(r as any).project?.name}</span>
-                            {r.period_start && r.period_end && (
+                          <span className="block text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground line-clamp-2 [overflow-wrap:anywhere] max-sm:text-[15px] max-sm:leading-5">{r.title}</span>
+                          <span className={juntar(texto.auxiliar, "mt-1.5 flex min-w-0 flex-wrap items-center")}>
+                            <StatusPill tone={kind.tone} className="mr-2 sm:hidden">{kind.label}</StatusPill>
+                            {(r as any).project?.name && (
                               <>
-                                <span className="mx-1.5 shrink-0" aria-hidden="true">·</span>
-                                <Calendar className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
-                                <span className="shrink-0">{formatDateShort(r.period_start)} a {formatDateShort(r.period_end)}</span>
+                                <span className="truncate max-sm:hidden">{(r as any).project?.name}</span>
+                                {r.period_start && r.period_end && <span className="mx-1.5 shrink-0 max-sm:hidden" aria-hidden="true">·</span>}
                               </>
+                            )}
+                            {r.period_start && r.period_end && (
+                              <span className="inline-flex shrink-0 items-center">
+                                <Calendar className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                                {formatDateShort(r.period_start)} a {formatDateShort(r.period_end)}
+                              </span>
                             )}
                           </span>
                         </span>
                         <span className="ml-3 flex shrink-0 items-center">
-                          <StatusPill tone={kind.tone}>{kind.label}</StatusPill>
-                          <span aria-hidden="true" className="ml-2 hidden h-9 w-9 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:inline-flex">
+                          <StatusPill tone={kind.tone} className="max-sm:hidden">{kind.label}</StatusPill>
+                          <span aria-hidden="true" className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:ml-2 sm:h-9 sm:w-9">
                             <ChevronRight className="h-4 w-4" />
                           </span>
                         </span>
                       </span>
-                      {/* Celular (16/10/2026): lista de app, título e uma linha de apoio; os
-                          números e o resumo ficam no relatório aberto. */}
+                      {/* Os números do período: dois no celular (o resto fica no relatório aberto), até oito na tela larga. */}
                       {visibleMetrics.length > 0 && (
-                        <span className="mt-6 hidden w-full min-w-0 grid-cols-2 gap-x-6 gap-y-5 sm:grid sm:grid-cols-4">
-                          {visibleMetrics.slice(0, 8).map(metric => {
+                        <span className="mt-5 grid w-full min-w-0 grid-cols-2 gap-x-4 gap-y-5 sm:mt-6 sm:grid-cols-4 sm:gap-x-6">
+                          {visibleMetrics.slice(0, 8).map((metric, mi) => {
                             const Icon = metric.icon;
                             return (
-                              <span key={metric.key} className="block min-w-0">
+                              <span key={metric.key} className={juntar("block min-w-0", mi > 1 && "max-sm:hidden")}>
                                 <span className="flex min-w-0 items-center text-[12px] leading-4 text-muted-foreground">
                                   <Icon className="mr-1.5 h-3.5 w-3.5 shrink-0" style={{ color: metric.color }} aria-hidden="true" />
                                   <span className="truncate">{metric.label}</span>
                                 </span>
-                                <span className="mt-1 block truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{metric.format(metric.value)}</span>
+                                <span className="mt-1 block truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground max-sm:text-[20px] max-sm:leading-7">{metric.format(metric.value)}</span>
                               </span>
                             );
                           })}
@@ -211,7 +215,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                       )}
                       {r.summary && <span className={juntar(texto.auxiliar, "mt-4 line-clamp-2 hidden leading-5 sm:block")}>{r.summary}</span>}
                       {sparklineData && (
-                        <span className="mt-auto hidden w-full min-w-0 pt-5 sm:block">
+                        <span className="mt-auto block w-full min-w-0 pt-4 sm:pt-5">
                           <Sparkline values={sparklineData} tone={1} height={48} />
                         </span>
                       )}

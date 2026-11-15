@@ -11,7 +11,7 @@ import { useDiasPrioritarios } from "@/lib/diaPrioritarioApi";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Clock, Plus, X, Paperclip, CalendarIcon, Trash2, MoreVertical, ArrowRight, SlidersHorizontal } from "lucide-react";
+import { UserRound, Clock, Plus, X, Paperclip, CalendarIcon, Trash2, MoreVertical, ArrowRight, SlidersHorizontal } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
@@ -331,8 +331,9 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
             </div>
           ) : (
           <div className="p-4">
-            {priorityLabels[task.priority] && (
-              <Chip dot tone={priorityTone[task.priority] || "neutral"} outline={task.priority === "low"} className="mb-2.5" title={`Prioridade: ${priorityLabels[task.priority]}`}>{priorityLabels[task.priority]}</Chip>
+            {/* Polimento v4 (15/11/2026): só o que pede atenção vira selo no topo; média e baixa viram o ponto discreto do rodapé. */}
+            {(task.priority === "urgent" || task.priority === "high") && (
+              <Chip dot tone={priorityTone[task.priority] || "neutral"} className="mb-2.5" title={`Prioridade: ${priorityLabels[task.priority]}`}>{priorityLabels[task.priority]}</Chip>
             )}
             <p className="text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground desk:text-[15px]">{task.title}</p>
             {task.project?.name && <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{task.project.name}</p>}
@@ -368,8 +369,14 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
                 {noDia ? "No Dia Prioritário" : `Dia Prioritário: ${nomeDoDia(diaPrioritario)}`}
               </span>
             )}
-            <div className="mt-3 flex items-center justify-between border-t border-border/70 pt-3">
+            <div className="mt-3.5 flex items-center justify-between">
               <div className="flex min-w-0 items-center text-[12px] tabular-nums text-muted-foreground">
+                {(task.priority === "medium" || task.priority === "low") && (
+                  <span className="mr-3 flex items-center" title={`Prioridade: ${priorityLabels[task.priority]}`}>
+                    <span aria-hidden="true" className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", task.priority === "low" ? "border border-muted-foreground/60" : "bg-muted-foreground")} />
+                    <span className="sr-only">Prioridade: </span>{priorityLabels[task.priority]}
+                  </span>
+                )}
                 {task.due_date && (
                   <span className="mr-3 flex items-center">
                     <Clock className="mr-1 h-3 w-3" aria-hidden="true" />
@@ -385,8 +392,8 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
               </div>
               <div className="flex shrink-0 items-center">
                 <Avatar className="h-7 w-7" title={task.assignee?.full_name || "Sem responsável"}>
-                  <AvatarFallback className="bg-muted text-[11px] font-semibold text-foreground">
-                    {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                  <AvatarFallback className={juntar("text-[11px] font-semibold", task.assignee?.full_name ? "bg-muted text-foreground" : "border border-dashed border-foreground/25 bg-transparent text-muted-foreground")}>
+                    {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || <UserRound className="h-3.5 w-3.5" aria-hidden="true" />}
                   </AvatarFallback>
                 </Avatar>
                 {menuDeAcoes}
@@ -1665,9 +1672,10 @@ export default function Kanban() {
                       <span className="text-[32px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{isLoading ? "" : colTasks.length}</span>
                       {!isLoading && filteredTasks.length > 0 && <span className="ml-2 text-[12px] tabular-nums text-muted-foreground">de {filteredTasks.length}</span>}
                     </p>
-                    {!isLoading && filteredTasks.length > 0 && (
+                    {/* A altura da barra fica reservada enquanto lê: o cabeçalho não cresce quando os números chegam. */}
+                    {!isLoading && filteredTasks.length > 0 ? (
                       <ProgressBar value={colTasks.length} max={filteredTasks.length} height={6} tone={col.id === "doing" ? 1 : "current"} className="mt-2.5" label={`${col.title}: ${colTasks.length} de ${filteredTasks.length} tarefas`} />
-                    )}
+                    ) : <div className="mt-2.5 h-1.5" aria-hidden="true" />}
                   </div>
                   <RegiaoRolavel
                     rotulo={`Tarefas em ${col.title}`}

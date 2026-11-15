@@ -1,0 +1,1345 @@
+/* Polimento v4 da área de membros (15/11/2026).
+   Última camada: alinha tudo numa coluna, tira a dança e os vazamentos do celular.
+   Carrega depois de membros.css e membros-experiencia.css. */
+
+/* ---------- Coluna única e ritmo ---------- */
+.membros-portal .membros-conteudo:not(.membros-conteudo-estudio) > * {
+  width: 100%;
+  max-width: 1320px;
+  margin-inline: auto;
+}
+.membros-portal .membros-inicio > * {
+  min-width: 0;
+}
+.membros-portal .membros-vitrine {
+  margin-block: 0;
+}
+
+/* Entrada sem deslocamento: só opacidade, curta. */
+@media (prefers-reduced-motion: no-preference) {
+  .membros-portal .membros-abertura,
+  .membros-portal .membros-destaque,
+  .membros-portal .membros-atalhos,
+  .membros-portal .membros-prateleira,
+  .membros-portal .bolso-estudio > *,
+  .membros-portal .membros-ferramentas {
+    animation: membros-v4-surgir 0.2s ease-out both;
+    animation-timeline: auto;
+    animation-range: normal;
+    animation-delay: 0s;
+  }
+}
+@keyframes membros-v4-surgir {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------- Menu lateral ---------- */
+.membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao > span.membros-menu-curto {
+  display: none;
+}
+:root[data-membros-tema="claro"] .membros-menu .membros-acao[aria-current="page"] {
+  color: hsl(120 100% 19%);
+  background: hsl(120 45% 92%);
+}
+:root[data-membros-tema="escuro"] .membros-menu .membros-acao[aria-current="page"] {
+  color: hsl(120 66% 72%);
+  background: hsl(120 40% 50% / 0.14);
+}
+
+/* ---------- Abertura ---------- */
+.membros-portal .membros-abertura {
+  align-items: flex-end;
+}
+.membros-portal .membros-saudacao {
+  margin-bottom: 4px;
+}
+
+/* ---------- Destaque ---------- */
+.membros-portal .membros-destaque {
+  min-height: clamp(300px, 27vw, 380px);
+  border-radius: 24px;
+}
+.membros-portal .membros-destaque h2 {
+  overflow-wrap: anywhere;
+}
+.membros-portal .membros-destaque-selo {
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+.membros-portal .membros-destaque-titulo button {
+  color: #dfeee0;
+}
+
+/* ---------- Vitrine "Explore" ---------- */
+.membros-vitrine-cabecalho {
+  flex-wrap: nowrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.membros-vitrine-cabecalho h2 {
+  min-width: 0;
+  font-size: 21px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.membros-vitrine-boas-vindas {
+  flex: none;
+  white-space: nowrap;
+  min-height: 40px;
+  padding: 8px 14px;
+  gap: 8px;
+}
+.membros-vitrine-grade {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 212px), 1fr));
+  gap: 20px;
+}
+.membros-vitrine-cartao {
+  min-height: 0;
+  aspect-ratio: 4/5;
+  border-radius: 20px;
+}
+@media (min-width: 1800px) {
+  .membros-vitrine-cartao {
+    min-height: 0;
+    max-height: none;
+  }
+}
+.membros-vitrine-imagem {
+  inset: 0 0 auto;
+  height: 62%;
+  object-fit: cover;
+}
+.membros-vitrine-cartao::after {
+  background: linear-gradient(180deg, #0000 0%, #0000 28%, #050b07e6 60%, #050b07 74%);
+}
+.membros-vitrine-selo {
+  top: 14px;
+  left: 14px;
+  padding: 6px 10px;
+  backdrop-filter: blur(8px);
+}
+.membros-vitrine-identidade {
+  padding: 18px;
+}
+.membros-vitrine-identidade > span:first-child {
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.membros-vitrine-identidade h3 {
+  font-size: clamp(17px, 8.4cqi, 23px);
+  line-height: 1.14;
+  letter-spacing: -0.03em;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  min-height: 2.28em;
+}
+.membros-vitrine-identidade p {
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.membros-vitrine-acao {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top-color: #ffffff1f;
+  color: #dbe8dd;
+}
+.membros-vitrine-acao svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+}
+button.membros-vitrine-cartao:hover {
+  transform: translateY(-3px);
+}
+
+/* ---------- Jornada ---------- */
+.membros-portal .membros-jornada {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 18px 28px;
+  padding: 20px 24px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 20px;
+  background: hsl(var(--card));
+  box-shadow: var(--membros-sombra);
+}
+.membros-portal .membros-jornada > div:first-child {
+  max-width: none;
+}
+.membros-jornada-resumo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.membros-jornada-icone {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.membros-jornada-resumo h2 {
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+}
+.membros-jornada-resumo p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+.membros-jornada-resumo strong {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.membros-jornada-resumo p span {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.membros-portal .membros-jornada .membros-progresso {
+  height: 8px;
+  border-radius: 999px;
+  min-width: 0;
+}
+.membros-portal .membros-jornada .membros-progresso > span {
+  border-radius: 999px;
+}
+.membros-portal .membros-conquistas {
+  gap: 8px;
+  justify-content: flex-end;
+}
+.membros-portal .membros-conquistas span {
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.4;
+}
+.membros-portal .membros-conquistas .conquistado {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+@media (max-width: 1023px) {
+  .membros-portal .membros-jornada {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    padding: 18px;
+  }
+  .membros-portal .membros-conquistas {
+    justify-content: flex-start;
+  }
+}
+
+/* ---------- Atalhos ---------- */
+.membros-portal .membros-atalhos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.membros-portal .membros-atalho {
+  flex: 1 1 220px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 20px;
+}
+.membros-portal .membros-atalho > span:last-child {
+  min-width: 0;
+}
+.membros-portal .membros-atalho strong,
+.membros-portal .membros-atalho small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.membros-portal .membros-atalho small {
+  display: block;
+  margin-top: 0;
+}
+.membros-portal .membros-atalho-icone {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.membros-portal .membros-atalho-icone svg {
+  width: 20px;
+  height: 20px;
+}
+.membros-portal .membros-atalho:hover {
+  transform: translateY(-2px);
+}
+
+/* ---------- Categorias em chips ---------- */
+.membros-portal .membros-filtros {
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.membros-categorias {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.membros-categorias button {
+  flex: none;
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  transition: background-color 0.16s, color 0.16s, border-color 0.16s;
+}
+.membros-categorias button:hover {
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--input));
+}
+.membros-categorias button[aria-pressed="true"] {
+  background: hsl(var(--foreground));
+  border-color: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+.membros-categorias button:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.membros-portal .membros-filtros-limpar {
+  flex: none;
+  min-height: 38px;
+  padding: 8px 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ---------- Prateleiras ---------- */
+.membros-portal .membros-prateleira-cabecalho {
+  margin-bottom: 14px;
+}
+.membros-portal .membros-prateleira-cabecalho h2 {
+  min-width: 0;
+}
+.membros-portal .membros-trilho {
+  gap: 20px;
+  padding: 4px 0 14px;
+  margin-right: 0;
+  scroll-padding-inline: 0;
+  scrollbar-width: none;
+}
+.membros-portal .membros-trilho::-webkit-scrollbar {
+  display: none;
+}
+.membros-portal .membros-trilho .membros-cartao-grupo {
+  flex: 0 0 calc((100% - 60px) / 4);
+  max-width: none;
+}
+.membros-portal .membros-cartao {
+  padding-bottom: 0;
+}
+.membros-portal .membros-cartao:focus-visible {
+  outline-offset: -2px;
+}
+.membros-portal .membros-cartao-capa {
+  aspect-ratio: 4/3;
+  border-radius: 18px;
+  border-color: hsl(var(--border) / 0.7);
+  background: #07100b;
+  box-shadow: none;
+}
+.membros-portal .membros-cartao-capa .membros-capa {
+  object-fit: cover;
+  background: #07100b;
+}
+.membros-portal .membros-cartao-capa .membros-capa[data-capa="propria"] {
+  object-fit: contain;
+}
+.membros-portal .membros-cartao-capa .membros-fallback {
+  padding: 16px;
+}
+.membros-portal .membros-cartao-capa .membros-capa-simbolo {
+  display: none;
+}
+.membros-portal .membros-cartao-capa .membros-fallback strong {
+  font-size: 18px;
+  max-width: none;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.membros-portal .membros-cartao-info {
+  padding: 12px 2px 0;
+}
+.membros-portal .membros-cartao-info h3 {
+  min-height: 0;
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: break-word;
+}
+.membros-portal .membros-cartao-info p {
+  margin-top: 3px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.membros-portal .membros-cartao-info [role="progressbar"] {
+  margin-top: 10px;
+}
+.membros-portal .membros-cartao:hover {
+  transform: translateY(-3px);
+}
+.membros-portal .membros-favoritar {
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+}
+@media (max-width: 1199px) and (min-width: 768px) {
+  .membros-portal .membros-trilho .membros-cartao-grupo {
+    flex-basis: calc((100% - 40px) / 3);
+  }
+}
+
+/* ---------- Esqueleto do carregamento (mesmo desenho do conteúdo) ---------- */
+.membros-esqueleto {
+  display: grid;
+  gap: 28px;
+}
+.membros-esqueleto > div,
+.membros-esqueleto-grade > div {
+  border-radius: 20px;
+  background: hsl(var(--muted));
+}
+.membros-esqueleto .membros-esqueleto-titulo {
+  width: 220px;
+  max-width: 60%;
+  height: 58px;
+  border-radius: 12px;
+}
+.membros-esqueleto .membros-esqueleto-destaque {
+  min-height: clamp(300px, 27vw, 380px);
+  border-radius: 24px;
+}
+.membros-esqueleto .membros-esqueleto-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 212px), 1fr));
+  gap: 20px;
+  background: none;
+}
+.membros-esqueleto-grade > div {
+  aspect-ratio: 4/5;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .membros-esqueleto > div:not(.membros-esqueleto-grade),
+  .membros-esqueleto-grade > div {
+    animation: membros-v4-pulso 1.4s ease-in-out infinite;
+  }
+}
+@keyframes membros-v4-pulso {
+  50% { opacity: 0.55; }
+}
+
+/* ---------- Estados vazios ---------- */
+.membros-portal .membros-estado-vazio {
+  border-style: solid;
+  border-radius: 20px;
+  gap: 10px;
+}
+.membros-portal .membros-estado-vazio > svg {
+  box-sizing: content-box;
+  width: 22px;
+  height: 22px;
+  padding: 13px;
+  border-radius: 50%;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.membros-portal .membros-estado-vazio .membros-acao {
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  padding-inline: 18px;
+}
+
+/* ================= Celular ================= */
+@media (max-width: 767px) {
+  :root[data-membros-tema] {
+    --membros-topo-altura: 116px;
+  }
+  .membros-portal .membros-topo > .membros-topo-interno {
+    padding: 10px 16px 12px;
+    gap: 8px 12px;
+    min-height: 116px;
+  }
+  .membros-portal.membros-estudio-ativo .membros-topo > .membros-topo-interno {
+    min-height: 64px;
+    padding: 10px 16px;
+  }
+  .membros-portal .membros-marca {
+    min-width: 0;
+  }
+  .membros-portal .membros-topo-busca {
+    min-height: 42px;
+    border-radius: 999px;
+  }
+  .membros-portal .membros-conta-menu {
+    width: min(238px, calc(100vw - 32px));
+  }
+
+  /* Navegação vira barra fixa embaixo: nada corta à direita. */
+  .membros-portal .membros-menu {
+    position: fixed;
+    inset: auto 0 0 0;
+    top: auto;
+    z-index: 30;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(58px, 1fr);
+    justify-content: stretch;
+    gap: 0;
+    height: auto;
+    max-height: none;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    border: 0;
+    border-top: 1px solid hsl(var(--border));
+    background: hsl(var(--card) / 0.97);
+    backdrop-filter: blur(14px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .membros-portal .membros-menu::-webkit-scrollbar {
+    display: none;
+  }
+  .membros-portal .membros-menu .membros-menu-controle {
+    display: none;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    min-height: 50px;
+    padding: 6px 2px;
+    border-radius: 14px;
+    font-size: 10.5px;
+    line-height: 1.2;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao > svg {
+    width: 20px;
+    height: 20px;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao > span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao > span.membros-menu-nome {
+    display: none;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao > span.membros-menu-curto {
+    display: block;
+  }
+  .membros-portal .membros-conteudo {
+    padding: 20px 16px calc(96px + env(safe-area-inset-bottom));
+  }
+  .membros-portal.membros-estudio-ativo .membros-conteudo-estudio {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+  .membros-foco-compacto.flutuante {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+  .membros-portal .membros-conteudo > .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 26px;
+  }
+
+  .membros-portal .membros-abertura h1 {
+    font-size: 26px;
+  }
+  .membros-portal .membros-destaque {
+    min-height: 340px;
+    border-radius: 20px;
+  }
+  .membros-portal .membros-destaque-texto {
+    padding: 22px;
+  }
+  .membros-portal .membros-destaque h2 {
+    font-size: 28px;
+    max-width: none;
+  }
+  .membros-portal .membros-destaque-acao {
+    width: 100%;
+    margin-top: 18px;
+  }
+
+  .membros-vitrine-cabecalho {
+    margin-bottom: 14px;
+  }
+  .membros-vitrine-cabecalho h2 {
+    font-size: 20px;
+  }
+  .membros-vitrine-boas-vindas span {
+    display: none;
+  }
+  .membros-vitrine-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .membros-vitrine-cartao {
+    min-height: 0;
+    aspect-ratio: 4/5;
+    border-radius: 18px;
+  }
+  .membros-vitrine-imagem {
+    height: 56%;
+  }
+  .membros-vitrine-selo {
+    top: 10px;
+    left: 10px;
+    padding: 5px 8px;
+  }
+  .membros-vitrine-identidade {
+    padding: 12px;
+  }
+  .membros-vitrine-identidade > span:first-child {
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    margin-bottom: 4px;
+  }
+  .membros-vitrine-identidade h3 {
+    font-size: 16px;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+  .membros-vitrine-acao {
+    margin-top: 10px;
+    padding-top: 9px;
+    font-size: 11px;
+  }
+
+  .membros-portal .membros-atalhos {
+    gap: 10px;
+  }
+  .membros-portal .membros-atalho {
+    flex: 1 1 148px;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+  .membros-portal .membros-atalho small {
+    display: none;
+  }
+  .membros-portal .membros-atalho strong {
+    font-size: 13px;
+    white-space: normal;
+    line-height: 1.25;
+  }
+  .membros-portal .membros-atalho-icone {
+    width: 38px;
+    height: 38px;
+  }
+
+  /* Prateleira vira grade de duas colunas: nenhum cartão cortado na borda. */
+  .membros-portal .membros-prateleira-controles {
+    display: none;
+  }
+  .membros-portal .membros-trilho {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 12px;
+    overflow: visible;
+    padding: 0;
+    scroll-snap-type: none;
+  }
+  .membros-portal .membros-trilho .membros-cartao-grupo {
+    flex: none;
+    min-width: 0;
+    max-width: none;
+  }
+  .membros-portal .membros-cartao-capa {
+    border-radius: 14px;
+  }
+  .membros-portal .membros-cartao-info {
+    padding-top: 9px;
+  }
+  .membros-portal .membros-cartao-info h3 {
+    font-size: 14px;
+  }
+  .membros-portal .membros-cartao-info p {
+    font-size: 11px;
+  }
+  .membros-portal .membros-cartao:hover,
+  .membros-portal .membros-atalho:hover,
+  button.membros-vitrine-cartao:hover {
+    transform: none;
+  }
+  .membros-portal .membros-cartao-abrir {
+    display: none;
+  }
+  .membros-portal .membros-favoritar {
+    top: 6px;
+    right: 6px;
+    width: 34px;
+    height: 34px;
+  }
+  .membros-esqueleto .membros-esqueleto-destaque {
+    min-height: 340px;
+  }
+  .membros-esqueleto .membros-esqueleto-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+@media (max-width: 360px) {
+  .membros-vitrine-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .membros-vitrine-cartao {
+    aspect-ratio: 3/4;
+  }
+  .membros-vitrine-identidade h3 {
+    font-size: 15px;
+  }
+}
+:root[data-membros-tema="escuro"] .membros-portal .membros-destaque {
+  outline: 1px solid #ffffff14;
+  outline-offset: -1px;
+}
+
+/* ================= Comunidade ================= */
+.membros-comunidade-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.membros-comunidade-cabecalho .membros-canais {
+  flex: 1;
+  min-width: 0;
+}
+.membros-comunidade-cabecalho .membros-canais a {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+.membros-comunidade-cabecalho .membros-canais a span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.membros-comunidade-cabecalho .membros-canais a svg {
+  flex: none;
+}
+.membros-comunidade-atualizar {
+  flex: none;
+  width: 38px;
+  min-height: 38px;
+  padding: 0;
+  margin-left: auto;
+  border-radius: 50%;
+}
+.membros-comunidade .membros-comunidade-compor,
+.membros-comunidade .membros-conversa {
+  border-radius: 20px;
+  padding: 18px 20px;
+}
+.membros-comunidade .membros-resposta {
+  border-radius: 0;
+  padding: 8px 0 8px 18px;
+}
+.membros-comunidade .membros-campo {
+  width: 100%;
+  border-radius: 14px;
+}
+.membros-comunidade .membros-acao.bg-primary:disabled {
+  opacity: 1;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+.membros-comunidade .membros-conversa-autor {
+  min-width: 0;
+}
+.membros-comunidade .membros-conversa-autor strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.membros-comunidade .membros-conversa time {
+  flex: none;
+  white-space: nowrap;
+}
+.membros-conversa-acoes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  margin-left: -8px;
+}
+.membros-comunidade .membros-conversa-acoes .membros-acao {
+  min-height: 36px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+.membros-comunidade .membros-conversa-acoes .membros-conversa-mais {
+  width: 36px;
+  padding: 0;
+  margin-left: auto;
+}
+@media (max-width: 767px) {
+  .membros-comunidade .membros-comunidade-compor,
+  .membros-comunidade .membros-conversa {
+    padding: 16px;
+    border-radius: 18px;
+  }
+  .membros-comunidade .membros-resposta {
+    margin-left: 12px;
+    padding: 6px 0 6px 14px;
+  }
+  .membros-comunidade-cabecalho {
+    align-items: flex-start;
+  }
+}
+
+/* ================= Leitor do produto ================= */
+.membros-modal .membros-curso-identidade h2 {
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.membros-modal .membros-abas {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.membros-modal .membros-abas::-webkit-scrollbar {
+  display: none;
+}
+.membros-modal .membros-abas .membros-acao {
+  flex: none;
+  white-space: nowrap;
+}
+.membros-modal .membros-leitor .prose {
+  overflow-wrap: anywhere;
+}
+.membros-modal .membros-leitor .prose :where(pre, table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.membros-modal .membros-leitor :where(video, iframe) {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #07100b;
+}
+.membros-modal .membros-leitor audio {
+  width: 100%;
+}
+.membros-modal .membros-material-conteudo > h2 {
+  overflow-wrap: anywhere;
+}
+.membros-modal .membros-aula-rodape {
+  gap: 8px;
+}
+.membros-modal .membros-aula-rodape .membros-acao {
+  border-radius: 999px;
+}
+.membros-modal .membros-modulo summary {
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+  .membros-modal.membros-modal-curso {
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+    gap: 10px;
+  }
+  .membros-modal .membros-curso-banner {
+    flex-wrap: nowrap;
+    min-height: 84px;
+    padding: 12px 14px;
+    gap: 10px;
+    border-radius: 16px;
+  }
+  .membros-modal .membros-curso-identidade {
+    flex: 1;
+  }
+  .membros-modal .membros-curso-identidade h2 {
+    font-size: 17px;
+    line-height: 1.25;
+  }
+  .membros-modal .membros-curso-controles {
+    flex: none;
+    margin-right: 30px;
+  }
+  .membros-modal .membros-leitor-curso .membros-sumario {
+    flex: none;
+    max-height: 38dvh;
+    border-radius: 16px;
+  }
+  .membros-modal .membros-aula-principal {
+    min-height: 0;
+    flex: 1;
+  }
+  .membros-modal .membros-abas .membros-acao {
+    padding-inline: 10px;
+  }
+}
+.membros-comunidade-cabecalho.com-titulo {
+  flex-wrap: wrap;
+}
+.membros-comunidade-cabecalho.com-titulo > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.membros-comunidade-cabecalho.com-titulo .membros-canais {
+  order: 3;
+  flex: 1 1 100%;
+}
+.membros-comunidade-cabecalho.com-titulo {
+  align-items: center;
+}
+@media (max-width: 767px) {
+  .membros-modal .membros-abas {
+    gap: 0;
+  }
+  .membros-modal .membros-abas .membros-acao {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-inline: 6px;
+    font-size: 12.5px;
+    gap: 5px;
+  }
+  .membros-modal .membros-abas .membros-acao svg {
+    display: none;
+  }
+  .membros-modal .membros-curso-controles {
+    gap: 4px;
+    margin-right: 40px;
+  }
+  .membros-modal.membros-modal-curso > button:last-child {
+    top: 36px;
+    right: 22px;
+  }
+}
+
+/* ================= Oferta (produto bloqueado) ================= */
+.membros-oferta-refinada {
+  overflow-y: auto;
+  min-height: 0;
+}
+.membros-oferta-refinada .membros-oferta-apresentacao {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+  align-items: start;
+}
+.membros-oferta-capa {
+  aspect-ratio: 4/3;
+  max-height: min(420px, 52dvh);
+  width: 100%;
+}
+.membros-oferta-capa img {
+  object-fit: cover;
+}
+.membros-oferta-capa img[src*="supabase"] {
+  object-fit: contain;
+}
+.membros-oferta-refinada .membros-oferta-descricao {
+  font-size: 16px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.membros-oferta-refinada .membros-oferta-acoes .membros-acao {
+  min-width: 0;
+}
+@media (max-width: 767px) {
+  .membros-oferta-refinada {
+    padding: 4px 4px 16px;
+    gap: 16px;
+  }
+  .membros-oferta-refinada .membros-oferta-apresentacao {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .membros-oferta-capa {
+    aspect-ratio: 16/10;
+    max-height: 240px;
+    border-radius: 16px;
+  }
+  .membros-oferta-refinada .membros-oferta-descricao {
+    font-size: 15px;
+    margin-top: 14px;
+  }
+  .membros-oferta-refinada .membros-oferta-acoes .membros-acao {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}
+
+/* Barra do celular com 7 ou mais itens (Estúdio e Créditos liberados):
+   só o item atual mostra o nome; os demais ficam em ícone. Nada rola nem corta. */
+@media (max-width: 767px) {
+  .membros-portal .membros-menu:has(> :nth-child(8)) {
+    display: flex;
+    justify-content: space-between;
+    gap: 2px;
+    overflow: hidden;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu:has(> :nth-child(8)) .membros-acao {
+    flex: 0 1 auto;
+    flex-direction: row;
+    gap: 6px;
+    min-width: 40px;
+    min-height: 46px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu:has(> :nth-child(8)) .membros-acao:not([aria-current="page"]) > span {
+    display: none;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu:has(> :nth-child(8)) .membros-acao[aria-current="page"] {
+    flex: 0 0 auto;
+    padding-inline: 12px;
+    font-weight: 600;
+  }
+}
+
+/* ================= Créditos (Aceleriq de Bolso) ================= */
+.bolso-creditos-extrato .bolso-lista {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 4px 20px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 20px;
+  background: hsl(var(--card));
+}
+.bolso-creditos-extrato .bolso-extrato-linha {
+  margin: 0;
+  padding: 14px 0;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+}
+.bolso-creditos-extrato .bolso-lista > li:last-child {
+  border-bottom: 0;
+}
+.bolso-creditos-extrato .bolso-extrato-linha > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bolso-creditos .bolso-cabecalho-secao {
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+/* A faixa de demonstração gruda no lugar certo: no computador a rolagem é do
+   próprio conteúdo (topo 0); no celular fica logo abaixo do cabeçalho. */
+.membros-portal .bolso-demonstracao {
+  top: var(--membros-topo-altura);
+}
+@media (min-width: 768px) {
+  .membros-portal .bolso-demonstracao {
+    top: 0;
+  }
+}
+
+/* ================= Administração da biblioteca ================= */
+.membros-admin .membros-admin-conteudo-barra {
+  margin-bottom: 12px;
+}
+.membros.membros-admin .membros-acao.membros-admin-recolher {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  justify-content: center;
+}
+.membros-admin .membros-admin-recolher > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.membros-admin .membros-admin-produto {
+  min-height: 64px;
+  border-radius: 14px;
+}
+.membros-admin .membros-admin-produto-capa {
+  width: 56px;
+  height: 42px;
+  border-radius: 10px;
+}
+.membros-admin .membros-admin-produto-capa svg {
+  width: 18px;
+  height: 18px;
+}
+.membros-admin .membros-admin-produto-info {
+  flex: 1;
+  text-align: left;
+}
+.membros-admin .membros-admin-produto-info strong {
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.membros-admin .membros-admin-estado {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.membros-admin .membros-admin-catalogo > .membros-acao:not(.membros-admin-produto) {
+  border-radius: 14px;
+}
+.membros-admin .membros-admin-busca {
+  border-radius: 999px;
+}
+.membros-admin .membros-admin-busca input {
+  font-size: 13px;
+}
+@media (max-width: 1279px) {
+  .membros-admin .membros-admin-catalogo > .membros-acao:not(.membros-admin-produto) {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+  .membros-admin .membros-admin-catalogo {
+    max-height: 300px;
+    align-content: start;
+  }
+}
+/* Menu de seções em grade no tablet e no celular: tudo à vista, nada cortado. */
+@media (max-width: 1099px) {
+  .membros-admin .membros-admin-nav {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 6px;
+    margin-inline: 0;
+    padding: 6px;
+    overflow: visible;
+    border: 1px solid hsl(var(--border));
+    border-radius: 20px;
+    background: hsl(var(--card));
+  }
+  .membros.membros-admin .membros-admin-nav > .membros-acao {
+    position: relative;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    min-height: 62px;
+    padding: 8px 4px;
+    border-radius: 14px;
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal;
+  }
+  .membros-admin .membros-admin-nav > .membros-acao > span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
+}
+@media (max-width: 767px) {
+  .membros-admin .membros-admin-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .membros.membros-admin .membros-admin-nav > .membros-acao {
+    padding: 8px 2px;
+    font-size: 10.5px;
+  }
+  .membros-admin > .membros-admin-topo {
+    min-height: 72px;
+    padding: 12px 16px;
+  }
+  .membros-admin .membros-admin-principal {
+    padding: 18px 14px;
+    border-radius: 20px;
+  }
+  .membros-admin .membros-admin-produto-capa {
+    width: 44px;
+    height: 34px;
+  }
+  .membros-admin .membros-admin-produto-info strong {
+    font-size: 12px;
+  }
+}
+@media (max-width: 374px) {
+  .membros-admin .membros-admin-catalogo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Título com ações (celular): as ações descem para a linha de baixo em vez de cortar. */
+@media (max-width: 639px) {
+  .membros .membros-titulo {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .membros .membros-titulo > div:first-child {
+    max-width: none;
+    flex: 1 1 100%;
+    margin-right: 0;
+  }
+  .membros .membros-titulo > [data-acoes-do-cabecalho] {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    overflow: visible;
+    justify-content: flex-start;
+  }
+  .membros .membros-titulo > [data-acoes-do-cabecalho] > :first-child {
+    margin-left: 4px;
+  }
+  .membros.membros-admin .membros-admin-nav > .membros-acao {
+    padding-inline: 0;
+    font-size: 10px;
+    letter-spacing: -0.01em;
+  }
+  .membros-admin .membros-admin-nav > .membros-acao > span {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}
+
+/* ================= Tabelas da administração ================= */
+.membros-tabela td {
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+.membros-tabela td strong {
+  font-weight: 600;
+}
+.membros-tabela-licencas td:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.membros-tabela-licencas td:last-child .membros-acao {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  font-size: 12px;
+}
+/* No celular a tabela vira lista de cartões: nada rola de lado. */
+@media (max-width: 767px) {
+  .membros-tabela-rolagem {
+    max-height: none;
+    overflow: visible;
+  }
+  .membros-tabela-pessoas,
+  .membros-tabela-licencas,
+  .membros-tabela-pessoas tbody,
+  .membros-tabela-licencas tbody {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+  .membros-tabela-licencas thead {
+    display: none;
+  }
+  .membros-tabela-pessoas thead,
+  .membros-tabela-pessoas thead tr {
+    display: block;
+  }
+  .membros-tabela-pessoas thead th {
+    display: none;
+    position: static;
+  }
+  .membros-tabela-pessoas thead th:first-child {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    background: transparent;
+  }
+  .membros-tabela-pessoas thead th:first-child::after {
+    content: "Selecionar esta página";
+    font-size: 12px;
+  }
+  .membros-tabela-pessoas tbody tr {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .membros-tabela-pessoas tbody tr:last-child,
+  .membros-tabela-licencas tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .membros-tabela-pessoas tbody td,
+  .membros-tabela-licencas tbody td {
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .membros-tabela-pessoas tbody td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .membros-tabela-pessoas tbody td:nth-child(2) { grid-column: 2; grid-row: 1; }
+  .membros-tabela-pessoas tbody td:nth-child(6) { grid-column: 3; grid-row: 1; }
+  .membros-tabela-pessoas tbody td:nth-child(3) { grid-column: 2 / -1; grid-row: 2; color: hsl(var(--muted-foreground)); }
+  .membros-tabela-pessoas tbody td:nth-child(4) { grid-column: 2; grid-row: 3; }
+  .membros-tabela-pessoas tbody td:nth-child(5) { grid-column: 3; grid-row: 3; text-align: right; }
+  .membros-tabela-pessoas tbody td[data-rotulo]::before {
+    content: attr(data-rotulo) ": ";
+    color: hsl(var(--muted-foreground));
+  }
+  .membros-tabela-pessoas tbody td:nth-child(6) .membros-acao {
+    min-height: 36px;
+    padding: 6px 12px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 999px;
+    font-size: 12px;
+  }
+  .membros-tabela-licencas tbody tr {
+    display: grid;
+    gap: 8px;
+    padding: 14px 0;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+}

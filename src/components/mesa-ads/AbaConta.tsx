@@ -638,7 +638,8 @@ export default function AbaConta({
             }
           />
         )}
-        {conta.isLoading && <Carregando forma="aba" rotulo="Lendo a conta" />}
+        {/* v4: enquanto a conta carrega, só a espera (altura da tela); as partes entram juntas, já no lugar. */}
+        {conta.isLoading && <div className="min-h-[calc(100vh-260px)]"><Carregando forma="aba" rotulo="Lendo a conta" /></div>}
 
         {dados && !dados.conta.conectada && (
           <EstadoVazio
@@ -649,13 +650,13 @@ export default function AbaConta({
         )}
 
         {/* 12/10/2026: alertas da conta (fadiga, custo, ROAS abaixo do equilíbrio), com a régua da memória. */}
-        {(!dados || dados.conta.conectada) && <AlertasDaConta onPedirAoAgente={levarAoAgente} />}
+        {!conta.isLoading && (!dados || dados.conta.conectada) && <AlertasDaConta onPedirAoAgente={levarAoAgente} />}
 
         {/* Frente ADM (01/10): os números da Meta como no Gerenciador (objetivo, nível, colunas e horário). */}
-        {(!dados || dados.conta.conectada) && <MetricasDaMeta clientId={clientId} periodo={periodo} rotuloDoPeriodo={trechoDoPeriodo(periodo)} />}
+        {!conta.isLoading && (!dados || dados.conta.conectada) && <MetricasDaMeta clientId={clientId} periodo={periodo} rotuloDoPeriodo={trechoDoPeriodo(periodo)} />}
 
         {/* 2. O Gerenciador ao vivo: campanha, conjunto e anúncio, com as ações e a prova. */}
-        {(!dados || dados.conta.conectada) && (
+        {!conta.isLoading && (!dados || dados.conta.conectada) && (
           <section className="min-w-0" aria-label="Gerenciador">
             <CabecalhoDaParte
               titulo="Gerenciador"
@@ -700,7 +701,7 @@ export default function AbaConta({
               recolher={{ recolhido: resultadosRecolhido, onAlternar: () => setResultadosRecolhido(!resultadosRecolhido) }}
               acoes={
                   <BotaoComCusto
-                    rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar com o estrategista</>}
+                    rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar<span className="hidden sm:inline">&nbsp;com o estrategista</span></>}
                     titulo="Analisar a conta"
                     descricao="O estrategista lê os números da conta (calculados em código) e diz o que escalar, pausar e renovar, o que a copy ensina e os próximos testes."
                     className="h-9"

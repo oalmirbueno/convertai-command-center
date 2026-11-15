@@ -948,7 +948,7 @@ export default function GerenciadorAoVivo({
   return (
     <section className="min-w-0" aria-label="Gerenciador de anúncios">
       <div className="mb-2 flex min-w-0 flex-wrap items-end">
-        <div className="mb-1 mr-3 min-w-0 flex-1">
+        <div className="mb-1 mr-3 min-w-0 flex-1 basis-full sm:basis-64">
           {r && (
             <p className="text-[13px] leading-snug" data-resumo-do-gerenciador="">
               <span className="font-semibold">{r.campanhas_entregando}</span> de {r.campanhas_ativas} {r.campanhas_ativas === 1 ? "campanha ativa entregando" : "campanhas ativas entregando"}
@@ -966,7 +966,7 @@ export default function GerenciadorAoVivo({
           </p>
         </div>
         <div className="-m-0.5 mb-1 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
-          <div className="inline-flex rounded-full bg-muted p-0.5" role="group" aria-label="Filtro do gerenciador">
+          <div className="scrollbar-hidden inline-flex max-w-full overflow-x-auto rounded-full bg-muted p-0.5 [&>*]:shrink-0" role="group" aria-label="Filtro do gerenciador">
             {FILTROS.map((f) => (
               <button
                 key={f.valor}

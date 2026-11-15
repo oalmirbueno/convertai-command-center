@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { MessageCircle, Check, X, AlertTriangle, Zap, ArrowRight, Clock } from "lucide-react";
 import { AjudaRecolhida, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, espaco, juntar, superficie, texto } from "@/components/sistema";
-import { Card, CardSurface, Chip, List, ListRow, PageHeader, ProgressBar, StatCard, StatusPill, type Tone } from "@/components/ds";
+import { Card, CardSurface, Chip, List, ListRow, MiniBars, PageHeader, ProgressBar, StatCard, StatusPill, type Tone } from "@/components/ds";
 import { Bolha, type TomDaBolha } from "@/components/client/pecasOusadas";
 import { getProjectBrand } from "@/lib/brandHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -44,6 +44,21 @@ function receivedOf(row: any) {
 // DATE ("AAAA-MM-DD") lido como dia de calendário: `new Date(d)` mostrava o vencimento um dia antes em UTC-3.
 const formatDate = (d: string) => dataDoPortal(d);
 
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** Valor em reais com os centavos apagados e menores (o número que importa fica na frente). */
+function Dinheiro({ valor }: { valor: number }) {
+  const escrito = formatCurrency(valor);
+  const virgula = escrito.lastIndexOf(",");
+  if (virgula < 0) return <>{escrito}</>;
+  return (
+    <>
+      {escrito.slice(0, virgula)}
+      <span className="text-[0.6em] font-medium tracking-normal text-muted-foreground">{escrito.slice(virgula)}</span>
+    </>
+  );
+}
+
 export default function ClientFinanceiro() {
   const { user, profile: authProfile } = useAuth();
   const { clientId, profile, isImpersonating } = useClientIdentity();
@@ -68,7 +83,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: wallets, isError: erroNasWallets } = useQuery({
+  const { data: wallets, isLoading: loadingWallets, isError: erroNasWallets } = useQuery({
     queryKey: ["ads-wallet-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -82,7 +97,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: rechargeRequests, isError: erroNasRecargas } = useQuery({
+  const { data: rechargeRequests, isLoading: loadingRecargas, isError: erroNasRecargas } = useQuery({
     queryKey: ["recharge-requests-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -97,7 +112,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: myProjectPayments } = useQuery({
+  const { data: myProjectPayments, isLoading: loadingProjetos } = useQuery({
     queryKey: ["client-project-payments", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -235,6 +250,14 @@ export default function ClientFinanceiro() {
 
   // ===== RENDER =====
   const temRecargaPendente = pendingRecharges.length > 0;
+  // A próxima cobrança em aberto (a de vencimento mais próximo) e a série das últimas cobranças, da mais antiga
+  // à mais recente: tudo já está na lista "Pagamentos" desta tela; aqui só ganha destaque.
+  const proximaCobranca = [...(billing || [])]
+    .filter((b: any) => b.status === "pending" || b.status === "partial")
+    .sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date)))[0] as any;
+  const ultimasCobrancas = [...(billing || [])].sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date))).slice(-6);
+  const mostrarProxima = !temRecargaPendente && !!proximaCobranca;
+  const aoLadoDoPlano = temRecargaPendente || mostrarProxima;
   const corDoPlano = planStatus === "active" ? "text-primary" : planStatus === "warning" ? "text-warning" : "text-destructive";
   const iconeDoPagamento = (status: string, tone: Tone) =>
     status === "paid" ? <Check className="h-4 w-4" /> : tone === "danger" ? <AlertTriangle className="h-4 w-4" /> : <Clock className="h-4 w-4" />;
@@ -264,20 +287,21 @@ export default function ClientFinanceiro() {
       )}
 
       {/* ===== LOADING ===== */}
-      {loadingBilling ? (
+      {/* Espera a primeira carga de tudo: saldo e projetos chegando depois empurravam "Pagamentos" para baixo. */}
+      {loadingBilling || loadingWallets || loadingRecargas || loadingProjetos ? (
         <Carregando forma="aba" rotulo="Carregando dados financeiros" />
       ) : (
       <>
       {/* ========== SEÇÃO 1: MEU PLANO (cartão de tinta) + SEÇÃO 3: RECARGAS PARA CONFIRMAR (cartão sólido) ========== */}
-      <div className={juntar(espaco.grade, "grid-cols-1 items-stretch", temRecargaPendente && "lg:grid-cols-5")}>
-        <Card title="Plano" variant="ink" collapsible={false} className={temRecargaPendente ? "lg:col-span-3" : undefined}>
+      <div className={juntar(espaco.grade, "grid-cols-1 items-stretch", aoLadoDoPlano && "lg:grid-cols-5")}>
+        <Card title="Plano" variant="ink" collapsible={false} className={aoLadoDoPlano ? "lg:col-span-3" : undefined}>
           {latestPlan ? (
             <>
               <div className="flex min-w-0 flex-wrap items-end justify-between">
                 <div className="mr-4 min-w-0">
                   <p className={juntar(texto.rotulo, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
                   <p className="mt-2 text-[48px] font-semibold leading-[52px] tracking-[-0.04em] tabular-nums text-foreground max-sm:text-[32px] max-sm:leading-10">
-                    {formatCurrency(Number(latestPlan.amount))}
+                    <Dinheiro valor={Number(latestPlan.amount)} />
                     <span className="ml-1.5 text-[15px] font-normal tracking-normal text-muted-foreground">/mês</span>
                   </p>
                 </div>
@@ -294,7 +318,7 @@ export default function ClientFinanceiro() {
                     {daysLeft > 0 ? (
                       <>
                         <span className="mr-1.5 text-[20px] font-semibold leading-7 tabular-nums text-foreground">{daysLeft}</span>
-                        dias restantes
+                        {daysLeft === 1 ? "dia restante" : "dias restantes"}
                       </>
                     ) : (
                       "Período vencido"
@@ -307,6 +331,41 @@ export default function ClientFinanceiro() {
             <p className={texto.auxiliar}>Nenhum plano encontrado</p>
           )}
         </Card>
+
+        {mostrarProxima && (() => {
+          const st = statusDoPagamento(proximaCobranca.status, proximaCobranca.due_date);
+          const falta = proximaCobranca.status === "partial" ? Math.max(Number(proximaCobranca.amount) - receivedOf(proximaCobranca), 0) : Number(proximaCobranca.amount);
+          return (
+            <CardSurface variant="accent" padded className="flex flex-col lg:col-span-2" data-proxima-cobranca="">
+              <div className="flex min-w-0 items-center">
+                <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-foreground">
+                  <Clock className="h-4 w-4" />
+                </span>
+                <h2 className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-muted-foreground">Próximo pagamento</h2>
+                <StatusPill tone={st.tone} className="ml-2">{st.label}</StatusPill>
+              </div>
+              <p className="mt-5 text-[48px] font-semibold leading-[52px] tracking-[-0.04em] tabular-nums text-foreground max-sm:text-[36px] max-sm:leading-10">
+                <Dinheiro valor={falta} />
+              </p>
+              <p className="mt-1.5 min-w-0 text-[13px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                {proximaCobranca.description || typeLabels[proximaCobranca.type] || proximaCobranca.type} · vence em {formatDate(proximaCobranca.due_date)}
+              </p>
+              {ultimasCobrancas.length >= 3 && (
+                <div className="mt-auto min-w-0 pt-5">
+                  <MiniBars
+                    values={ultimasCobrancas.map((b: any) => Number(b.amount) || 0)}
+                    highlightIndex={ultimasCobrancas.findIndex((b: any) => b.id === proximaCobranca.id)}
+                    height={56}
+                    tone="current"
+                    showLabels
+                    labels={ultimasCobrancas.map((b: any) => MESES_CURTOS[Number(String(b.due_date).slice(5, 7)) - 1] || "")}
+                    label={`Valor das últimas ${ultimasCobrancas.length} cobranças; a próxima em destaque`}
+                  />
+                </div>
+              )}
+            </CardSurface>
+          );
+        })()}
 
         {temRecargaPendente && (
           <Card
@@ -375,7 +434,7 @@ export default function ClientFinanceiro() {
                   size="xl"
                   icon={<Zap className="h-4 w-4" />}
                   label={platformLabels[w.platform] || w.platform}
-                  value={formatCurrency(balance)}
+                  value={<Dinheiro valor={balance} />}
                   corner={<StatusPill tone={statusTone}>{statusText}</StatusPill>}
                   chart={
                     <>
@@ -409,17 +468,17 @@ export default function ClientFinanceiro() {
                         <p className="mr-2 truncate text-[15px] font-semibold leading-5 text-foreground">{pp.project?.name || "Projeto"}</p>
                         <Chip>{getProjectBrand(pp.project?.project_type)}</Chip>
                       </div>
-                      <p className={juntar(texto.numeroGrande, "mt-2")}>{formatCurrency(Number(pp.total_value))}</p>
+                      <p className={juntar(texto.numeroGrande, "mt-2")}><Dinheiro valor={Number(pp.total_value)} /></p>
                     </div>
-                    <div className="mt-2 text-right tabular-nums">
-                      <p className="text-[13px] font-medium leading-5 text-success">{formatCurrency(paid)} pago</p>
-                      {remaining > 0 && <p className="text-[13px] leading-5 text-warning">{formatCurrency(remaining)} restante</p>}
+                    <div className="mt-2 flex min-w-0 flex-wrap items-center tabular-nums sm:flex-col sm:items-end">
+                      <Chip tone="success" dot className="mr-2 sm:mr-0">{formatCurrency(paid)} pago</Chip>
+                      {remaining > 0 && <Chip tone="warning" dot className="sm:mt-1.5">{formatCurrency(remaining)} restante</Chip>}
                     </div>
                   </div>
 
                   <div className="mt-5">
                     <ProgressBar value={paid} max={Number(pp.total_value)} height={10} tone={1} striped label={`${pct}% pago`} />
-                    <p className={juntar(texto.auxiliar, "mt-2")}>{pct}% concluído</p>
+                    <p className={juntar(texto.auxiliar, "mt-2")}>{pct}% pago</p>
                   </div>
 
                   <List className="mt-3" label={`Parcelas de ${pp.project?.name || "Projeto"}`}>

@@ -207,9 +207,9 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                     <span className={juntar(texto.etiqueta, "ml-2 inline-flex h-5 shrink-0 items-center rounded-full px-2 tabular-nums", group.naoLidos > 0 ? (group.pedeDecisao ? "bg-accent-solid text-on-accent" : "bg-foreground text-background") : "bg-muted text-muted-foreground")}>{group.naoLidos > 0 ? `${group.naoLidos} não ${group.naoLidos === 1 ? "lido" : "lidos"}` : group.itens.length}</span>
                   </button>
                   {group.naoLidos > 0 && (
-                    <button type="button" onClick={() => void marcarGrupo(group)} className={juntar(botao.discreto, "ml-2 h-7 shrink-0 px-2 text-[12px]")} title={`Marcar todos de ${group.nome} como lidos`} aria-label={`Marcar todos de ${group.nome} como lidos`}>
-                      <CheckCheck className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-                      <span className="hidden sm:inline">Marcar todos como lidos</span>
+                    <button type="button" onClick={() => void marcarGrupo(group)} className={juntar(botao.icone, "ml-2 h-7 w-7")} title={`Marcar todos de ${group.nome} como lidos`} aria-label={`Marcar todos de ${group.nome} como lidos`}>
+                      {/* v4: só o ícone (o texto repetia em cada grupo); o nome completo fica na dica e no leitor de tela. */}
+                      <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -221,7 +221,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                       key={n.id}
                       onClick={() => handleClick(n)}
                       data-pede-decisao={destaque ? "" : undefined}
-                      className={`mx-2 mb-1 cursor-pointer rounded-md px-3 py-3 transition-colors ${
+                      className={`mx-2 mb-1 min-w-0 cursor-pointer rounded-md px-3 py-3 transition-colors ${
                         destaque ? "bg-accent-soft hover:bg-accent-soft/80" : "hover:bg-muted/60"
                       }`}
                     >
@@ -230,14 +230,15 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                           {icon}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-[13px] leading-5 ${n.read ? "text-muted-foreground" : destaque ? "text-foreground font-medium" : "text-foreground"}`}>
+                          <p className={`text-[13px] leading-5 [overflow-wrap:anywhere] ${n.read ? "text-muted-foreground" : destaque ? "text-foreground font-medium" : "text-foreground"}`}>
                             {n.message}
                           </p>
                           {area === "agentes" && n.link && <ContextoDoAviso link={n.link} />}
-                          <p className="text-[11px] leading-4 text-muted-foreground mt-0.5">{timeAgo(n.created_at)}</p>
-                          {n.link && (
-                            <p className="text-[12px] font-medium leading-4 text-primary mt-1">{getLinkLabel(n)}</p>
-                          )}
+                          {/* v4: hora e destino na mesma linha (uma linha a menos por aviso). */}
+                          <p className="mt-1 flex min-w-0 items-center text-[12px] leading-4 text-muted-foreground">
+                            <span className="shrink-0">{timeAgo(n.created_at)}</span>
+                            {n.link && <span className="ml-2 min-w-0 truncate font-medium text-primary">{getLinkLabel(n)}</span>}
+                          </p>
                         </div>
                         {!n.read && <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-2 ${destaque ? "bg-accent-solid ring-4 ring-primary/15" : "bg-foreground"}`} />}
                       </div>

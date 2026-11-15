@@ -15,7 +15,7 @@ import { ehRegistroDeEntrega, tituloDoRegistro } from "@/lib/documentos/registra
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink } from "lucide-react";
+import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink, ChevronRight } from "lucide-react";
 import CarouselSlider from "@/components/shared/CarouselSlider";
 import JanelaDoCelular from "@/components/sistema/JanelaDoCelular";
 import { useTelaPequena } from "@/components/client/useTelaPequena";
@@ -288,10 +288,10 @@ export default function ClientDocuments() {
         <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5" aria-label="Pastas">
           {[{ id: "todos" as FolderId | "todos", rotulo: "Tudo", total: visibleFiles.length }]
             .concat(folderSummaries.map((entry) => ({ id: entry.folder.id as FolderId | "todos", rotulo: entry.folder.label, total: entry.total })))
-            .map((pasta) => {
+            .map((pasta, indice, lista) => {
               const aberta = activeFolder === pasta.id;
               return (
-                <li key={pasta.id} className="min-w-0">
+                <li key={pasta.id} className={juntar("min-w-0", indice === 0 && lista.length % 2 === 1 && "max-sm:col-span-2")}>
                   <button
                     type="button"
                     aria-pressed={aberta}
@@ -302,8 +302,7 @@ export default function ClientDocuments() {
                       <Bolha tom={aberta ? "tinta" : "neutro"} className={aberta ? "bg-foreground/10 text-foreground" : ""}><FolderOpen className="h-4 w-4" /></Bolha>
                       <span className="ml-2 text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums text-foreground">{pasta.total}</span>
                     </span>
-                    <span className="mt-4 block w-full truncate text-[13px] font-medium leading-5 text-foreground">{pasta.rotulo}</span>
-                    <span className="block text-[12px] leading-4 text-muted-foreground">{pasta.total === 1 ? "item" : "itens"}</span>
+                    <span className="mt-3 block w-full text-[13px] font-medium leading-[18px] text-foreground line-clamp-2 sm:mt-4">{pasta.rotulo}</span>
                   </button>
                 </li>
               );
@@ -326,7 +325,8 @@ export default function ClientDocuments() {
               className="max-w-[180px] sm:max-w-[240px]"
             />
           )}
-          {visibleFiles.length > 0 && (
+          {/* Com os azulejos de pasta em cima, o seletor "Pasta" seria a mesma coisa duas vezes. */}
+          {visibleFiles.length > 0 && folderSummaries.length <= 1 && (
             <SeletorCompacto
               rotulo="Pasta"
               icone={<FolderOpen className="h-3.5 w-3.5" />}
@@ -410,19 +410,23 @@ export default function ClientDocuments() {
                 <div className="flex min-w-0 items-center">
                   <ClientFileThumb file={f} />
                   <div className="ml-4 min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-medium leading-5 text-foreground">
+                    <p className="text-[13px] font-medium leading-5 text-foreground [overflow-wrap:anywhere] max-sm:line-clamp-2 sm:truncate">
                       {f.file_name}
                       {f.version > 1 && <span className="ml-1 text-[11px] text-muted-foreground">v{f.version}</span>}
                     </p>
-                    <p className={juntar(texto.auxiliar, "truncate")}>
+                    <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
                       {/* Celular: uma linha de apoio só (data e projeto); a pasta fica nos filtros. */}
                       <span className="hidden sm:inline">{fileLocationLabel(f)} · </span>
                       {f.project?.name || "Sem projeto"} · {formatDate(f.created_at)}
                     </p>
+                    {f.approval_status !== "none" && (
+                      <StatusPill tone={badge.tone} className="mt-1.5 sm:hidden">{badge.label}</StatusPill>
+                    )}
                   </div>
                   {f.approval_status !== "none" && (
-                    <StatusPill tone={badge.tone} className="ml-2">{badge.label}</StatusPill>
+                    <StatusPill tone={badge.tone} className="ml-2 max-sm:hidden">{badge.label}</StatusPill>
                   )}
+                  <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground sm:hidden" aria-hidden="true" />
                   {/* No celular o Baixar fica na folha do item (um toque por linha). */}
                   <button
                     type="button"

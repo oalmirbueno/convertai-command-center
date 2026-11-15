@@ -25,6 +25,11 @@ const COR_DO_TOM: Record<TomDoAchado, string> = {
   atencao: "text-warning",
   info: "text-info",
 };
+const FUNDO_DO_TOM: Record<TomDoAchado, string> = {
+  urgente: "bg-danger-soft",
+  atencao: "bg-warning-soft",
+  info: "bg-info-soft",
+};
 const BOLINHA_DO_TOM: Record<TomDoAchado, string> = {
   urgente: "bg-destructive",
   atencao: "bg-warning",
@@ -78,23 +83,31 @@ export default function FaixaDeAchados({
         aria-label="Achados com ação"
         className="flex min-w-0 snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-1 sm:grid sm:snap-none sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:pb-0 lg:grid-cols-3"
       >
-        {visiveis.map((a) => {
+        {visiveis.map((a, indice) => {
           const local = acoesLocais ? acoesLocais[a.id] : undefined;
           const nome = `${a.numero} ${a.frase}`;
           const conteudoDaAcao = (
             <>
-              {a.acao.copiar && !local ? <Copy className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> : <ArrowUpRight className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
-              {a.acao.rotulo}
+              {a.acao.copiar && !local ? <Copy className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ArrowUpRight className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+              <span className="truncate">{a.acao.rotulo}</span>
             </>
           );
-          const classeDaAcao = juntar(botao.barra, "-mb-1 -ml-2 mt-2 self-start text-primary hover:text-primary");
+          /* v4 (15/11): o primeiro achado (o mais urgente) é o cartão de tinta, com o botão cheio; os
+             outros ficam claros, com o ícone do tom num círculo e a ação em pílula. Uma ação por cartão. */
+          const principal = indice === 0;
+          const classeDaAcao = juntar(
+            "toque-compacto mt-3 inline-flex h-9 max-w-full items-center self-start rounded-full px-3.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            principal ? "bg-accent-solid text-on-accent hover:opacity-90" : "bg-muted text-foreground hover:bg-muted/70",
+          );
           return (
-            <li key={a.id} data-achado={a.id} className={juntar(superficie.painel, "mr-3 flex w-[72%] max-w-[260px] shrink-0 snap-start flex-col px-4 py-3.5 sm:mr-0 sm:w-auto sm:max-w-none sm:px-5 sm:py-4")}>
+            <li key={a.id} data-achado={a.id} className={juntar(superficie.painel, principal && superficie.tinta, "mr-3 flex w-[72%] max-w-[260px] shrink-0 snap-start flex-col px-4 py-4 sm:mr-0 sm:w-auto sm:max-w-none sm:px-5 sm:py-5")}>
               <span className="flex min-w-0 items-center">
-                <span className={juntar(texto.numeroGrande, COR_DO_TOM[a.tom])}>{a.numero}</span>
-                <span className={juntar("ml-auto h-2 w-2 shrink-0 rounded-full", BOLINHA_DO_TOM[a.tom])} aria-hidden="true" />
+                <span className={juntar("text-[32px] font-medium leading-9 tracking-[-0.03em] tabular-nums", principal ? "text-foreground" : COR_DO_TOM[a.tom])}>{a.numero}</span>
+                <span className={juntar("ml-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full", principal ? "bg-foreground/10" : FUNDO_DO_TOM[a.tom])} aria-hidden="true">
+                  <span className={juntar("h-2 w-2 rounded-full", BOLINHA_DO_TOM[a.tom])} />
+                </span>
               </span>
-              <span className={juntar(texto.corpo, "mt-0.5 line-clamp-2 min-h-[40px] text-muted-foreground")}>{a.frase}</span>
+              <span className={juntar(texto.corpo, "mt-1 line-clamp-2 min-h-[40px] text-muted-foreground")}>{a.frase}</span>
               {local ? (
                 <button type="button" onClick={() => local(a)} aria-label={`${a.acao.rotulo}: ${nome}`} className={classeDaAcao}>{conteudoDaAcao}</button>
               ) : a.acao.copiar ? (

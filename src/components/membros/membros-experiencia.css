@@ -15,7 +15,8 @@
   --card-foreground: 145 15% 10%;
   --popover: 0 0% 100%;
   --popover-foreground: 145 15% 10%;
-  --primary: 120 100% 25%;
+  /* v4: um tom mais escuro para o verde passar de 4,5:1 também sobre fundo verde-claro. */
+  --primary: 120 100% 22%;
   --primary-foreground: 0 0% 100%;
   --secondary: 120 9% 94%;
   --secondary-foreground: 140 7% 36%;

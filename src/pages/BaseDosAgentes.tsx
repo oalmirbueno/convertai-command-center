@@ -120,6 +120,8 @@ export default function BaseDosAgentes() {
         descricao={<span><strong className="tabular-nums text-foreground">{totalAtivas}</strong> técnicas em uso em {AGENTES_COM_BASE.length} agentes</span>}
       />
 
+      {/* O lugar da linha da semana fica guardado enquanto ela carrega (o resto não desce quando chega). */}
+      {semana.isLoading && <div aria-hidden="true" className="min-h-[60px] sm:min-h-[20px]" />}
       {semana.data && (
         <section aria-label="Esta semana" className="min-w-0 space-y-2" data-resumo-da-semana="">
           <p className="text-[13px] leading-5 text-foreground">
@@ -138,7 +140,22 @@ export default function BaseDosAgentes() {
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Os agentes, por mesa. */}
-        <nav aria-label="Agentes" className="min-w-0 space-y-4">
+        {/* Celular e tablet: os agentes numa lista suspensa (a coluna inteira ocupava duas telas antes do conteúdo). */}
+        <select
+          aria-label="Agente"
+          value={agente.chave}
+          onChange={(e) => setChave(e.target.value)}
+          className={juntar(campo, "h-11 rounded-full lg:hidden")}
+        >
+          {mesas.map(([mesa, lista]) => (
+            <optgroup key={mesa} label={mesa}>
+              {lista.map((a) => (
+                <option key={a.chave} value={a.chave}>{`${a.nome} (${resumo.data?.[a.chave]?.ativas ?? 0})`}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <nav aria-label="Agentes" className="hidden min-w-0 space-y-4 lg:block">
           {mesas.map(([mesa, lista]) => (
             <div key={mesa} className="min-w-0">
               <p className={juntar(texto.rotulo, "mb-1 px-2")}>{mesa}</p>
@@ -186,8 +203,10 @@ export default function BaseDosAgentes() {
                 novo sobre {agente.tema} e as fichas novas também entram em uso. Desligue o que não ajudar.
               </>
             }
-            acao={podeEnsinar ? <span className="inline-flex items-center"><BotaoDosResultados aoTerminar={recarregar} /><BotaoDePesquisa agente={agente} aoTerminar={recarregar} /></span> : undefined}
+            acao={podeEnsinar ? <span className="hidden items-center sm:inline-flex"><BotaoDosResultados aoTerminar={recarregar} /><BotaoDePesquisa agente={agente} aoTerminar={recarregar} /></span> : undefined}
           >
+            {/* Celular: as duas ações descem para a linha delas (ao lado do título, cortavam o nome do agente). */}
+            {podeEnsinar && <div className="mb-3 flex min-w-0 items-center sm:hidden"><BotaoDosResultados aoTerminar={recarregar} /><BotaoDePesquisa agente={agente} aoTerminar={recarregar} /></div>}
             <ChaveDaBiblioteca agente={agente} fichas={fichas.data || []} podeMudar={podeEnsinar} aoMudar={recarregar} />
             {podeEnsinar && <CaixaDeEnsino agente={agente} clientes={clientes.data || []} aoTerminar={recarregar} />}
           </Secao>

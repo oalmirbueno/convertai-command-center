@@ -104,6 +104,7 @@ import {
   type ResultadoDoObjetivo,
 } from "@/lib/adsResumo";
 import { tendenciaDoCliente, type Direcao, type TendenciaDoCliente } from "@/lib/adsTendencia";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 
 /**
  * A área de anúncios (docs/design/SISTEMA.md). Pedidos do dono: 26/09
@@ -289,7 +290,7 @@ function Metrica({
   return (
     <div className="flex min-w-0 items-center" title={dica} data-metrica="">
       <span
-        className="mr-2.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
+        className="mr-2.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground max-sm:mr-2 max-sm:h-7 max-sm:w-7 max-sm:[&>svg]:h-3.5 max-sm:[&>svg]:w-3.5"
         aria-hidden="true"
       >
         {icone}
@@ -1328,6 +1329,7 @@ function ContasEConexao({
 /* ─────────────────────────────── a página ─────────────────────────────── */
 
 export default function AdminAds() {
+  const pequena = useTelaPequena();
   const { profile } = useAuth();
   const papel = profile?.role || "";
   const isStaff = ["admin", "manager", "design", "traffic"].includes(papel);
@@ -1558,14 +1560,16 @@ export default function AdminAds() {
         descricao={descricao.charAt(0).toUpperCase() + descricao.slice(1)}
         ajuda={`Meta Ads lido direto da conta, de hora em hora, com os números dos últimos 30 dias. As abas ao lado do título trocam entre os clientes, o que está no ar e as contas. O relógio diz quando a Meta foi lida por último (passou de 24 h, fica âmbar). ${DICA_DO_LINK_DO_ANUNCIO}`}
         aoLado={
-          <Etapas
-            soIcone
-            rotulo="Partes dos anúncios"
-            itens={abas}
-            valor={aba}
-            onEscolher={(v) => setAba(v as AbaDaLista)}
-            className="min-w-0 flex-1"
-          />
+          pequena ? undefined : (
+            <Etapas
+              soIcone
+              rotulo="Partes dos anúncios"
+              itens={abas}
+              valor={aba}
+              onEscolher={(v) => setAba(v as AbaDaLista)}
+              className="min-w-0 flex-1"
+            />
+          )
         }
         acoes={
           <>
@@ -1575,6 +1579,11 @@ export default function AdminAds() {
           </>
         }
       />
+
+      {/* Celular: as abas ganham a linha delas (ao lado do título, empurravam as ações para fora da tela). */}
+      {pequena && (
+        <Etapas soIcone rotulo="Partes dos anúncios" itens={abas} valor={aba} onEscolher={(v) => setAba(v as AbaDaLista)} className="min-w-0" />
+      )}
 
       {todas.detalhe}
 

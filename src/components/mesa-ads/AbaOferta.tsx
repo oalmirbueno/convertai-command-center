@@ -532,7 +532,8 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
           )}
 
           <div className="mt-3 min-w-0">
-            {ofertas.isLoading && <Carregando forma="lista" linhas={3} rotulo="Lendo as ofertas" />}
+            {/* v4: a espera ocupa a altura da tela; o Briefing de baixo não pula quando as ofertas chegam. */}
+            {ofertas.isLoading && <div className="min-h-[calc(100vh-200px)]"><Carregando forma="lista" linhas={3} rotulo="Lendo as ofertas" /></div>}
             {ofertas.isError && todas.length === 0 && (
               <EstadoVazio compacto titulo="As ofertas salvas ainda não abriram." descricao={`(${textoDoErro(ofertas.error)}) As que o agente propuser aparecem aqui mesmo assim.`} />
             )}

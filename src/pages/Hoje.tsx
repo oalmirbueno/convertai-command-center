@@ -227,7 +227,7 @@ export default function Hoje() {
                   </StatGrid>
                 </div>
 
-                <Secao id="hoje-precisa" titulo="Precisa de você" descricao={pedidos.length ? `${pedidos.length} ${pedidos.length === 1 ? "decisão" : "decisões"}` : "Nada esperando você"} recolher="hoje:precisa">
+                <Secao id="hoje-precisa" titulo="Precisa de você" recolher="hoje:precisa">
                   {pedidos.length === 0 ? <EstadoVazio compacto titulo="Nada esperando você." descricao="Os agentes seguem sozinhos." /> : (
                     <Grade itens={pedidos} rotulo="Precisa de você" cartao={(p) => {
                       const d = destinoDoPedido(p);
@@ -252,7 +252,7 @@ export default function Hoje() {
                 </Secao>
 
                 {r.clientesEmRisco.length > 0 && (
-                  <Secao id="hoje-calendario" titulo="Clientes sem post" descricao={`${r.clientesEmRisco.length}`} recolher="hoje:calendario">
+                  <Secao id="hoje-calendario" titulo="Clientes sem post" recolher="hoje:calendario">
                     <Grade itens={r.clientesEmRisco} rotulo="Clientes sem post" cartao={(c) => <CartaoDeRisco key={c.clientId} c={c} logo={logoDe(c.clientId)} />} />
                   </Secao>
                 )}
@@ -277,7 +277,6 @@ export default function Hoje() {
                 {(r.alertas.length > 0 || r.mudancas.length > 0) && (
                   <Secao
                     titulo="Anúncios"
-                    descricao={[r.alertas.length ? `${r.alertas.length} ${r.alertas.length === 1 ? "alerta" : "alertas"}` : "", r.mudancas.length ? `${r.mudancas.length} ${r.mudancas.length === 1 ? "mudança" : "mudanças"}` : ""].filter(Boolean).join(" · ")}
                     recolher="hoje:anuncios"
                     acao={<Link to="/anuncios/hoje" className={botao.icone} title="Abrir Anúncios hoje" aria-label="Abrir Anúncios hoje"><Megaphone className="h-4 w-4" aria-hidden="true" /></Link>}
                   >
@@ -319,7 +318,7 @@ export default function Hoje() {
                   </Secao>
                 )}
 
-                <Secao id="hoje-feito" titulo="Feito ontem com prova" descricao={r.feitoOntem.length ? `${r.feitoOntem.length}` : "Nada entregue com prova ontem"} recolher="hoje:feito">
+                <Secao id="hoje-feito" titulo="Feito ontem com prova" recolher="hoje:feito">
                   {r.feitoOntem.length === 0 ? <EstadoVazio compacto titulo="Nenhuma entrega com prova ontem." /> : (
                     <Grade itens={r.feitoOntem} rotulo="Feito ontem com prova" classe={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-4")} cartao={(f) => {
                       const d = destinoDoFeito(f);

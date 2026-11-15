@@ -8,7 +8,15 @@ import {
   Send,
   RefreshCw,
   ExternalLink,
+  MoreHorizontal,
+  Reply,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AjudaRecolhida } from "@/components/sistema";
 import { carregarCanais } from "@/lib/membros/canais";
 import { urlHttps } from "@/lib/membros/modelo";
@@ -131,7 +139,7 @@ export default function ComunidadeDoCurso({
           {c.texto}
         </p>
         {!leitura && (
-          <div className="flex flex-wrap gap-1 mt-2">
+          <div className="membros-conversa-acoes">
             {!filha && (
               <button
                 className="membros-acao text-muted-foreground"
@@ -141,45 +149,57 @@ export default function ComunidadeDoCurso({
                   setTexto("");
                 }}
               >
+                <Reply size={14} aria-hidden="true" />
                 Responder
               </button>
             )}
-            {c.autor_id === user?.id && (
-              <button
-                className="membros-acao text-muted-foreground"
-                onClick={() => {
-                  setEditando(c);
-                  setResposta(null);
-                  setTexto(c.texto);
-                }}
-              >
-                <Pencil size={13} />
-                Editar
-              </button>
-            )}
-            {admin && (
-              <>
-                <button
-                  className="membros-acao text-muted-foreground"
-                  disabled={ocupado}
-                  onClick={() =>
-                    void agir(c.texto, c.id, undefined, c.oculto, !c.fixado)
-                  }
-                >
-                  <Pin size={13} />
-                  {c.fixado ? "Desafixar" : "Fixar"}
-                </button>
-                <button
-                  className="membros-acao text-muted-foreground"
-                  disabled={ocupado}
-                  onClick={() =>
-                    void agir(c.texto, c.id, undefined, !c.oculto, c.fixado)
-                  }
-                >
-                  <EyeOff size={13} />
-                  {c.oculto ? "Mostrar" : "Ocultar"}
-                </button>
-              </>
+            {(c.autor_id === user?.id || admin) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="membros-acao membros-conversa-mais text-muted-foreground"
+                    aria-label={`Mais ações na mensagem de ${c.autor_nome}`}
+                  >
+                    <MoreHorizontal size={17} aria-hidden="true" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-40">
+                  {c.autor_id === user?.id && (
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setEditando(c);
+                        setResposta(null);
+                        setTexto(c.texto);
+                      }}
+                    >
+                      <Pencil size={14} className="mr-2" aria-hidden="true" />
+                      Editar
+                    </DropdownMenuItem>
+                  )}
+                  {admin && (
+                    <>
+                      <DropdownMenuItem
+                        disabled={ocupado}
+                        onSelect={() =>
+                          void agir(c.texto, c.id, undefined, c.oculto, !c.fixado)
+                        }
+                      >
+                        <Pin size={14} className="mr-2" aria-hidden="true" />
+                        {c.fixado ? "Desafixar" : "Fixar"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={ocupado}
+                        onSelect={() =>
+                          void agir(c.texto, c.id, undefined, !c.oculto, c.fixado)
+                        }
+                      >
+                        <EyeOff size={14} className="mr-2" aria-hidden="true" />
+                        {c.oculto ? "Mostrar" : "Ocultar"}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         )}
@@ -188,8 +208,8 @@ export default function ComunidadeDoCurso({
   }
   return (
     <section className="membros-comunidade" aria-label="Comunidade do curso">
-      <header className="membros-comunidade-cabecalho flex flex-wrap items-center justify-between gap-2">
-        <div>
+      <header className={`membros-comunidade-cabecalho${tituloOculto ? "" : " com-titulo"}`}>
+        <div className={tituloOculto ? "sr-only" : undefined}>
           <h2
             className={`${tituloOculto ? "sr-only" : "text-[15px] font-semibold flex items-center gap-2"}`}
           >
@@ -223,8 +243,9 @@ export default function ComunidadeDoCurso({
           </nav>
         )}
         <button
-          className="membros-acao"
+          className="membros-acao membros-comunidade-atualizar text-muted-foreground"
           aria-label="Atualizar comunidade"
+          title="Atualizar"
           onClick={() => void dados.refetch()}
         >
           <RefreshCw size={15} />

@@ -56,7 +56,7 @@ export default function SeletorDeClientes({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={juntar(botao.secundario, "h-8 max-w-[220px] px-3", filtro.modo !== "todos" && "border-foreground bg-foreground text-background hover:bg-foreground/90")}
+          className={juntar(botao.secundario, "h-8 max-w-[220px] px-3 max-sm:h-9 max-sm:max-w-[calc(100vw-216px)]", filtro.modo !== "todos" && "border-foreground bg-foreground text-background hover:bg-foreground/90")}
           aria-label={`Clientes da Esteira: ${rotulo}`}
           title={resumo}
           data-seletor-de-clientes={filtro.modo}

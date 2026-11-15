@@ -31,9 +31,12 @@ export function ChipDeCreditos() {
   const nome = c && c.disponivel ? `Créditos do Laboratório: ${usd(c.saldo_usd)}${c.ativa ? "" : " (limite desligado)"}` : "Créditos do Laboratório";
   return (
     <>
-      <button type="button" className={botao.barra} onClick={() => setAberta(true)} title={nome} aria-label={nome} data-chip-de-creditos="">
-        <Wallet className="mr-1.5 h-4 w-4" aria-hidden="true" />
-        <span className="tabular-nums">{c ? usd(c.saldo_usd) : q.isError ? "?" : "…"}</span>
+      {/* v4: pílula com a carteira num círculo de tinta; largura mínima reservada para o saldo não empurrar o cabeçalho ao chegar. */}
+      <button type="button" className="toque-compacto inline-flex h-9 shrink-0 items-center rounded-full bg-card pl-1 pr-3.5 text-[13px] font-medium text-foreground shadow-card transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setAberta(true)} title={nome} aria-label={nome} data-chip-de-creditos="">
+        <span className="mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background" aria-hidden="true">
+          <Wallet className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-[56px] text-left tabular-nums">{c ? usd(c.saldo_usd) : q.isError ? "?" : "…"}</span>
       </button>
       <JanelaDeCreditos aberta={aberta} onFechar={() => setAberta(false)} />
     </>

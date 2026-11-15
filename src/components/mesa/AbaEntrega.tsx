@@ -320,7 +320,7 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
             lista faz parte da página, sem caixa com rolagem prendendo o dedo. */}
         {itens.length > 0 && (
           <RegiaoRolavel modo="lg" rotulo="Artes do mês" sobre="cartao" memoria={`mesa:entrega:${clientId}:${mes}`}>
-          <ul className="divide-y divide-border">
+          <ul className="space-y-0.5 p-1.5">
             {itens.map((i) => {
               const t = trabalhoDe(i);
               return (
@@ -390,9 +390,9 @@ function LinhaDaArte({
   const agenda = t ? linkDaAgenda(clientId, t, pub) : null;
   const quando = pub?.scheduled_at || t?.publicar_em || null;
   return (
-    <li className="flex min-w-0 items-center px-3 py-2.5 hover:bg-muted">
+    <li className="flex min-w-0 items-center rounded-lg px-2 py-2 transition-colors hover:bg-muted">
       <button type="button" onClick={() => onAbrir(i.id)} className="flex min-w-0 flex-1 items-center text-left" aria-label={`Abrir ${i.title} no Estúdio`}>
-        <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="mr-3 h-16 w-12 shrink-0 rounded-md border border-border" />
+        <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="mr-3 h-16 w-12 shrink-0 rounded-lg" />
         <span className="min-w-0 flex-1">
           <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{i.title}</span>
           <span className="mt-0.5 block text-[12px] text-muted-foreground">
@@ -552,7 +552,23 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
     }
   };
 
-  if (previsao.isLoading) return null;
+  // v4: enquanto a previsão carrega, um bloco do tamanho final guarda o lugar (a lista de artes não pula depois).
+  if (previsao.isLoading)
+    return (
+      <section className={`border-y border-border py-4 ${recolhido ? "h-[86px]" : "h-[379px] lg:h-[238px]"}`} aria-hidden="true" data-publicacao-carregando="">
+        <span className="block h-5 w-44 rounded-full bg-muted" />
+        {!recolhido && (
+          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-6 lg:max-w-[50%]">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="space-y-2">
+                <span className="block h-2.5 w-16 rounded-full bg-muted/70" />
+                <span className="block h-5 w-24 rounded-full bg-muted" />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
   if (previsao.isError) return <p className="rounded-md bg-destructive/10 p-3 text-[13px] text-destructive">{textoDoErro(previsao.error)}</p>;
 
   const tipos = melhores.data ? Object.keys(melhores.data.por_tipo).filter((k) => !!melhores.data!.por_tipo[k]) : [];

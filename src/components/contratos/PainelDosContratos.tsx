@@ -62,9 +62,9 @@ export default function PainelDosContratos({ clientId, nomeDoCliente, aoAbrir }:
             </>
           }
           value={p.aVencer.length}
-          hint={p.aVencer.length ? (aberta === "vencer" ? "toque para recolher" : "toque para ver quais") : "nada a vencer"}
+          hint={p.aVencer.length ? (aberta === "vencer" ? "recolher" : "ver quais") : "nada a vencer"}
           onClick={p.aVencer.length ? () => alternar("vencer") : undefined}
-          className={juntar(aberta === "vencer" && "ring-2 ring-foreground")}
+          className={juntar("max-sm:[&_.truncate]:whitespace-normal", aberta === "vencer" && "ring-2 ring-foreground")}
         />
         <StatCard
           label={
@@ -74,16 +74,16 @@ export default function PainelDosContratos({ clientId, nomeDoCliente, aoAbrir }:
             </>
           }
           value={p.pendentes.length}
-          hint={p.pendentes.length ? (aberta === "pendentes" ? "toque para recolher" : "toque para ver quais") : "nada pendente"}
+          hint={p.pendentes.length ? (aberta === "pendentes" ? "recolher" : "ver quais") : "nada pendente"}
           onClick={p.pendentes.length ? () => alternar("pendentes") : undefined}
-          className={juntar(aberta === "pendentes" && "ring-2 ring-foreground")}
+          className={juntar("max-sm:[&_.truncate]:whitespace-normal", aberta === "pendentes" && "ring-2 ring-foreground")}
         />
         <StatCard variant="accent" label="Assinados no mês" value={p.assinadosNoMes} />
         <StatCard variant="ink" label="Recorrente em vigor" value={moedaBr(p.recorrenteMensal)} hint={`${p.ativos} ${p.ativos === 1 ? "contrato ativo" : "contratos ativos"}`} />
       </StatGrid>
       {aberta === "vencer" && p.aVencer.length > 0 && (
         <Card title="A vencer" subtitle={`${p.aVencer.length} ${p.aVencer.length === 1 ? "contrato" : "contratos"} nos próximos ${d.janela_dias} dias`} flush>
-        <ul className="min-w-0 divide-y divide-border/60 px-2 pb-2" aria-label="Contratos a vencer">
+        <ul className="min-w-0 px-2 pb-2" aria-label="Contratos a vencer">
           {p.aVencer.map((x) => (
             <li key={x.id} className="flex min-w-0 items-center rounded-md px-2 transition-colors hover:bg-muted/50">
               <button type="button" className="flex min-w-0 flex-1 items-center py-3.5 text-left" onClick={() => aoAbrir(x.renovacao_id || x.id, x.client_id)}>
@@ -118,7 +118,7 @@ export default function PainelDosContratos({ clientId, nomeDoCliente, aoAbrir }:
       )}
       {aberta === "pendentes" && p.pendentes.length > 0 && (
         <Card title="Esperando assinatura" subtitle={`${p.pendentes.length} ${p.pendentes.length === 1 ? "contrato" : "contratos"}`} flush>
-        <ul className="min-w-0 divide-y divide-border/60 px-2 pb-2" aria-label="Contratos esperando assinatura">
+        <ul className="min-w-0 px-2 pb-2" aria-label="Contratos esperando assinatura">
           {p.pendentes.map((x) => (
             <li key={x.id} className="flex min-w-0 items-center rounded-md px-2 transition-colors hover:bg-muted/50">
               <button type="button" className="flex min-w-0 flex-1 items-center py-3.5 text-left" onClick={() => aoAbrir(x.id, x.client_id)}>

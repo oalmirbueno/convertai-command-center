@@ -15,7 +15,7 @@ import CartaoDaPeca from "./CartaoDaPeca";
 export const CLASSES_DA_TABELA = "w-full min-w-[860px] table-fixed border-separate border-spacing-0 text-left sm:min-w-[1040px]";
 export const CLASSES_DA_TABELA_DE_DUAS_SEMANAS = "w-full min-w-[1540px] table-fixed border-separate border-spacing-0 text-left sm:min-w-[1860px]";
 const classesDaTabela = (quantosDias: number): string => (quantosDias > 7 ? CLASSES_DA_TABELA_DE_DUAS_SEMANAS : CLASSES_DA_TABELA);
-export const LARGURA_DA_COLUNA_DO_CLIENTE = "w-[136px] sm:w-[216px]";
+export const LARGURA_DA_COLUNA_DO_CLIENTE = "w-[100px] sm:w-[216px]";
 /**
  * O cabeçalho dos dias fica fora da área que rola: com a página cabendo na
  * tela, ele não sai do lugar. O `sticky` continua para a tela muito baixa,
@@ -28,7 +28,7 @@ export const CLASSES_DO_CABECALHO_DOS_DIAS = "sticky -top-4 z-30 shrink-0 overfl
  * na vertical (outro cliente) e na horizontal (outros dias), e ocupa o que
  * sobra da tela. A página não precisa rolar.
  */
-export const CLASSES_DA_ROLAGEM_DAS_DATAS = "relative min-h-0 min-w-0 flex-1 overflow-auto [scrollbar-gutter:stable]";
+export const CLASSES_DA_ROLAGEM_DAS_DATAS = "relative min-h-0 min-w-0 flex-1 overflow-auto [scrollbar-gutter:stable] max-sm:snap-x max-sm:snap-proximity max-sm:scroll-pl-[100px]";
 /**
  * Cada dia de cada cliente tem teto e rola por dentro (21h55: "scroll
  * individual em cada coluna"); substitui o "+N" de 21h08. Só na vertical.
@@ -87,7 +87,7 @@ export default function GradeDaEsteira({
           <Colunas dias={dias} />
           <thead>
             <tr>
-              <th className={juntar(texto.rotulo, "sticky left-0 z-20 bg-card py-3 pl-5 pr-3")} data-canto-cliente="">Cliente</th>
+              <th className={juntar(texto.rotulo, "sticky left-0 z-20 bg-card py-3 pl-4 pr-2 sm:pl-5 sm:pr-3")} data-canto-cliente="">Cliente</th>
               {dias.map((d, i) => {
                 const ehHoje = d.data === hoje;
                 const [semana, numero] = d.rotulo.split(" ");
@@ -146,7 +146,7 @@ export default function GradeDaEsteira({
                 <th
                   scope="row"
                   className={juntar(
-                    "sticky left-0 z-10 rounded-l-lg border-y border-l-4 border-border bg-card px-3 py-4 align-top font-normal sm:px-4 sm:py-6",
+                    "sticky left-0 z-10 rounded-l-lg border-y border-l-4 border-border bg-card px-2.5 py-3 align-top font-normal sm:px-4 sm:py-6",
                     corDeApoioDoCliente(faixa.clientId).faixa,
                   )}
                   data-cabecalho-da-faixa=""
@@ -208,7 +208,7 @@ function CelulaDoDia({ celula, ultima, viradaDaSemana, aoAbrir }: { celula: Celu
       data-prioritario={celula.prioritario ? "sim" : undefined}
       data-alerta={celula.alerta ? "sim" : undefined}
       className={juntar(
-        "border-y border-l border-border border-l-border/50 p-2 align-top sm:p-3",
+        "border-y border-l border-border border-l-border/50 p-1.5 align-top max-sm:snap-start sm:p-3",
         ultima && "rounded-r-lg border-r",
         viradaDaSemana && "border-l-foreground/25",
         celula.alerta ? "bg-warning-soft" : celula.prioritario ? "bg-accent-soft" : "bg-card",

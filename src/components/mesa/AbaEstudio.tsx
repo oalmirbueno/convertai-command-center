@@ -1651,7 +1651,8 @@ export function DetalheDoItem({
       rotulo={<>{v ? <RotateCw className="h-3.5 w-3.5" aria-hidden="true" /> : <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />}<span className="sr-only">{v ? "Refazer" : "Gerar"} a lâmina {c.ordem}</span></>}
       titulo={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}`}
       descricao={comNotaDoFundo(`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`, [c.ordem])}
-      variant={v ? "ghost" : "default"}
+      // v4 (uma ação principal por vez): só a lâmina aberta ganha o botão cheio; as outras ficam discretas.
+      variant={v ? "ghost" : c.ordem === selecionado ? "default" : "outline"}
       className="h-8 w-full gap-1 px-2 text-[11px]"
       disabled={laminaOcupada(c.ordem) || entregue || semTipografia}
       partes={() => partesGerarDas([c.ordem]).concat(partesDoFundo([c.ordem]))}
@@ -2832,7 +2833,7 @@ export default function AbaEstudio({
   };
 
   // Frente AE-2 (dono: "sem linha nova"): Pautas | Arte rápida entra na barra da faixa e na do histórico.
-  const modoDoEstudio = <ModoDoEstudio modo={alvoRapido ? "rapida" : "pautas"} onModo={(m) => irParaRapida(m === "rapida" ? NOVA_ARTE_RAPIDA : null, ["fotos"])} className="mb-1 mr-2 mt-1" />;
+  const modoDoEstudio = <ModoDoEstudio modo={alvoRapido ? "rapida" : "pautas"} onModo={(m) => irParaRapida(m === "rapida" ? NOVA_ARTE_RAPIDA : null, ["fotos"])} className="mb-1 mr-2 mt-1" curto={!!alvoRapido} />;
 
   const faixaDasPautas = (
     <EstudioLista

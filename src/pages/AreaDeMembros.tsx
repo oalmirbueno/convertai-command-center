@@ -68,6 +68,7 @@ import { ProviderAparenciaMembros, BotaoAparenciaMembros } from "@/components/me
 import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import "@/components/membros/membros.css";
 import "@/components/membros/membros-experiencia.css";
+import "@/components/membros/membros-v4.css";
 
 type AcessoDoCartao = {
   rotulo: string;
@@ -111,6 +112,7 @@ export function CapaProduto({
   return !falhouPadrao ? (
     <img
       className="membros-capa"
+      data-capa={!falhou && urlHttps(produto.capa_url) ? "propria" : "padrao"}
       src={capa}
       alt={`Capa de ${produto.titulo}`}
       width={1024}
@@ -266,34 +268,39 @@ function Jornada({ jornada }: { jornada: NonNullable<Catalogo["jornada"]> }) {
     : 0;
   return (
     <section className="membros-jornada" aria-label="Sua jornada">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <BookCheck size={17} className="text-primary" />
-          <h2 className="text-[14px] font-semibold">Sua jornada</h2>
+      <div className="membros-jornada-resumo">
+        <span className="membros-jornada-icone" aria-hidden="true">
+          <BookCheck size={20} />
+        </span>
+        <div className="min-w-0">
+          <h2>Sua jornada</h2>
+          <p>
+            <strong>{percentual}%</strong>
+            <span>
+              {jornada.concluidos} de {jornada.materiais} materiais
+            </span>
+          </p>
         </div>
-        <p className="text-[12px] text-muted-foreground mt-1">
-          {jornada.concluidos} de {jornada.materiais} materiais concluídos
-        </p>
-        <div
-          className="membros-progresso mt-3"
-          role="progressbar"
-          aria-label="Materiais concluídos"
-          aria-valuenow={percentual}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <span style={{ width: `${percentual}%` }} />
-        </div>
+      </div>
+      <div
+        className="membros-progresso"
+        role="progressbar"
+        aria-label="Materiais concluídos"
+        aria-valuenow={percentual}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <span style={{ width: `${percentual}%` }} />
       </div>
       <div className="membros-conquistas">
         <span className={jornada.concluidos > 0 ? "conquistado" : ""}>
-          <Check size={17} />
+          <Check size={15} aria-hidden="true" />
           {jornada.concluidos > 0
             ? "Primeiro passo concluído"
             : "Sua primeira conquista começa na aula"}
         </span>
         <span className={jornada.produtos_concluidos > 0 ? "conquistado" : ""}>
-          <Trophy size={17} />
+          <Trophy size={15} aria-hidden="true" />
           {jornada.produtos_concluidos > 0
             ? `${jornada.produtos_concluidos} produto${jornada.produtos_concluidos > 1 ? "s" : ""} concluído${jornada.produtos_concluidos > 1 ? "s" : ""}`
             : "Próxima conquista: concluir um produto"}
@@ -726,14 +733,14 @@ function ConteudoAreaDeMembros() {
           <aside id="menu-de-membros" className="membros-menu" aria-label="Menu de membros">
             <div className="membros-menu-controle">{controleDoMenu}</div>
             {[
-              { id: "inicio", nome: "Início", icone: Home },
-              { id: "lista", nome: "Minha lista", icone: Bookmark },
-              { id: "comunidade", nome: "Comunidade", icone: MessageCircle },
-              { id: "ferramentas", nome: "Ferramentas", icone: Wrench },
+              { id: "inicio", nome: "Início", curto: "Início", icone: Home },
+              { id: "lista", nome: "Minha lista", curto: "Lista", icone: Bookmark },
+              { id: "comunidade", nome: "Comunidade", curto: "Comunidade", icone: MessageCircle },
+              { id: "ferramentas", nome: "Ferramentas", curto: "Ferramentas", icone: Wrench },
               ...(comBolso
                 ? [
-                    { id: "estudio", nome: "Estúdio", icone: Megaphone },
-                    { id: "creditos", nome: "Créditos e acesso", icone: Coins },
+                    { id: "estudio", nome: "Estúdio", curto: "Estúdio", icone: Megaphone },
+                    { id: "creditos", nome: "Créditos e acesso", curto: "Créditos", icone: Coins },
                   ]
                 : []),
             ].map((i) => (
@@ -745,8 +752,9 @@ function ConteudoAreaDeMembros() {
                 aria-current={secaoAtual === i.id ? "page" : undefined}
                 onClick={() => irParaSecao(i.id)}
               >
-                <i.icone size={18} />
-                <span>{i.nome}</span>
+                <i.icone size={18} aria-hidden="true" />
+                <span className="membros-menu-nome">{i.nome}</span>
+                <span className="membros-menu-curto" aria-hidden="true">{i.curto}</span>
               </button>
             ))}
             <BotaoPomodoro compacto={recolhida} />
@@ -914,17 +922,19 @@ function ConteudoAreaDeMembros() {
                     <span className="membros-saudacao">{primeiroNome ? `Bom ter você aqui, ${primeiroNome}.` : "Seu espaço para ir além."}</span>
                     <CabecalhoDePagina titulo={<>Sua biblioteca</>} />
                   </div>
-                  <span className="membros-abertura-marca" aria-hidden="true">APRENDER. APLICAR. ACELERAR.</span>
                 </div>
               )}
               {catalogo.isPending ? (
                 <div
                   aria-label="Carregando biblioteca"
                   role="status"
-                  className="grid md:grid-cols-2 gap-8 motion-safe:animate-pulse"
+                  className="membros-esqueleto"
                 >
-                  <div className="h-48 rounded-xl bg-muted" />
-                  <div className="h-64 rounded-xl bg-muted" />
+                  <div className="membros-esqueleto-titulo" />
+                  <div className="membros-esqueleto-destaque" />
+                  <div className="membros-esqueleto-grade">
+                    <div /><div /><div /><div />
+                  </div>
                   <span className="sr-only">Carregando biblioteca…</span>
                 </div>
               ) : catalogo.isError ? (
@@ -1017,43 +1027,39 @@ function ConteudoAreaDeMembros() {
                         <button className="membros-atalho membros-atalho-estudio" onClick={() => irParaSecao("estudio")} aria-label="Abrir o estúdio">
                           <span className="membros-atalho-icone"><Megaphone size={23} aria-hidden="true" /></span>
                           <span><small>Aceleriq de Bolso</small><strong>Abrir o estúdio</strong></span>
-                          <ArrowRight size={19} aria-hidden="true" />
                         </button>
                       )}
                       <button className="membros-atalho" onClick={() => irParaSecao("ferramentas")} aria-label="Explorar minhas ferramentas">
                         <span className="membros-atalho-icone"><Wrench size={22} aria-hidden="true" /></span>
                         <span><small>Do plano à prática</small><strong>Minhas ferramentas</strong></span>
-                        <ArrowRight size={19} aria-hidden="true" />
                       </button>
                       <button className="membros-atalho" onClick={() => irParaSecao("lista")} aria-label="Ver conteúdos salvos">
                         <span className="membros-atalho-icone"><Bookmark size={22} aria-hidden="true" /></span>
                         <span><small>Continue no seu ritmo</small><strong>Conteúdos salvos</strong></span>
-                        <ArrowRight size={19} aria-hidden="true" />
                       </button>
                     </nav>
                   )}
-                  {(categorias.length > 1 || busca || categoria) && <div className="membros-filtros">
-                    {categorias.length > 1 && (
-                      <label>
-                        <span className="sr-only">Categoria</span>
-                        <select
-                          className="h-11 max-w-full bg-muted rounded-lg px-3 text-[13px] focus-visible:ring-2 focus-visible:ring-ring"
-                          value={categoria}
-                          onChange={(e) => setCategoria(e.target.value)}
-                        >
-                          <option value="">Todas as categorias</option>
+                  {(categorias.length > 1 || busca || categoria) && (
+                    <div className="membros-filtros">
+                      {categorias.length > 1 && (
+                        <div className="membros-categorias" role="group" aria-label="Categoria">
+                          <button type="button" aria-pressed={!categoria} onClick={() => setCategoria("")}>
+                            Todas
+                          </button>
                           {categorias.map((c) => (
-                            <option key={c}>{c}</option>
+                            <button type="button" key={c} aria-pressed={categoria === c} onClick={() => setCategoria(c)}>
+                              {c}
+                            </button>
                           ))}
-                        </select>
-                      </label>
-                    )}
-                    {(busca || categoria) && (
-                      <button className="membros-acao text-muted-foreground" onClick={() => { setBusca(""); setCategoria(""); }} aria-label="Remover filtros">
-                        Limpar filtros
-                      </button>
-                    )}
-                  </div>}
+                        </div>
+                      )}
+                      {(busca || categoria) && (
+                        <button className="membros-acao membros-filtros-limpar" onClick={() => { setBusca(""); setCategoria(""); }} aria-label="Remover filtros">
+                          Limpar filtros
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {catalogo.data?.pendentes.length ? (
                     <p
                       role="status"

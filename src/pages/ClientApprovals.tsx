@@ -421,8 +421,18 @@ export default function ClientApprovals() {
                   <button type="button" onClick={() => irPara(posicao - 1)} aria-label="Item anterior" className={juntar(botao.icone, "h-11 w-11 bg-card shadow-card")}>
                     <ChevronLeft className="h-5 w-5" aria-hidden="true" />
                   </button>
-                  <span className="rounded-full bg-foreground px-3 py-1 text-[12px] font-medium leading-4 tabular-nums text-background" aria-live="polite">
-                    {posicao + 1} de {filaDoCelular.length}
+                  <span className="mx-3 flex min-w-0 flex-1 flex-col items-center">
+                    <span className="rounded-full bg-foreground px-3 py-1 text-[12px] font-medium leading-4 tabular-nums text-background" aria-live="polite">
+                      {posicao + 1} de {filaDoCelular.length}
+                    </span>
+                    {/* Onde você está na fila: um traço por item (até 12; acima disso o contador basta). */}
+                    {filaDoCelular.length <= 12 && (
+                      <span aria-hidden="true" className="mt-2 flex w-full max-w-[180px] items-center justify-center">
+                        {filaDoCelular.map((item: any, i: number) => (
+                          <span key={item.id} className={juntar("mx-0.5 h-1 min-w-0 flex-1 rounded-full transition-colors", i === posicao ? "bg-foreground" : item.approval_status === "pending" ? "bg-warning/50" : "bg-border")} />
+                        ))}
+                      </span>
+                    )}
                   </span>
                   <button type="button" onClick={() => irPara(posicao + 1)} aria-label="Próximo item" className={juntar(botao.icone, "h-11 w-11 bg-card shadow-card")}>
                     <ChevronRight className="h-5 w-5" aria-hidden="true" />
@@ -433,19 +443,17 @@ export default function ClientApprovals() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Ver detalhes de ${f.file_name}`}
-                className={juntar(superficie.painel, "min-w-0 overflow-hidden", foco)}
+                className={juntar(superficie.painel, "relative min-w-0 overflow-hidden", foco)}
                 onClick={() => setPreviewFile(f)}
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >
                 <CarouselPreview key={f.id} images={images} grande />
+                <span className="absolute left-3 top-3 z-[1] flex rounded-full bg-card shadow-card [&>[data-status-pill]]:!bg-transparent"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
               </div>
               <div className="mt-4 min-w-0">
-                <div className="flex min-w-0 items-start">
-                  <p className="mr-2 min-w-0 flex-1 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground break-words">{f.file_name}</p>
-                  <StatusPill tone={badge.tone}>{badge.label}</StatusPill>
-                </div>
-                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
-                  {images.length > 1 ? `Carrossel com ${images.length} cards · ` : ""}{f.project?.name || "-"}
+                <p className="min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]">{f.file_name}</p>
+                <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
+                  {images.length > 1 ? `Carrossel com ${images.length} cards · ` : ""}{f.project?.name || "-"} · {formatDate(f.created_at)}
                 </p>
                 <button type="button" onClick={() => setPreviewFile(f)} className={juntar(botao.discreto, "-ml-3.5 mt-1 h-11 text-primary")}>
                   Ver legenda e detalhes
@@ -519,7 +527,7 @@ export default function ClientApprovals() {
                     <CarouselPreview images={images} small />
                   </div>
                 </div>
-                <span className="absolute left-4 top-4 z-[1] flex rounded-full bg-card shadow-card"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
+                <span className="absolute left-4 top-4 z-[1] flex rounded-full bg-card shadow-card [&>[data-status-pill]]:!bg-transparent"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
                 <div className="min-w-0 p-5">
                   <p className="min-w-0 truncate text-[15px] font-semibold leading-5 text-foreground">{f.file_name}</p>
                   <p className={juntar(texto.auxiliar, "mt-1 truncate")}>

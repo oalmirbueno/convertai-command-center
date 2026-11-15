@@ -20,7 +20,7 @@ export default {
         desk: "1440px",
       },
       fontFamily: {
-        outfit: ["Outfit", "sans-serif"],
+        outfit: ["Outfit", "Outfit Fallback", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
       },
       colors: {
@@ -90,6 +90,14 @@ export default {
           3: "hsl(var(--chart-3))",
           4: "hsl(var(--chart-4))",
           5: "hsl(var(--chart-5))",
+        },
+      },
+      // v4 (15/11/2026): o verde como TEXTO usa um tom próprio (--primary-text), mais fundo no tema
+      // claro para dar leitura (text-primary sobre branco e sobre o verde suave). Fundo, borda e anel
+      // continuam no --primary vivo.
+      textColor: {
+        primary: {
+          DEFAULT: "hsl(var(--primary-text))",
         },
       },
       // Cantos (rodada ousada de 15/11/2026): cartão 24 px (lg), controle 12 px (md),

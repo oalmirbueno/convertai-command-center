@@ -118,6 +118,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
               <ImagePlus className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
+          {aberta && pecasQ.isLoading && <p className="mt-1.5 h-4" aria-hidden="true"><span className="block h-2.5 w-48 rounded-full bg-muted" /></p>}
           {aberta && semPecas && <p className={juntar(texto.auxiliar, "mt-1.5")}>Nenhuma peça de foto no planejamento deste mês e do próximo.</p>}
           {aberta && temLista && (
             <ul className="mt-2 flex min-w-0 overflow-x-auto pb-1 scrollbar-hidden" data-lista-de-pecas="">

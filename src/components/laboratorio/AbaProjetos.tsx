@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, Copy, FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
-import { CampoDeBusca, Carregando, EstadoDeErro, EstadoVazio, SeletorCompacto, botao, espaco, juntar, texto, useEstadoDaTela, type OpcaoCompacta } from "@/components/sistema";
+import { Archive, Copy, FolderOpen, Loader2, Plus, SearchX, Trash2, Workflow } from "lucide-react";
+import { CampoDeBusca, Carregando, EstadoDeErro, SeletorCompacto, botao, espaco, juntar, texto, useEstadoDaTela, type OpcaoCompacta } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
 import { arquivarProjeto, chaveDosProjetos, criarProjeto, listarProjetos, type ProjetoDoLab } from "@/lib/laboratorio/api";
 import { duplicarProjeto } from "@/lib/laboratorio/duplicar";
@@ -10,6 +10,7 @@ import EditorDoProjeto from "./EditorDoProjeto";
 import { CartaoDeProjeto } from "./CartaoDeProjeto";
 import JanelaDeExcluirProjeto from "./JanelaDeExcluirProjeto";
 import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
+import { ZonaVazia } from "./visual";
 
 /**
  * Projetos do Laboratório. Tocar num projeto abre direto o canvas grande
@@ -132,11 +133,28 @@ export default function AbaProjetos({
 
   return (
     <div className={espaco.pagina} data-aba-projetos="">
-      <div className="flex min-w-0 items-center">
-        <h2 className={juntar(texto.tituloSecao, "flex-1")}>Projetos</h2>
-        <button type="button" className={juntar(botao.primario, "h-8 px-3")} onClick={() => void novo()} disabled={criando} title={`Cria um projeto vazio (${nomeDoCliente(clientes, clienteId)}) e abre o canvas`} data-novo-projeto-em-branco="">
-          {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
-          Novo projeto em branco
+      {/*
+        v4 (15/11/2026): título com o trio de números sem cartão (ativos, nós, clientes), a ação principal à
+        direita, busca e filtro numa faixa branca em pílula, e a grade de cartões com capa de altura fixa.
+        Os números ficam com o lugar reservado enquanto a lista carrega (nada empurra depois).
+      */}
+      <div className="flex min-w-0 flex-wrap items-center">
+        <h2 className={juntar(texto.tituloSecao, "mr-6 shrink-0")}>Projetos</h2>
+        <dl className="order-3 mt-3 flex w-full min-w-0 items-end sm:order-none sm:mt-0 sm:w-auto sm:flex-1" data-numeros-dos-projetos="">
+          {[
+            { rotulo: "Ativos", valor: ativos.length },
+            { rotulo: "Nós", valor: ativos.reduce((soma, p) => soma + (p.total_nos || 0), 0) },
+            { rotulo: "Clientes", valor: Object.keys(ativos.reduce((m: Record<string, true>, p) => (p.client_id ? { ...m, [p.client_id]: true } : m), {})).length },
+          ].map((n) => (
+            <div key={n.rotulo} className="mr-8 min-w-0 last:mr-0">
+              <dt className={juntar(texto.etiqueta, "text-muted-foreground")}>{n.rotulo}</dt>
+              <dd className="text-[24px] font-medium leading-7 tracking-[-0.02em] tabular-nums text-foreground">{q.isLoading || q.isError ? "–" : n.valor}</dd>
+            </div>
+          ))}
+        </dl>
+        <button type="button" className={juntar(botao.primario, "ml-auto h-10 px-4")} onClick={() => void novo()} disabled={criando} aria-label="Novo projeto em branco" title={`Cria um projeto vazio (${nomeDoCliente(clientes, clienteId)}) e abre o canvas`} data-novo-projeto-em-branco="">
+          {criando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+          Novo projeto<span className="hidden sm:inline">&nbsp;em branco</span>
         </button>
       </div>
       {q.isLoading ? (
@@ -144,15 +162,18 @@ export default function AbaProjetos({
       ) : q.isError ? (
         <EstadoDeErro titulo="Não deu para ler os projetos" descricao={textoDoErro(q.error)} acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />
       ) : !ativos.length ? (
-        <EstadoVazio titulo="Nenhum projeto ainda" descricao="Peça um na Início ou abra um canvas em branco." acao={<button type="button" className={botao.secundario} onClick={() => void novo()}>Abrir um canvas em branco</button>} />
+        <ZonaVazia icone={<Workflow className="h-5 w-5" />} titulo="Nenhum projeto ainda" descricao="Peça um na Início ou abra um canvas em branco." acao={<button type="button" className={botao.secundario} onClick={() => void novo()}>Abrir um canvas em branco</button>} className="py-16" />
       ) : (
         <>
-          <div className="flex min-w-0 flex-wrap items-center gap-2" data-filtros-dos-projetos="">
-            <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por nome ou cliente" rotulo="Buscar projetos" className="w-full sm:w-[280px]" />
-            <SeletorCompacto opcoes={opcoes} valor={filtroValido} onEscolher={setFiltro} rotulo="Filtrar projetos" listaQuandoNaoCabe />
+          <div className="flex min-w-0 flex-wrap items-center rounded-[22px] bg-card p-1.5 shadow-card sm:rounded-full" data-filtros-dos-projetos="">
+            <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por nome ou cliente" rotulo="Buscar projetos" className="w-full sm:mr-2 sm:w-[280px]" />
+            <div className="mt-1.5 min-w-0 max-w-full sm:mt-0">
+              <SeletorCompacto opcoes={opcoes} valor={filtroValido} onEscolher={setFiltro} rotulo="Filtrar projetos" listaQuandoNaoCabe />
+            </div>
           </div>
           {!visiveis.length ? (
-            <EstadoVazio
+            <ZonaVazia
+              icone={<SearchX className="h-5 w-5" />}
               titulo="Nenhum projeto com esse filtro"
               descricao="Troque a busca ou o filtro."
               acao={

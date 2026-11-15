@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, ArrowRight, Bot, CalendarClock, CheckCircle2, ExternalLink, FileText, History, ListChecks, Megaphone, RefreshCw, Users, Wallet,
@@ -11,10 +11,10 @@ import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/Log
 import { BarraFina } from "@/components/horas/Graficos";
 import {
   CabecalhoDePagina,
-  Carregando,
   EstadoDeErro,
   EstadoVazio,
   JanelaCentral,
+  MenuMais,
   Secao,
   SeletorCompacto,
   botao,
@@ -152,7 +152,17 @@ function useDiasDosAnuncios() {
   });
 }
 
+/** O lugar dos quatro números enquanto a tela lê (mesma grade e altura dos cartões que chegam). */
+function EsqueletoDosNumeros() {
+  return (
+    <div aria-hidden="true" className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4" data-esqueleto-dos-numeros="">
+      {[0, 1, 2, 3].map((i) => <div key={i} className="h-[182px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none sm:h-[218px]" />)}
+    </div>
+  );
+}
+
 export default function AnunciosHoje() {
+  const navigate = useNavigate();
   const boletins = useBoletins();
   const acoes = useAcoesNasContas();
   const campanhas = useCampanhasDaMesaAds();
@@ -219,15 +229,26 @@ export default function AnunciosHoje() {
     <div className={juntar(larguraDaMesa, espaco.pagina, "pb-10")} data-anuncios-hoje="">
       <CabecalhoDePagina
         titulo="Anúncios hoje"
-        descricao={carregando ? undefined : `${todos.length} ${todos.length === 1 ? "cliente com anúncio ativo" : "clientes com anúncio ativo"}`}
+        className="max-sm:[&>div:first-child]:flex-none"
+        descricao={carregando ? "\u00a0" : `${todos.length} ${todos.length === 1 ? "cliente com anúncio ativo" : "clientes com anúncio ativo"}`}
         ajuda="Só os clientes com anúncio no ar na Mesa Ads (campanha ativa na conta, sem data de fim passada). Em cada cartão: gasto de hoje e da semana contra o teto da verba diária, o resultado principal e o custo (verde: igual ou melhor que a semana anterior; amarelo: até 35% mais caro; vermelho: mais caro que isso ou gasto sem resultado), as campanhas, o saldo da conta e a última mudança feita pelo agente, com antes, depois e prova."
         acoes={<>
-          {todos.length > 1 && <SeletorCompacto opcoes={opcoesDeCliente} valor={cliente} onEscolher={(v) => { setCliente(v); setPagina(1); }} rotulo="Filtrar por cliente" modo="lista" icone={<Users className="h-3.5 w-3.5" />} />}
-          <button type="button" onClick={() => setMudancasDe("")} className={botao.icone} title="Todas as mudanças nas contas" aria-label="Todas as mudanças nas contas"><ListChecks className="h-4 w-4" aria-hidden="true" /></button>
-          <Link to="/anuncios" className={botao.icone} title="Abrir Anúncios (contas e campanhas)" aria-label="Abrir Anúncios"><Megaphone className="h-4 w-4" aria-hidden="true" /></Link>
+          {/* Celular: o seletor fica só com o ícone (o nome do cliente já está nos cartões). O secundário mora no "…". */}
+          {todos.length > 1 && <SeletorCompacto opcoes={opcoesDeCliente} valor={cliente} onEscolher={(v) => { setCliente(v); setPagina(1); }} rotulo="Filtrar por cliente" modo="lista" icone={<Users className="h-3.5 w-3.5" />} className={juntar("max-w-[240px] max-sm:px-3 max-sm:[&>span.truncate]:hidden", cliente && "max-sm:border-foreground")} />}
           <button type="button" onClick={atualizar} className={botao.icone} title="Atualizar" aria-label="Atualizar"><RefreshCw className={juntar("h-4 w-4", (boletins.isFetching || acoes.isFetching || campanhas.isFetching) && "animate-spin")} aria-hidden="true" /></button>
+          <MenuMais
+            rotulo="Mais ações dos anúncios"
+            itens={[
+              { rotulo: "Todas as mudanças nas contas", icone: <ListChecks className="h-3.5 w-3.5" />, aoEscolher: () => setMudancasDe("") },
+              { rotulo: "Abrir Anúncios", icone: <Megaphone className="h-3.5 w-3.5" />, dica: "Contas e campanhas", aoEscolher: () => navigate("/anuncios") },
+            ]}
+          />
         </>}
       />
+
+      {/* Enquanto lê: o mesmo espaço dos números e do boletim, para nada pular quando chegam. */}
+      {carregando && <EsqueletoDosNumeros />}
+      {boletins.isLoading && <div aria-hidden="true" className="h-[90px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />}
 
       {!carregando && !campanhas.error && todos.length > 0 && (
         <div data-numeros-da-carteira="" role="group" aria-label="Números da carteira">
@@ -277,8 +298,12 @@ export default function AnunciosHoje() {
         </div>
       )}
 
-      <Secao titulo="Clientes" descricao={carregando ? undefined : `${cartoes.length}`} recolher="anuncios-hoje:clientes">
-        {carregando ? <Carregando linhas={3} rotulo="Lendo as contas de anúncio" />
+      <Secao titulo="Clientes" recolher="anuncios-hoje:clientes">
+        {carregando ? (
+          <div aria-busy="true" aria-label="Lendo as contas de anúncio" className={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-3")}>
+            {[0, 1, 2].map((i) => <div key={i} className={juntar("h-[480px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none", i > 0 && "max-sm:hidden", i > 1 && "max-xl:hidden")} />)}
+          </div>
+        )
           : campanhas.error ? <EstadoDeErro titulo="Não foi possível ler as campanhas." descricao={(campanhas.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void campanhas.refetch()}>Tentar de novo</button>} />
             : cartoes.length === 0 ? <EstadoVazio icone={<Megaphone className="h-5 w-5" />} titulo="Nenhum cliente com anúncio ativo na Mesa Ads." descricao="Quando uma campanha entrar no ar, o cliente aparece aqui." acao={<Link to="/mesa-ads" className={botao.secundario}>Abrir a Mesa Ads</Link>} />
               : <>
