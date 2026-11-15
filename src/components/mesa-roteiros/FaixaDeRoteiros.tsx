@@ -90,7 +90,7 @@ export default function FaixaDeRoteiros({
                 onClick={() => onFechar(a.id)}
                 aria-label={`Fechar ${a.titulo} da faixa`}
                 title="Fechar da faixa (o roteiro continua guardado)"
-                className={juntar("toque-compacto ml-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground", foco)}
+                className={juntar("toque-compacto ml-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground", foco)}
               >
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>

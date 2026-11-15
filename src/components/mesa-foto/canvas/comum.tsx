@@ -18,7 +18,7 @@ export const ICONES: Record<TipoDeNo, typeof Box> = { produto: Box, modelo: User
 export const ICONE_DO_VIDEO = Film;
 
 /** Painel flutuante preto (paleta, ajustes, esteira, galeria, conversa). */
-export const PAINEL = "border border-white/10 bg-zinc-950/95 text-zinc-100 shadow-2xl";
+export const PAINEL = "border border-white/10 bg-zinc-950/95 text-zinc-100 shadow-pop";
 /** Botão pequeno sobre fundo preto. */
 export const BOTAO = "inline-flex h-7 shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-2 text-[12px] text-zinc-100 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50";
 /**
@@ -172,7 +172,7 @@ export function Gaveta({
     return () => window.removeEventListener("keydown", tecla);
   }, []);
   return (
-    <section ref={roda} role="dialog" aria-modal="false" aria-label={rotulo} className={`${PAINEL} ${FLUTUANTE} ${LUGAR_DA_GAVETA[lugar]} flex min-w-0 flex-col rounded-xl`} data-gaveta={lugar} {...dados}>
+    <section ref={roda} role="dialog" aria-modal="false" aria-label={rotulo} className={`${PAINEL} ${FLUTUANTE} ${LUGAR_DA_GAVETA[lugar]} flex min-w-0 flex-col rounded-lg`} data-gaveta={lugar} {...dados}>
       <div className="flex min-w-0 shrink-0 items-start border-b border-white/10 px-3 py-2">
         <div className="min-w-0 flex-1">{cabeca}</div>
         <button type="button" onClick={onFechar} aria-label={rotuloDoFechar} className="-mr-1 ml-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white">

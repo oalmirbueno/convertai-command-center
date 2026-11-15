@@ -331,7 +331,7 @@ export default function AdminComercial() {
   // Os filtros do CRM sobem para a linha do título quando cabem (16/10/2026:
   // as áreas viraram ícones nessa mesma linha, então o limite subiu de 1280
   // para 1440 px). Abaixo disso ficam numa fileira só, logo embaixo.
-  const filtrosNaLinha = useLarguraMinima(1440);
+  const filtrosNaLinha = useLarguraMinima(1680);
   // Do sm para cima as áreas moram na linha do título; no celular, logo abaixo.
   const abasNoTitulo = useLarguraMinima(640);
   const [linhaDosFiltros, setLinhaDosFiltros] = useState<HTMLDivElement | null>(null);
@@ -1080,8 +1080,8 @@ function Metas({
       {carregando ? (
         <Carregando rotulo="Carregando as metas" linhas={5} />
       ) : (
-        <Painel semEspaco as="section" aria-label="Metas do mês">
-          <ul className="divide-y divide-border">
+        <Painel semEspaco as="section" aria-label="Metas do mês" className="mt-4">
+          <ul className="divide-y divide-border/60">
             {METRICAS.map((metrica) => {
               const meta = metas.find((m) => m.metric === metrica.id);
               const feito = realizadoDoMes({

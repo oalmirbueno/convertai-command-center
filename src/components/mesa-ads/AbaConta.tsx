@@ -182,7 +182,7 @@ function CartaoDoAnuncio({
   return (
     <article className={juntar(superficie.painel, "min-w-0 p-3")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
       <div className="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-3 sm:grid-cols-[112px_minmax(0,1fr)]">
-        <button type="button" onClick={onFicha} className="block min-w-0 self-start overflow-hidden rounded-md bg-secondary/40" aria-label={`Ver ${a.nome}`}>
+        <button type="button" onClick={onFicha} className="block min-w-0 self-start overflow-hidden rounded-md bg-muted/40" aria-label={`Ver ${a.nome}`}>
           <div className="relative w-full" style={{ paddingTop: "125%" }}>
             <div className="absolute inset-0">
               <Foto src={a.imagem_url} alt={a.nome} className="h-full w-full" />
@@ -720,7 +720,7 @@ export default function AbaConta({
               <>
                 <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
                 <details className="min-w-0 border-y border-border py-2">
-                  <summary className={juntar("cursor-pointer rounded text-[13px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
+                  <summary className={juntar("cursor-pointer rounded-sm text-[13px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
                   <div className="mt-3 min-w-0 space-y-3">
                     <ResumoDaConta totais={dados.conta.totais} extras={extras} />
                     <SaldosDasContas contas={extras.contas} />

@@ -335,7 +335,7 @@ function ItemSelecionado({
     <li className={juntar(superficie.poco, "min-w-0")}>
       <div className="flex min-w-0 items-start px-3 py-2.5">
         <button type="button" onClick={() => setAberto((v) => !v)} className="flex min-w-0 flex-1 items-start text-left" aria-expanded={aberto}>
-          <ChevronDown className={`mr-1.5 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "" : "-rotate-90"}`} />
+          <ChevronDown className={`mr-1.5 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${aberto ? "" : "-rotate-90"}`} />
           <span className="min-w-0 flex-1">
             <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.title}</span>
             <span className="mt-0.5 block text-[12px] text-muted-foreground">
@@ -809,7 +809,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={voltar} aria-label={vista === "semana" ? "Semana anterior" : "Mês anterior"}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <p className="mx-1 min-w-[140px] text-center text-[15px] font-semibold capitalize">
+          <p className="mx-1 min-w-[140px] text-center text-[15px] font-semibold first-letter:[text-transform:uppercase]">
             {rotuloDoMes(mes)}
             {vista === "semana" && rotuloDaSemana && <span className="ml-1.5 text-[12px] font-normal normal-case text-muted-foreground">dias {rotuloDaSemana}</span>}
           </p>

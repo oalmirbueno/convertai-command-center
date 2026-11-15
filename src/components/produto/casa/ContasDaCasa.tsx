@@ -38,6 +38,7 @@ import {
   juntar,
   lista,
   texto,
+  superficie,
 } from "@/components/sistema";
 
 export const COR_DO_ESTADO: Record<EstadoDaConta, string> = {
@@ -127,7 +128,7 @@ export default function ContasDaCasa() {
         {visiveis.length === 0 ? (
           <EstadoVazio compacto titulo={todas.length ? "Nenhuma empresa neste filtro." : "Nenhuma empresa ainda."} descricao={todas.length ? undefined : "Crie a primeira ou espere alguém abrir a conta pelo site."} />
         ) : (
-          <ul className={juntar(lista.aberta, lista.divisoria)} data-lista-de-contas="">
+          <ul className={juntar(superficie.painel, lista.divisoria, "px-2 py-1.5 sm:px-3")} data-lista-de-contas="">
             {visiveis.map((c) => (
               <li key={c.id}>
                 <button type="button" className={juntar(lista.linha, "w-full text-left")} onClick={() => setAberta(c.id)} data-conta={c.id}>

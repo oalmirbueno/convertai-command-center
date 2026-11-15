@@ -109,7 +109,7 @@ export default function PreviaDoPerfil({
   // Na simulação o cabeçalho encolhe (foto, @ e números numa linha, sem a bio): a grade fica logo abaixo.
   if (simulando) {
     return (
-      <div className="mx-auto w-full max-w-[420px] rounded-xl border border-border bg-background px-3 pb-3 pt-2.5" data-previa-do-perfil="" data-simulando="">
+      <div className="mx-auto w-full max-w-[420px] rounded-lg border border-border bg-background px-3 pb-3 pt-2.5" data-previa-do-perfil="" data-simulando="">
         <div className="flex min-w-0 items-center">
           <FotoDoPerfil url={perfil.foto_url} nome={nome} tamanho={40} />
           <p className="ml-2 min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{perfil.username ? `@${perfil.username}` : nome}</p>
@@ -182,7 +182,7 @@ export default function PreviaDoPerfil({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[420px] rounded-xl border border-border bg-background px-3 pb-3 pt-2.5" data-previa-do-perfil="">
+    <div className="mx-auto w-full max-w-[420px] rounded-lg border border-border bg-background px-3 pb-3 pt-2.5" data-previa-do-perfil="">
       <p className="truncate text-center text-[14px] font-semibold text-foreground">{perfil.username ? `@${perfil.username}` : "Sem @ conectado"}</p>
       <div className="mt-3 flex min-w-0 items-center">
         <FotoDoPerfil url={perfil.foto_url} nome={nome} tamanho={68} />

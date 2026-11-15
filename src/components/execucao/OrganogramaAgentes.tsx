@@ -330,7 +330,7 @@ export default function OrganogramaAgentes({
                 ? "bg-primary/20 text-primary"
                 : destaque === "gateway"
                   ? "bg-info/20 text-info"
-                  : "bg-secondary text-foreground",
+                  : "bg-muted text-foreground",
             )}
           >
             {destaque === "dono" ? (
@@ -421,7 +421,7 @@ export default function OrganogramaAgentes({
         )}
 
         {no.ativo === false && (
-          <div className="border-t border-border bg-secondary px-3 py-1 pl-4 text-[11px] font-medium text-muted-foreground">
+          <div className="border-t border-border bg-muted px-3 py-1 pl-4 text-[11px] font-medium text-muted-foreground">
             {no.excluido ? "excluído" : no.aposentado ? "aposentado" : "pausado"}
           </div>
         )}
@@ -440,7 +440,7 @@ export default function OrganogramaAgentes({
           onClick={() => aoEditar(no)}
           aria-label={`Editar ${no.nome}`}
           title={`Editar ${no.nome}`}
-          className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-card text-muted-foreground transition-opacity hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:opacity-0 lg:group-hover/caixa:opacity-100"
+          className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-card text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:opacity-0 lg:group-hover/caixa:opacity-100"
         >
           <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
@@ -472,7 +472,7 @@ export default function OrganogramaAgentes({
     if (no) aoAbrir(no);
   };
 
-  const botaoDoPalco = "flex h-8 min-w-[2rem] items-center justify-center rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40";
+  const botaoDoPalco = "flex h-8 min-w-[2rem] items-center justify-center rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40";
 
   /*
    * Sem caixa em volta (sistema de design: nada de cartão dentro de cartão).
@@ -597,7 +597,7 @@ export default function OrganogramaAgentes({
                     <button
                       type="button"
                       onClick={() => abrirPorId(m.agenteId)}
-                      className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12px] transition-colors hover:bg-secondary"
+                      className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12px] transition-colors hover:bg-muted"
                     >
                       <span className={cn("mr-2 h-1.5 w-1.5 shrink-0 rounded-full", TOM_DO_MOVIMENTO[m.tom])} aria-hidden />
                       <span className="mr-1.5 shrink-0 font-semibold text-foreground">{m.agente}</span>

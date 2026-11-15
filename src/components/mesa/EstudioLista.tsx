@@ -182,7 +182,7 @@ function MenuDeEntregaDaFaixa({ entregar, marcados, aoEntregar }: { entregar: En
         <button
           type="button"
           disabled={!prontas || entregar.ocupado}
-          className="toque-compacto mr-1 flex h-8 min-w-8 items-center justify-center rounded-md bg-primary px-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+          className="toque-compacto mr-1 flex h-8 min-w-8 items-center justify-center rounded-full bg-primary px-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
           title={marcados.length && !prontas ? "Nenhuma das marcadas tem todas as lâminas com arte" : "Entregar as marcadas"}
           aria-label={`Entregar ${prontas ? `(${prontas})` : ""}`.trim()}
           data-entregar-da-faixa={prontas}
@@ -335,7 +335,7 @@ function CartaoDoItem({
         onClick={() => onArquivar(item.id)}
         aria-label={`Arquivar ${item.title}`}
         title="Arquivar: sai da faixa, do mês e da fila (dá para desfazer)"
-        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-background/90 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
         data-arquivar-pauta={item.id}
       >
         <Archive className="h-3.5 w-3.5" />
@@ -449,7 +449,7 @@ export default function EstudioLista({
       {inicio}
       <div className="w-[160px] shrink-0">
         <Select value={janela} onValueChange={onJanela}>
-          <SelectTrigger className="h-8 min-w-0 text-[13px] font-medium first-letter:uppercase" aria-label="Período da lista">
+          <SelectTrigger className="toque-compacto h-8 min-w-0 text-[13px] font-medium first-letter:uppercase" aria-label="Período da lista">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -460,7 +460,7 @@ export default function EstudioLista({
           </SelectContent>
         </Select>
       </div>
-      <div className="grid h-8 shrink-0 grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5" role="tablist" aria-label="Filtro das pautas">
+      <div className="grid h-8 shrink-0 grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5" role="tablist" aria-label="Filtro das pautas">
         {FILTROS_DO_ESTUDIO.map((f) => (
           <button
             key={f.valor}
@@ -469,8 +469,8 @@ export default function EstudioLista({
             onClick={() => onFiltro(f.valor)}
             aria-selected={filtro === f.valor}
             title={f.dica}
-            className={`flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded px-2.5 text-[12px] transition-colors ${
-              filtro === f.valor ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            className={`toque-compacto flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded-full px-3 text-[12px] transition-colors duration-200 ${
+              filtro === f.valor ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <span>{f.rotulo}</span>
@@ -482,7 +482,7 @@ export default function EstudioLista({
       {recolhida && filtrados.length > 0 && (
         <div className="w-[300px] min-w-0 max-w-full shrink" data-pauta-no-seletor="">
           <Select value={tarefaId && filtrados.some((i) => i.id === tarefaId) ? tarefaId : ""} onValueChange={onEscolher}>
-            <SelectTrigger className="h-8 min-w-0 text-[13px]" aria-label="Pauta aberta">
+            <SelectTrigger className="toque-compacto h-8 min-w-0 text-[13px]" aria-label="Pauta aberta">
               <SelectValue placeholder="Escolha a pauta" />
             </SelectTrigger>
             <SelectContent>
@@ -524,7 +524,7 @@ export default function EstudioLista({
             disabled={!marcados.length}
             aria-label={`Arquivar ${marcados.length ? `(${marcados.length})` : ""}`.trim()}
             title="Arquivar as marcadas"
-            className="toque-compacto flex h-8 min-w-8 items-center justify-center rounded-md bg-destructive px-2 text-[12px] font-medium text-destructive-foreground disabled:opacity-50"
+            className="toque-compacto flex h-8 min-w-8 items-center justify-center rounded-full bg-destructive px-2 text-[12px] font-medium text-destructive-foreground disabled:opacity-50"
           >
             <Archive className="h-4 w-4" aria-hidden="true" />
             {marcados.length > 0 && <span className="ml-1 tabular-nums" aria-hidden="true">{marcados.length}</span>}

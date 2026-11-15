@@ -857,7 +857,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
               valor={segment}
               onEscolher={(v) => setSegment(v as "all" | "recurring" | "one_off")}
               rotulo="Segmento"
-              modo="segmentado"
+              listaQuandoNaoCabe
             />
             <AjudaRecolhida rotulo="Sobre o período e o segmento">
               Período: meses mostrados no gráfico e no DRE (metade para trás, metade para frente). Recorrente: só mensalidades de clientes
@@ -1033,10 +1033,10 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
           ajuda="Resultado mensal: receita, despesa, lucro e margem. Soma o realizado e o previsto de cada mês."
           className="lg:col-span-2"
         >
-          <RegiaoRolavel memoria="financeiro:fluxo:dre" rotulo="DRE simplificado" className="lg:max-h-[360px]">
+          <RegiaoRolavel memoria="financeiro:fluxo:dre" rotulo="DRE simplificado" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden px-4 py-1 sm:px-5")} className="lg:max-h-[360px]">
             {/* Computador: tabela. Celular: lista. */}
             <table className="hidden w-full text-[13px] sm:table">
-              <thead className="bg-background lg:sticky lg:top-0 lg:z-10">
+              <thead className="bg-card lg:sticky lg:top-0 lg:z-10">
                 <tr className="border-b border-border">
                   <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Mês</th>
                   <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Receita</th>

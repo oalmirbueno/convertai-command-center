@@ -54,9 +54,9 @@ const TEXTO: Record<SituacaoDaMaquina, string> = {
 };
 
 const COR: Record<SituacaoDaMaquina, string> = {
-  ligado: "bg-emerald-500",
-  desligado: "bg-amber-500",
-  nunca: "bg-amber-500",
+  ligado: "bg-success",
+  desligado: "bg-warning",
+  nunca: "bg-warning",
   sem_fila: "bg-muted-foreground",
   lendo: "bg-muted-foreground",
   erro: "bg-destructive",

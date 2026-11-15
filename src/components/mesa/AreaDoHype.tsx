@@ -246,7 +246,7 @@ export default function AreaDoHype({ hoje, juntando, juntados, onAlternar, onCri
         {outras.length > 0 && (
           <div className="min-w-0 pt-3" data-grupo="outras">
             <button type="button" className={juntar(botao.barra, "-ml-2")} onClick={() => setOutrasAbertas(!outrasAbertas)} aria-expanded={outrasAbertas}>
-              <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", outrasAbertas ? "rotate-180" : "")} aria-hidden="true" />
+              <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform duration-200", outrasAbertas ? "rotate-180" : "")} aria-hidden="true" />
               {outrasAbertas ? "Esconder outras datas" : `Outras datas (${outras.length})`}
             </button>
             {outrasAbertas && <ul className={juntar(lista.aberta, lista.divisoria, "opacity-80")} aria-label="Outras datas">{outras.map(linhaDaData)}</ul>}

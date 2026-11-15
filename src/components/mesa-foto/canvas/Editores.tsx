@@ -195,7 +195,7 @@ export function EditorDoCartao({
   const falta = faltaNoCartao(no);
   return (
     <div className="min-w-0 space-y-2.5">
-      <div className="flex min-w-0 items-center rounded-xl border border-white/10 bg-zinc-900/60 p-2">
+      <div className="flex min-w-0 items-center rounded-lg border border-white/10 bg-zinc-900/60 p-2">
         <span className="relative block shrink-0 overflow-hidden rounded-lg bg-zinc-900" style={{ width: 52, height: 52 }}>
           <MiniaturaGrande m={desc.miniatura} alt={desc.titulo} />
         </span>
@@ -326,7 +326,7 @@ export function FotoDoResultado({
   const [personagem, setPersonagem] = useState(false);
   const caminho = r.storage_path || r.url;
   return (
-    <div className="min-w-0 rounded-xl border border-white/10 bg-zinc-900/60 p-2" data-resultado={r.geracao_id}>
+    <div className="min-w-0 rounded-lg border border-white/10 bg-zinc-900/60 p-2" data-resultado={r.geracao_id}>
       <div className="flex min-w-0 items-start">
         <button type="button" className="block shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-white/10 bg-zinc-900" style={{ width: 64, height: 80 }} onClick={() => setAmpliada(true)} aria-label="Ver grande">
           <MiniaturaDoStorage bucket={r.storage_bucket} caminho={caminho} alt="Foto do Canvas" largura={200} className="h-full w-full" />
@@ -439,7 +439,7 @@ export function FotoDoResultado({
 
 export function PedidoMontado({ m, fotos, onFechar }: { m: Montagem; fotos: FotoDoAcervo[]; onFechar: () => void }) {
   return (
-    <div className="min-w-0 rounded-xl border border-emerald-400/30 bg-zinc-900/60 p-2.5" data-pedido-montado="">
+    <div className="min-w-0 rounded-lg border border-emerald-400/30 bg-zinc-900/60 p-2.5" data-pedido-montado="">
       <div className="mb-2 flex min-w-0 items-center">
         <p className="min-w-0 flex-1 text-[12px] font-semibold">O que vai para o gerador</p>
         {m.estimativa_usd !== null && <span className="mr-2 text-[11px] text-zinc-400">~{usd(m.estimativa_usd)} por foto</span>}

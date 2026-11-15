@@ -68,7 +68,7 @@ export default function SeletorLateral({
     <section className="min-w-0" aria-label={titulo} data-seletor-lateral="" data-recolhido={recolher ? (recolhido ? "sim" : "nao") : undefined}>
       <div className={juntar("flex min-w-0 items-center", recolhido ? "" : "mb-2")}>
         {recolher ? (
-          <h2 className="min-w-0">
+          <h2 className="flex min-w-0">
             <TituloRecolhivel titulo={titulo} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={atual ? atual.nome : undefined} />
           </h2>
         ) : (

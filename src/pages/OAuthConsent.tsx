@@ -157,7 +157,7 @@ export default function OAuthConsent() {
               return (
                 <li key={s} className="flex min-w-0 items-start py-3">
                   {info.sensitive ? (
-                    <AlertTriangle className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-label="Permissão sensível" />
+                    <AlertTriangle className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-warning" aria-label="Permissão sensível" />
                   ) : (
                     <ShieldCheck className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                   )}

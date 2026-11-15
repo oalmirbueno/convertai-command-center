@@ -52,7 +52,7 @@ export function MiniaturaDoModelo({ m, altura = 84 }: { m: ModeloPronto; altura?
 export function GaleriaDeModelos({ onAplicar, onFechar, onMontarPeloContexto, compacta = false }: { onAplicar: (chave: string) => void; onFechar?: () => void; onMontarPeloContexto?: () => Promise<unknown>; compacta?: boolean }) {
   const { catalogo } = useMesa();
   return (
-    <div className={compacta ? "min-w-0" : `${PAINEL} min-w-0 rounded-xl p-3`} data-modelos-prontos="">
+    <div className={compacta ? "min-w-0" : `${PAINEL} min-w-0 rounded-lg p-3`} data-modelos-prontos="">
       <div className="mb-2 flex min-w-0 flex-wrap items-center">
         {!compacta && (
           <>
@@ -84,7 +84,7 @@ export function GaleriaDeModelos({ onAplicar, onFechar, onMontarPeloContexto, co
       </div>
       <div className={compacta ? "grid min-w-0 grid-cols-2 gap-1.5" : "grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"}>
         {MODELOS_PRONTOS.map((m) => (
-          <button key={m.chave} type="button" onClick={() => onAplicar(m.chave)} data-modelo-pronto={m.chave} title={m.dica} className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-1.5 text-left transition-colors hover:border-emerald-400/60">
+          <button key={m.chave} type="button" onClick={() => onAplicar(m.chave)} data-modelo-pronto={m.chave} title={m.dica} className="min-w-0 rounded-lg border border-white/10 bg-white/[0.03] p-1.5 text-left transition-colors hover:border-emerald-400/60">
             <MiniaturaDoModelo m={m} altura={compacta ? 64 : 84} />
             <span className="mt-1.5 block truncate text-[12px] font-semibold leading-snug">{m.rotulo}</span>
             <span className="block truncate text-[11px] text-zinc-400">
@@ -106,7 +106,7 @@ export function ComoFunciona({ onFechar, noQuadro = true }: { onFechar: () => vo
   return (
     <div
       ref={roda}
-      className={`${PAINEL} ${FLUTUANTE} rounded-xl p-3 ${noQuadro ? "absolute left-[76px] right-2 top-3 z-10 sm:right-auto sm:w-[300px]" : "relative w-full min-w-0"}`}
+      className={`${PAINEL} ${FLUTUANTE} rounded-lg p-3 ${noQuadro ? "absolute left-[76px] right-2 top-3 z-10 sm:right-auto sm:w-[300px]" : "relative w-full min-w-0"}`}
       data-como-funciona=""
     >
       <div className="mb-1.5 flex items-center">

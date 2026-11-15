@@ -219,7 +219,7 @@ function EmptyPanel({
 }) {
   return (
     <div className="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 px-6 py-10 text-center">
-      <div className="mb-4 rounded-full border bg-background p-3 shadow-sm">
+      <div className="mb-4 rounded-full border bg-background p-3">
         <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
       </div>
       <h3 className={texto.tituloSecao}>{title}</h3>
@@ -459,7 +459,7 @@ function EntryCard({
   const canSettle = !readOnly && entry.canSettle;
   const cashMode = mode === "cash";
   return (
-    <article className={cn(superficie.painel, "p-4 shadow-sm")}>
+    <article className={cn(superficie.painel, "p-4")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
@@ -706,7 +706,7 @@ function ClientRow({
   const summary = client.summary;
   const hasConfiguredTerm = !!summary && summary.status !== "not_configured";
   return (
-    <div className={cn(superficie.painel, "grid gap-4 p-4 shadow-sm lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(110px,0.55fr))_auto] lg:items-center")}>
+    <div className={cn(superficie.painel, "grid gap-4 p-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(110px,0.55fr))_auto] lg:items-center")}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="min-w-0 max-w-full truncate text-[13px] font-semibold text-foreground" title={client.name}>{client.name}</h3>
@@ -890,7 +890,7 @@ function SubscriptionsTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between")}>
         <div><p className="text-[13px] font-semibold text-foreground">Carteira de mensalidades</p><p className="mt-1 text-[13px] text-muted-foreground">{unlinked} cliente(s) sem termo financeiro vigente.</p></div>
         {!readOnly && <Button type="button" className="min-h-11" onClick={() => openAssign()}><Plus className="h-4 w-4" />Vincular cliente</Button>}
       </div>
@@ -1019,7 +1019,7 @@ function FixedCostsTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between")}>
         <div><p className="text-[13px] font-medium text-muted-foreground">Base mensal ativa</p><p className="mt-1 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums">{currency(activeTotal)}</p></div>
         {!readOnly && <Button type="button" className="min-h-11" onClick={() => openRule()}><Plus className="h-4 w-4" />Novo custo fixo</Button>}
       </div>
@@ -1312,7 +1312,7 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-6">
-      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between")}>
         <div><p className="text-[13px] font-semibold text-foreground">Catálogo comercial</p><p className="mt-1 text-[13px] text-muted-foreground">Preços são versionados por vigência; o passado não é reescrito.</p></div>
         {!readOnly && <div className="flex flex-col gap-2 sm:flex-row"><Button type="button" variant="outline" className="min-h-11" onClick={openSettings}><Settings2 className="h-4 w-4" />Configurações</Button><Button type="button" className="min-h-11" onClick={() => openPlan()}><Plus className="h-4 w-4" />Novo plano</Button></div>}
       </div>
@@ -1515,7 +1515,7 @@ export default function FinanceV2({
         </Alert>
       )}
 
-      <section aria-labelledby="finance-mode-title" className={cn(superficie.painel, "p-3 shadow-sm")}>
+      <section aria-labelledby="finance-mode-title" className={cn(superficie.painel, "p-3")}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="px-1"><h2 id="finance-mode-title" className="text-[13px] font-semibold text-foreground">Modo de leitura</h2><p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{modeDescription}</p></div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Modo de leitura financeira">

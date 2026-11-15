@@ -71,12 +71,12 @@ export default function ChecklistDeLancamento({ itens, onIrPara }: { itens: Item
       <ul className={juntar(lista.aberta, lista.divisoria)} data-checklist-de-lancamento="">
         {ordenados.map((i) => (
           <li key={i.id} className={lista.linha} data-item-do-checklist={i.id} data-ok={i.ok ? "sim" : "nao"}>
-            {i.ok ? <CheckCircle2 className="mr-2 h-4 w-4 shrink-0 text-primary" aria-label="Pronto" /> : i.obrigatorio ? <CircleAlert className="mr-2 h-4 w-4 shrink-0 text-amber-600" aria-label="Falta (obrigatório)" /> : <Circle className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-label="Falta" />}
+            {i.ok ? <CheckCircle2 className="mr-2 h-4 w-4 shrink-0 text-primary" aria-label="Pronto" /> : i.obrigatorio ? <CircleAlert className="mr-2 h-4 w-4 shrink-0 text-warning" aria-label="Falta (obrigatório)" /> : <Circle className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-label="Falta" />}
             <span className="mr-2 min-w-0 flex-1">
               <span className={juntar(texto.corpo, "block truncate")}>{i.rotulo}</span>
               {i.detalhe && !i.ok && <span className={juntar(texto.auxiliar, "block truncate")}>{i.detalhe}</span>}
             </span>
-            {i.obrigatorio && !i.ok && <span className={juntar(etiqueta, "mr-1 bg-amber-500/15 text-amber-700 dark:text-amber-400")}>obrigatório</span>}
+            {i.obrigatorio && !i.ok && <span className={juntar(etiqueta, "mr-1 bg-warning-soft text-warning")}>obrigatório</span>}
             {!i.ok && (
               <button type="button" className={botao.discreto} onClick={() => onIrPara(i.etapa)}>
                 {ROTULO_DA_ETAPA[i.etapa] || i.etapa}

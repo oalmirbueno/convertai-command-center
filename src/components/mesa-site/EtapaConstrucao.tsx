@@ -23,7 +23,7 @@ import RascunhoDoSite from "./RascunhoDoSite";
 const TOM: Record<string, string> = {
   na_fila: "bg-muted text-muted-foreground",
   executando: "bg-primary/10 text-primary",
-  parando: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  parando: "bg-warning-soft text-warning",
   feito: "bg-primary/10 text-primary",
   falhou: "bg-destructive/10 text-destructive",
   parado: "bg-muted text-foreground",

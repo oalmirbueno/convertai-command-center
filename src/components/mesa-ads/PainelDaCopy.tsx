@@ -69,7 +69,7 @@ import { campanhaDoCriativo } from "./campanhaDaMesaApi";
 /** Seletor da Fidelidade à referência (Idêntico, Próximo, Criativo). */
 export function SeletorDeFidelidade({ valor, onMudar }: { valor: FidelidadeAds; onMudar: (f: FidelidadeAds) => void }) {
   return (
-    <div className="inline-flex h-8 min-w-0 max-w-full items-center rounded-md bg-muted p-0.5" role="radiogroup" aria-label="Fidelidade à referência">
+    <div className="inline-flex h-8 min-w-0 max-w-full items-center rounded-full bg-muted p-0.5" role="radiogroup" aria-label="Fidelidade à referência">
       {FIDELIDADES_ADS.map((f) => (
         <button
           key={f}
@@ -77,7 +77,7 @@ export function SeletorDeFidelidade({ valor, onMudar }: { valor: FidelidadeAds; 
           role="radio"
           aria-checked={valor === f}
           onClick={() => onMudar(f)}
-          className={`inline-flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded px-2.5 text-[12px] font-medium transition-colors ${valor === f ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          className={`inline-flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium transition-colors ${valor === f ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground"}`}
         >
           {ROTULO_DA_FIDELIDADE_ADS[f]}
         </button>
@@ -120,7 +120,7 @@ export function PreviaDoFeed({ copy, caminho, formato, nome }: { copy: CopyDoAnu
   // No feed, 9:16 aparece recortado em 4:5; o resto na própria proporção.
   const altura = f.valor === "stories_9x16" ? 125 : Math.round((f.altura / f.largura) * 100);
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-background text-foreground" aria-label="Prévia no feed">
+    <div className="overflow-hidden rounded-lg border border-border bg-background text-foreground" aria-label="Prévia no feed">
       <div className="flex items-center px-3 py-2">
         <span className="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[12px] font-semibold text-primary">
           {(nome || "?").trim().charAt(0).toUpperCase()}
@@ -135,7 +135,7 @@ export function PreviaDoFeed({ copy, caminho, formato, nome }: { copy: CopyDoAnu
         {visivel || <span className="text-muted-foreground">Texto principal</span>}
         {cortado && <span className="text-muted-foreground">… mais</span>}
       </p>
-      <div className="relative w-full bg-secondary" style={{ paddingBottom: `${altura}%` }}>
+      <div className="relative w-full bg-muted" style={{ paddingBottom: `${altura}%` }}>
         <div className="absolute inset-0">
           {caminho ? <ImagemDaMesa caminho={caminho} alt="Arte do anúncio" className="h-full w-full" /> : <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">Arte ainda não gerada</div>}
         </div>
@@ -145,7 +145,7 @@ export function PreviaDoFeed({ copy, caminho, formato, nome }: { copy: CopyDoAnu
           <span className="block truncate text-[13px] font-semibold">{copy.titulo || <span className="font-normal text-muted-foreground">Título</span>}</span>
           {copy.descricao && <span className="block truncate text-[11px] text-muted-foreground">{copy.descricao}</span>}
         </span>
-        <span className="ml-2 shrink-0 rounded-md bg-secondary px-2.5 py-1.5 text-[12px] font-medium">{rotuloDoCta(copy.cta_meta) || "CTA"}</span>
+        <span className="ml-2 shrink-0 rounded-md bg-muted px-2.5 py-1.5 text-[12px] font-medium">{rotuloDoCta(copy.cta_meta) || "CTA"}</span>
       </div>
     </div>
   );
@@ -293,7 +293,7 @@ export default function PainelDaCopy({
             value={copy.cta_meta || ""}
             onChange={(e) => setCopy((c) => ({ ...c, cta_meta: e.target.value }))}
             onBlur={() => void salvar(true)}
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px]"
+            className="h-9 w-full rounded-md border border-input bg-card px-2 text-[13px]"
           >
             <option value="">Escolha o CTA</option>
             {CTAS_DO_META.map((c) => <option key={c.valor} value={c.valor}>{c.rotulo}</option>)}
@@ -336,7 +336,7 @@ export default function PainelDaCopy({
               aria-label="Seguir referência"
               value={referenciaId}
               onChange={(e) => setReferenciaId(e.target.value)}
-              className="h-8 min-w-0 max-w-full flex-1 rounded-md border border-input bg-background px-2 text-[12px]"
+              className="h-8 min-w-0 max-w-full flex-1 rounded-md border border-input bg-card px-2 text-[12px]"
             >
               <option value="">Sem referência</option>
               {refsComImagem.map((r) => <option key={r.id} value={r.id}>{r.titulo || "Referência"}</option>)}

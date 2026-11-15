@@ -308,7 +308,7 @@ export function JanelaDaPublicacao({
               />
             </CampoDeFormulario>
             <label className={`flex items-center ${podePublicar ? "" : "opacity-70"}`}>
-              <Switch checked={logoQueAprovar} onCheckedChange={setLogoQueAprovar} disabled={!podePublicar || ocupado} className="mr-2 shrink-0" />
+              <Switch checked={logoQueAprovar} onCheckedChange={setLogoQueAprovar} disabled={!podePublicar || ocupado} className="toque-compacto mr-2 shrink-0" />
               <span className="min-w-0 text-[13px]">Se o cliente aprovar depois do horário, publicar assim que aprovar</span>
             </label>
             {!podePublicar && <p className="text-[12px] text-muted-foreground">Só admin ou gestor confirma a data e publica.</p>}

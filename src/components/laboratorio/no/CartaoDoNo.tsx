@@ -181,7 +181,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
           </span>
         ) : null}
         {data.auto === "aguardando" && !ocupado ? (
-          <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-amber-500/15 px-2 text-[11px] font-medium leading-none text-amber-700 dark:text-amber-300" title="Automático: roda sozinho quando as entradas ficarem prontas" data-aguardando-entradas="">
+          <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-warning-soft px-2 text-[11px] font-medium leading-none text-warning" title="Automático: roda sozinho quando as entradas ficarem prontas" data-aguardando-entradas="">
             <Hourglass className="mr-1 h-3 w-3" aria-hidden="true" />
             Aguardando entradas
           </span>

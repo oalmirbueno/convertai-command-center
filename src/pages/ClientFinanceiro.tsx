@@ -6,7 +6,8 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { MessageCircle, Check, X, AlertTriangle, Zap, ArrowRight } from "lucide-react";
-import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Painel, Secao, botao, etiqueta, foco, juntar, lista, superficie, texto } from "@/components/sistema";
+import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, foco, juntar, lista, superficie, texto } from "@/components/sistema";
+import { Card, Chip, StatCard, type Tone } from "@/components/ds";
 import { Progress } from "@/components/ui/progress";
 import { getProjectBrand } from "@/lib/brandHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -155,12 +156,7 @@ export default function ClientFinanceiro() {
       : planStatus === "warning"
         ? "Renova em breve"
         : "Pendente";
-  const planStatusColor =
-    planStatus === "active"
-      ? "bg-success/10 text-success"
-      : planStatus === "warning"
-        ? "bg-warning/10 text-warning"
-        : "bg-destructive/10 text-destructive";
+  const planStatusTone: Tone = planStatus === "active" ? "success" : planStatus === "warning" ? "warning" : "danger";
   const barColor =
     planStatus === "active"
       ? "bg-success"
@@ -239,7 +235,7 @@ export default function ClientFinanceiro() {
     return {
       label: status === "paid" ? "Pago" : status === "partial" ? "Parcial" : isOverdue ? "Atrasado" : "Pendente",
       dot: status === "paid" ? "bg-success" : status === "partial" ? "bg-info" : isOverdue ? "bg-destructive" : "bg-warning",
-      badge: status === "paid" ? "bg-success/10 text-success" : status === "partial" ? "bg-info/10 text-info" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning",
+      tone: (status === "paid" ? "success" : status === "partial" ? "info" : isOverdue ? "danger" : "warning") as Tone,
     };
   };
   const falarSobreRenovacao = () => openWhatsApp("Olá! Gostaria de falar sobre a renovação do meu plano.");
@@ -274,26 +270,26 @@ export default function ClientFinanceiro() {
       ) : (
       <>
       {/* ========== SEÇÃO 1: MEU PLANO ========== */}
-      <Secao titulo="Plano">
+      <Card title="Plano">
         {latestPlan ? (
           <>
             <div className="flex min-w-0 flex-wrap items-end justify-between">
               <div className="mr-4 min-w-0">
-                <p className={juntar(texto.tituloSecao, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
-                <p className={juntar(texto.numero, "mt-1 font-light")}>
+                <p className={juntar(texto.rotulo, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
+                <p className={juntar(texto.numeroGrande, "mt-1")}>
                   {formatCurrency(Number(latestPlan.amount))}
                   <span className="ml-1 text-[13px] font-normal text-muted-foreground">/mês</span>
                 </p>
               </div>
               <div className="mt-2 flex items-center">
-                <span className={juntar(etiqueta, planStatusColor)}>{planStatusLabel}</span>
+                <Chip tone={planStatusTone} dot>{planStatusLabel}</Chip>
                 {renewalDate && <span className={juntar(texto.auxiliar, "ml-2")}>Renova em {formatDate(renewalDateStr!)}</span>}
               </div>
             </div>
 
             {renewalDate && (
               <div className="mt-4">
-                <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                   <div className={`h-full rounded-full ${barColor}`} style={{ width: `${timePercent}%` }} />
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-1.5")}>{daysLeft > 0 ? `${daysLeft} dias restantes` : "Período vencido"}</p>
@@ -303,17 +299,16 @@ export default function ClientFinanceiro() {
         ) : (
           <p className={texto.auxiliar}>Nenhum plano encontrado</p>
         )}
-      </Secao>
+      </Card>
 
       {/* ========== SEÇÃO 2: INVESTIMENTO EM ANÚNCIOS ========== */}
       {showTraffic && (wallets || []).length > 0 && (
         <Secao
-          divisoria
           titulo="Saldo de anúncios"
           descricao={pendingRecharges.length === 0 ? "Nenhuma recarga pendente" : undefined}
           ajuda="Quanto ainda tem de saldo em cada plataforma. A barra enche até R$ 2.000; abaixo de R$ 500 a equipe já avisa que vai precisar de recarga."
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
             {(wallets || []).map((w: any) => {
               const balance = Number(w.balance);
               const gaugePercent = Math.min((balance / 2000) * 100, 100);
@@ -331,25 +326,25 @@ export default function ClientFinanceiro() {
                     : balance === 0
                       ? "Sem saldo"
                       : "Saldo crítico";
-              const statusTextColor =
-                balance > 500
-                  ? "text-success"
-                  : balance > 100
-                    ? "text-warning"
-                    : "text-destructive";
+              const statusTone: Tone = balance > 500 ? "success" : balance > 100 ? "warning" : "danger";
 
               return (
-                <Painel key={w.id}>
-                  <p className={texto.rotulo}>{platformLabels[w.platform] || w.platform}</p>
-                  <p className="mt-1.5 text-[20px] leading-7 font-light tabular-nums text-foreground">{formatCurrency(balance)}</p>
-                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
-                    <div className={`h-full rounded-full ${gaugeColor}`} style={{ width: `${gaugePercent}%` }} />
-                  </div>
-                  <p className="mt-1.5 truncate text-[12px] leading-4">
-                    <span className={statusTextColor}>{statusText}</span>
-                    {w.last_recharge_date && <span className="text-muted-foreground"> · última recarga {formatDate(w.last_recharge_date)}</span>}
-                  </p>
-                </Painel>
+                <StatCard
+                  key={w.id}
+                  label={platformLabels[w.platform] || w.platform}
+                  value={formatCurrency(balance)}
+                  chart={
+                    <>
+                      <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
+                        <span className={`block h-full rounded-full ${gaugeColor}`} style={{ width: `${gaugePercent}%` }} />
+                      </span>
+                      <span className="mt-2.5 flex min-w-0 items-center">
+                        <Chip tone={statusTone} dot>{statusText}</Chip>
+                        {w.last_recharge_date && <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>última recarga {formatDate(w.last_recharge_date)}</span>}
+                      </span>
+                    </>
+                  }
+                />
               );
             })}
           </div>
@@ -358,16 +353,15 @@ export default function ClientFinanceiro() {
 
       {/* ========== SEÇÃO 3: RECARGAS PENDENTES ========== */}
       {pendingRecharges.length > 0 && (
-        <Secao
-          divisoria
-          recolher={`financeiro:recargas:${clientId || ""}`}
-          titulo={
+        <Card
+          collapsible={`financeiro:recargas:${clientId || ""}`}
+          title={
             <span className="inline-flex min-w-0 items-center">
               <AlertTriangle className="mr-1.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
               <span className="truncate">Recargas para confirmar</span>
             </span>
           }
-          descricao={`${pendingRecharges.length} ${pendingRecharges.length === 1 ? "pedido" : "pedidos"} da equipe`}
+          subtitle={`${pendingRecharges.length} ${pendingRecharges.length === 1 ? "pedido" : "pedidos"} da equipe`}
         >
           <ul className={juntar(lista.aberta, lista.divisoria)}>
             {pendingRecharges.map((r: any) => (
@@ -375,9 +369,9 @@ export default function ClientFinanceiro() {
                 <button
                   type="button"
                   onClick={() => setRechargePopup(r)}
-                  className={juntar("flex w-full min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                  className={juntar("flex w-full min-w-0 items-center rounded-md px-2 py-3 text-left transition-colors hover:bg-muted/40", foco)}
                 >
-                  <Zap className="mr-3 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                  <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning" aria-hidden="true"><Zap className="h-4 w-4" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium text-foreground">Recarga {platformLabels[r.platform] || r.platform}</span>
                     <span className={juntar(texto.auxiliar, "block truncate")}>
@@ -391,12 +385,12 @@ export default function ClientFinanceiro() {
               </li>
             ))}
           </ul>
-        </Secao>
+        </Card>
       )}
 
       {/* ========== SEÇÃO: PROJETOS INDIVIDUAIS ========== */}
       {(myProjectPayments || []).length > 0 && (
-        <Secao divisoria titulo="Projetos avulsos">
+        <Secao titulo="Projetos avulsos">
           <div className="space-y-3">
             {(myProjectPayments || []).map((pp: any) => {
               const installments = pp.installments || [];
@@ -406,14 +400,14 @@ export default function ClientFinanceiro() {
               const sortedInstallments = [...installments].sort((a: any, b: any) => a.installment_number - b.installment_number);
 
               return (
-                <Painel key={pp.id}>
+                <Card key={pp.id}>
                   <div className="flex min-w-0 flex-wrap items-start justify-between">
                     <div className="mr-4 min-w-0">
                       <div className="flex min-w-0 items-center">
                         <p className="mr-2 truncate text-[14px] font-semibold text-foreground">{pp.project?.name || "Projeto"}</p>
-                        <span className={juntar(etiqueta, "bg-secondary text-muted-foreground")}>{getProjectBrand(pp.project?.project_type)}</span>
+                        <Chip>{getProjectBrand(pp.project?.project_type)}</Chip>
                       </div>
-                      <p className="mt-1 text-[20px] leading-7 font-light tabular-nums text-foreground">{formatCurrency(Number(pp.total_value))}</p>
+                      <p className={juntar(texto.numero, "mt-1")}>{formatCurrency(Number(pp.total_value))}</p>
                     </div>
                     <div className="text-right tabular-nums">
                       <p className="text-[12px] text-success">{formatCurrency(paid)} pago</p>
@@ -426,7 +420,7 @@ export default function ClientFinanceiro() {
                     <p className={juntar(texto.auxiliar, "mt-1")}>{pct}% concluído</p>
                   </div>
 
-                  <ul className="mt-2 divide-y divide-border">
+                  <ul className="mt-2 divide-y divide-border/60">
                     {sortedInstallments.map((inst: any) => {
                       const st = statusDoPagamento(inst.status, inst.due_date);
                       return (
@@ -444,12 +438,12 @@ export default function ClientFinanceiro() {
                             </p>
                             {inst.status === "partial" && <p className="text-[11px] text-muted-foreground">de {formatCurrency(Number(inst.amount))}</p>}
                           </div>
-                          <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", st.badge)}>{st.label}</span>
+                          <Chip tone={st.tone} className="ml-3 hidden sm:inline-flex">{st.label}</Chip>
                         </li>
                       );
                     })}
                   </ul>
-                </Painel>
+                </Card>
               );
             })}
           </div>
@@ -457,7 +451,7 @@ export default function ClientFinanceiro() {
       )}
 
       {/* ========== SEÇÃO 4: HISTÓRICO ========== */}
-      <Secao divisoria titulo="Pagamentos" descricao={billing && billing.length ? `${billing.length} ${billing.length === 1 ? "registro" : "registros"}` : undefined}>
+      <Card title="Pagamentos" subtitle={billing && billing.length ? `${billing.length} ${billing.length === 1 ? "registro" : "registros"}` : undefined}>
         {(!billing || billing.length === 0) ? (
           <EstadoVazio compacto titulo="Nenhum pagamento registrado." />
         ) : (
@@ -478,13 +472,13 @@ export default function ClientFinanceiro() {
                     </p>
                     {b.status === "partial" && <p className="text-[11px] text-muted-foreground">de {formatCurrency(Number(b.amount))}</p>}
                   </div>
-                  <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", st.badge)}>{st.label}</span>
+                  <Chip tone={st.tone} className="ml-3 hidden sm:inline-flex">{st.label}</Chip>
                 </li>
               );
             })}
           </ul>
         )}
-      </Secao>
+      </Card>
       </>
       )}
 

@@ -200,7 +200,7 @@ export default function PainelDaTela({
                   aria-checked={estiloNativo === e}
                   disabled={salvando || travado}
                   onClick={() => mudarFundo({ estilo_texto: e })}
-                  className={juntar("mb-1 mr-1.5 inline-flex h-8 items-center rounded-md border px-2.5 text-[13px] transition-colors", estiloNativo === e ? "border-primary bg-primary/[0.08] text-foreground" : "border-border text-muted-foreground hover:text-foreground")}
+                  className={juntar("mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[13px] transition-colors", estiloNativo === e ? "border-primary bg-primary/[0.08] text-foreground" : "border-border text-muted-foreground hover:text-foreground")}
                   style={{ fontFamily: ESTILOS_DO_TEXTO[e].familia, fontWeight: Math.min(800, ESTILOS_DO_TEXTO[e].peso), fontStyle: ESTILOS_DO_TEXTO[e].italico ? "italic" : "normal" }}
                 >
                   {ESTILOS_DO_TEXTO[e].rotulo}

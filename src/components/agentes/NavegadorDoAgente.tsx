@@ -55,10 +55,10 @@ const TRAVAS =
   "Roda num navegador isolado da máquina da agência, só depois do Confirmar do dono. Só abre os domínios da lista, não envia formulário, não faz login nem pagamento (página com senha ou cartão faz parar), guarda um print de cada passo e para no teto de passos e de custo ou quando alguém clica em Parar.";
 
 const COR_DO_ESTADO: Record<string, string> = {
-  aguardando_dono: "bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200",
+  aguardando_dono: "bg-warning-soft text-warning",
   aprovada: "bg-muted text-foreground",
   executando: "bg-primary/10 text-primary",
-  feita: "bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200",
+  feita: "bg-success-soft text-success",
   falhou: "bg-destructive/10 text-destructive",
   cancelada: "bg-muted text-muted-foreground",
 };
@@ -390,7 +390,7 @@ export function TarefasDoNavegador({
               <div><dt className={texto.rotulo}>Custo</dt><dd data-custo-no-confirmar="">{custoNoConfirmar(confirmando)}</dd></div>
               <div><dt className={texto.rotulo}>Teto</dt><dd>{confirmando.teto_passos} passos{Number(confirmando.teto_custo_usd) > 0 ? ` e ${dolares(Number(confirmando.teto_custo_usd))} de modelo` : ", sem modelo (roteiro fixo, custo zero)"}</dd></div>
               <div><dt className={texto.rotulo}>Travas</dt><dd>Só leitura; sem login, senha, formulário ou pagamento; um print por passo; Parar a qualquer momento.</dd></div>
-              {!ligado && <p className="text-[12px] text-amber-700 dark:text-amber-300">Nenhum executor ligado agora: depois do Confirmar, a tarefa espera até um dia.</p>}
+              {!ligado && <p className="text-[12px] text-warning">Nenhum executor ligado agora: depois do Confirmar, a tarefa espera até um dia.</p>}
             </dl>
           )}
       </JanelaCentral>

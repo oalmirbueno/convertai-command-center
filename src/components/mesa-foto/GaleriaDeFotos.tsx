@@ -37,12 +37,12 @@ export default function GaleriaDeFotos({ titulo, fotos, atualId, onSelecionar, o
   const miniatura = (f: FotoNaGaleria, grade = false) => <div key={f.id} className={juntar("relative min-w-0", grade ? "" : "w-20 shrink-0")}>
     <button type="button" aria-label={`Abrir ${f.titulo || f.grupo}`} aria-pressed={f.id === atualId} onClick={() => { onSelecionar(f.id); if (grade) setAberta(false); }}
       title={[f.titulo, f.detalhe].filter(Boolean).join(" · ")} className={juntar("block w-full overflow-hidden rounded-md border p-1 focus-visible:ring-2 focus-visible:ring-primary", f.id === atualId ? "border-primary bg-primary/5" : "border-transparent hover:border-border")}>
-      <ImagemDaMesa caminho={f.caminho} bucket={f.bucket || "mesa"} alt={f.titulo || f.grupo} className={juntar("w-full rounded !object-contain", grade ? "h-32" : "h-16")} />
+      <ImagemDaMesa caminho={f.caminho} bucket={f.bucket || "mesa"} alt={f.titulo || f.grupo} className={juntar("w-full rounded-sm !object-contain", grade ? "h-32" : "h-16")} />
       <span className={juntar(texto.etiqueta, "mt-1 block truncate text-left")}>{f.legenda || f.grupo}</span>
       {grade && <span className={juntar(texto.auxiliar, "block truncate text-left")}>{f.titulo}</span>}
       {f.aprovada && <span className={juntar(texto.etiqueta, "block text-left text-success")}>Aprovada</span>}
     </button>
-    <button type="button" className="absolute right-1 top-1 rounded bg-background/90 p-1.5 text-foreground focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Ampliar ${f.titulo || f.grupo}`} onClick={() => setZoomId(f.id)}><ZoomIn className="h-3.5 w-3.5" /></button>
+    <button type="button" className="absolute right-1 top-1 rounded-sm bg-background/90 p-1.5 text-foreground focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Ampliar ${f.titulo || f.grupo}`} onClick={() => setZoomId(f.id)}><ZoomIn className="h-3.5 w-3.5" /></button>
     {grade && onUsar && <label className={juntar(texto.auxiliar, "mt-1 flex items-center")}><input type="checkbox" className="mr-2" aria-label={`Selecionar ${f.titulo || f.grupo} para o post`} checked={selecao.includes(f.id)} disabled={!selecao.includes(f.id) && selecao.length >= 10} onChange={(e) => setMarcadas((ids) => e.target.checked ? [...ids, f.id] : ids.filter((id) => id !== f.id))} />{selecao.includes(f.id) ? `Posição ${selecao.indexOf(f.id) + 1}` : "Usar no post"}</label>}
   </div>;
   return <section aria-label={titulo} className="min-w-0" data-galeria-de-fotos="">

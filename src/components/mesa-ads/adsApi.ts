@@ -463,7 +463,7 @@ export function humanizar(v?: string | null): string {
 }
 
 export const ESCALA_DE_EVIDENCIA: { valor: Evidencia; rotulo: string; dica: string; cor: string }[] = [
-  { valor: "E0", rotulo: "Referência", dica: "Só inspiração: nada se sabe do resultado.", cor: "bg-secondary text-muted-foreground" },
+  { valor: "E0", rotulo: "Referência", dica: "Só inspiração: nada se sabe do resultado.", cor: "bg-muted text-muted-foreground" },
   { valor: "E1", rotulo: "Circulação observada", dica: "Vista no ar, sem sinal de retorno.", cor: "bg-info/10 text-info" },
   { valor: "E2", rotulo: "Sinal indireto", dica: "Longevidade ou muitas variações. Sugere, não prova.", cor: "bg-warning/15 text-warning" },
   { valor: "E3", rotulo: "Resultado documentado", dica: "Gasto, resultado, período e atribuição conhecidos.", cor: "bg-success/10 text-success" },
@@ -526,11 +526,11 @@ export const formatoDe = (f?: string | null) => FORMATOS.find((x) => x.valor ===
 export const ZONA_SEGURA = { topo: 0.14, base: 0.2 };
 
 export const STATUS_DO_CRIATIVO: { valor: StatusDoCriativo; rotulo: string; tom: string }[] = [
-  { valor: "rascunho", rotulo: "Rascunho", tom: "bg-secondary text-muted-foreground" },
+  { valor: "rascunho", rotulo: "Rascunho", tom: "bg-muted text-muted-foreground" },
   { valor: "pronto", rotulo: "Pronto", tom: "bg-info/10 text-info" },
   { valor: "no_ar", rotulo: "No ar", tom: "bg-success/10 text-success" },
   { valor: "pausado", rotulo: "Pausado", tom: "bg-warning/15 text-warning" },
-  { valor: "encerrado", rotulo: "Encerrado", tom: "bg-secondary text-muted-foreground" },
+  { valor: "encerrado", rotulo: "Encerrado", tom: "bg-muted text-muted-foreground" },
 ];
 
 export const STATUS_DO_PLANO: { valor: StatusDoPlano; rotulo: string }[] = [
@@ -1477,8 +1477,8 @@ export const SINAIS: { valor: SinalDoAnuncio; rotulo: string; dica: string; tom:
   { valor: "pausar", rotulo: "Pausar", dica: "Gasta sem resultado ou muito acima do custo tolerável.", tom: "border-destructive/30 bg-destructive/10 text-destructive" },
   { valor: "renovar", rotulo: "Renovar", dica: "Fadiga: frequência alta e CTR caindo. Novo criativo no mesmo ângulo.", tom: "border-warning/40 bg-warning/15 text-warning" },
   { valor: "observar", rotulo: "Observar", dica: "Números em movimento. Espere mais volume antes de mexer.", tom: "border-info/30 bg-info/10 text-info" },
-  { valor: "manter", rotulo: "Manter", dica: "Dentro do esperado. Deixe rodar.", tom: "border-border bg-secondary text-foreground" },
-  { valor: "sem_dados", rotulo: "Sem dados", dica: "Pouca entrega no período para concluir.", tom: "border-border bg-secondary text-muted-foreground" },
+  { valor: "manter", rotulo: "Manter", dica: "Dentro do esperado. Deixe rodar.", tom: "border-border bg-muted text-foreground" },
+  { valor: "sem_dados", rotulo: "Sem dados", dica: "Pouca entrega no período para concluir.", tom: "border-border bg-muted text-muted-foreground" },
 ];
 
 export const sinalDe = (v?: string | null) => SINAIS.find((s) => s.valor === v) || SINAIS[SINAIS.length - 1];

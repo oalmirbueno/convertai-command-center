@@ -46,7 +46,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {listas.map(({ c, lista }) => (
             <div key={c.id} className="flex items-center gap-3">
-              <span className={juntar("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted/60", c.cor)}><c.Icone className="h-5 w-5" aria-hidden="true" /></span>
+              <span className={juntar("flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted/60", c.cor)}><c.Icone className="h-5 w-5" aria-hidden="true" /></span>
               <span><span className="block text-[24px] font-semibold tabular-nums leading-7">{lista.length}</span><span className="block text-[12px] text-muted-foreground">{c.nome}</span></span>
             </div>
           ))}

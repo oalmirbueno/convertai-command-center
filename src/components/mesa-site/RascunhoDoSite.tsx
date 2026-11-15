@@ -42,7 +42,7 @@ export default function RascunhoDoSite({ site, trabalhos }: { site: LinhaDoSite;
   const titulo = r.emAndamento ? "O motor está escrevendo no rascunho" : `Rascunho com ${n} ${n === 1 ? "troca" : "trocas"} do motor, ainda não salvo`;
   return (
     <div className="flex min-w-0 items-center" role="status" data-rascunho-do-site={r.emAndamento ? "em_andamento" : "aberto"}>
-      <FilePenLine className="mr-2 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+      <FilePenLine className="mr-2 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
       <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")} title={`${titulo}. A prévia mostra o rascunho; publicar sobe só a versão salva. Salvar e descartar não custam nada.`}>
         {titulo}
       </span>

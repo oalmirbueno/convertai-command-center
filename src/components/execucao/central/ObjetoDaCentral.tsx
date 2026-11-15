@@ -198,7 +198,7 @@ function useTitulo(informar: (t: string) => void, titulo: string | null | undefi
 
 const STATUS_DA_TAREFA: Record<string, { rotulo: string; classe: string }> = {
   backlog: { rotulo: "Backlog", classe: "bg-muted text-muted-foreground" },
-  todo: { rotulo: "A fazer", classe: "bg-secondary text-secondary-foreground" },
+  todo: { rotulo: "A fazer", classe: "bg-muted text-foreground" },
   doing: { rotulo: "Em andamento", classe: "bg-primary/10 text-primary" },
   review: { rotulo: "Em revisão", classe: "bg-warning/15 text-warning" },
   done: { rotulo: "Concluída", classe: "bg-success/15 text-success" },
@@ -417,7 +417,7 @@ function VerMemoriaDoAgente({ id, informarTitulo }: PropsDaVista) {
   return (
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
-        <Pilula classe="bg-secondary text-secondary-foreground">{m.tipo}</Pilula>
+        <Pilula classe="bg-muted text-foreground">{m.tipo}</Pilula>
         <Pilula classe={m.ativa ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}>{m.ativa ? "Ativa" : "Desativada"}</Pilula>
       </div>
       <p className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{m.texto}</p>
@@ -478,7 +478,7 @@ function VerMemoriaDoProjeto({ id, client_id, informarTitulo, aoAbrirFerramenta 
   return (
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
-        <Pilula classe="bg-secondary text-secondary-foreground">{m.kind}</Pilula>
+        <Pilula classe="bg-muted text-foreground">{m.kind}</Pilula>
         {(m.tags || []).slice(0, 6).map((t) => <Pilula key={t} classe="bg-muted text-muted-foreground">{t}</Pilula>)}
       </div>
       {m.title && <p className="mt-2 break-words text-[13px] font-medium leading-5 [overflow-wrap:anywhere]">{m.title}</p>}
@@ -510,7 +510,7 @@ const STATUS_DA_APROVACAO: Record<string, { rotulo: string; classe: string }> = 
   adiado: { rotulo: "Adiada", classe: "bg-muted text-muted-foreground" },
   aprovado: { rotulo: "Aprovada", classe: "bg-success/15 text-success" },
   rejeitado: { rotulo: "Rejeitada", classe: "bg-destructive/15 text-destructive" },
-  alteracoes_pedidas: { rotulo: "Alterações pedidas", classe: "bg-secondary text-secondary-foreground" },
+  alteracoes_pedidas: { rotulo: "Alterações pedidas", classe: "bg-muted text-foreground" },
   expirado: { rotulo: "Vencida", classe: "bg-muted text-muted-foreground" },
 };
 
@@ -584,7 +584,7 @@ function VerAprovacao({ id, informarTitulo, aoAbrirDiario }: PropsDaVista) {
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
         <Pilula classe={st.classe}>{st.rotulo}</Pilula>
-        <Pilula classe="bg-secondary text-secondary-foreground">{ROTULO_DA_ACAO[a.action_kind] || a.action_kind}</Pilula>
+        <Pilula classe="bg-muted text-foreground">{ROTULO_DA_ACAO[a.action_kind] || a.action_kind}</Pilula>
         {a.executed_at && <Pilula classe="bg-success/15 text-success">Enviado</Pilula>}
       </div>
       <p className="mt-2 break-words text-[15px] font-semibold leading-[22px] [overflow-wrap:anywhere]">{a.o_que}</p>
@@ -716,7 +716,7 @@ function VerProjeto({ id, informarTitulo, aoAbrirFerramenta, abrir }: PropsDaVis
   return (
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
-        <Pilula classe="bg-secondary text-secondary-foreground">{STATUS_DO_PROJETO[p.status] || p.status}</Pilula>
+        <Pilula classe="bg-muted text-foreground">{STATUS_DO_PROJETO[p.status] || p.status}</Pilula>
         {p.deleted_at && <Pilula classe="bg-destructive/15 text-destructive">Na lixeira</Pilula>}
       </div>
       <div className="mt-2">
@@ -843,7 +843,7 @@ function VerArquivo({ id, informarTitulo, aoAbrirFerramenta }: PropsDaVista) {
   return (
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
-        <Pilula classe="bg-secondary text-secondary-foreground">{(ext || a.mime_type || a.file_type || "arquivo").toLowerCase()}</Pilula>
+        <Pilula classe="bg-muted text-foreground">{(ext || a.mime_type || a.file_type || "arquivo").toLowerCase()}</Pilula>
         {a.archived_at && <Pilula classe="bg-muted text-muted-foreground">Arquivado</Pilula>}
       </div>
       <div className="mt-2">
@@ -906,7 +906,7 @@ function VerPublicacao({ id, client_id, informarTitulo, aoAbrirFerramenta }: Pro
   return (
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
-        <Pilula classe="bg-secondary text-secondary-foreground">{STATUS_DA_PRODUCAO[post.production_status] || post.production_status}</Pilula>
+        <Pilula classe="bg-muted text-foreground">{STATUS_DA_PRODUCAO[post.production_status] || post.production_status}</Pilula>
         <Pilula classe="bg-muted text-muted-foreground">{post.content_type}</Pilula>
         {post.archived_at && <Pilula classe="bg-muted text-muted-foreground">Arquivado</Pilula>}
       </div>
@@ -973,7 +973,7 @@ function VerVinculo({ id, informarTitulo, aoAbrirDiario }: PropsDaVista) {
   return (
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
-        <Pilula classe={v.status === "blocked" || v.status === "failed" ? "bg-destructive/15 text-destructive" : v.status === "done" ? "bg-success/15 text-success" : "bg-secondary text-secondary-foreground"}>{estadoDaExecucao(v.status)}</Pilula>
+        <Pilula classe={v.status === "blocked" || v.status === "failed" ? "bg-destructive/15 text-destructive" : v.status === "done" ? "bg-success/15 text-success" : "bg-muted text-foreground"}>{estadoDaExecucao(v.status)}</Pilula>
       </div>
       <div className="mt-2">
         <Linha rotulo="Agente">{agente}</Linha>

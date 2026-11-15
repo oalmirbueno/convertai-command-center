@@ -91,7 +91,7 @@ export function VirarPersonagem({ r, qualidade, onCriada, onFechar }: { r: Resul
   };
 
   return (
-    <div className="mt-2 min-w-0 space-y-2 rounded-xl border border-sky-400/30 bg-zinc-950 p-2.5" data-virar-personagem={r.geracao_id}>
+    <div className="mt-2 min-w-0 space-y-2 rounded-lg border border-sky-400/30 bg-zinc-950 p-2.5" data-virar-personagem={r.geracao_id}>
       <div className="flex min-w-0 items-center">
         <p className="flex min-w-0 flex-1 items-center text-[12px] font-semibold">
           <UserRoundPlus className="mr-1.5 h-3.5 w-3.5 shrink-0 text-sky-300" /> {criada ? `Personagem ${criada.nome}` : "Virar personagem"}

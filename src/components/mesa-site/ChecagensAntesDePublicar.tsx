@@ -268,7 +268,7 @@ export default function ChecagensAntesDePublicar({
       <div className="min-w-0" data-checagens={resultado ? resumo.total : "pendente"}>
         {conferenciaDoMotor && (
           <div className="mb-2 flex min-w-0 items-start" data-conferencia-do-motor={conferenciaDoMotor.conferencia.estado} data-graves-do-motor={conferenciaDoMotor.conferencia.graves}>
-            {capaQ.data && <img src={capaQ.data} alt="Capa do site (print do computador)" className="mr-3 h-auto w-24 shrink-0 rounded border border-border sm:w-32" loading="lazy" data-capa-do-site="" />}
+            {capaQ.data && <img src={capaQ.data} alt="Capa do site (print do computador)" className="mr-3 h-auto w-24 shrink-0 rounded-sm border border-border sm:w-32" loading="lazy" data-capa-do-site="" />}
             <span className="min-w-0 flex-1">
               <span className={juntar(texto.auxiliar, "block whitespace-normal")}>
                 {conferenciaDoMotor.conferencia.estado === "pronto"
@@ -288,7 +288,7 @@ export default function ChecagensAntesDePublicar({
         <ul className={juntar(lista.aberta, lista.divisoria)}>
           {visiveis.map((p) => (
             <li key={p.id} className={lista.linha} data-problema={p.tipo} data-grave={p.grave ? "sim" : "nao"}>
-              {p.grave ? <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-destructive" aria-label="Grave" /> : <Info className="mr-2 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-label="Aviso" />}
+              {p.grave ? <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-destructive" aria-label="Grave" /> : <Info className="mr-2 h-4 w-4 shrink-0 text-warning" aria-label="Aviso" />}
               <span className="min-w-0 flex-1">
                 <span className={juntar(texto.corpo, "block whitespace-normal break-words")}>{p.texto}</span>
                 <span className={juntar(texto.auxiliar, "block truncate")}>
@@ -367,7 +367,7 @@ export default function ChecagensAntesDePublicar({
         <ul className="min-w-0 space-y-1">
           {(correcao ? correcao.problemas : []).map((p, i) => (
             <li key={i} className={juntar(texto.corpo, "flex min-w-0 whitespace-normal break-words")}>
-              {p.grave ? <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-label="Grave" /> : <Info className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-label="Aviso" />}
+              {p.grave ? <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-label="Grave" /> : <Info className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-warning" aria-label="Aviso" />}
               <span className="min-w-0">
                 {p.texto}
                 <span className={juntar(texto.auxiliar, "block")}>

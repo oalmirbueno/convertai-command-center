@@ -96,7 +96,7 @@ export function FormularioDoBriefing({
             type="button"
             onClick={() => mudar({ produtos: produtos.concat([{ nome: "", por_que: "" }]) })}
             disabled={desabilitado}
-            className="toque-compacto mt-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-primary hover:bg-muted"
+            className="toque-compacto mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-primary hover:bg-muted"
             aria-label="Outro produto"
             title="Outro produto"
           >

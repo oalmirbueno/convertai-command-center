@@ -739,7 +739,7 @@ export default function ClientCycleSheet({
                 className={`flex-1 rounded-full ${
                   fechada(index + 1)
                     ? index + 1 > totalSteps ? "bg-info" : "bg-primary"
-                    : "bg-secondary"
+                    : "bg-muted"
                 }`}
               />
             ))}
@@ -999,7 +999,7 @@ export default function ClientCycleSheet({
                     )}
                   </p>
                   {pastWeekKey && (
-                    <div className="flex items-center gap-0.5 rounded-lg bg-secondary/60 p-0.5">
+                    <div className="flex items-center gap-0.5 rounded-full bg-muted/60 p-0.5">
                       {[
                         { valor: false, texto: "Esta semana" },
                         { valor: true, texto: "Anterior" },
@@ -1021,7 +1021,7 @@ export default function ClientCycleSheet({
                   )}
                 </div>
                 {editandoAnterior && (
-                  <p className="mt-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  <p className="mt-1.5 rounded-lg bg-muted/50 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
                     Você está corrigindo a semana de{" "}
                     {new Date(`${pastWeekKey}T12:00:00`).toLocaleDateString("pt-BR", {
                       day: "2-digit", month: "2-digit",
@@ -1097,8 +1097,8 @@ export default function ClientCycleSheet({
                                 done ? "border-primary/30 bg-primary/[0.06]" : "border-border bg-card"
                               } ${pendingKey === key ? "opacity-50" : ""}`}
                             >
-                              <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${
-                                done ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                              <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums ${
+                                done ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                               }`}>
                                 {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : step}
                               </span>
@@ -1172,8 +1172,8 @@ export default function ClientCycleSheet({
                                           onClick={() => setEtapaAberta(aberta ? null : step)}
                                           className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
                                         >
-                                          <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${
-                                            atual ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"
+                                          <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums ${
+                                            atual ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
                                           }`}>
                                             {step}
                                           </span>
@@ -1191,7 +1191,7 @@ export default function ClientCycleSheet({
                                           type="button"
                                           disabled={!canWrite || pendingKey === key || bulkRunning}
                                           onClick={() => void onToggle(client, step)}
-                                          className={`flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-[12px] font-bold transition-transform active:scale-95 disabled:opacity-50 ${
+                                          className={`flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-semibold transition-transform active:scale-95 disabled:opacity-50 ${
                                             atual
                                               ? "bg-primary text-primary-foreground"
                                               : "border border-border bg-card text-muted-foreground"
@@ -1255,7 +1255,7 @@ export default function ClientCycleSheet({
                                 return (
                                   <div
                                     key={key}
-                                    className="flex w-full items-start gap-2 rounded-lg border border-success/20 bg-success/[0.04] px-2.5 py-1.5 text-left"
+                                    className="flex w-full items-start gap-2 rounded-md bg-success-soft px-3 py-2 text-left"
                                   >
                                     <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
                                     <span className="min-w-0 flex-1">
@@ -1275,7 +1275,7 @@ export default function ClientCycleSheet({
                                   type="button"
                                   disabled={!canWrite || pendingKey === key || bulkRunning}
                                   onClick={() => void onToggle(client, step)}
-                                  className={`flex w-full items-start gap-2 rounded-lg border border-success/20 bg-success/[0.04] px-2.5 py-1.5 text-left ${
+                                  className={`flex w-full items-start gap-2 rounded-md bg-success-soft px-3 py-2 text-left ${
                                     pendingKey === key ? "opacity-50" : ""
                                   }`}
                                 >
@@ -1366,7 +1366,7 @@ export default function ClientCycleSheet({
                   type="button"
                   onClick={() => void adicionarAvulso()}
                   disabled={novoAvulso.trim().length < 3 || salvandoAvulso}
-                  className="shrink-0 rounded-md bg-secondary px-3 text-[12px] font-bold text-foreground disabled:opacity-40"
+                  className="shrink-0 rounded-full bg-muted px-4 text-[12px] font-semibold text-foreground transition-colors hover:bg-muted/70 disabled:opacity-40"
                 >
                   Somar
                 </button>
@@ -1426,7 +1426,7 @@ export default function ClientCycleSheet({
                   type="button"
                   onClick={() => void gerarChecklist()}
                   disabled={pedidoChecklist.trim().length < 3 || gerandoChecklist}
-                  className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary py-2 text-[12px] font-bold text-primary-foreground disabled:opacity-40"
+                  className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full bg-primary py-2 text-[12px] font-semibold text-primary-foreground disabled:opacity-40"
                 >
                   <Sparkles className={`h-3.5 w-3.5 ${gerandoChecklist ? "animate-pulse" : ""}`} />
                   {gerandoChecklist ? "Montando a lista..." : "Montar checklist"}
@@ -1468,7 +1468,7 @@ export default function ClientCycleSheet({
                               type="button"
                               disabled={!canWrite}
                               onClick={() => void marcarItem(lista, item.id)}
-                              className="flex w-full items-start gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-secondary/40"
+                              className="flex w-full items-start gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-muted/40"
                             >
                               <span
                                 className={`mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
@@ -1576,7 +1576,7 @@ export default function ClientCycleSheet({
                   const start = addDays(realMonday, (index - (HISTORY_WEEKS - 1)) * 7);
                   return (
                     <div key={key} className="flex flex-1 flex-col items-center gap-1">
-                      <span className="flex h-14 w-full items-end overflow-hidden rounded bg-secondary/40">
+                      <span className="flex h-14 w-full items-end overflow-hidden rounded bg-muted/40">
                         <span
                           className={`block w-full rounded ${fill >= 1 ? "bg-success/70" : "bg-primary/50"}`}
                           style={{ height: `${Math.max(fill * 100, fill > 0 ? 8 : 3)}%` }}
@@ -1599,7 +1599,7 @@ export default function ClientCycleSheet({
                     {servicos.map((servico) => (
                       <span
                         key={servico}
-                        className="rounded-md bg-secondary px-2 py-1 text-[11px] font-medium text-muted-foreground"
+                        className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
                       >
                         {servico}
                       </span>

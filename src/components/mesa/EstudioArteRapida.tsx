@@ -162,7 +162,7 @@ function EscolhaDaCampanha({
   const escolhida = valor && valor !== "auto" ? ativas.filter((c) => c.id === valor)[0] || null : null;
   const pilula = (ativa: boolean) =>
     `mb-1.5 mr-1.5 inline-flex h-9 max-w-full shrink-0 items-center rounded-full border px-3 text-[13px] transition-colors ${
-      ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
+      ativa ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground hover:bg-muted"
     }`;
   return (
     <div className="min-w-0">
@@ -178,7 +178,7 @@ function EscolhaDaCampanha({
             aria-checked={valor === "auto"}
             className={pilula(valor === "auto")}
             onClick={() => onValor("auto")}
-            title="O agente reconhece a campanha quando o pedido cita (nome, produto ou oferta)"
+            title="O agente procura a campanha que o pedido cita (nome, produto ou oferta); sem certeza, segue só a marca e avisa"
           >
             <Sparkles className="mr-1 h-3.5 w-3.5 shrink-0" /> Automático
           </button>
@@ -196,8 +196,6 @@ function EscolhaDaCampanha({
         <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-base-da-campanha={escolhida.id}>
           A arte puxa a base inteira: {resumoDaBaseDaCampanha(escolhida) || "tema e identidade"}. {periodoCurto(escolhida.periodo_inicio, escolhida.periodo_fim)}.
         </p>
-      ) : valor === "auto" ? (
-        <p className="mt-0.5 text-[12px] text-muted-foreground">O agente procura a campanha que o pedido cita; sem certeza, segue só a marca e avisa.</p>
       ) : null}
     </div>
   );
@@ -484,7 +482,7 @@ function PedidoDaArteRapida({
             </AjudaRecolhida>
           )}
         </div>
-        <div className="rounded-xl border border-border bg-background focus-within:border-primary/60">
+        <div className="rounded-lg border border-border bg-background focus-within:border-primary/60">
           <Textarea
             id="pedido-da-arte-rapida"
             value={pedido}
@@ -657,7 +655,7 @@ function PedidoDaArteRapida({
       <div className="min-w-0">
         <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Peça</p>
         <div className="flex min-w-0 flex-wrap items-center">
-          <div role="radiogroup" aria-label="Peça" className="mb-1 mr-3 inline-flex min-w-0 rounded-lg border border-border bg-background p-0.5">
+          <div role="radiogroup" aria-label="Peça" className="mb-1 mr-3 inline-flex min-w-0 rounded-full bg-muted p-0.5">
             {(["auto", "unica", "carrossel"] as PecaPedida[]).map((v) => (
               <button
                 key={v}
@@ -666,8 +664,8 @@ function PedidoDaArteRapida({
                 aria-checked={peca === v}
                 onClick={() => setPeca(v)}
                 className={juntar(
-                  "toque-compacto h-8 min-w-0 rounded-md px-3 text-[13px] font-medium transition-colors",
-                  peca === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                  "toque-compacto h-8 min-w-0 rounded-full px-3.5 text-[13px] font-medium transition-colors",
+                  peca === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
                 title={v === "auto" ? "O agente decide pelo pedido: arte única ou carrossel" : undefined}
               >
@@ -696,7 +694,7 @@ function PedidoDaArteRapida({
               <SeletorDeFormatoCompacto valor={formato} onMudar={setFormato} />
             </div>
             <label className="flex min-w-0 items-start text-[13px]">
-              <Switch checked={gerarLogo} onCheckedChange={setGerarLogo} className="mr-2 mt-0.5 shrink-0" aria-label="Gerar a arte logo em seguida" />
+              <Switch checked={gerarLogo} onCheckedChange={setGerarLogo} className="toque-compacto mr-2 mt-0.5 shrink-0" aria-label="Gerar a arte logo em seguida" />
               <span className="min-w-0">
                 Gerar a arte logo em seguida
                 <span className="block text-[12px] text-muted-foreground">Arte única: a lâmina entra na fila assim que a direção fica pronta. Carrossel: você confere a direção e gera.</span>
@@ -731,11 +729,12 @@ function PedidoDaArteRapida({
   );
 
   const cabecalho = (
-    <div className="flex min-w-0 items-baseline">
-      <h2 className="mr-2 shrink-0 text-[15px] font-semibold leading-tight">{origem === "laboratorio" ? "Estúdio livre" : "Arte rápida"}</h2>
-      <p className="min-w-0 truncate text-[12px] text-muted-foreground">
+    <div className="flex min-w-0 items-center">
+      <h2 className="shrink-0 text-[15px] font-semibold leading-tight">{origem === "laboratorio" ? "Estúdio livre" : "Arte rápida"}</h2>
+      {/* 14/11/2026 (dono: "explicação longa atrás do ?"): a linha explicativa saiu do lado do título. */}
+      <AjudaRecolhida className="ml-1.5" rotulo={origem === "laboratorio" ? "O que é o Estúdio livre" : "O que é a Arte rápida"}>
         {origem === "laboratorio" ? "Trabalho avulso, com o diretor de arte de sempre. Fica no arquivo livre, fora da Mesa do cliente." : "Fora do plano do mês, com a marca, a campanha e o diretor de arte de sempre."}
-      </p>
+      </AjudaRecolhida>
     </div>
   );
 
@@ -1107,7 +1106,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
             <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" onClick={() => onAbrirItem(taskFeito)}>
               Continuar no item
             </Button>
-            <Link to={`/calendario?client=${clientId}`} className="mb-1 inline-flex h-8 items-center rounded-md px-2 text-[12px] font-medium text-primary hover:underline">
+            <Link to={`/calendario?client=${clientId}`} className="mb-1 inline-flex h-8 items-center rounded-full px-2 text-[12px] font-medium text-primary hover:underline">
               Ver na Agenda
             </Link>
           </div>
@@ -1287,7 +1286,7 @@ export default function EstudioArteRapida({
   ) : peca ? (
     peca
   ) : daOutraMarca ? (
-    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-xl border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-arte-de-outra-marca="">
+    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-lg border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-arte-de-outra-marca="">
       <p className="text-[14px] font-semibold">Esta arte é de outra marca</p>
       <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. Aqui o Estúdio mostra e gera só a marca {marca ? marca.nome : "aberta"}.</p>
       <Button type="button" className="mt-4 h-10 w-10 p-0" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)} aria-label="Nova arte" title="Nova arte">
@@ -1406,7 +1405,7 @@ function SeletorDeFidelidade({ valor, escolhida, onValor }: { valor: Fidelidade;
           {FIDELIDADES.map((f) => `${ROTULO_DA_FIDELIDADE[f]}: ${DICA_DA_FIDELIDADE[f]}`).join(" ")}
         </AjudaRecolhida>
       </p>
-      <div role="radiogroup" aria-label="Fidelidade ao conteúdo" className="inline-flex min-w-0 rounded-lg border border-border bg-background p-0.5">
+      <div role="radiogroup" aria-label="Fidelidade ao conteúdo" className="inline-flex min-w-0 rounded-full bg-muted p-0.5">
         {FIDELIDADES.map((f) => (
           <button
             key={f}
@@ -1416,8 +1415,8 @@ function SeletorDeFidelidade({ valor, escolhida, onValor }: { valor: Fidelidade;
             title={DICA_DA_FIDELIDADE[f]}
             onClick={() => onValor(f)}
             className={juntar(
-              "toque-compacto h-8 min-w-0 rounded-md px-3 text-[13px] font-medium transition-colors",
-              valor === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+              "toque-compacto h-8 min-w-0 rounded-full px-3.5 text-[13px] font-medium transition-colors",
+              valor === f ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {ROTULO_DA_FIDELIDADE[f]}

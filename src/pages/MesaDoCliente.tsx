@@ -18,7 +18,7 @@ import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
 import Etapas from "@/components/sistema/Etapas";
-import { Carregando } from "@/components/sistema/Estados";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import SeletorDeClientesDaMesa from "@/components/mesa/SeletorDeClientesDaMesa";
 import MenuMais from "@/components/sistema/MenuMais";
 import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
@@ -267,7 +267,7 @@ export function SeletorDeCliente({
           aria-expanded={aberto}
           aria-haspopup="listbox"
           aria-label={valor ? `Cliente: ${rotulo}. Trocar de cliente` : "Escolher o cliente"}
-          className="flex h-8 min-w-0 max-w-full items-center rounded-md border border-border bg-card px-2.5 text-left text-[13px] font-semibold text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:max-w-[240px]"
+          className="flex h-8 min-w-0 max-w-full items-center rounded-full border border-border bg-card px-3 text-left text-[13px] font-semibold text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:max-w-[240px]"
         >
           <Building2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className={`min-w-0 flex-1 truncate ${valor ? "" : "font-normal text-muted-foreground"}`}>{rotulo}</span>
@@ -629,7 +629,7 @@ export default function MesaDoCliente() {
         </>
       }
     >
-      {!clientId && !painel && <p className="text-[13px] text-muted-foreground">Escolha um cliente para abrir a mesa dele.</p>}
+      {!clientId && !painel && <EstadoVazio icone={<Building2 className="h-5 w-5" />} titulo="Escolha um cliente para abrir a mesa dele." />}
 
       {mostrarFila && (
         <Suspense fallback={<EsqueletoDaAba />}>

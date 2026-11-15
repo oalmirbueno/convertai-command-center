@@ -144,17 +144,14 @@ const rodapeDoDialogo = "flex min-w-0 flex-wrap items-center justify-end border-
 const semIconeNoCelular = "max-sm:[&>span:first-child>span[aria-hidden]]:hidden";
 const numeroDoCartao = "block truncate text-[20px] leading-7 sm:text-[24px] sm:leading-8";
 
-/** Número sem caixa (resumo de uma seção). */
+/** Resumo de uma seção: os números numa faixa só (mesmo cartão das outras áreas do Financeiro). */
 function Resumo({ itens }: { itens: { rotulo: string; valor: string; cor?: string }[] }) {
   return (
-    <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 lg:grid-cols-4">
-      {itens.map((s) => (
-        <div key={s.rotulo} className="min-w-0">
-          <dt className={juntar(texto.rotulo, "truncate")}>{s.rotulo}</dt>
-          <dd className={juntar("mt-0.5 truncate text-[15px] font-semibold tabular-nums", s.cor || "text-foreground")}>{s.valor}</dd>
-        </div>
-      ))}
-    </dl>
+    <FaixaDeNumeros
+      rotulo="Resumo"
+      colunas={Math.min(4, Math.max(2, itens.length)) as 2 | 3 | 4}
+      itens={itens.map((s) => ({ rotulo: s.rotulo, valor: s.valor, corDoValor: s.cor }))}
+    />
   );
 }
 

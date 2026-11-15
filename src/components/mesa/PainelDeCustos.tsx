@@ -277,7 +277,7 @@ export default function PainelDeCustos({
             aria-label="Cliente"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
-            className={juntar(campo, "mb-1 mr-2 h-8 w-auto max-w-[220px] px-2")}
+            className={juntar(campo, "mb-1 mr-2 h-8 w-auto max-w-[220px] rounded-full px-3 max-sm:max-w-[116px]")}
           >
             <option value="">Todos os clientes</option>
             {opcoes.map((c) => (
@@ -301,27 +301,28 @@ export default function PainelDeCustos({
         }
       />
 
-      <div role="group" aria-label="Período" className="grid grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:inline-grid sm:grid-cols-5">
-        {PERIODOS.map((p) => (
-          <button
-            key={p.chave}
-            type="button"
-            onClick={() => setPeriodo(p.chave)}
-            aria-pressed={periodo === p.chave}
-            className={`truncate rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
-              periodo === p.chave ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {p.rotulo}
+      <div className="flex min-w-0 items-center">
+        <div role="group" aria-label="Período" className="min-w-0 flex-1 grid grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:inline-grid sm:flex-none sm:grid-cols-5 sm:rounded-full">
+          {PERIODOS.map((p) => (
+            <button
+              key={p.chave}
+              type="button"
+              onClick={() => setPeriodo(p.chave)}
+              aria-pressed={periodo === p.chave}
+              className={`toque-compacto truncate rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors sm:rounded-full ${
+                periodo === p.chave ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {p.rotulo}
+            </button>
+          ))}
+        </div>
+        {filtro && (
+          <button type="button" onClick={() => setFiltro("")} className={juntar(botao.icone, "ml-2 text-primary")} aria-label="Ver todos os clientes" title="Ver todos os clientes">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </button>
-        ))}
+        )}
       </div>
-
-      {filtro && (
-        <button type="button" onClick={() => setFiltro("")} className={juntar(botao.icone, "text-primary")} aria-label="Ver todos os clientes" title="Ver todos os clientes">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        </button>
-      )}
 
       {custos.isLoading && (
         <div aria-busy="true" aria-label="Carregando custos" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -388,7 +389,7 @@ export default function PainelDeCustos({
           <TabelaPorMes meses={porMes} />
 
           {!todas.length && (
-            <p className="rounded-lg border border-dashed border-border p-6 text-center text-[13px] text-muted-foreground">Nenhum gasto de IA neste período.</p>
+            <p className="rounded-lg bg-muted/50 p-6 text-center text-[13px] text-muted-foreground">Nenhum gasto de IA neste período.</p>
           )}
 
           {/* A explicação do que conta como gasto e peça foi para o "?" do título; aqui fica só o estado. */}

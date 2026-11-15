@@ -10,7 +10,7 @@ import { LEITURA_PADRAO, type LeituraDoQuadro } from "./visualDoQuadro";
 
 export function OpcoesDeLeitura({ leitura, onLeitura, temSelecao }: { leitura: LeituraDoQuadro; onLeitura: (valor: LeituraDoQuadro) => void; temSelecao: boolean }) {
   return (
-    <div className="nodrag nopan nowheel absolute bottom-0 left-12 w-[232px] max-w-[calc(100vw-88px)] space-y-3 rounded-xl border border-border bg-popover p-3 text-[14px] text-popover-foreground shadow-sm" role="group" aria-label="Leitura das conexões">
+    <div className="nodrag nopan nowheel absolute bottom-0 left-12 w-[232px] max-w-[calc(100vw-88px)] space-y-3 rounded-xl border border-border bg-popover p-3 text-[14px] text-popover-foreground shadow-pop" role="group" aria-label="Leitura das conexões">
       <label className="block space-y-1">
         <span className="font-medium">Conexões</span>
         <select className={juntar(campo, "h-9 text-[14px]")} value={leitura.foco} onChange={(e) => onLeitura({ ...leitura, foco: e.target.value as LeituraDoQuadro["foco"] })}>

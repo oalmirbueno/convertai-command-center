@@ -17,6 +17,7 @@ import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { chamarAcaoDoAgente, type AcaoDoAgente, type PedidoDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
+import { conversa as estiloDaConversa, juntar } from "@/components/sistema/estilos";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
 import AnexosComPapel, { anexosComPapel, corpoDosAnexos, usePapeisDosAnexos } from "./AnexosComPapel";
@@ -95,9 +96,7 @@ export interface PropsDoDiretor {
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
   return (
     <div
-      className={`min-w-0 rounded-xl px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere] ${
-        papel === "usuario" ? "ml-8 rounded-br-md bg-primary text-primary-foreground" : "mr-4 rounded-bl-md bg-muted text-foreground"
-      }`}
+      className={juntar(estiloDaConversa.balao, papel === "usuario" ? estiloDaConversa.doUsuario : estiloDaConversa.doAgente)}
     >
       {children}
     </div>
@@ -611,7 +610,7 @@ export default function DiretorDoEstudio({
                 <p className="whitespace-pre-wrap">{envio.mensagem}</p>
               </Bolha>
             )}
-            <div className="mr-4 rounded-xl rounded-bl-md bg-muted px-3 py-2">
+            <div className={juntar(estiloDaConversa.balao, estiloDaConversa.doAgente)}>
               <Cronometro desde={envio.desde} rotulo="O diretor está lendo o trabalho" />
             </div>
           </div>
@@ -644,7 +643,7 @@ export default function DiretorDoEstudio({
 
         </div>
         <ZonaDeAnexos anexos={anexosDoCampo} className="min-w-0" rotulo="Solte as imagens para o diretor">
-        <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
+        <div className="rounded-lg border border-border bg-background p-2 focus-within:border-primary/60">
           <Textarea
             ref={campoRef}
             value={texto}

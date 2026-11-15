@@ -83,17 +83,17 @@ function answeredCount(s: Submission) {
 }
 
 function scoreTone(score: number | null) {
-  if (score == null) return { label: "-", className: "bg-secondary text-muted-foreground border-border" };
-  if (score >= 80) return { label: `${score}`, className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
-  if (score >= 60) return { label: `${score}`, className: "bg-sky-500/15 text-sky-400 border-sky-500/30" };
-  if (score >= 40) return { label: `${score}`, className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
-  return { label: `${score}`, className: "bg-red-500/15 text-red-400 border-red-500/30" };
+  if (score == null) return { label: "-", className: "bg-muted text-muted-foreground border-transparent" };
+  if (score >= 80) return { label: `${score}`, className: "bg-success-soft text-success border-transparent" };
+  if (score >= 60) return { label: `${score}`, className: "bg-info-soft text-info border-transparent" };
+  if (score >= 40) return { label: `${score}`, className: "bg-warning-soft text-warning border-transparent" };
+  return { label: `${score}`, className: "bg-danger-soft text-destructive border-transparent" };
 }
 
 function statusTone(status: string | null) {
-  if (status === "processed") return { label: "Processado", className: "bg-primary/15 text-primary border-primary/30" };
-  if (status === "submitted") return { label: "Novo", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
-  return { label: "Em andamento", className: "bg-muted text-muted-foreground border-border" };
+  if (status === "processed") return { label: "Processado", className: "bg-accent-soft text-primary border-transparent" };
+  if (status === "submitted") return { label: "Novo", className: "bg-warning-soft text-warning border-transparent" };
+  return { label: "Em andamento", className: "bg-muted text-muted-foreground border-transparent" };
 }
 
 // ----------------- Page -----------------
@@ -394,11 +394,11 @@ export default function AdminQuizSubmissions() {
                         <div className="mr-2 h-1.5 w-14 overflow-hidden rounded-full bg-muted" aria-hidden="true">
                           <div className={`h-full ${isDraft ? "bg-warning/70" : "bg-primary"}`} style={{ width: `${progressPct}%` }} />
                         </div>
-                        <span className="font-mono text-[12px] tabular-nums text-muted-foreground">{answered}/{ANSWER_FIELDS.length}</span>
+                        <span className="text-[12px] tabular-nums text-muted-foreground">{answered}/{ANSWER_FIELDS.length}</span>
                       </div>
                     </td>
                     <td className="py-2.5 pr-3 text-right">
-                      <span className={juntar(etiqueta, "border font-mono", score.className)}>{score.label}</span>
+                      <span className={juntar(etiqueta, "border tabular-nums", score.className)}>{score.label}</span>
                     </td>
                     <td className={juntar(texto.corpo, "py-2.5 pr-3")}>{planLabel}</td>
                     <td className="whitespace-nowrap py-2.5 pr-3 text-[12px] tabular-nums text-muted-foreground">
@@ -435,7 +435,7 @@ export default function AdminQuizSubmissions() {
                       {lastActivity ? ` · ${format(new Date(lastActivity), "dd MMM", { locale: ptBR })}` : ""}
                     </span>
                   </button>
-                  <span className={juntar(etiqueta, "mr-1 border font-mono", score.className)}>{score.label}</span>
+                  <span className={juntar(etiqueta, "mr-1 border tabular-nums", score.className)}>{score.label}</span>
                   <span className={juntar(etiqueta, "mr-1 border", status.className)}>{status.label}</span>
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
@@ -569,7 +569,7 @@ function SubmissionDrawer({
           <dl className="divide-y divide-border border-b border-border">
             <div className="flex min-w-0 items-center py-2">
               <dt className={juntar(texto.rotulo, "w-24 shrink-0")}>Score</dt>
-              <dd><span className={juntar(etiqueta, "border font-mono", score.className)}>{score.label}</span></dd>
+              <dd><span className={juntar(etiqueta, "border tabular-nums", score.className)}>{score.label}</span></dd>
             </div>
             <div className="flex min-w-0 items-center py-2">
               <dt className={juntar(texto.rotulo, "w-24 shrink-0")}>Plano</dt>

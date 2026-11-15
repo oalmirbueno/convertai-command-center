@@ -527,7 +527,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
   ) : (
     <div className="space-y-5" data-aba-estilo="">
       <div className="flex min-w-0 flex-wrap items-center">
-        <Switch
+        <Switch className="toque-compacto"
           id="estilo-ligado"
           checked={estado.ativo}
           disabled={!temGuia || !!ocupado}

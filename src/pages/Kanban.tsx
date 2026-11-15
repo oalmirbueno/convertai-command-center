@@ -62,6 +62,12 @@ const columns = [
   { id: "done", title: "Concluído", dotColor: "bg-success" },
 ];
 
+/** Seta dos seletores nativos (o campo perde a seta do navegador com appearance-none). */
+const SETA_DO_SELETOR = {
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b9199' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+  backgroundPosition: "right 10px center",
+} as const;
+
 const priorityBorderColors: Record<string, string> = {
   urgent: "border-l-destructive",
   high: "border-l-warning",
@@ -253,7 +259,7 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
     : task.status === "blocked"
       ? { rotulo: "Bloqueada", cor: "bg-warning/10 text-warning" }
       : tipoDeEntrega
-        ? { rotulo: tipoDeEntrega, cor: "bg-violet-500/10 text-violet-500" }
+        ? { rotulo: tipoDeEntrega, cor: "bg-info-soft text-info" }
         : null;
   const apoioDoCelular = compacto
     ? [task.project?.name, task.due_date ? formatDate(task.due_date) : ""].filter(Boolean).join(" · ")
@@ -298,7 +304,7 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
             }
           }}
           className={cn(
-            "rounded-md border border-border border-l-[3px] bg-card transition-colors hover:border-muted-foreground/30",
+            "rounded-md border border-border border-l-[3px] bg-card shadow-card transition-colors hover:border-muted-foreground/30",
             priorityBorderColors[task.priority] || "border-l-border",
             podeArrastar ? "cursor-grab select-none [-webkit-touch-callout:none] active:cursor-grabbing" : "cursor-pointer",
             arrastado && "opacity-40",
@@ -326,11 +332,11 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
             {(taskDeliveryTypeLabel(task) || editorial || task.status === "blocked" || task.milestone?.title) && (
               <div className="mt-1.5 flex flex-wrap">
                 {taskDeliveryTypeLabel(task) ? (
-                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-violet-500/10 text-violet-500")}>
+                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-info-soft text-info")}>
                     {taskDeliveryTypeLabel(task)}
                   </span>
                 ) : editorial && (
-                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-violet-500/10 text-violet-500")}>
+                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-info-soft text-info")}>
                     Design e conteúdo
                   </span>
                 )}
@@ -1189,7 +1195,7 @@ export default function Kanban() {
     setFilterClient(""); setFilterProject(""); setFilterArea(""); setFilterDeliveryType(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSortBy("manual");
   };
   const filtrosExtras = [filterArea, filterDeliveryType, filterAssignee, filterPriority, filterDateFrom, filterDateTo, sortBy !== "manual" ? sortBy : ""].filter(Boolean).length;
-  const campoDoFiltro = juntar(campo, "h-9 pr-8");
+  const campoDoFiltro = juntar(campo, "h-9 cursor-pointer appearance-none bg-no-repeat pr-8");
 
   // Filtros: cliente e projeto à vista; o resto num seletor "Filtros" (mais de 4 opções vira seletor).
   // 16/10/2026 (celular): cliente e projeto entram no seletor "Filtros" e o
@@ -1210,6 +1216,7 @@ export default function Kanban() {
           }
         }}
         className={classe}
+        style={SETA_DO_SELETOR}
       >
         <option value="">Clientes</option>
         {clientOptions.map((client) => (
@@ -1225,6 +1232,7 @@ export default function Kanban() {
         value={filterProject}
         onChange={(e) => setFilterProject(e.target.value)}
         className={classe}
+        style={SETA_DO_SELETOR}
       >
         <option value="">Projetos</option>
         {visibleProjectOptions.map((project) => (
@@ -1236,8 +1244,8 @@ export default function Kanban() {
   );
   const FiltersBar = (
     <div className="flex min-w-0 items-center" role="group" aria-label="Filtros do Kanban">
-      {!isMobile && seletorCliente(juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 sm:w-[200px] sm:flex-none"))}
-      {!isMobile && seletorProjeto(juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 sm:w-[200px] sm:flex-none"))}
+      {!isMobile && seletorCliente(juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 rounded-full pl-3.5 sm:w-[184px] sm:flex-none"))}
+      {!isMobile && seletorProjeto(juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 rounded-full pl-3.5 sm:w-[184px] sm:flex-none"))}
       <Popover>
         <PopoverTrigger asChild>
           <button
@@ -1285,6 +1293,7 @@ export default function Kanban() {
                   value={filterArea}
                   onChange={(e) => setFilterArea(e.target.value)}
                   className={campoDoFiltro}
+                  style={SETA_DO_SELETOR}
                   title="Filtrar por área"
                 >
                   <option value="">Todas as áreas</option>
@@ -1303,6 +1312,7 @@ export default function Kanban() {
                   value={filterDeliveryType}
                   onChange={(event) => setFilterDeliveryType(event.target.value)}
                   className={campoDoFiltro}
+                  style={SETA_DO_SELETOR}
                   title="Filtrar por tipo de entrega"
                 >
                   <option value="">Todos os tipos</option>
@@ -1317,7 +1327,7 @@ export default function Kanban() {
             {!isClient && (
               <label className="col-span-2 block min-w-0 sm:col-span-1">
                 <span className={juntar(texto.rotulo, "mb-1 block")}>Responsável</span>
-                <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className={campoDoFiltro}>
+                <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className={campoDoFiltro} style={SETA_DO_SELETOR}>
                   <option value="">Todos os responsáveis</option>
                   {(teamMembers || []).map((m: any) => (<option key={m.id} value={m.id}>{m.full_name}</option>))}
                 </select>
@@ -1325,7 +1335,7 @@ export default function Kanban() {
             )}
             <label className="col-span-2 block min-w-0 sm:col-span-1">
               <span className={juntar(texto.rotulo, "mb-1 block")}>Prioridade</span>
-              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={campoDoFiltro}>
+              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={campoDoFiltro} style={SETA_DO_SELETOR}>
                 <option value="">Todas prioridades</option>
                 <option value="urgent">Urgente</option>
                 <option value="high">Alta</option>
@@ -1363,7 +1373,7 @@ export default function Kanban() {
             </div>
             <label className="col-span-2 block min-w-0">
               <span className={juntar(texto.rotulo, "mb-1 block")}>Ordem</span>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className={campoDoFiltro} title="Ordenar">
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className={campoDoFiltro} style={SETA_DO_SELETOR} title="Ordenar">
                 <option value="manual">Ordem manual</option>
                 <option value="title_asc">Título A-Z</option>
                 <option value="title_desc">Título Z-A</option>
@@ -1623,14 +1633,14 @@ export default function Kanban() {
                   key={col.id}
                   aria-label={col.title}
                   data-coluna-kanban={col.id}
-                  className={juntar("flex min-w-0 flex-col rounded-md lg:min-h-0", colunaDoToque === col.id && "bg-primary/5 ring-2 ring-primary/30")}
+                  className={juntar("flex min-w-0 flex-col rounded-lg bg-muted/50 p-2 lg:min-h-0", colunaDoToque === col.id && "bg-primary/5 ring-2 ring-primary/30")}
                   onDragOver={isClient ? undefined : (e) => e.preventDefault()}
                   onDrop={isClient ? undefined : () => handleDrop(col.id)}
                 >
-                  <div className="mb-2 flex h-8 shrink-0 items-center px-0.5">
+                  <div className="mb-2 flex h-8 shrink-0 items-center pl-2">
                     <span aria-hidden="true" className={`mr-2 h-1.5 w-1.5 rounded-full ${col.dotColor}`} />
                     <h2 className={juntar(texto.rotulo, "text-foreground")}>{col.title}</h2>
-                    <span className="ml-2 text-[11px] tabular-nums text-muted-foreground">{isLoading ? "" : colTasks.length}</span>
+                    <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-card px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{isLoading ? "" : colTasks.length}</span>
                     {!isClient && (
                       <button
                         type="button"
@@ -1646,12 +1656,12 @@ export default function Kanban() {
                   <RegiaoRolavel
                     rotulo={`Tarefas em ${col.title}`}
                     memoria={`kanban:coluna:${col.id}`}
-                    className="min-h-[120px] space-y-2 pb-16 lg:pr-1"
+                    className="min-h-[120px] space-y-2 pb-16"
                   >
                     {isLoading ? (
                       <Carregando rotulo={`Carregando ${col.title}`} linhas={3} />
                     ) : colTasks.length === 0 ? (
-                      <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-border px-3 text-center">
+                      <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-border/80 px-3 text-center">
                         <p className={texto.auxiliar}>{isClient ? "Sem tarefas." : "Sem tarefas. Arraste para cá."}</p>
                       </div>
                     ) : (

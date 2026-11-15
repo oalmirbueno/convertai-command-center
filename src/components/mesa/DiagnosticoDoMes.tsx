@@ -213,7 +213,7 @@ function ListaDePontos({ itens, tom }: { itens: Ponto[]; tom: "bom" | "ruim" }) 
     <ul className="space-y-1.5">
       {itens.map((p, i) => (
         <li key={i} className="flex items-start text-[13px] leading-relaxed">
-          <Icone className={`mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 ${tom === "bom" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`} />
+          <Icone className={`mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 ${tom === "bom" ? "text-success" : "text-destructive"}`} />
           <span className="min-w-0 [overflow-wrap:anywhere]">
             <span className="font-medium">{p.ponto}</span>
             {p.evidencia && <span className="text-muted-foreground"> {p.evidencia}</span>}
@@ -349,7 +349,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
         {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"): "Ver tudo"/"Recolher" fica no title e no leitor de tela. */}
         <span className="ml-3 mt-1 flex shrink-0 items-center text-muted-foreground" title={aberto ? "Recolher" : "Ver tudo"}>
           <span className="sr-only">{aberto ? "Recolher" : "Ver tudo"}</span>
-          <ChevronDown className={`h-4 w-4 transition-transform ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
+          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
         </span>
       </button>
 
@@ -373,7 +373,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
                   <ul className="space-y-2">
                     {d.oportunidades_do_mes.map((o, i) => (
                       <li key={i} className="flex items-start text-[13px] leading-relaxed">
-                        <span className="mr-2.5 mt-0.5 w-12 shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-center text-[11px] font-medium text-primary">
+                        <span className="mr-2.5 mt-0.5 w-12 shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-center text-[11px] font-medium text-primary">
                           {o.data ? dataCurta(o.data) : "mês"}
                         </span>
                         <span className="min-w-0 [overflow-wrap:anywhere]">

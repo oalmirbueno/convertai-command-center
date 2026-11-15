@@ -146,15 +146,15 @@ const statusLabels: Record<string, string> = {
 // producao e pronto ficavam identicos no calendario. Classes literais para o
 // Tailwind nao purgar.
 const stageClasses: Record<string, string> = {
-  draft: "border-slate-400/30 bg-slate-400/10 text-foreground",
-  production: "border-violet-500/30 bg-violet-500/10 text-violet-500",
-  ready: "border-amber-500/30 bg-amber-500/10 text-amber-500",
-  scheduled: "border-sky-500/30 bg-sky-500/10 text-sky-500",
+  draft: "border-transparent bg-muted/70 text-foreground",
+  production: "border-transparent bg-violet-500/10 text-foreground",
+  ready: "border-transparent bg-warning-soft text-foreground",
+  scheduled: "border-transparent bg-info-soft text-foreground",
   // Passou da hora e nao saiu: precisa saltar aos olhos, nao se confundir com
   // um agendamento normal.
-  overdue: "border-warning/40 bg-warning/15 text-warning",
-  published: "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
-  failed: "border-destructive/30 bg-destructive/10 text-destructive",
+  overdue: "border-warning/50 bg-warning-soft text-foreground",
+  published: "border-transparent bg-success-soft text-foreground",
+  failed: "border-destructive/30 bg-danger-soft text-foreground",
   cancelled: "border-border bg-muted text-muted-foreground",
 };
 
@@ -418,17 +418,17 @@ function ContentDirection({
         )}
         title={`Tema: ${normalizedTheme}`}
       >
-        <span className="font-semibold opacity-60">Tema:</span>{" "}
+        <span className="font-normal text-muted-foreground">Tema:</span>{" "}
         {normalizedTheme}
       </p>
       <p
         className={cn(
-          "opacity-75",
+          "text-muted-foreground",
           compact ? "truncate" : "line-clamp-2 leading-4",
         )}
         title={`Contexto: ${normalizedContext}`}
       >
-        <span className="font-semibold">Contexto:</span>{" "}
+        <span>Contexto:</span>{" "}
         {normalizedContext}
       </p>
     </div>
@@ -490,7 +490,7 @@ export function EditorialFileThumbnail({
   return (
     <span
       className={cn(
-        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-secondary",
+        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted",
         className,
       )}
       aria-hidden="true"
@@ -694,7 +694,7 @@ function PublicationPill({
       // Arrasta pelo cartão inteiro; o clique continua abrindo o conteúdo.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group relative min-h-11 w-full rounded-lg border text-left transition-colors hover:border-primary/40",
+        "group relative min-h-11 w-full rounded-md border text-left transition-colors hover:border-primary/40",
         stageClasses[stage] || stageClasses.draft,
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
@@ -708,7 +708,7 @@ function PublicationPill({
         className={cn(
           "block min-h-11 w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50",
           compact ? "px-2 py-1.5" : "p-2.5",
-          draggable && !moving && "pr-12",
+          draggable && !moving && "pr-7",
         )}
       >
       {compact ? (
@@ -731,16 +731,16 @@ function PublicationPill({
               className="truncate font-medium"
               title={`Tema: ${item.post.post.title}`}
             >
-              <span className="font-semibold opacity-60">Tema:</span>{" "}
+              <span className="sr-only">Tema:</span>{" "}
               {item.post.post.title}
             </span>
-            <span className="ml-auto shrink-0 opacity-75">{time}</span>
+            <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">{time}</span>
           </div>
           <p
-            className="mt-0.5 truncate text-[11px] opacity-75"
+            className="mt-0.5 truncate text-[11px] text-muted-foreground"
             title={`Contexto: ${context || "Não informado"}`}
           >
-            <span className="font-semibold">Contexto:</span>{" "}
+            <span className="sr-only">Contexto:</span>{" "}
             {context || "Não informado"}
           </p>
         </>
@@ -764,7 +764,7 @@ function PublicationPill({
               {platform}
               {account?.handle ? ` · ${account.handle}` : ""}
             </span>
-            <span className="ml-auto shrink-0">{time}</span>
+            <span className="ml-auto shrink-0 tabular-nums">{time}</span>
             </div>
             <ContentDirection
               theme={item.post.post.title}
@@ -778,12 +778,12 @@ function PublicationPill({
       {draggable && !moving && (
         <button
           type="button"
-          className="absolute inset-y-0 right-0 inline-flex min-h-11 w-11 touch-none cursor-grab items-center justify-center rounded-r-lg border-l border-current/10 opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 active:cursor-grabbing"
+          className="toque-compacto absolute inset-y-0 right-0 inline-flex w-7 touch-none cursor-grab items-center justify-center rounded-r-md text-muted-foreground opacity-40 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 group-hover:opacity-80 active:cursor-grabbing"
           {...listeners}
           {...attributes}
           aria-label={`Mover ${item.post.post.title} no calendário`}
         >
-          <GripVertical className="h-4 w-4" aria-hidden="true" />
+          <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       )}
     </div>
@@ -837,7 +837,7 @@ function AnchoredPostPill({
       aria-label={`Abrir o conteúdo "${post.post.title}". Etapa: ${nomeEtapa}. Dia herdado do prazo da tarefa; ainda sem agendamento de publicação.`}
       title={`${post.post.title} · ${nomeEtapa} · dia herdado do prazo da tarefa`}
       className={cn(
-        "group flex w-full items-center gap-1.5 rounded-lg border text-left text-foreground transition-colors hover:border-primary/50",
+        "group flex w-full items-center gap-1.5 rounded-md border text-left text-foreground transition-colors hover:border-primary/50",
         cor.borda,
         cor.fundo,
         compact ? "px-1.5 py-1" : "p-2.5",
@@ -899,7 +899,7 @@ function TaskSchedulePill({
       onClick={onClick}
       aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban. Prazo em ${dueDateLabel}. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}.${descricaoDaArteDoEstudio(arte)}`}
       className={cn(
-        "group w-full rounded-lg border border-violet-500/25 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/[0.14]",
+        "group w-full rounded-md border border-dashed border-violet-500/30 bg-violet-500/[0.06] text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/10",
         compact ? "px-2 py-1.5" : "p-2.5",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
@@ -922,7 +922,7 @@ function TaskSchedulePill({
               className="min-w-0 truncate font-medium"
               title={`Tema: ${task.title}`}
             >
-              <span className="font-semibold opacity-60">Tema:</span>{" "}
+              <span className="sr-only">Tema:</span>{" "}
               {task.title}
             </span>
             <span
@@ -941,7 +941,7 @@ function TaskSchedulePill({
               className="mt-0.5 truncate text-[11px] text-muted-foreground"
               title={`Contexto: ${context || "Não informado"}`}
             >
-              <span className="font-semibold">Contexto:</span>{" "}
+              <span className="sr-only">Contexto:</span>{" "}
               {context || "Não informado"}
             </p>
           )}
@@ -1505,7 +1505,7 @@ function MonthView({
       <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
         <div className="min-w-[840px]">
           <div
-            className="grid grid-cols-7 border-b border-border bg-secondary/25"
+            className="grid grid-cols-7 border-b border-border/70"
             role="row"
           >
             {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map(
@@ -1550,7 +1550,7 @@ function MonthView({
                   dateKey={key}
                   canDrop={canCreate || canEdit || canPublish}
                   className={cn(
-                    "group min-h-[148px] border-b border-r border-border p-2.5",
+                    "group min-h-[148px] border-b border-r border-border/70 p-2 [&:nth-child(7n)]:border-r-0",
                     !isSameMonth(day, anchorDate) && "bg-muted/20",
                   )}
                 >
@@ -1569,14 +1569,14 @@ function MonthView({
                     </span>
                     <div className="flex items-center gap-1.5">
                       {dayCount > 0 && (
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
                           {dayCount}
                         </span>
                       )}
                       {canCreate && isSameMonth(day, anchorDate) && (
                         <button
                           type="button"
-                          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100 focus:opacity-100"
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100 focus:opacity-100"
                           onClick={() => onCreateOnDate(key)}
                           aria-label={`Criar conteúdo em ${key}`}
                         >
@@ -1622,7 +1622,7 @@ function MonthView({
                         <PopoverTrigger asChild>
                           <button
                             type="button"
-                            className="inline-flex min-h-7 w-full items-center rounded-md px-1 text-left text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                            className="inline-flex min-h-7 w-full items-center rounded-full px-2 text-left text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                             aria-label={`Ver mais ${dayCount - visibleCount} itens de ${format(day, "dd 'de' MMMM", { locale: ptBR })}`}
                           >
                             +{dayCount - visibleCount} neste dia
@@ -1756,12 +1756,12 @@ function WeekView({
                 key={key}
                 dateKey={key}
                 canDrop={canCreate || canEdit || canPublish}
-                className="group min-h-[450px] border-r border-border last:border-r-0"
+                className="group min-h-[450px] border-r border-border/70 last:border-r-0"
               >
                 <header
                   className={cn(
-                    "border-b border-border px-3 py-3 text-center",
-                    key === todayKey && "bg-primary/5",
+                    "border-b border-border/70 px-3 py-3 text-center",
+                    key === todayKey && "bg-accent-soft",
                   )}
                 >
                   <p className="text-[11px] font-medium capitalize text-muted-foreground">
@@ -1770,9 +1770,9 @@ function WeekView({
                   <div className="mt-1 flex items-center justify-center gap-1">
                     <p
                       className={cn(
-                        "text-[20px] font-semibold leading-7",
+                        "text-[20px] font-semibold leading-7 tabular-nums",
                         key === todayKey
-                          ? "text-primary"
+                          ? "inline-flex min-w-[40px] items-center justify-center rounded-full bg-primary px-2 text-primary-foreground"
                           : "text-foreground",
                       )}
                     >
@@ -1781,7 +1781,7 @@ function WeekView({
                     {canCreate && (
                       <button
                         type="button"
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary group-hover:opacity-100 focus:opacity-100"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary group-hover:opacity-100 focus:opacity-100"
                         onClick={() => onCreateOnDate(key)}
                         aria-label={`Criar conteúdo em ${key}`}
                       >
@@ -1820,7 +1820,7 @@ function WeekView({
                     />
                   ))}
                   {dayItems.length === 0 && dayTasks.length === 0 && (
-                    <p className="rounded-lg border border-dashed border-border/70 py-8 text-center text-[11px] text-muted-foreground/60">
+                    <p className="rounded-md border border-dashed border-border/70 py-8 text-center text-[11px] text-muted-foreground/60">
                       Solte aqui
                     </p>
                   )}
@@ -1888,7 +1888,7 @@ function BoardPostCard({
       // funcionando: o sensor só vira arrasto depois de mover alguns pixels.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        superficie.painel, "group p-3.5 transition-[border-color,box-shadow] duration-150 hover:border-primary/35 hover:shadow motion-reduce:transition-none",
+        superficie.painel, "group rounded-md p-3 transition-[border-color,box-shadow] duration-150 hover:border-primary/35 motion-reduce:transition-none",
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -1896,7 +1896,7 @@ function BoardPostCard({
       <button
         type="button"
         onClick={onClick}
-        className="relative mb-3 block w-full overflow-hidden rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        className="relative mb-3 block w-full overflow-hidden rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         style={{ paddingBottom: "56.25%" }}
         aria-label={`Ver conteúdo completo de ${post.post.title}`}
       >
@@ -2029,7 +2029,7 @@ function BoardTaskCard({
       // Arrasta pelo cartão inteiro; clique nos botões continua normal.
       {...(draggable ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group rounded-lg border border-primary/20 bg-primary/[0.035] p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow motion-reduce:transition-none",
+        "group rounded-md border border-dashed border-primary/30 bg-card p-3 shadow-card transition-[border-color,box-shadow] duration-150 hover:border-primary/45 motion-reduce:transition-none",
         draggable && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -2209,7 +2209,7 @@ function BoardColumn({
         // 28/09: sem altura fixa. De 1280 px para cima a coluna ocupa a altura
         // da área (AreaDeTrabalho) e rola sozinha; abaixo disso a grade tem duas
         // colunas e quem rola é o quadro inteiro (uma rolagem por região).
-        "flex min-h-[160px] min-w-0 flex-col rounded-lg p-1.5 transition-colors xl:h-full xl:min-h-0",
+        "flex min-h-[160px] min-w-0 flex-col rounded-lg bg-muted/50 p-2 transition-colors max-sm:bg-transparent max-sm:p-0 xl:h-full xl:min-h-0",
         isOver &&
           acceptsActive &&
           "bg-primary/[0.06] ring-1 ring-primary/40",
@@ -2217,22 +2217,22 @@ function BoardColumn({
     >
       {/* 16/10/2026: no celular o nome e a contagem já estão na aba. */}
       {!celular && (
-      <header className="mb-2 px-1 pt-0.5" title={column.description}>
-        <div className="flex items-center gap-2">
-          <span className={cn("h-2 w-2 rounded-full", column.dot)} />
-          <h2 className="min-w-0 truncate text-[12px] font-semibold text-foreground">
+      <header className="mb-2 flex h-7 items-center px-1.5" title={column.description}>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", column.dot)} />
+          <h2 className="min-w-0 truncate text-[12px] font-medium text-foreground">
             {column.label}
           </h2>
           <Badge
             variant="secondary"
-            className="ml-auto h-5 rounded-md px-1.5 font-mono text-[11px]"
+            className="h-5 min-w-[20px] justify-center rounded-full border-transparent bg-card px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground"
           >
             {posts.length + tasks.length}
           </Badge>
         </div>
       </header>
       )}
-      <div className="space-y-2.5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:pr-0.5 xl:[scrollbar-gutter:stable]">
+      <div className="space-y-2 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:[scrollbar-gutter:stable]">
         {tasks.map((task) => (
           <BoardTaskCard
             key={task.id}
@@ -2265,7 +2265,7 @@ function BoardColumn({
           />
         ))}
         {posts.length === 0 && tasks.length === 0 && (
-          <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-border/80 px-4 text-center">
+          <div className="flex min-h-28 items-center justify-center rounded-md border border-dashed border-border/80 px-4 text-center">
             <p className="text-[11px] leading-4 text-muted-foreground/70">
               {celular
                 ? "Nada nesta etapa"

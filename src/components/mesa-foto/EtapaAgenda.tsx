@@ -342,13 +342,13 @@ export function MontarOPost({
                   <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold">{i + 1}</span>
                 </Moldura>
                 <div className="mt-1 flex items-center justify-between">
-                  <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === 0} onClick={() => mover(i, -1)} aria-label={`Mover ${f.nome} para antes`}>
+                  <button type="button" className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === 0} onClick={() => mover(i, -1)} aria-label={`Mover ${f.nome} para antes`}>
                     <ArrowLeft className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-destructive" onClick={() => setIds(ids.filter((x) => x !== f.id))} aria-label={`Tirar ${f.nome} do post`}>
+                  <button type="button" className="rounded-sm p-0.5 text-muted-foreground hover:text-destructive" onClick={() => setIds(ids.filter((x) => x !== f.id))} aria-label={`Tirar ${f.nome} do post`}>
                     <X className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === fotos.length - 1} onClick={() => mover(i, 1)} aria-label={`Mover ${f.nome} para depois`}>
+                  <button type="button" className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === fotos.length - 1} onClick={() => mover(i, 1)} aria-label={`Mover ${f.nome} para depois`}>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -371,9 +371,9 @@ export function MontarOPost({
         </div>
         <div className="min-w-0">
           <p className="mb-1 text-[12px] font-medium text-muted-foreground">Formato</p>
-          <div role="radiogroup" aria-label="Formato do post" className="inline-grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
+          <div role="radiogroup" aria-label="Formato do post" className="inline-grid grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5">
             {FORMATOS_DO_POST_DE_FOTOS.map((f) => (
-              <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded px-2 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
+              <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded-full px-2 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-card" : "text-muted-foreground")}>
                 {ROTULO_DO_FORMATO_DE_FOTOS[f]}
               </button>
             ))}

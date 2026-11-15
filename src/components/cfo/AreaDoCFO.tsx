@@ -68,7 +68,8 @@ export default function AreaDoCFO() {
       <div className="min-w-0 space-y-8">
         <FaixaDeNumeros
           rotulo="Saúde financeira"
-          colunas={5}
+          // Valor inteiro à vista: 5 colunas só onde cabem (com a conversa ao lado, 3).
+          grade="grid-cols-2 md:grid-cols-5 xl:grid-cols-3 min-[1700px]:grid-cols-5"
           itens={[
             { rotulo: "Saúde", valor: `${r.saude.nota}/100`, apoio: r.saude.rotulo, ponto: tomDaSaude(r.saude.nota) },
             { rotulo: "Caixa livre", valor: reais(r.caixa.saldoLivre), apoio: `caixa ${reais(r.caixa.saldo)} menos caixinhas`, ponto: r.caixa.saldoLivre >= 0 ? "verde" : "perigo" },

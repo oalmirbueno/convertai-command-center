@@ -84,8 +84,8 @@ export function SeloDaArte({ arte, className = "" }: { arte: ArteDoEstudioNaAgen
   const selo = seloDaArteDoEstudio(arte);
   return (
     <span
-      className={`inline-flex min-w-0 max-w-full items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
-        selo.alerta ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      className={`inline-flex min-w-0 max-w-full items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
+        selo.alerta ? "bg-warning-soft text-warning" : "bg-success-soft text-success"
       } ${className}`}
       title={[selo.texto, selo.laminas].filter(Boolean).join(" · ")}
     >

@@ -33,7 +33,7 @@ export function EsteiraDeProdutos({ onPor }: { onPor: (p: ProdutoDaEsteira) => v
     return c ? String(c.company_name || c.full_name || "cliente") : "outro cliente";
   };
   return (
-    <div ref={roda} className={`${PAINEL} ${FLUTUANTE} flex min-w-0 items-center rounded-xl px-2 py-1.5`} data-esteira-de-produtos="" data-rolagem-propria="" aria-label="Esteira de produtos">
+    <div ref={roda} className={`${PAINEL} ${FLUTUANTE} flex min-w-0 items-center rounded-lg px-2 py-1.5`} data-esteira-de-produtos="" data-rolagem-propria="" aria-label="Esteira de produtos">
       <div className="mr-2 flex shrink-0 flex-col">
         <span className="flex items-center text-[11px] font-semibold text-zinc-400">
           <Box className="mr-1 h-3 w-3 text-emerald-300" /> Produtos
@@ -78,7 +78,7 @@ export function EsteiraDeProdutos({ onPor }: { onPor: (p: ProdutoDaEsteira) => v
                 onClick={() => onPor(p)}
                 title={`${p.nome}${deFora ? ` (${nomeDoCliente(p.client_id)})` : ""}. Toque ou arraste para o quadro.`}
                 data-produto-da-esteira={p.kit_id}
-                className="mr-1.5 flex w-[64px] shrink-0 flex-col items-center rounded-xl p-1 text-center transition-colors hover:bg-white/10"
+                className="mr-1.5 flex w-[64px] shrink-0 flex-col items-center rounded-lg p-1 text-center transition-colors hover:bg-white/10"
               >
                 <span className="relative block overflow-hidden rounded-lg border border-white/10 bg-zinc-900" style={{ width: 44, height: 44 }}>
                   {p.capa ? <MiniaturaDoStorage bucket={p.capa.bucket} caminho={p.capa.caminho} alt={p.nome} largura={120} className="h-full w-full" /> : <Box className="m-3 h-5 w-5 text-zinc-600" />}

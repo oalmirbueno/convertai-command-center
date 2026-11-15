@@ -230,7 +230,7 @@ export function PromptDoCliente() {
           recolhidaDeInicio
           resumo={ativo ? `v${ativo.versao} em uso` : "nenhuma em uso"}
         >
-        <ul className="divide-y divide-border rounded-xl border border-border">
+        <ul className="divide-y divide-border rounded-lg border border-border">
           {prompts.data!.versoes.map((p) => (
             <li key={p.id} className="flex items-start px-3 py-2.5">
               <div className="mr-3 min-w-0 flex-1">
@@ -352,7 +352,7 @@ export function MemoriaDoAgente() {
       >
       {memoria.data && lista.length === 0 && <p className="text-[12px] text-muted-foreground">Nada guardado ainda. A memória cresce com as escolhas, os ajustes e as aprovações.</p>}
       {lista.length > 0 && (
-      <ul className="divide-y divide-border rounded-xl border border-border">
+      <ul className="divide-y divide-border rounded-lg border border-border">
         {lista.map((m) => (
           <li key={m.id} className={`flex items-start px-3 py-2.5 ${m.ativa ? "" : "opacity-60"}`}>
             <div className="mr-3 min-w-0 flex-1">
@@ -361,7 +361,7 @@ export function MemoriaDoAgente() {
                 {TIPOS.find((t) => t.valor === m.tipo)?.rotulo || m.tipo} · {AGENTES.find((a) => a.valor === m.agente)?.rotulo || m.agente} · {ORIGENS[m.origem] || m.origem}
               </p>
             </div>
-            <Switch checked={m.ativa} onCheckedChange={(v) => void alternar(m, v)} aria-label="Usar esta memória" />
+            <Switch className="toque-compacto" checked={m.ativa} onCheckedChange={(v) => void alternar(m, v)} aria-label="Usar esta memória" />
           </li>
         ))}
       </ul>

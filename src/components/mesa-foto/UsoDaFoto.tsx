@@ -223,7 +223,7 @@ export function MenuDeUso({
       <>
         <button
           type="button"
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground disabled:opacity-60 ${className}`}
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-card hover:text-foreground disabled:opacity-60 ${className}`}
           aria-haspopup="menu"
           aria-expanded={!!aberto}
           aria-label={`Ações de ${foto ? foto.nome : pendente ? pendente.tomada.nome : "foto"}`}

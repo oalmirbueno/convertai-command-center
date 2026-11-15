@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/shared/confirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, etiqueta, GrupoDeCampos, juntar, RegiaoRolavel, SeletorCompacto, texto,
+  superficie,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaPropostas } from "./dadosFreela";
 import { normalizar, somaPorMoeda, totalEmTexto } from "@/lib/freela/freelaLib";
@@ -206,7 +207,7 @@ export default function AbaContatos() {
             descricao={busca ? "Tente outro termo de busca." : "Cadastre o primeiro contato do freela."}
           />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-5")}>
             {lista.map((c) => (
               <li key={c.id} className="flex min-w-0 items-center gap-2 px-1 py-2.5">
                 <div className="mr-1 min-w-0 flex-1">

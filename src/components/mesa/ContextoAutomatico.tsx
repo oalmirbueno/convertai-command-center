@@ -841,7 +841,8 @@ export default function ContextoAutomatico({
                   : "A montagem automática roda só na primeira vez. Aqui o agente lê de novo os documentos, o dossiê, as artes aprovadas e as referências sem leitura. O que a equipe já preencheu não é trocado: vira sugestão."
               }
               variant="ghost"
-              className="h-8 px-2 text-[12px]"
+              // relative: o nome só para leitor de tela (sr-only, absoluto) fica preso ao botão e não alarga a página no celular.
+              className="relative h-8 px-2 text-[12px]"
               disabled={!dados || montando}
               partes={() => [
                 { modeloId: modeloDoContexto?.id, tipo: "texto", tokensEntrada: TAMANHOS.montarContexto.entrada, tokensSaida: TAMANHOS.montarContexto.saida },

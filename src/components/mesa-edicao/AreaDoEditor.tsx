@@ -106,7 +106,7 @@ function Montagem({ projeto }: { projeto: ProjetoDeEdicao }) {
             {projeto.trilhas.map((t) => (
               <li key={t.id} className="flex min-w-0 items-center" data-trilha={t.tipo}>
                 <span className={juntar(texto.auxiliar, "w-24 shrink-0 truncate")}>{t.nome || ROTULO_DA_TRILHA[t.tipo]}</span>
-                <div className="relative h-8 min-w-0 flex-1 overflow-hidden rounded bg-muted/50">
+                <div className="relative h-8 min-w-0 flex-1 overflow-hidden rounded-sm bg-muted/50">
                   {t.clipes.map((c) => {
                     const esquerda = total > 0 ? (c.inicio_s / total) * 100 : 0;
                     const largura = total > 0 ? Math.max(0.8, (duracaoDoClipe(c) / total) * 100) : 0;
@@ -121,7 +121,7 @@ function Montagem({ projeto }: { projeto: ProjetoDeEdicao }) {
                         aria-label={`${fonte ? fonte.nome : c.texto || "Clipe"}, de ${tempo(c.inicio_s)} a ${tempo(c.inicio_s + duracaoDoClipe(c))}`}
                         className={juntar(
                           "absolute inset-y-0.5 truncate rounded-sm px-1.5 text-left text-[11px] leading-7",
-                          t.tipo === "video" ? "bg-primary/25 text-foreground" : "bg-secondary text-foreground",
+                          t.tipo === "video" ? "bg-primary/25 text-foreground" : "bg-muted text-foreground",
                           ativo && "ring-2 ring-primary",
                         )}
                         style={{ left: `${esquerda}%`, width: `${largura}%` }}
@@ -271,7 +271,7 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
           </span>
         )}
         {migrado.de < 2 && <span className={juntar(etiqueta, "mr-2 bg-muted text-muted-foreground")}>formato antigo, abriu convertido</span>}
-        {migrado.aviso && <span className="mr-2 text-[12px] text-amber-500">{migrado.aviso}</span>}
+        {migrado.aviso && <span className="mr-2 text-[12px] text-warning">{migrado.aviso}</span>}
         {/* 16/10/2026: só ícones, sem borda (nome no aria-label e no title). */}
         <button type="button" className={juntar(botao.icone, "ml-auto disabled:pointer-events-none disabled:opacity-50")} onClick={() => void comecar()} disabled={criando || !temClipe} title="Nova versão: cria outra versão com a montagem de agora (takes e ordem de Organizar)" aria-label="Nova versão" data-nova-versao="">
           {criando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}

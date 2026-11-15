@@ -502,7 +502,7 @@ export default function MCPManager() {
                   <div className="mr-3 min-w-0 flex-1">
                     <div className="flex min-w-0 flex-wrap items-center">
                       <h4 className={juntar(texto.corpo, "mr-2 min-w-0 truncate font-semibold")}>{agent.name}</h4>
-                      <span className={juntar(etiqueta, "uppercase", agent.auth === "oauth" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")}>{agent.auth}</span>
+                      <span className={juntar(etiqueta, agent.auth === "oauth" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{agent.auth === "oauth" ? "OAuth" : agent.auth === "bearer" ? "Bearer" : "OAuth ou Bearer"}</span>
                     </div>
                     <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{agent.title}. {agent.description}</p>
                     <div className="-m-0.5 mt-1.5 flex flex-wrap">

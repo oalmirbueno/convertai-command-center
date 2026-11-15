@@ -184,7 +184,7 @@ export default function MemoriaDaConta() {
         <div className="min-w-0 divide-y divide-border border-y border-border">
           {m.camadas.map((c) => (
             <details key={c.id} className="group min-w-0 py-2" open={c.id === "C01"}>
-              <summary className={juntar("flex cursor-pointer list-none items-baseline gap-2 rounded text-[13px]", foco)}>
+              <summary className={juntar("flex cursor-pointer list-none items-baseline gap-2 rounded-sm text-[13px]", foco)}>
                 <span className="font-mono text-[11px] text-muted-foreground">{c.id}</span>
                 <span className="font-medium">{c.titulo}</span>
                 <span className="text-[11px] text-muted-foreground">{c.fonte}</span>

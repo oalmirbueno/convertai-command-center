@@ -1060,7 +1060,7 @@ export default function AgenteEditor({
                   m.quem === "agente" && i.tipo === "resposta" ? (
                     <TextoDoAgente key={j} texto={i.texto} clientId={clientId} />
                   ) : (
-                    <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[13px] text-muted-foreground", i.tipo === "aviso" && "text-[13px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
+                    <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[13px] text-muted-foreground", i.tipo === "aviso" && "text-[13px] text-warning", i.tipo === "plano" && "italic text-muted-foreground")}>
                       {i.texto}
                     </p>
                   )
@@ -1073,7 +1073,7 @@ export default function AgenteEditor({
                     onGuardar={(texto, tipo) => chamarEditorVideo({ acao: "aprendizado_guardar", client_id: clientId, texto, tipo, mensagem_id: m.mensagemId })}
                   />
                 )}
-                {m.aviso && <p className="text-[11px] text-amber-500" data-aviso-registro="">{m.aviso}</p>}
+                {m.aviso && <p className="text-[11px] text-warning" data-aviso-registro="">{m.aviso}</p>}
               </div>
               {m.opcoes && m.opcoes.length > 0 && (
                 <div className="flex flex-wrap" role="group" aria-label="Respostas para o agente" data-opcoes-do-editor="">

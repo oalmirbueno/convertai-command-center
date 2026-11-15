@@ -119,7 +119,7 @@ function EntradaDoDiario({ e, autor, doHumano, aoResponder }: { e: Entrada; auto
   const imagens = documento.anexos;
   const pedeAlgo = !doHumano && e.entry_type === "pedido_insumo";
   return (
-    <article className={juntar("rounded-xl p-4", doHumano ? "ml-auto max-w-[85%] bg-primary/10" : "bg-card", pedeAlgo && "ring-1 ring-warning/50")}>
+    <article className={juntar("rounded-lg p-4", doHumano ? "ml-auto max-w-[85%] bg-primary/10" : "bg-card", pedeAlgo && "ring-1 ring-warning/50")}>
       <header className="flex min-w-0 items-center gap-2 text-[12px]">
         <span className={juntar("flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold", doHumano ? "bg-primary/20 text-primary" : "bg-muted text-foreground")} aria-hidden="true">{inicial(autor)}</span>
         <span className="min-w-0 truncate font-semibold text-foreground">{autor}</span>

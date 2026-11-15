@@ -169,7 +169,7 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { d:
   }).sort((a, b) => Number(b.agora) - Number(a.agora) || ORDEM.indexOf(a.status) - ORDEM.indexOf(b.status));
   const ha = (ms: number) => { const m = Math.max(1, Math.round((agora - ms) / 60_000)); return m < 60 ? `há ${m} min` : `há ${Math.round(m / 60)} h`; };
   return (
-    <section aria-label="Agora" className="space-y-3 rounded-xl bg-muted/30 p-3">
+    <section aria-label="Agora" className="space-y-3 rounded-lg bg-muted/30 p-3">
       {d.aprovacoes > 0 && (
         <button type="button" onClick={aoVerDecisoes} className="flex w-full items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 text-left text-[13px] hover:bg-warning/15">
           <Scale className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
@@ -333,7 +333,7 @@ function Historico({ q, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentra
         <p className="text-[12px] text-muted-foreground">Cada execução com o resultado verificado: tarefa, execução e prova juntas.</p>
         <SeletorCompacto rotulo="Mostrar" valor={filtro} onEscolher={(v) => setFiltro(v as typeof filtro)} modo="segmentado" listaQuandoNaoCabe opcoes={[{ valor: "todas", rotulo: "Todas" }, { valor: "atencao", rotulo: "Atenção" }, { valor: "concluidas", rotulo: "Com prova" }]} />
       </div>
-      <div className="divide-y divide-border rounded-xl border border-border">
+      <div className="divide-y divide-border rounded-lg border border-border">
         {linhas.length === 0 ? <div className="p-4"><EstadoVazio titulo="Nenhuma execução neste recorte." descricao="Execução só aparece aqui quando o agente relata pelo OS." /></div> : linhas.map(({ r, v, t, resultado, divergencia }, i) => {
           const titulo = t?.title || limparTecnico(String(r.detail?.title || r.detail?.action || r.run_key));
           const aberto = aberta === r.id;
@@ -785,9 +785,9 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const mioloCelular = (
     <div className="flex min-w-0 flex-col gap-2">
       {ehAdmin && (
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1" role="tablist" aria-label="Painel da Central">
+        <div className="grid grid-cols-3 gap-1 rounded-full bg-muted/50 p-1" role="tablist" aria-label="Painel da Central">
           {PAINEIS.map((p) => (
-            <button key={p} type="button" role="tab" aria-selected={noCelular === p} onClick={() => setNoCelular(p)} className={juntar("rounded-lg py-1.5 text-[12px] font-medium", noCelular === p ? "bg-background shadow-sm" : "text-muted-foreground")}>
+            <button key={p} type="button" role="tab" aria-selected={noCelular === p} onClick={() => setNoCelular(p)} className={juntar("rounded-full py-1.5 text-[12px] font-medium", noCelular === p ? "bg-card shadow-card" : "text-muted-foreground")}>
               {NOME_DO_PAINEL[p]}{p === "area" && decisoesPendentes ? ` · ${decisoesPendentes}` : ""}
             </button>
           ))}

@@ -101,7 +101,7 @@ export default function LerPaginaDoCliente({
         </button>
       </form>
 
-      {motivo && <p className={juntar(texto.auxiliar, "whitespace-normal", leitura ? "text-amber-700 dark:text-amber-400" : "text-destructive")} data-motivo-da-leitura="">{motivo}</p>}
+      {motivo && <p className={juntar(texto.auxiliar, "whitespace-normal", leitura ? "text-warning" : "text-destructive")} data-motivo-da-leitura="">{motivo}</p>}
 
       {leitura && (
         <div className="min-w-0" data-leitura-do-link={leitura.host}>
@@ -125,7 +125,7 @@ export default function LerPaginaDoCliente({
                 {a.id === "cores" && (
                   <span className="mt-1.5 flex flex-wrap" aria-hidden="true">
                     {leitura.cores.map((c) => (
-                      <span key={c} className="mb-1 mr-1.5 inline-block h-5 w-5 rounded border border-border" style={{ background: c }} title={c} />
+                      <span key={c} className="mb-1 mr-1.5 inline-block h-5 w-5 rounded-full border border-border" style={{ background: c }} title={c} />
                     ))}
                   </span>
                 )}

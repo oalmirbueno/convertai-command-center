@@ -207,7 +207,7 @@ export default function EditorDeCena({
           placeholder="Detalhe da cena (opcional)"
           aria-label="Detalhe da cena"
           maxLength={300}
-          className="mb-2 mr-3 block h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-[13px]"
+          className="mb-2 mr-3 block h-9 min-w-0 flex-1 rounded-md border border-input bg-card px-3 text-[13px]"
         />
         {confirmar ? (
           <span className="mb-2 inline-flex items-center">

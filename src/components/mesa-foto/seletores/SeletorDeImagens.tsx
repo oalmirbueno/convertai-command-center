@@ -112,7 +112,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
                     <span className="block aspect-square w-full bg-muted">
                       <MiniaturaDoStorage bucket={f.storage_bucket} caminho={f.storage_path} alt={f.nome} largura={240} className="h-full w-full" />
                     </span>
-                    {s && <span className="pointer-events-none absolute left-1 top-1 rounded bg-background/85 px-1 text-[11px] font-medium text-foreground">{s}</span>}
+                    {s && <span className="pointer-events-none absolute left-1 top-1 rounded-sm bg-background/85 px-1 text-[11px] font-medium text-foreground">{s}</span>}
                     {marcada && (
                       <span className="pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                         <Check className="h-3 w-3" aria-hidden="true" />
@@ -124,7 +124,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
             })}
           </ul>
           {lista.length > limite && (
-            <button type="button" className={juntar("mt-2 rounded text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => setLimite(limite + PASSO)}>
+            <button type="button" className={juntar("mt-2 rounded-sm text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => setLimite(limite + PASSO)}>
               Mostrar mais ({lista.length - limite})
             </button>
           )}

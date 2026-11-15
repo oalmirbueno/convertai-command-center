@@ -69,7 +69,7 @@ export function NovaConversa({ aoCriar, compacto = false }: { aoCriar: (c: Conve
     );
   }
   return (
-    <div className="space-y-2 rounded-xl border border-border bg-background p-2.5" role="group" aria-label="Nova conversa">
+    <div className="space-y-2 rounded-lg border border-border bg-background p-2.5" role="group" aria-label="Nova conversa">
       <label className="block text-[12px] text-muted-foreground">
         Contexto
         <select value={cliente} onChange={(e) => { setCliente(e.target.value); setProjeto(""); }} className={juntar(campo, "mt-1 h-9 text-[13px]")} aria-label="Cliente da conversa">

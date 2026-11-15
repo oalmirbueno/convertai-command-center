@@ -43,7 +43,7 @@ export function ComparadorSimples({ antes, depois, tipo, rotulo = "Antes e depoi
         {[antes, depois].map((u, i) => (
           <div key={u} className="relative w-full overflow-hidden rounded-md bg-black" style={{ paddingBottom: "177%" }}>
             <video src={u} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
-            <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 text-[11px] text-white">{i ? "Depois" : "Antes"}</span>
+            <span className="absolute left-2 top-2 rounded-sm bg-black/60 px-1.5 text-[11px] text-white">{i ? "Depois" : "Antes"}</span>
           </div>
         ))}
       </div>

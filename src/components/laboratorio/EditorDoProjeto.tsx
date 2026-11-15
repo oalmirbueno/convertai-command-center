@@ -1023,13 +1023,13 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               </p>
             )}
             {inspetor && detalhes && (
-              <div className="nowheel nodrag nopan absolute bottom-2 right-2 top-2 z-10 w-[300px] max-w-[85%] overflow-y-auto overscroll-contain rounded-md border border-border bg-background p-3 shadow-sm" data-painel-do-inspetor="">
+              <div className="nowheel nodrag nopan absolute bottom-2 right-2 top-2 z-10 w-[300px] max-w-[85%] overflow-y-auto overscroll-contain rounded-md border border-border bg-background p-3 shadow-card" data-painel-do-inspetor="">
                 {inspetor}
               </div>
             )}
             {soCanvas && (
               // Mini barra flutuante do "só o canvas": sair, abrir o Studio e Rodar tudo.
-              <div className="nowheel nodrag nopan absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center rounded-lg border border-border bg-background p-1 shadow-sm" role="toolbar" aria-label="Barra do canvas em tela cheia" data-mini-barra-do-canvas="">
+              <div className="nowheel nodrag nopan absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center rounded-lg border border-border bg-background p-1 shadow-card" role="toolbar" aria-label="Barra do canvas em tela cheia" data-mini-barra-do-canvas="">
                 <button type="button" className={botao.icone} onClick={sairDoSoCanvas} aria-label="Sair do canvas em tela cheia" title="Sair do canvas em tela cheia (Esc)">
                   <Minimize2 className="h-4 w-4" aria-hidden="true" />
                 </button>

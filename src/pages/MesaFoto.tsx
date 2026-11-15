@@ -543,7 +543,7 @@ export default function MesaFoto() {
             {/* Linha de produção (frente FTL, 30/09): 5 passos. 16/10/2026 (dono: "deixa só o ícone"):
                 em toda largura só o passo aberto mostra o nome; os outros ficam no ícone (o número e o
                 nome vão no leitor de tela e na dica). */}
-            <div className="flex min-w-0 flex-1 rounded-lg bg-muted p-0.5" data-caminho-principal="" data-linha-de-producao="">
+            <div className="flex min-w-0 flex-1 rounded-full bg-muted p-0.5" data-caminho-principal="" data-linha-de-producao="">
               {PASSOS_PRINCIPAIS.map((p, i) => {
                 const ativo = !!passoAtual && passoAtual.passo === p.passo;
                 const recomendado = !ativo && !!passoRecomendado && passoRecomendado.passo === p.passo;
@@ -562,9 +562,9 @@ export default function MesaFoto() {
                     data-proximo={recomendado ? "" : undefined}
                     data-pula={pula ? "" : undefined}
                     className={juntar(
-                      "inline-flex h-8 min-w-0 items-center justify-center rounded-md text-[13px] font-medium transition-colors",
+                      "inline-flex h-8 min-w-0 items-center justify-center rounded-full text-[13px] font-medium transition-colors",
                       i > 0 && "ml-0.5",
-                      ativo ? "flex-1 bg-card px-2 text-foreground shadow-sm" : "shrink-0 px-1.5 sm:flex-1 sm:shrink sm:px-2",
+                      ativo ? "flex-1 bg-card px-2 text-foreground shadow-card" : "shrink-0 px-1.5 sm:flex-1 sm:shrink sm:px-2",
                       foco,
                       !ativo && (recomendado ? "text-primary hover:bg-card/60" : pula ? "text-muted-foreground/60 hover:text-foreground" : "text-muted-foreground hover:text-foreground"),
                     )}

@@ -229,7 +229,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
                 {c.objecoes.map((o, k) => (
                   <li key={k} className="min-w-0 rounded-md bg-muted/60 px-2 py-1 [overflow-wrap:anywhere]">
                     <span className="font-medium">{o.objecao}</span>
-                    {o.fonte === "briefing" && <span className="ml-1.5 rounded bg-primary/10 px-1 text-[11px] text-primary">do briefing</span>}
+                    {o.fonte === "briefing" && <span className="ml-1.5 rounded-full bg-primary/10 px-2 text-[11px] text-primary">do briefing</span>}
                     <span className="block text-muted-foreground">{o.resposta}</span>
                   </li>
                 ))}

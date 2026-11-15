@@ -135,7 +135,7 @@ export default function AtivarGestao({
           <span className="min-w-0">
             <span className="block text-[13px] font-semibold">Gestão de campanhas pelo agente</span>
             <span className="mt-0.5 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
-              {gestao.isLoading ? <span className="h-3 w-40 animate-pulse rounded bg-muted" /> : g ? <Situacao g={g} /> : <span>Situação não lida</span>}
+              {gestao.isLoading ? <span className="h-3 w-40 animate-pulse rounded-full bg-muted" /> : g ? <Situacao g={g} /> : <span>Situação não lida</span>}
               {g && g.conferido_em && <span className="ml-2">conferido {tempoDesde(g.conferido_em)}</span>}
             </span>
           </span>

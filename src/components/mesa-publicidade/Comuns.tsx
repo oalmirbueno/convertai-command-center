@@ -131,7 +131,7 @@ export function MolduraDaFoto({
       <div className="absolute inset-0">
         <ImagemDaMesa caminho={caminho || null} bucket={bucket} alt={alt} className="h-full w-full" />
       </div>
-      {rotulo && <span className="absolute left-1.5 top-1.5 rounded-full bg-background/90 px-1.5 py-px text-[11px] font-medium leading-4 text-foreground shadow-sm">{rotulo}</span>}
+      {rotulo && <span className="absolute left-1.5 top-1.5 rounded-full bg-background/90 px-1.5 py-px text-[11px] font-medium leading-4 text-foreground shadow-card">{rotulo}</span>}
     </div>
   );
 }

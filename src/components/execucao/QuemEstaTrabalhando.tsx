@@ -55,7 +55,7 @@ export default function QuemEstaTrabalhando({ aberto, aoFechar, pessoas, aoConve
                     </span>
                   </div>
                   {/* A fala do agente, como um balão de conversa. */}
-                  <p className="mt-3 rounded-xl rounded-tl-sm bg-muted/50 px-3.5 py-2.5 text-[14px] leading-6 text-foreground">{p.frase}</p>
+                  <p className="mt-3 rounded-lg rounded-tl-sm bg-muted/50 px-3.5 py-2.5 text-[14px] leading-6 text-foreground">{p.frase}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" className={juntar(botao.primario, "h-9 px-3 text-[13px]")} onClick={() => aoConversar(p.operatorId)}><MessageCircle className="mr-1.5 h-4 w-4" />Conversar comigo</button>
                     {p.linkId && <button type="button" className={juntar(botao.secundario, "h-9 px-3 text-[13px]")} onClick={() => aoVerTrabalho(p.linkId!, p.titulo || undefined)}><SquareArrowOutUpRight className="mr-1.5 h-4 w-4" />Ver o trabalho</button>}

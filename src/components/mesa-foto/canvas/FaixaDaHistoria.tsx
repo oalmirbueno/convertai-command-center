@@ -79,8 +79,8 @@ export function HistoriaDoCanvas({
 
   const caixa =
     lugar === "quadro"
-      ? `${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[62%] min-w-0 flex-col rounded-xl sm:left-[72px] sm:right-3`
-      : "min-w-0 rounded-xl border border-white/10 bg-zinc-950 text-zinc-100";
+      ? `${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[62%] min-w-0 flex-col rounded-lg sm:left-[72px] sm:right-3`
+      : "min-w-0 rounded-lg border border-white/10 bg-zinc-950 text-zinc-100";
 
   return (
     <section ref={roda} aria-label="História do canvas" className={caixa} data-historia={lugar}>
@@ -145,7 +145,7 @@ export function HistoriaDoCanvas({
                     setArrastando(null);
                     setSobre(null);
                   }}
-                  className={`mr-2.5 flex w-[196px] shrink-0 flex-col rounded-xl border bg-zinc-900/70 p-2 ${sobre === h.no.id && arrastando !== h.no.id ? "border-emerald-400" : "border-white/10"} ${arrastando === h.no.id ? "opacity-50" : ""}`}
+                  className={`mr-2.5 flex w-[196px] shrink-0 flex-col rounded-lg border bg-zinc-900/70 p-2 ${sobre === h.no.id && arrastando !== h.no.id ? "border-emerald-400" : "border-white/10"} ${arrastando === h.no.id ? "opacity-50" : ""}`}
                   data-cena-da-historia={h.no.id}
                   data-numero={h.numero}
                 >

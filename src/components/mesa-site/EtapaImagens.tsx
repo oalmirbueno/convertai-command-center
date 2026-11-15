@@ -194,7 +194,7 @@ export default function EtapaImagens({ site }: { site: LinhaDoSite; onIrPara?: (
                     </span>
                   </span>
                   {x.so_real && <span className={juntar(etiqueta, "mr-1 shrink-0 bg-muted")}>só foto real</span>}
-                  {falta > 0 ? <span className={juntar(etiqueta, "shrink-0 bg-amber-500/15 text-amber-700 dark:text-amber-400")}>falta {falta}</span> : <Check className="h-4 w-4 shrink-0 text-primary" aria-label="Completo" />}
+                  {falta > 0 ? <span className={juntar(etiqueta, "shrink-0 bg-warning-soft text-warning")}>falta {falta}</span> : <Check className="h-4 w-4 shrink-0 text-primary" aria-label="Completo" />}
                 </button>
                 {aqui && (
                   <div className="min-w-0 space-y-3 px-2 pb-3 pt-2" data-linha-aberta={chave}>

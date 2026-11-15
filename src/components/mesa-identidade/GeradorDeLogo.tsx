@@ -1,3 +1,4 @@
+import { HelpTooltip } from "@/components/ds";
 import { useMemo, useState } from "react";
 import { Check, Loader2, Shapes, Shuffle, X } from "lucide-react";
 import { toast } from "sonner";
@@ -252,7 +253,12 @@ export default function GeradorDeLogo({ onUsar }: { onUsar: (logo: LogoDoBrandbo
           {!doJev && <p className={juntar(texto.auxiliar, "mt-2")}>O Jev não apontou uma escolha nesta rodada.</p>}
         </>
       )}
-      {!rodada && <p className={texto.auxiliar}>Símbolo + logotipo em fundo liso, a partir do que a marca já decidiu. A escolhida vira a logo principal; o vetor final (SVG) a equipe faz no editor.</p>}
+      {!rodada && (
+        <p className={juntar(texto.auxiliar, "flex items-center")}>
+          Símbolo + logotipo em fundo liso.
+          <HelpTooltip className="ml-1">Sai do que a marca já decidiu. A escolhida vira a logo principal; o vetor final (SVG) a equipe faz no editor.</HelpTooltip>
+        </p>
+      )}
     </div>
   );
 }

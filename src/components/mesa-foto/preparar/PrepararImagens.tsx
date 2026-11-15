@@ -193,7 +193,7 @@ export default function PrepararImagens({ aberta, onFechar }: { aberta: boolean;
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
           <section className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-2 scrollbar-hidden lg:pr-5" aria-label="Catálogo" data-coluna-catalogo="">
-            <div role="tablist" aria-label="O que escolher" className="mb-3 inline-flex rounded-lg bg-muted p-0.5">
+            <div role="tablist" aria-label="O que escolher" className="mb-3 inline-flex rounded-full bg-muted p-0.5">
               {ABAS.map((a) => (
                 <button
                   key={a.valor}
@@ -201,7 +201,7 @@ export default function PrepararImagens({ aberta, onFechar }: { aberta: boolean;
                   role="tab"
                   aria-selected={aba === a.valor}
                   onClick={() => setAba(a.valor)}
-                  className={juntar("h-8 rounded-md px-3 text-[13px] font-medium transition-colors", aba === a.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground", foco)}
+                  className={juntar("h-8 rounded-full px-3 text-[13px] font-medium transition-colors", aba === a.valor ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground", foco)}
                   data-aba-do-catalogo={a.valor}
                 >
                   {a.rotulo}

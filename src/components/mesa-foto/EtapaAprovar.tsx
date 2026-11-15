@@ -44,7 +44,7 @@ interface Selecao {
 
 function CaixaDeMarcar({ chave, nome, selecao }: { chave: string; nome: string; selecao: Selecao }) {
   return (
-    <label className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
+    <label className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-card">
       <input type="checkbox" checked={selecao.marcadas.indexOf(chave) >= 0} onChange={() => selecao.alternar(chave)} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Marcar ${nome}`} />
     </label>
   );
@@ -138,7 +138,7 @@ function DoAcervo({ selecao }: { selecao: Selecao }) {
                 type="button"
                 onClick={() => setAmpliada(i)}
                 aria-label={`Ver grande ${f.nome}`}
-                className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+                className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-card hover:text-foreground"
               >
                 <Maximize2 className="h-3.5 w-3.5" />
               </button>

@@ -7,6 +7,7 @@ import { useConfirm } from "@/components/shared/confirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, etiqueta, GrupoDeCampos, juntar, Painel, RegiaoRolavel, SeletorCompacto, texto,
+  superficie,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dadosFreela";
 import {
@@ -359,7 +360,7 @@ export default function AbaProjetos() {
             descricao="Aceite uma proposta e vire projeto, ou crie direto aqui."
           />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-5")}>
             {lista.map((p) => {
               const doProjeto = parcelasPorProjeto.get(p.id) || [];
               const pagas = doProjeto.filter((x) => x.status === "paga").length;

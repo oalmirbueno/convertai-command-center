@@ -896,7 +896,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     <div
       aria-label="Studio"
       className={cn(
-        "fixed bg-card border-border shadow-2xl flex flex-col overflow-hidden transition-all",
+        "fixed bg-card border-border shadow-pop flex flex-col overflow-hidden transition-all",
         isMobile && isFull ? "z-[120]" : "z-40",
         isFull ? "rounded-none border-t" : "rounded-lg border",
         dockPos, dockSize
@@ -1738,7 +1738,7 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
   const color = colors[depth % colors.length];
   return (
     <div>
-      <div className="group flex items-center gap-1 py-1 rounded-md hover:bg-secondary/40" style={{ paddingLeft: depth * 14 }}>
+      <div className="group flex items-center gap-1 py-1 rounded-md hover:bg-muted/40" style={{ paddingLeft: depth * 14 }}>
         <span className={cn("w-1.5 h-1.5 rounded-full bg-current", color)} />
         {editing ? (
           <Input
@@ -1754,7 +1754,7 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
             {node.label}
           </button>
         )}
-        <button onClick={() => onAdd(node.id)} className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-secondary text-muted-foreground" title="Adicionar sub-nó">
+        <button onClick={() => onAdd(node.id)} className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted text-muted-foreground" title="Adicionar sub-nó">
           <Plus className="w-3 h-3" />
         </button>
         {node.id !== "root" && (
@@ -3060,7 +3060,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           {msgs.map(m => (
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
-                <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-xl rounded-br-md bg-primary px-3.5 py-2.5 text-[14px] leading-[1.6] text-primary-foreground">
+                <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-lg rounded-br-sm bg-primary px-3.5 py-2.5 text-[14px] leading-[1.6] text-primary-foreground">
                   {m.content}
                 </div>
               </div>

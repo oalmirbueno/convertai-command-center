@@ -186,7 +186,7 @@ function CamadaDaApresentacao({ total, atual, onIr, onFechar, children }: { tota
       <div className="relative overflow-hidden" style={{ width: LARGURA_DO_SLIDE * escala, height: ALTURA_DO_SLIDE * escala }}>
         <div style={{ position: "absolute", top: 0, left: 0, width: LARGURA_DO_SLIDE, height: ALTURA_DO_SLIDE, transform: `scale(${escala})`, transformOrigin: "0 0" }}>{children}</div>
       </div>
-      <span className={juntar(texto.etiqueta, "pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-black/60 px-2 py-0.5 tabular-nums text-white transition-opacity", contador ? "opacity-80" : "opacity-0")} aria-live="polite" data-contador-da-apresentacao="">
+      <span className={juntar(texto.etiqueta, "pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-sm bg-black/60 px-2 py-0.5 tabular-nums text-white transition-opacity", contador ? "opacity-80" : "opacity-0")} aria-live="polite" data-contador-da-apresentacao="">
         {atual + 1} / {total}
       </span>
       <button

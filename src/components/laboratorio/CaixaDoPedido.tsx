@@ -83,7 +83,7 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
         p.onEnviar();
       }}
     >
-      <div className={juntar(superficie.painel, "min-w-0", p.compacta ? "px-2 py-1.5 shadow-sm" : "p-3")}>
+      <div className={juntar(superficie.painel, "min-w-0", p.compacta ? "px-2 py-1.5" : "p-3")}>
         <textarea
           ref={ref}
           aria-label={p.rotulo}

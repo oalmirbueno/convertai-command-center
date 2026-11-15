@@ -216,7 +216,7 @@ function Conferencia({
         <ScanSearch className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="sr-only">Conferência</span>
         <span className="flex min-w-0 flex-1 flex-wrap gap-y-0.5">{v && <SelosDaConferencia v={v} />}</span>
-        <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} aria-hidden="true" />
+        <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${aberta ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
       {decisao && !conferindo && <AindaComErro motivos={decisao.motivos} acaoCorrigir={acaoCorrigir} />}
       {aberta && v && (
@@ -788,11 +788,11 @@ export default function CardDoEstudio({
                 aria-expanded={pedidosAbertos}
                 aria-label={`Pedidos anteriores (${pedidosAnteriores.length})`}
                 title="Pedidos anteriores"
-                className="flex h-7 items-center rounded-md px-1 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="flex h-7 items-center rounded-full px-2 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <MessagesSquare className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
                 <span className="tabular-nums" aria-hidden="true">{pedidosAnteriores.length}</span>
-                <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${pedidosAbertos ? "rotate-180" : ""}`} aria-hidden="true" />
+                <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform duration-200 ${pedidosAbertos ? "rotate-180" : ""}`} aria-hidden="true" />
               </button>
               {pedidosAbertos && (
                 <ul className="mt-1 space-y-1.5">

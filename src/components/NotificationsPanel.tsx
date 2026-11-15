@@ -4,7 +4,7 @@ import { useAvisosPorArea, marcarAreaComoLida, marcarTiposComoLidos, type AreaDo
 
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCircle, ChevronDown, CreditCard, FileArchive,
+  AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCheck, CheckCircle, ChevronDown, CreditCard, FileArchive,
   FolderOpen, Instagram, ListChecks, Megaphone, Package, Sunrise,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -205,7 +205,8 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                   </button>
                   {group.naoLidos > 0 && (
                     <button type="button" onClick={() => void marcarGrupo(group)} className={juntar(botao.discreto, "ml-2 h-7 shrink-0 px-2 text-[12px]")} title={`Marcar todos de ${group.nome} como lidos`} aria-label={`Marcar todos de ${group.nome} como lidos`}>
-                      Marcar todos como lidos
+                      <CheckCheck className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                      <span className="hidden sm:inline">Marcar todos como lidos</span>
                     </button>
                   )}
                 </div>

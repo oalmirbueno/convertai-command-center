@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { CircleDollarSign, Pencil } from "lucide-react";
 import {
   AjudaRecolhida, botao, campo, Carregando, EstadoDeErro, EstadoVazio, etiqueta, FaixaDeNumeros, juntar, RegiaoRolavel, SeletorCompacto, texto,
+  superficie,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dadosFreela";
 import { dataBR, fmtMoeda, hojeISO, ROTULO_STATUS_PARCELA, statusVisualDaParcela, type Moeda } from "@/lib/freela/freelaLib";
@@ -144,7 +145,7 @@ export default function AbaCaixa() {
             descricao="Gere as parcelas de um projeto na aba Projetos."
           />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-5")}>
             {lista.map((p) => {
               const visual = statusVisualDaParcela(p, hoje);
               const projeto = projetoPorId.get(p.projeto_id);

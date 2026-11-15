@@ -72,7 +72,7 @@ import ProducaoDoPlano, { corpoDaProducao, SeletorDeTom } from "./ProducaoDoPlan
  * seletor, sem caixa dentro de caixa.
  */
 
-const seletorCurto = `h-9 min-w-0 max-w-full rounded-md border border-input bg-background px-2 text-[13px] text-foreground ${foco}`;
+const seletorCurto = `h-9 min-w-0 max-w-full rounded-md border border-input bg-card px-2 text-[13px] text-foreground ${foco}`;
 
 export const QUANTIDADES_DE_ANGULOS = [3, 4, 5, 6];
 
@@ -224,7 +224,7 @@ function CartaoDoAngulo({
       )}
 
       {angulo.gancho_verbal && (
-        <p className="mt-3 font-serif text-[20px] font-semibold leading-snug [overflow-wrap:anywhere]">
+        <p className="mt-3 tracking-[-0.01em] text-[20px] font-semibold leading-snug [overflow-wrap:anywhere]">
           {"“"}
           {angulo.gancho_verbal}
           {"”"}
@@ -268,7 +268,7 @@ function CartaoDoAngulo({
 
       <div className="mt-3 flex min-w-0 flex-wrap items-center">
         {formatos.map((f) => (
-          <span key={f.valor} className="mb-1 mr-1.5 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
+          <span key={f.valor} className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
             {f.rotulo}
           </span>
         ))}
@@ -300,7 +300,7 @@ function Descartados({ angulos }: { angulos: Angulo[] }) {
         onClick={() => setAberto((v) => !v)}
         aria-expanded={aberto}
         title="Não passaram na régua do Jev nem depois de reescritos. Ficam aqui para consulta, fora da produção."
-        className={juntar("flex w-full items-center rounded py-1 text-left", foco)}
+        className={juntar("flex w-full items-center rounded-sm py-1 text-left", foco)}
       >
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">Descartados pela conferência ({angulos.length})</span>
         <ChevronDown className={`ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
@@ -529,7 +529,7 @@ export default function AbaPlano({
                 <SeletorDeTom valor={tom} onMudar={setTomEscolhido} rotulo="Tom do plano" />
               </div>
             </GrupoDeCampos>
-            <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
+            <div className="rounded-md border border-input bg-card p-2 focus-within:border-primary/60">
               <Textarea
                 value={pedido}
                 onChange={(e) => setPedido(e.target.value)}
@@ -540,7 +540,7 @@ export default function AbaPlano({
               />
               <div className="mt-1 flex min-w-0 flex-wrap items-center">
                 <Ditado valor={pedido} onChange={setPedido} className="mb-1 mr-2" />
-                <div className="mb-1 mr-2 flex items-center rounded-md bg-muted p-0.5" role="radiogroup" aria-label="Quantidade de ângulos">
+                <div className="mb-1 mr-2 flex items-center rounded-full bg-muted p-0.5" role="radiogroup" aria-label="Quantidade de ângulos">
                   {QUANTIDADES_DE_ANGULOS.map((n) => (
                     <button
                       key={n}
@@ -548,7 +548,7 @@ export default function AbaPlano({
                       role="radio"
                       aria-checked={quantidade === n}
                       onClick={() => setQuantidade(n)}
-                      className={juntar("h-7 min-w-[34px] rounded px-2 text-[12px]", quantidade === n ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground", foco)}
+                      className={juntar("h-7 min-w-[34px] rounded-full px-2 text-[12px]", quantidade === n ? "bg-card font-medium text-foreground shadow-card" : "text-muted-foreground", foco)}
                     >
                       {n}
                     </button>
@@ -625,7 +625,7 @@ export default function AbaPlano({
                 </span>
                 {qualidade.aprovados !== null && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success">{qualidade.aprovados} aprovados</span>}
                 {qualidade.descartados.length > 0 && (
-                  <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">{qualidade.descartados.length} descartados</span>
+                  <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{qualidade.descartados.length} descartados</span>
                 )}
                 {qualidade.objetivo && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(qualidade.objetivo)}</span>}
                 {ofertaDoPlano && <span className="mb-0.5 mt-0.5 min-w-0 truncate text-[12px] text-muted-foreground">Oferta: {ofertaDoPlano.nome}</span>}

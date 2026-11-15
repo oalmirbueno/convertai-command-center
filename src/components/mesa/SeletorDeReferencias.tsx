@@ -219,7 +219,7 @@ function BotaoUsar({ marcada, bloqueada, ocupada, onClick, rotulo = "Usar" }: { 
 }
 
 function Aviso({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] leading-relaxed text-muted-foreground">{children}</p>;
+  return <p className="rounded-lg bg-muted/50 px-3 py-4 text-center text-[12px] leading-relaxed text-muted-foreground">{children}</p>;
 }
 
 /** Selo do papel com a explicação curta ao passar o mouse. */

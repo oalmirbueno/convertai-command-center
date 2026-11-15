@@ -209,7 +209,7 @@ export function EstrategiaNaTela({
           <ul className="min-w-0 space-y-1" aria-label="Diagnóstico">
             {e.diagnostico.map((d, k) => (
               <li key={k} className="min-w-0 text-[12px] leading-snug">
-                <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold capitalize ${d.gravidade === "alta" ? "bg-destructive/10 text-destructive" : d.gravidade === "media" ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground"}`}>
+                <span className={`mr-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${d.gravidade === "alta" ? "bg-destructive/10 text-destructive" : d.gravidade === "media" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>
                   {ROTULO_DA_GRAVIDADE[d.gravidade]}
                 </span>
                 <span className="font-medium">{d.titulo}</span>
@@ -340,7 +340,7 @@ export function EstrategiaNaTela({
 function FalaDaEquipe({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-w-0 justify-end">
-      <div className="min-w-0 max-w-[85%] rounded-xl rounded-br-md bg-primary px-3 py-1.5 text-[13px] leading-relaxed text-primary-foreground [overflow-wrap:anywhere]">{children}</div>
+      <div className="min-w-0 max-w-[85%] rounded-lg rounded-br-md bg-primary px-3 py-1.5 text-[13px] leading-relaxed text-primary-foreground [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
 }
@@ -359,9 +359,9 @@ export function inicioDaUltimaTroca(mensagens: { papel: string }[]): number {
 function Esqueleto() {
   return (
     <div className="space-y-2" aria-busy="true" aria-label="Lendo a conversa">
-      <div className="ml-auto h-7 w-2/5 animate-pulse rounded-xl bg-muted" />
-      <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
-      <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
+      <div className="ml-auto h-7 w-2/5 animate-pulse rounded-lg bg-muted" />
+      <div className="h-3 w-3/4 animate-pulse rounded-full bg-muted" />
+      <div className="h-3 w-2/3 animate-pulse rounded-full bg-muted" />
       <div className="h-16 w-full animate-pulse rounded-lg bg-muted/70" />
     </div>
   );
@@ -403,7 +403,7 @@ function LinhaDoModelo({ escolha, onEscolher }: { escolha: EscolhaDoModelo; onEs
     <div className="mb-1.5 min-w-0" data-modelo-do-agente={m ? m.id : ""}>
       <button
         type="button"
-        className={juntar("flex w-full min-w-0 items-center rounded text-left text-[12px] text-muted-foreground hover:text-foreground", foco)}
+        className={juntar("flex w-full min-w-0 items-center rounded-sm text-left text-[12px] text-muted-foreground hover:text-foreground", foco)}
         onClick={() => setAberta(!aberta)}
         aria-expanded={aberta}
         aria-label="Modelo do agente sênior"
@@ -429,7 +429,7 @@ function LinhaDoModelo({ escolha, onEscolher }: { escolha: EscolhaDoModelo; onEs
           />
           <SeletorDeRaciocinio modelo={m} valor={efetivo.raciocinio} onChange={(r) => onEscolher({ modelo: m ? m.id : escolha.modelo, raciocinio: r })} />
           {escolha.modelo && (
-            <button type="button" className={juntar("justify-self-start rounded text-[12px] text-primary hover:underline sm:col-span-2", foco)} onClick={() => onEscolher({ modelo: "", raciocinio: "" })}>
+            <button type="button" className={juntar("justify-self-start rounded-sm text-[12px] text-primary hover:underline sm:col-span-2", foco)} onClick={() => onEscolher({ modelo: "", raciocinio: "" })}>
               Voltar ao padrão (GPT-6 Luna, raciocínio máximo)
             </button>
           )}
@@ -662,7 +662,7 @@ export default function AgenteSenior({
               ))}
             </div></SugestoesDoAgente>
           </div>
-          <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
+          <div className="rounded-md border border-input bg-card p-2 focus-within:border-primary/60">
             <Textarea
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
@@ -731,7 +731,7 @@ export default function AgenteSenior({
           {envio.mensagem && !pedidoGravado && <FalaDaEquipe><p className="whitespace-pre-wrap">{envio.mensagem}</p></FalaDaEquipe>}
           <FalaDoAgente>
             <div className="space-y-2">
-              {numerosDoEnvio ? <NumerosQueEleViu n={numerosDoEnvio} carregando /> : <div className="h-8 w-3/4 animate-pulse rounded bg-muted" />}
+              {numerosDoEnvio ? <NumerosQueEleViu n={numerosDoEnvio} carregando /> : <div className="h-8 w-3/4 animate-pulse rounded-full bg-muted" />}
               <Andamento desde={envio.desde} pesquisar={pesquisar} assumindo={envio.assumindo} servidor={pedidoGravado ? pedidoGravado.andamento || null : null} />
             </div>
           </FalaDoAgente>

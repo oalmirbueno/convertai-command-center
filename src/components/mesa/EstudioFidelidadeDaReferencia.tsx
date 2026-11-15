@@ -62,7 +62,7 @@ export default function EstudioFidelidadeDaReferencia({
       <div
         role="radiogroup"
         aria-label={alvo === "lamina" ? `Fidelidade à referência da lâmina ${ordem}` : "Fidelidade à referência do trabalho"}
-        className={`grid grid-cols-4 gap-0.5 rounded-md border border-border bg-background p-0.5 ${compacto ? "max-w-[300px]" : ""}`}
+        className={`grid grid-cols-4 gap-0.5 rounded-full bg-muted p-0.5 ${compacto ? "max-w-[300px]" : ""}`}
       >
         {FIDELIDADES.map((f) => {
           const marcada = f.valor === atual;
@@ -75,8 +75,8 @@ export default function EstudioFidelidadeDaReferencia({
               title={f.dica}
               disabled={bloqueado || salvando}
               onClick={() => void escolher(f.valor)}
-              className={`h-6 min-w-0 truncate rounded px-1 text-[11px] transition-colors disabled:opacity-50 ${
-                marcada ? (propria || alvo === "conjunto" ? "bg-primary font-medium text-primary-foreground" : "bg-primary/15 font-medium text-foreground") : "text-muted-foreground hover:text-foreground"
+              className={`toque-compacto h-6 min-w-0 truncate rounded-full px-1.5 text-[11px] transition-colors disabled:opacity-50 ${
+                marcada ? (propria || alvo === "conjunto" ? "bg-card font-medium text-foreground shadow-sm" : "bg-primary/15 font-medium text-foreground") : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {f.rotulo}

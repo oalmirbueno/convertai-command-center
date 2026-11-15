@@ -769,7 +769,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
               <div className="flex min-w-0 items-center">
                 <span className="mr-2 shrink-0 text-[13px] font-bold tabular-nums text-primary">{String(i + 1).padStart(2, "0")}</span>
                 <div className="mr-2 min-w-0 flex-1 sm:max-w-[200px]">
-                  <input value={b.funcao} onChange={(e) => mudarBloco(i, { funcao: e.target.value })} disabled={desabilitado} aria-label={`Função do bloco ${i + 1}`} className={juntar(campo, "font-semibold uppercase")} />
+                  <input value={b.funcao} onChange={(e) => mudarBloco(i, { funcao: e.target.value })} disabled={desabilitado} aria-label={`Função do bloco ${i + 1}`} className={juntar(campo, "font-semibold")} />
                 </div>
                 <div className="mr-auto flex shrink-0 items-center text-[12px] text-muted-foreground">
                   <div className="mr-1 w-16">

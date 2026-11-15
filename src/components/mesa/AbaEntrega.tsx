@@ -33,6 +33,7 @@ import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, t
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { salvarRegraDoDia } from "./agendaInteligenteApi";
 import { regraDoCliente } from "../../../supabase/functions/_shared/agenda-inteligente";
@@ -267,7 +268,7 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, -1))} aria-label="Mês anterior">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <p className="mx-1 min-w-[120px] text-center text-[15px] font-semibold capitalize">{rotuloDoMes(mes)}</p>
+          <p className="mx-1 min-w-[120px] text-center text-[15px] font-semibold first-letter:[text-transform:uppercase]">{rotuloDoMes(mes)}</p>
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, 1))} aria-label="Próximo mês">
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -420,7 +421,7 @@ function LinhaDaArte({
           </a>
         )}
         {agenda && (
-          <Link to={agenda} className="toque-compacto mt-1 inline-flex h-6 w-6 items-center justify-center rounded-md text-primary hover:bg-muted" aria-label="Agenda" title="Abrir na Agenda">
+          <Link to={agenda} className="toque-compacto mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-primary hover:bg-muted" aria-label="Agenda" title="Abrir na Agenda">
             <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
         )}
@@ -588,18 +589,33 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
           checked={horarioAutomatico}
           onCheckedChange={(v) => void trocarAutomatico(v)}
           disabled={!podeEditar || trocandoAutomatico || automatico.isLoading}
-          className="mr-2 shrink-0"
+          className="toque-compacto mr-2 shrink-0"
         />
         <span className="min-w-0">Horário automático pelos melhores horários</span>
       </label>
     </div>
   );
 
+  const horaFixa = p?.hora_publicacao || "09:00";
+  const diasDaRegra = regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta";
+  // A regra inteira, por extenso: mora no "?" do título (antes ficava em parágrafos na tela).
+  const regraPorExtenso = [
+    horarioAutomatico ? `Cada post sai no melhor horário do seu tipo, ${diasDaRegra}. Horário fixo de reserva: ${horaFixa}.` : `Horário fixo: ${horaFixa}, ${diasDaRegra}.`,
+    p?.agendar_ao_aprovar
+      ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Aprovada sem data: entra sozinha no próximo dia livre do plano (um post por dia, entre 9h e 20h)."
+      : "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Peças antigas: a equipe agenda pela Agenda.",
+    regraDoDia.data ? "O que passa do limite do dia vai para o próximo dia livre." : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <section className="space-y-3 border-y border-border py-4 text-[13px]" data-recolhido={recolhido && !editando ? "sim" : "nao"}>
       {/* Configuração da entrega: recolhível (lembrado por cliente); editando, fica aberta. */}
       <CabecalhoDeSecao
         titulo="Publicação e plano"
+        ajuda={recolhido && !editando ? undefined : regraPorExtenso}
+        rotuloDaAjuda="Como a publicação funciona"
         recolher={editando ? undefined : { recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: resumoDosAjustes }}
         acao={
           podeEditar && !editando && !recolhido ? (
@@ -611,33 +627,39 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
       />
       {recolhido && !editando ? null : !editando ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-1.5">
-            {/* 16/10/2026 (dono: "menos texto" no celular): abaixo de 640 px só a regra em uma linha; a explicação inteira volta a partir de 640 px. */}
-            <p className="leading-relaxed sm:hidden">
-              {horarioAutomatico ? `Melhor horário de cada tipo, reserva ${p?.hora_publicacao || "09:00"}` : `Horário fixo ${p?.hora_publicacao || "09:00"}`}, seg. a sex.
-            </p>
-            <p className="hidden leading-relaxed sm:block">
-              {horarioAutomatico
-                ? `Cada post sai no melhor horário do seu tipo, ${regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta"}. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
-                : `Horário fixo: ${p?.hora_publicacao || "09:00"}, ${regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta"}.`}{" "}
-              {p?.agendar_ao_aprovar
-                ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Aprovada sem data: entra sozinha no próximo dia livre do plano (um post por dia, entre 9h e 20h)."
-                : "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Peças antigas: a equipe agenda pela Agenda."}
-            </p>
-            {regraDoDia.data && (
-              <p className="leading-relaxed text-muted-foreground" data-regra-do-dia="">
-                <span className="font-medium text-foreground">Agenda:</span> até {regraDoDia.data.porDia} {regraDoDia.data.porDia === 1 ? "post" : "posts"} por dia
-                {regraDoDia.data.hypesPorDia ? ` + ${regraDoDia.data.hypesPorDia} de hype` : ", sem hype extra"}, {regraDoDia.data.horasEntre} h entre eles{regraDoDia.data.fimDeSemana ? ", sábado e domingo liberados" : ", de segunda a sexta"}; o que passa disso vai para o próximo dia livre.
-              </p>
-            )}
-            <p className="leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Plano:</span>{" "}
-              {p?.posts_por_mes ? `${p.posts_por_mes} posts por mês` : "posts por mês não definidos"}
-              {p?.laminas_por_post ? `, ${p.laminas_por_post} lâminas em média` : ""}
-              {p ? ` · cerca de ${usd(p.custo_por_post_usd)} por post (${p.fonte === "historico" ? `média de ${p.amostra} ${p.amostra === 1 ? "arte" : "artes"}` : "pela tabela de preços"})` : ""}
-              {p?.previsao_mes_usd != null ? ` · mês perto de ${usd(p.previsao_mes_usd)}` : ""}
-              {p?.posts_que_o_saldo_cobre != null ? ` · o saldo cobre ${p.posts_que_o_saldo_cobre} ${p.posts_que_o_saldo_cobre === 1 ? "post" : "posts"}` : ""}
-            </p>
+          {/* 14/11/2026 (dono: "menos texto, informação direta"): os ajustes viram números; a regra inteira mora no "?" do título. */}
+          <div className="min-w-0" data-regra-do-dia={regraDoDia.data ? "" : undefined}>
+            <FaixaDeNumeros
+              rotulo="Publicação e plano"
+              colunas={2}
+              tamanho="compacto"
+              itens={[
+                {
+                  rotulo: "Horário",
+                  valor: horarioAutomatico ? "Automático" : horaFixa,
+                  apoio: `${horarioAutomatico ? `reserva ${horaFixa} · ` : ""}${regraDoDia.data?.fimDeSemana ? "todos os dias" : "seg. a sex."}`,
+                },
+                {
+                  rotulo: "Por dia",
+                  valor: regraDoDia.data ? `${regraDoDia.data.porDia} ${regraDoDia.data.porDia === 1 ? "post" : "posts"}` : "·",
+                  apoio: regraDoDia.data ? `${regraDoDia.data.hypesPorDia ? `+ ${regraDoDia.data.hypesPorDia} de hype` : "sem hype extra"} · ${regraDoDia.data.horasEntre} h entre eles` : undefined,
+                },
+                {
+                  rotulo: "Plano do mês",
+                  valor: p?.posts_por_mes ? `${p.posts_por_mes} posts` : "não definido",
+                  apoio: p?.laminas_por_post ? `${p.laminas_por_post} lâminas em média` : undefined,
+                },
+                {
+                  rotulo: "Custo por post",
+                  valor: p ? usd(p.custo_por_post_usd) : "·",
+                  apoio: [
+                    p?.previsao_mes_usd != null ? `mês perto de ${usd(p.previsao_mes_usd)}` : "",
+                    p?.posts_que_o_saldo_cobre != null ? `saldo cobre ${p.posts_que_o_saldo_cobre} ${p.posts_que_o_saldo_cobre === 1 ? "post" : "posts"}` : "",
+                  ].filter(Boolean).join(" · ") || undefined,
+                  dica: p ? (p.fonte === "historico" ? `Média de ${p.amostra} ${p.amostra === 1 ? "arte" : "artes"}` : "Pela tabela de preços") : undefined,
+                },
+              ]}
+            />
           </div>
           {blocoDeHorarios}
         </div>
@@ -672,11 +694,11 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
             </div>
           </div>
           <label className="flex items-center" data-fim-de-semana-editar="">
-            <Switch checked={fimDeSemana} onCheckedChange={setFimDeSemana} className="mr-2 shrink-0" />
+            <Switch checked={fimDeSemana} onCheckedChange={setFimDeSemana} className="toque-compacto mr-2 shrink-0" />
             <span className="min-w-0">Postar no sábado e no domingo (desligado: só de segunda a sexta)</span>
           </label>
           <label className="flex items-center">
-            <Switch checked={agendar} onCheckedChange={setAgendar} className="mr-2 shrink-0" />
+            <Switch checked={agendar} onCheckedChange={setAgendar} className="toque-compacto mr-2 shrink-0" />
             <span className="min-w-0">Agendar sozinho na Agenda quando o cliente aprovar: sem data, vai para o próximo dia livre do plano, entre 9h e 20h ({fimDeSemana ? "todos os dias" : "segunda a sexta"})</span>
           </label>
           {blocoDeHorarios}

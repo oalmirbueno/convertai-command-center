@@ -102,7 +102,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
 
   if (chunks.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-12 bg-secondary rounded-xl border border-border">
+      <div className="flex flex-col items-center justify-center gap-3 py-12 bg-muted rounded-lg border border-border">
         <Icon className="w-10 h-10 text-muted-foreground/40" />
         <div className="text-center space-y-1">
           <p className="text-[13px] leading-5 font-medium">Conteúdo ainda não extraído</p>
@@ -120,7 +120,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-[220px,1fr] gap-3 h-[70vh] bg-secondary/40 rounded-xl border border-border overflow-hidden">
+    <div className="grid grid-cols-[220px,1fr] gap-3 h-[70vh] bg-muted/40 rounded-lg border border-border overflow-hidden">
       {/* Thumbnails rail */}
       <div className="overflow-y-auto border-r border-border bg-background/60 p-2 space-y-2">
         {chunks.map((c, i) => {
@@ -191,7 +191,7 @@ function TableRenderer({ text }: { text: string }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-[12px] leading-4">
-        <thead className="bg-secondary">
+        <thead className="bg-muted">
           <tr>
             {head.map((h, i) => (
               <th key={i} className="text-left font-semibold px-2 py-1.5 border-b border-border whitespace-nowrap">{h}</th>
@@ -200,7 +200,7 @@ function TableRenderer({ text }: { text: string }) {
         </thead>
         <tbody>
           {body.slice(0, 500).map((r, i) => (
-            <tr key={i} className="odd:bg-background even:bg-secondary/30">
+            <tr key={i} className="odd:bg-background even:bg-muted/30">
               {r.map((c, j) => (
                 <td key={j} className="px-2 py-1 border-b border-border/60 align-top">{c}</td>
               ))}

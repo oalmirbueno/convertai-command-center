@@ -7,7 +7,7 @@ import {
   Eye, MousePointerClick, Users, Zap, DollarSign, Target, MessageCircle,
   ChevronRight,
 } from "lucide-react";
-import { CabecalhoDePagina, CabecalhoDeSecao, Carregando, EstadoDeErro, EstadoVazio, botao, etiqueta, foco, juntar, lista, texto, useEstadoDaTela } from "@/components/sistema";
+import { CabecalhoDePagina, CabecalhoDeSecao, Carregando, EstadoDeErro, EstadoVazio, botao, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import ClientLiveCampaigns from "@/components/reports/ClientLiveCampaigns";
 import { useNavigate } from "react-router-dom";
 import { getPeriodModel, PERIOD_ORDER } from "@/lib/reportGrouping";
@@ -98,9 +98,9 @@ const reportKind = (r: any): { label: string; cls: string } => {
   const m = (r.metrics || {}) as Record<string, unknown>;
   const hasAdsNumbers = ["ad_spend", "cpc", "cpm", "roas", "impressions", "reach", "clicks", "results"]
     .some((key) => Number(m[key]) > 0);
-  if (hasAdsNumbers) return { label: "Anúncios", cls: "bg-primary/10 text-primary border-primary/25" };
+  if (hasAdsNumbers) return { label: "Anúncios", cls: "bg-accent-soft text-primary border-transparent" };
   const images = Array.isArray(r.images) ? r.images : [];
-  if (r.file_url || images.length > 0) return { label: "Entrega", cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/25" };
+  if (r.file_url || images.length > 0) return { label: "Entrega", cls: "bg-success-soft text-success border-transparent" };
   return { label: "Resumo", cls: "bg-secondary text-muted-foreground border-border" };
 };
 
@@ -125,7 +125,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
         // "relatorios:grupos-fechados".
         <section
           key={model}
-          className={juntar("min-w-0", gi > 0 && "border-t border-border pt-5")}
+          className="min-w-0"
           data-recolhido={open[model] ? "nao" : "sim"}
         >
           <CabecalhoDeSecao
@@ -140,7 +140,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
             }}
           />
           {open[model] && (
-            <ul className={juntar(lista.aberta, lista.divisoria)}>
+            <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")}>
               {groups[model].map((r: any) => {
                 const m = (r.metrics || {}) as Record<string, any>;
                 const visibleMetrics = Object.entries(m)
@@ -162,7 +162,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                   <li key={r.id} className="min-w-0">
                     <button
                       type="button"
-                      className={juntar("group flex w-full min-w-0 items-start rounded-lg px-2 py-3.5 text-left transition-colors hover:bg-muted/40", foco)}
+                      className={juntar("group flex w-full min-w-0 items-start rounded-md px-2 py-3.5 text-left transition-colors hover:bg-muted/40", foco)}
                       onClick={() => navigate(`/relatorios/${r.id}`)}
                       aria-label={`Abrir o relatório ${r.title}`}
                     >

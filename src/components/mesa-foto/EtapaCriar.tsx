@@ -67,7 +67,7 @@ export default function EtapaCriar() {
           <span className="mr-2 min-w-0">
             {esperando} {esperando === 1 ? "foto gerada espera" : "fotos geradas esperam"} a sua aprovação.
           </span>
-          <button type="button" className={juntar("rounded font-medium text-primary hover:underline", foco)} onClick={() => irPara("aprovar")}>
+          <button type="button" className={juntar("rounded-sm font-medium text-primary hover:underline", foco)} onClick={() => irPara("aprovar")}>
             Aprovar agora
           </button>
         </div>

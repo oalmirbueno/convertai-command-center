@@ -89,7 +89,7 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
             ) : (
               <p className="flex min-w-0 items-center text-[13px] font-semibold" data-nome-do-produto="">
                 <span className="min-w-0 truncate">{nomeDoKit(kit)}</span>
-                <button type="button" className={juntar("ml-1.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground", foco)} onClick={() => setNome(kit.nome || "")} aria-label="Mudar o nome do produto">
+                <button type="button" className={juntar("ml-1.5 shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground", foco)} onClick={() => setNome(kit.nome || "")} aria-label="Mudar o nome do produto">
                   <Pencil className="h-3 w-3" />
                 </button>
               </p>

@@ -41,9 +41,9 @@ const priorityLabels: Record<string, string> = {
 };
 const priorityColors: Record<string, string> = {
   low: "bg-muted text-muted-foreground",
-  medium: "bg-blue-500/10 text-blue-500",
-  high: "bg-warning/10 text-warning",
-  urgent: "bg-destructive/10 text-destructive",
+  medium: "bg-info-soft text-info",
+  high: "bg-warning-soft text-warning",
+  urgent: "bg-danger-soft text-destructive",
 };
 const statusLabels: Record<string, string> = {
   backlog: "Backlog", doing: "Em Andamento", review: "Revisão", approved: "Aprovado", done: "Concluído",
@@ -1106,7 +1106,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               <div className="relative">
                 {mentionQuery !== null && filteredMentions.length > 0 && (
                   <div ref={mentionDropdownRef}
-                    className="absolute bottom-full left-0 z-10 mb-1 max-h-[160px] w-full overflow-y-auto rounded-md border border-border bg-card py-1 shadow-sm">
+                    className="absolute bottom-full left-0 z-10 mb-1 max-h-[160px] w-full overflow-y-auto rounded-md border border-border bg-card py-1 shadow-pop">
                     {filteredMentions.map((m: any, i: number) => (
                       <button type="button" key={m.id}
                         onClick={() => insertMention(m)}

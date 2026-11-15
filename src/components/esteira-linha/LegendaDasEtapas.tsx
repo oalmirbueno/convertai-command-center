@@ -20,11 +20,11 @@ export default function LegendaDasEtapas() {
         </li>
       ))}
       <li className={juntar(texto.auxiliar, "flex items-center")}>
-        <span className="mr-2 h-3 w-3 shrink-0 rounded-sm border border-border bg-accent" aria-hidden="true" />
+        <span className="mr-2 h-3 w-3 shrink-0 rounded-sm border border-primary/30 bg-accent-soft" aria-hidden="true" />
         <span className="font-medium text-foreground">Dia prioritário</span>
       </li>
       <li className={juntar(texto.auxiliar, "flex items-center")}>
-        <span className="mr-2 h-3 w-3 shrink-0 rounded-sm border border-amber-500/50 bg-amber-500/15" aria-hidden="true" />
+        <span className="mr-2 h-3 w-3 shrink-0 rounded-sm border border-warning/40 bg-warning-soft" aria-hidden="true" />
         <span className="font-medium text-foreground">Dia prioritário sem peça</span>
       </li>
     </ul>

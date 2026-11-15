@@ -982,7 +982,7 @@ function ConteudoAreaDeMembros() {
                         />
                       </div>
                       <div className="membros-destaque-texto">
-                        <span className="membros-destaque-selo">EM DESTAQUE</span>
+                        <span className="membros-destaque-selo">Em destaque</span>
                         <div className="membros-destaque-titulo">
                           <h2>{destaque.titulo}</h2>
                           <AjudaRecolhida rotulo={`Sobre ${destaque.titulo}`}>
