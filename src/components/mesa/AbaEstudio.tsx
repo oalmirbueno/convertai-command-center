@@ -371,7 +371,7 @@ function BarraDeFerramentas({
     <TooltipProvider delayDuration={250}>
       <nav
         aria-label="Ferramentas"
-        className={vertical ? "flex w-12 shrink-0 flex-col items-center border-l border-border py-2" : "flex min-w-0 overflow-x-auto border-t border-border px-2 py-1.5"}
+        className={vertical ? "flex w-14 shrink-0 flex-col items-center border-l border-border py-3" : "flex min-w-0 overflow-x-auto border-t border-border px-2 py-2"}
       >
         {ferramentas.map((f) => {
           const def = FERRAMENTAS[f];
@@ -385,13 +385,13 @@ function BarraDeFerramentas({
                   onClick={() => onAbrir(f)}
                   aria-label={def.rotulo}
                   aria-pressed={aberta}
-                  className={`relative flex shrink-0 items-center justify-center rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                    vertical ? "mb-1 h-10 w-10" : "mr-1 h-10 min-w-[64px] flex-col px-2"
-                  } ${aberta ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                  className={`relative flex shrink-0 items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    vertical ? "mb-1.5 h-10 w-10 rounded-full" : "mr-1 h-11 min-w-[68px] flex-col rounded-[16px] px-2.5"
+                  } ${aberta ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
                 >
                   <Icone className="h-[18px] w-[18px]" />
                   {!vertical && <span className="mt-0.5 text-[11px] leading-none">{def.rotulo}</span>}
-                  {marca(f) && <span className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${aberta ? "bg-primary-foreground" : "bg-primary"}`} aria-label="pede atenção" />}
+                  {marca(f) && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent-solid" aria-label="pede atenção" />}
                 </button>
               </TooltipTrigger>
               <TooltipContent side={vertical ? "left" : "top"} className="max-w-[240px]">
@@ -1485,7 +1485,7 @@ export function DetalheDoItem({
   // em duas quando não cabe. Nenhuma função saiu: a explicação de cada chave está no "?" ou na dica.
   const barraDoItem = (
     <div className="shrink-0 border-b border-border">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 py-1.5" data-barra-do-item="">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5 sm:px-5" data-barra-do-item="">
         <div className="flex min-w-[140px] flex-1 basis-[150px] items-center">
           {temRoteiro && (
             <span title={DICA_DO_ROTEIRO} className="mr-1.5 shrink-0">
@@ -1493,7 +1493,7 @@ export function DetalheDoItem({
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[14px] font-semibold leading-tight" title={item.title}>{item.title}</h2>
+            <h2 className="truncate text-[18px] font-semibold leading-6 tracking-[-0.02em]" title={item.title}>{item.title}</h2>
             <p className="mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground">
               <span className="truncate">{rapida ? rapida.subtitulo : <>{dataCurta(item.due_date)} · {formatoDoItem(item)}</>}</span>
               <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
@@ -1504,7 +1504,7 @@ export function DetalheDoItem({
                 </span>
               )}
               {trabalho && trabalho.custo_usd > 0 && (
-                <span className="ml-2 shrink-0 tabular-nums" title="Gasto de IA neste item">{usd(trabalho.custo_usd)}</span>
+                <span className="ml-2 inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 font-medium tabular-nums text-foreground" title="Gasto de IA neste item">{usd(trabalho.custo_usd)}</span>
               )}
             </p>
           </div>
@@ -2550,8 +2550,8 @@ function SemPauta({ carregando, vazia }: { carregando: boolean; vazia: boolean }
         <p className="inline-flex items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a pauta…</p>
       ) : (
         <>
-          <ListChecks className="h-6 w-6 text-primary" />
-          <p className="mt-3 text-[15px] font-semibold">{vazia ? "Nenhuma pauta de arte neste período" : "Escolha uma pauta na faixa acima"}</p>
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-solid text-on-accent" aria-hidden="true"><ListChecks className="h-6 w-6" /></span>
+          <p className="mt-4 text-[20px] font-semibold leading-7 tracking-[-0.02em]">{vazia ? "Nenhuma pauta de arte neste período" : "Escolha uma pauta na faixa acima"}</p>
           <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">
             {vazia ? "Troque o período na faixa ou complete a agenda pela aba Mês." : "O estúdio abre com a pauta escolhida."}
           </p>

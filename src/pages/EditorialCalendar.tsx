@@ -14,12 +14,18 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
+  AlertTriangle,
+  CalendarClock,
+  CalendarDays,
+  CheckCircle2,
   GripVertical,
+  PenLine,
   RefreshCw,
   Send,
   SquareKanban,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ProgressBar, StatCard, StatGrid } from "@/components/ds";
 import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import {
@@ -305,34 +311,17 @@ function FaixaDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
   const publicados = contar("published");
   const falhas = contar("failed");
   const outros = publications.length - agendados - publicados - falhas;
-  const partes = [
-    { chave: "publicados", rotulo: "Publicados", n: publicados, cor: "bg-accent-solid" },
-    { chave: "agendados", rotulo: "Agendados", n: agendados, cor: "bg-info" },
-    { chave: "outros", rotulo: "Em preparo", n: outros, cor: "bg-foreground/25" },
-    { chave: "falhas", rotulo: "Falhas", n: falhas, cor: "bg-destructive" },
-  ].filter((parte) => parte.n > 0);
+  const total = publications.length;
+  const fatia = (n: number) => <ProgressBar value={n} max={total} height={6} label={`${n} de ${total} publicações`} />;
   return (
-    <div className="mb-4 hidden min-w-0 items-center lg:flex" data-faixa-do-calendario="" role="group" aria-label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}>
-      <p className="mr-5 flex shrink-0 items-baseline">
-        <span className="text-[32px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{posts.length}</span>
-        <span className="ml-2 text-[13px] text-muted-foreground">{posts.length === 1 ? "conteúdo" : "conteúdos"}</span>
-      </p>
-      <div className="min-w-0 flex-1">
-        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
-          {partes.map((parte) => (
-            <span key={parte.chave} className={juntar("h-full border-r-2 border-background last:border-r-0", parte.cor)} style={{ width: `${(parte.n / publications.length) * 100}%` }} />
-          ))}
-        </div>
-        <ul className="mt-2 flex min-w-0 flex-wrap items-center">
-          {partes.map((parte) => (
-            <li key={parte.chave} className="mr-4 flex items-center text-[12px] leading-4 text-muted-foreground">
-              <span className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", parte.cor)} aria-hidden="true" />
-              {parte.rotulo}
-              <span className="ml-1.5 font-semibold tabular-nums text-foreground">{parte.n}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+    <div className="mb-5 hidden min-w-0 lg:block" data-faixa-do-calendario="" role="group" aria-label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}>
+      <StatGrid cols={falhas > 0 ? 5 : 4} className={falhas > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4"}>
+        <StatCard variant="ink" label={posts.length === 1 ? "Conteúdo" : "Conteúdos"} value={posts.length} deltaLabel={`${total} ${total === 1 ? "publicação" : "publicações"}`} icon={<CalendarDays className="h-4 w-4" />} />
+        <StatCard variant="accent" label="Publicados" value={publicados} chartPosition="side" chart={fatia(publicados)} icon={<CheckCircle2 className="h-4 w-4" />} />
+        <StatCard label="Agendados" value={agendados} chartPosition="side" chart={fatia(agendados)} icon={<CalendarClock className="h-4 w-4" />} />
+        <StatCard label="Em preparo" value={outros} chartPosition="side" chart={fatia(outros)} icon={<PenLine className="h-4 w-4" />} />
+        {falhas > 0 && <StatCard label="Falhas" value={falhas} chartPosition="side" chart={fatia(falhas)} icon={<AlertTriangle className="h-4 w-4" />} />}
+      </StatGrid>
     </div>
   );
 }

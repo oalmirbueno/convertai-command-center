@@ -33,19 +33,19 @@ export default function CartaoDaPeca({ cartao, aoAbrir }: { cartao: CartaoDaEste
         aria-label={`${cartao.titulo}. ${cartao.formato}. ${cartao.rotuloDaEtapa}. Ver detalhes`}
         aria-haspopup="dialog"
         className={juntar(
-          "block w-full rounded-md border border-transparent bg-muted py-2.5 pl-3 pr-7 text-left transition-colors hover:border-foreground/15 [[data-prioritario=sim]_&]:bg-card [[data-prioritario=sim]_&]:shadow-card",
+          "block w-full rounded-[16px] border border-transparent bg-muted py-3 pl-3 pr-7 text-left transition-colors hover:border-foreground/20 sm:rounded-lg sm:py-3.5 sm:pl-4 sm:pr-8 [[data-prioritario=sim]_&]:bg-card [[data-prioritario=sim]_&]:shadow-card",
           foco,
         )}
         data-abrir-peca=""
       >
-        <span className="line-clamp-2 break-words text-[12px] font-semibold leading-4 text-foreground">{cartao.titulo}</span>
-        <span className="mt-1.5 flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground">
-          <span className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", estilo.ponto)} aria-hidden="true" />
+        <span className="line-clamp-2 break-words text-[12px] font-semibold leading-4 tracking-[-0.01em] text-foreground sm:text-[13px] sm:leading-[18px]">{cartao.titulo}</span>
+        {/* A etapa é uma pílula só, na cor dela (sem ponto empilhado). */}
+        <span className={juntar("mt-2 inline-flex h-[22px] max-w-full items-center rounded-full px-2 text-[11px] font-medium leading-none sm:mt-2.5 sm:px-2.5", estilo.selo)} data-etapa-da-peca="">
           <span className="truncate">{cartao.rotuloDaEtapa}</span>
         </span>
       </button>
       <div
-        className="absolute right-1 top-1"
+        className="absolute right-1 top-1 sm:right-1.5 sm:top-1.5"
         onClick={pararClique}
         onPointerDown={pararClique}
         onKeyDown={pararClique}

@@ -1,4 +1,4 @@
-import { useRef, type UIEvent } from "react";
+import { useMemo, useRef, type UIEvent } from "react";
 import { AlertTriangle } from "lucide-react";
 import { juntar, texto } from "@/components/sistema";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
@@ -15,7 +15,7 @@ import CartaoDaPeca from "./CartaoDaPeca";
 export const CLASSES_DA_TABELA = "w-full min-w-[860px] table-fixed border-separate border-spacing-0 text-left sm:min-w-[1040px]";
 export const CLASSES_DA_TABELA_DE_DUAS_SEMANAS = "w-full min-w-[1540px] table-fixed border-separate border-spacing-0 text-left sm:min-w-[1860px]";
 const classesDaTabela = (quantosDias: number): string => (quantosDias > 7 ? CLASSES_DA_TABELA_DE_DUAS_SEMANAS : CLASSES_DA_TABELA);
-export const LARGURA_DA_COLUNA_DO_CLIENTE = "w-[136px] sm:w-[188px]";
+export const LARGURA_DA_COLUNA_DO_CLIENTE = "w-[136px] sm:w-[216px]";
 /**
  * O cabeçalho dos dias fica fora da área que rola: com a página cabendo na
  * tela, ele não sai do lugar. O `sticky` continua para a tela muito baixa,
@@ -34,7 +34,7 @@ export const CLASSES_DA_ROLAGEM_DAS_DATAS = "relative min-h-0 min-w-0 flex-1 ove
  * individual em cada coluna"); substitui o "+N" de 21h08. Só na vertical.
  * Sem `overscroll-contain`: no fim da célula, a rolagem segue para a área.
  */
-export const CLASSES_DA_ROLAGEM_DA_CELULA = "-m-0.5 max-h-[196px] space-y-2 overflow-y-auto overflow-x-hidden p-0.5 sm:max-h-[248px]";
+export const CLASSES_DA_ROLAGEM_DA_CELULA = "-m-0.5 max-h-[196px] space-y-2 overflow-y-auto overflow-x-hidden p-0.5 sm:max-h-[264px] sm:space-y-2.5";
 
 function Colunas({ dias }: { dias: DiaDaGrade[] }) {
   return (
@@ -72,6 +72,12 @@ export default function GradeDaEsteira({
     if (topo.current) topo.current.scrollLeft = e.currentTarget.scrollLeft;
   };
   const classesDasTabelas = classesDaTabela(dias.length);
+  // Contagem do cabeçalho de cada dia: os mesmos cartões que as faixas mostram embaixo.
+  const pecasPorDia = useMemo(() => {
+    const conta = new Map<string, number>();
+    for (const f of faixas) for (const c of f.celulas) conta.set(c.data, (conta.get(c.data) ?? 0) + c.cartoes.length);
+    return conta;
+  }, [faixas]);
 
   return (
     // Altura mínima: numa janela baixa com o aviso aberto, a grade não some (a página rola um pouco).
@@ -82,21 +88,36 @@ export default function GradeDaEsteira({
           <thead>
             <tr>
               <th className={juntar(texto.rotulo, "sticky left-0 z-20 bg-card py-3 pl-5 pr-3")} data-canto-cliente="">Cliente</th>
-              {dias.map((d, i) => (
-                <th
-                  key={d.data}
-                  className={juntar(
-                    texto.rotulo,
-                    "border-l border-transparent px-2 py-3",
-                    // Duas semanas: um traço mais forte entre a primeira e a segunda.
-                    i === 7 && "border-l-foreground/25",
-                    d.data === hoje && "font-semibold text-foreground",
-                  )}
-                >
-                  {d.rotulo}
-                  {d.data === hoje && <span className="ml-1.5 inline-flex h-5 items-center rounded-full bg-accent-solid px-2 text-[11px] font-semibold text-on-accent">Hoje</span>}
-                </th>
-              ))}
+              {dias.map((d, i) => {
+                const ehHoje = d.data === hoje;
+                const [semana, numero] = d.rotulo.split(" ");
+                const pecas = pecasPorDia.get(d.data) ?? 0;
+                return (
+                  <th
+                    key={d.data}
+                    className={juntar(
+                      "border-l border-transparent px-1 py-1.5 font-normal sm:px-1.5",
+                      // Duas semanas: um traço mais forte entre a primeira e a segunda.
+                      i === 7 && "border-l-foreground/25",
+                    )}
+                  >
+                    {/* O dia de hoje é a pílula sólida na cor da marca; a contagem do dia vai na pílula da direita. */}
+                    <span className={juntar("flex min-w-0 items-center rounded-full py-1 pl-2.5 pr-1 sm:pl-3.5", ehHoje && "ds-accent")} data-dia-de-hoje={ehHoje ? "" : undefined}>
+                      <span className="flex min-w-0 flex-1 items-baseline">
+                        <span className={juntar(texto.etiqueta, "mr-1.5 truncate", ehHoje ? "font-semibold text-foreground" : "text-muted-foreground")}>{ehHoje ? "Hoje" : numero ? semana : d.rotulo}</span>
+                        {numero && <span className="text-[20px] font-semibold leading-7 tracking-[-0.03em] tabular-nums text-foreground">{numero}</span>}
+                      </span>
+                      <span
+                        className={juntar("ml-1 inline-flex h-7 min-w-[28px] shrink-0 items-center justify-center rounded-full bg-muted px-2 text-[12px] font-semibold leading-none tabular-nums", pecas > 0 ? "text-foreground" : "text-muted-foreground")}
+                        title={`${pecas} ${pecas === 1 ? "peça" : "peças"}`}
+                        data-pecas-do-dia={pecas}
+                      >
+                        {pecas}
+                      </span>
+                    </span>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
         </table>
@@ -120,39 +141,42 @@ export default function GradeDaEsteira({
           {/* Um tbody por cliente: cada faixa é um bloco, com respiro antes do próximo. A altura dela tem o teto dos dias. */}
           {faixas.map((faixa) => (
             <tbody key={faixa.clientId} data-faixa-da-esteira={faixa.clientId}>
-              <tr aria-hidden="true"><td colSpan={dias.length + 1} className="h-3 p-0 sm:h-4" /></tr>
+              <tr aria-hidden="true"><td colSpan={dias.length + 1} className="h-3 p-0 sm:h-5" /></tr>
               <tr>
                 <th
                   scope="row"
                   className={juntar(
-                    "sticky left-0 z-10 rounded-l-lg border-y border-l-4 border-border bg-card px-3 py-4 align-top font-normal sm:px-4 sm:py-5",
+                    "sticky left-0 z-10 rounded-l-lg border-y border-l-4 border-border bg-card px-3 py-4 align-top font-normal sm:px-4 sm:py-6",
                     corDeApoioDoCliente(faixa.clientId).faixa,
                   )}
                   data-cabecalho-da-faixa=""
                 >
-                  <span className="flex min-w-0 items-start">
+                  <span className="flex min-w-0 items-center">
                     <LogoDoCliente
                       url={identidades.data?.get(faixa.clientId)?.profile_picture_url ?? null}
                       clienteId={faixa.clientId}
                       nome={faixa.nome}
-                      tamanho={36}
+                      tamanho={40}
                       className="mr-3 hidden shrink-0 text-[12px] sm:flex"
                     />
-                    <span className="min-w-0">
-                      <span className="block break-words text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground sm:text-[15px]">{faixa.nome}</span>
-                      {faixa.diaPrioritario !== null && (
-                        <span className={juntar(texto.auxiliar, "mt-0.5 block")}>Dia prioritário: {faixa.nomeDoDiaPrioritario}</span>
+                    <span className="block min-w-0 break-words text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground sm:text-[15px]">{faixa.nome}</span>
+                  </span>
+                  <span className="block min-w-0">
+                    {faixa.diaPrioritario !== null && (
+                        // De 640 px para cima o dia prioritário é uma pílula; no celular a coluna é estreita e fica a linha de texto.
+                        <span className={juntar(texto.auxiliar, "mt-1 block sm:mt-3 sm:inline-flex sm:h-6 sm:max-w-full sm:items-center sm:rounded-full sm:bg-accent-soft sm:px-2.5 sm:text-[11px] sm:font-medium sm:text-primary")}>
+                          <span className="sm:truncate">Dia prioritário: {faixa.nomeDoDiaPrioritario}</span>
+                        </span>
                       )}
                       {faixa.aprovacaoDoClienteDispensada && (
                         <span
-                          className={juntar(texto.auxiliar, "mt-0.5 block")}
+                          className={juntar(texto.auxiliar, "mt-1.5 block")}
                           data-aprovacao-dispensada=""
                           title="Regra do cadastro deste cliente: a revisão interna da agência basta. As peças não passam pela aprovação do cliente."
                         >
                           Aprovação do cliente dispensada
                         </span>
                       )}
-                    </span>
                   </span>
                 </th>
                 {faixa.celulas.map((celula, i) => (
@@ -184,7 +208,7 @@ function CelulaDoDia({ celula, ultima, viradaDaSemana, aoAbrir }: { celula: Celu
       data-prioritario={celula.prioritario ? "sim" : undefined}
       data-alerta={celula.alerta ? "sim" : undefined}
       className={juntar(
-        "border-y border-l border-border border-l-border/50 p-2 align-top sm:p-2.5",
+        "border-y border-l border-border border-l-border/50 p-2 align-top sm:p-3",
         ultima && "rounded-r-lg border-r",
         viradaDaSemana && "border-l-foreground/25",
         celula.alerta ? "bg-warning-soft" : celula.prioritario ? "bg-accent-soft" : "bg-card",
@@ -192,7 +216,7 @@ function CelulaDoDia({ celula, ultima, viradaDaSemana, aoAbrir }: { celula: Celu
     >
       {celula.prioritario && !celula.alerta && <span className="sr-only">Dia prioritário</span>}
       {celula.alerta ? (
-        <p className="flex items-start rounded-md bg-card px-2 py-2 text-[12px] font-medium leading-4 text-warning">
+        <p className="flex items-start rounded-[16px] bg-card px-2.5 py-2.5 text-[12px] font-medium leading-4 text-warning">
           <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
           Dia prioritário sem peça
         </p>

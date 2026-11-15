@@ -146,8 +146,8 @@ const statusLabels: Record<string, string> = {
 // producao e pronto ficavam identicos no calendario. Classes literais para o
 // Tailwind nao purgar.
 const stageClasses: Record<string, string> = {
-  draft: "border-transparent bg-muted/70 text-foreground",
-  production: "border-transparent bg-violet-500/10 text-foreground",
+  draft: "border-border bg-card text-foreground",
+  production: "border-transparent bg-violet-500/20 text-foreground",
   ready: "border-transparent bg-warning-soft text-foreground",
   scheduled: "border-transparent bg-info-soft text-foreground",
   // Passou da hora e nao saiu: precisa saltar aos olhos, nao se confundir com
@@ -694,7 +694,7 @@ function PublicationPill({
       // Arrasta pelo cartão inteiro; o clique continua abrindo o conteúdo.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group relative min-h-11 w-full rounded-md border text-left transition-colors hover:border-foreground/30",
+        "group relative min-h-11 w-full rounded-[14px] border text-left transition-colors hover:border-foreground/30",
         stageClasses[stage] || stageClasses.draft,
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
@@ -706,8 +706,8 @@ function PublicationPill({
         onClick={onClick}
         aria-label={`Tema: ${item.post.post.title}. Contexto: ${context || "não informado"}. ${platform}, ${time}, ${status}`}
         className={cn(
-          "block min-h-11 w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50",
-          compact ? "px-2 py-1.5" : "p-2.5",
+          "block min-h-11 w-full rounded-[14px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50",
+          compact ? "px-2 py-1.5" : "p-3",
           draggable && !moving && "pr-7",
         )}
       >
@@ -718,7 +718,7 @@ function PublicationPill({
             <EditorialFileThumbnail
               post={item.post}
               publication={item.publication}
-              className="h-7 w-7 shrink-0 rounded-md"
+              className="h-7 w-7 shrink-0 rounded-full"
             />
             <span
               className={cn(
@@ -778,7 +778,7 @@ function PublicationPill({
       {draggable && !moving && (
         <button
           type="button"
-          className="toque-compacto absolute inset-y-0 right-0 inline-flex w-7 touch-none cursor-grab items-center justify-center rounded-r-md text-muted-foreground opacity-40 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 group-hover:opacity-80 active:cursor-grabbing"
+          className="toque-compacto absolute inset-y-0 right-0 inline-flex w-7 touch-none cursor-grab items-center justify-center rounded-r-[14px] text-muted-foreground opacity-40 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 group-hover:opacity-80 active:cursor-grabbing"
           {...listeners}
           {...attributes}
           aria-label={`Mover ${item.post.post.title} no calendário`}
@@ -837,10 +837,10 @@ function AnchoredPostPill({
       aria-label={`Abrir o conteúdo "${post.post.title}". Etapa: ${nomeEtapa}. Dia herdado do prazo da tarefa; ainda sem agendamento de publicação.`}
       title={`${post.post.title} · ${nomeEtapa} · dia herdado do prazo da tarefa`}
       className={cn(
-        "group flex w-full items-center gap-1.5 rounded-md border text-left text-foreground transition-colors hover:border-primary/50",
+        "group flex w-full items-center gap-1.5 rounded-[14px] border text-left text-foreground transition-colors hover:border-primary/50",
         cor.borda,
         cor.fundo,
-        compact ? "px-1.5 py-1" : "p-2.5",
+        compact ? "px-2 py-1.5" : "p-3",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
     >
@@ -899,8 +899,8 @@ function TaskSchedulePill({
       onClick={onClick}
       aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban. Prazo em ${dueDateLabel}. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}.${descricaoDaArteDoEstudio(arte)}`}
       className={cn(
-        "group w-full rounded-md border border-dashed border-violet-500/30 bg-violet-500/[0.06] text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/10",
-        compact ? "px-2 py-1.5" : "p-2.5",
+        "group w-full rounded-[14px] border border-dashed border-violet-500/40 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/60 hover:bg-violet-500/15",
+        compact ? "px-2 py-1.5" : "p-3",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
     >
@@ -910,7 +910,7 @@ function TaskSchedulePill({
             {arte ? (
               <MiniaturaDaArteDoEstudio
                 arte={arte}
-                className="h-7 w-7 shrink-0 rounded-md"
+                className="h-7 w-7 shrink-0 rounded-full"
               />
             ) : (
               <Palette
@@ -1298,22 +1298,25 @@ function MobileAgenda({
                   aria-label={`${format(day, "EEEE, dd 'de' MMMM", { locale: ptBR })}${total > 0 ? `, ${total} ${total === 1 ? "item" : "itens"}` : ""}`}
                   className={cn(
                     "flex h-16 w-full flex-col items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-                    escolhido
-                      ? "bg-primary text-primary-foreground"
-                      : key === todayKey
-                        ? "text-primary"
+                    // Hoje é verde (sólido quando é o dia aberto); outro dia aberto é a pílula de tinta.
+                    key === todayKey
+                      ? escolhido
+                        ? "bg-accent-solid text-on-accent"
+                        : "bg-accent-soft text-primary"
+                      : escolhido
+                        ? "bg-foreground text-background"
                         : "text-foreground active:bg-muted",
                   )}
                 >
                   <span
                     className={cn(
                       "text-[11px] font-medium capitalize",
-                      escolhido ? "opacity-85" : "text-muted-foreground",
+                      escolhido ? "opacity-80" : key === todayKey ? "" : "text-muted-foreground",
                     )}
                   >
                     {format(day, "EEEEEE", { locale: ptBR })}
                   </span>
-                  <span className="mt-0.5 text-[15px] font-semibold leading-6 tabular-nums">
+                  <span className="mt-0.5 text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums">
                     {format(day, "d")}
                   </span>
                   <span
@@ -1322,7 +1325,7 @@ function MobileAgenda({
                       total === 0
                         ? "bg-transparent"
                         : escolhido
-                          ? "bg-primary-foreground"
+                          ? "bg-current"
                           : "bg-primary",
                     )}
                     aria-hidden="true"
@@ -1502,10 +1505,10 @@ function MonthView({
 
   return (
     <>
-      <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
+      <div className={juntar(superficie.painel, "hidden overflow-x-auto p-2 md:block lg:p-3")} data-agenda-mes="">
         <div className="min-w-[840px]">
           <div
-            className="grid grid-cols-7 border-b border-border/70"
+            className="mb-2 grid grid-cols-7 rounded-full bg-muted"
             role="row"
           >
             {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map(
@@ -1513,14 +1516,14 @@ function MonthView({
                 <div
                   key={day}
                   role="columnheader"
-                  className="px-3 py-3.5 text-center text-[12px] font-medium capitalize text-muted-foreground"
+                  className="px-3 py-2.5 text-center text-[12px] font-medium capitalize text-muted-foreground"
                 >
                   {day}
                 </div>
               ),
             )}
           </div>
-          <div className="grid grid-cols-7" role="grid">
+          <div className="grid grid-cols-7 gap-1.5" role="grid">
             {days.map((day) => {
               const key = localDateKey(day);
               const dayItems = itemsByDate.get(key) || [];
@@ -1550,27 +1553,29 @@ function MonthView({
                   dateKey={key}
                   canDrop={canCreate || canEdit || canPublish}
                   className={cn(
-                    "group min-h-[164px] border-b border-r border-border/70 p-2.5 [&:nth-child(7n)]:border-r-0",
-                    !isSameMonth(day, anchorDate) && "bg-muted/30",
-                    key === todayKey && "bg-accent-soft",
+                    // Cada dia é um ladrilho; fora do mês fica sem fundo e hoje ganha o verde com o contorno sólido.
+                    "group min-h-[164px] rounded-[18px] bg-muted/50 p-2.5",
+                    !isSameMonth(day, anchorDate) && "bg-transparent",
+                    key === todayKey && "bg-accent-soft ring-2 ring-inset ring-accent-solid",
                   )}
                 >
                   <div className="mb-2 flex items-center justify-between">
                     <span
                       className={cn(
-                        "inline-flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-semibold leading-4 tabular-nums",
+                        "inline-flex h-8 min-w-[32px] items-center justify-center rounded-full text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums",
                         key === todayKey
-                          ? "bg-accent-solid text-on-accent"
+                          ? "bg-accent-solid px-3 text-on-accent"
                           : !isSameMonth(day, anchorDate)
                             ? "font-normal text-muted-foreground/45"
                             : "text-foreground",
                       )}
                     >
-                      {format(day, "d")}
+                      {key === todayKey && <span className="mr-1.5 text-[11px] font-semibold leading-4 tracking-normal" aria-hidden="true">Hoje</span>}
+                      <span>{format(day, "d")}</span>
                     </span>
                     <div className="flex items-center gap-1.5">
                       {dayCount > 0 && (
-                        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-foreground px-1.5 text-[11px] font-semibold tabular-nums text-background">
+                        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-foreground px-2 text-[11px] font-semibold tabular-nums text-background">
                           {dayCount}
                         </span>
                       )}
@@ -1743,8 +1748,8 @@ function WeekView({
 
   return (
     <>
-      <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
-        <div className="grid min-w-[920px] grid-cols-7">
+      <div className={juntar(superficie.painel, "hidden overflow-x-auto p-2 md:block lg:p-3")} data-agenda-semana="">
+        <div className="grid min-w-[920px] grid-cols-7 gap-1.5">
           {days.map((day) => {
             const key = localDateKey(day);
             const dayItems = itemsByDate.get(key) || [];
@@ -1757,12 +1762,13 @@ function WeekView({
                 key={key}
                 dateKey={key}
                 canDrop={canCreate || canEdit || canPublish}
-                className="group min-h-[450px] border-r border-border/70 last:border-r-0"
+                className="group min-h-[450px] rounded-[18px] bg-muted/50"
               >
                 <header
                   className={cn(
-                    "border-b border-border/70 px-3 py-4 text-center",
-                    key === todayKey && "bg-accent-soft",
+                    // Hoje: o cabeçalho do dia é o bloco sólido na cor da marca.
+                    "m-1.5 rounded-[14px] px-3 py-3 text-center",
+                    key === todayKey && "ds-accent",
                   )}
                 >
                   <p className="text-[12px] font-medium capitalize text-muted-foreground">
@@ -1771,10 +1777,7 @@ function WeekView({
                   <div className="mt-1 flex items-center justify-center gap-1">
                     <p
                       className={cn(
-                        "text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums",
-                        key === todayKey
-                          ? "inline-flex min-w-[52px] items-center justify-center rounded-full bg-accent-solid px-2.5 text-on-accent"
-                          : "text-foreground",
+                        "text-[32px] font-semibold leading-10 tracking-[-0.035em] tabular-nums text-foreground",
                       )}
                     >
                       {format(day, "dd")}
@@ -1791,7 +1794,7 @@ function WeekView({
                     )}
                   </div>
                 </header>
-                <div className="space-y-2 p-3">
+                <div className="space-y-2 px-2 pb-2.5 pt-1">
                   {dayAnchored.map((bundle) => (
                     <AnchoredPostPill
                       key={bundle.post.id}
@@ -1821,7 +1824,7 @@ function WeekView({
                     />
                   ))}
                   {dayItems.length === 0 && dayTasks.length === 0 && (
-                    <p className="rounded-md border border-dashed border-border/70 py-8 text-center text-[11px] text-muted-foreground/60">
+                    <p className="rounded-[14px] border border-dashed border-border py-8 text-center text-[11px] text-muted-foreground/70">
                       Solte aqui
                     </p>
                   )}
@@ -1889,7 +1892,7 @@ function BoardPostCard({
       // funcionando: o sensor só vira arrasto depois de mover alguns pixels.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        superficie.painel, "group rounded-md p-4 transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 motion-reduce:transition-none",
+        superficie.painel, "group p-4 transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 motion-reduce:transition-none",
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -1897,7 +1900,7 @@ function BoardPostCard({
       <button
         type="button"
         onClick={onClick}
-        className="relative mb-3 block w-full overflow-hidden rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        className="relative mb-3.5 block w-full overflow-hidden rounded-[16px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         style={{ paddingBottom: "56.25%" }}
         aria-label={`Ver conteúdo completo de ${post.post.title}`}
       >
@@ -1930,7 +1933,7 @@ function BoardPostCard({
         {draggable && !moving && (
           <button
             type="button"
-            className="inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-50 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
+            className="inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-full text-muted-foreground opacity-50 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
             aria-label={`Mover ${post.post.title}`}
             {...listeners}
             {...attributes}
@@ -2030,7 +2033,7 @@ function BoardTaskCard({
       // Arrasta pelo cartão inteiro; clique nos botões continua normal.
       {...(draggable ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group rounded-md border border-dashed border-primary/40 bg-card p-4 shadow-card transition-[border-color,box-shadow] duration-150 hover:border-primary/60 motion-reduce:transition-none",
+        "group rounded-lg border border-dashed border-primary/40 bg-card p-4 shadow-card transition-[border-color,box-shadow] duration-150 hover:border-primary/60 motion-reduce:transition-none",
         draggable && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -2069,7 +2072,7 @@ function BoardTaskCard({
         {draggable && (
           <button
             type="button"
-            className="inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-60 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
+            className="inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-full text-muted-foreground opacity-60 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
             aria-label={`Mover tarefa ${task.title}`}
             {...listeners}
             {...attributes}
@@ -2100,7 +2103,7 @@ function BoardTaskCard({
         type="button"
         variant="secondary"
         size="sm"
-        className="mt-3 h-8 w-full text-[11px]"
+        className="mt-3.5 h-9 w-full rounded-full text-[12px]"
         disabled={!canEdit || moving}
         onClick={onCreate}
       >
@@ -2218,7 +2221,7 @@ function BoardColumn({
     >
       {/* 16/10/2026: no celular o nome e a contagem já estão na aba. */}
       {!celular && (
-      <header className={cn("mb-2.5 rounded-md px-4 py-3", column.id === "production" ? "ds-ink" : column.id === "delivery" ? "ds-accent" : "bg-card shadow-card")} title={column.description}>
+      <header className={cn("mb-2.5 rounded-[18px] px-4 py-3.5", column.id === "production" ? "ds-ink" : column.id === "delivery" ? "ds-accent" : "bg-card shadow-card")} title={column.description}>
         <div className="flex min-w-0 items-center gap-2">
           <span className={cn("h-2 w-2 shrink-0 rounded-full", column.id === "production" || column.id === "delivery" ? "bg-foreground" : column.dot)} />
           <h2 className="min-w-0 flex-1 truncate text-[13px] font-medium text-muted-foreground">
@@ -2227,7 +2230,7 @@ function BoardColumn({
         </div>
         <Badge
           variant="secondary"
-          className="mt-1 h-auto justify-start rounded-none border-transparent bg-transparent p-0 text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums text-foreground hover:bg-transparent"
+          className="mt-1 h-auto justify-start rounded-none border-transparent bg-transparent p-0 text-[36px] font-semibold leading-10 tracking-[-0.035em] tabular-nums text-foreground hover:bg-transparent"
         >
           {posts.length + tasks.length}
         </Badge>
@@ -2266,7 +2269,7 @@ function BoardColumn({
           />
         ))}
         {posts.length === 0 && tasks.length === 0 && (
-          <div className="flex min-h-28 items-center justify-center rounded-md border border-dashed border-border/80 px-4 text-center">
+          <div className="flex min-h-28 items-center justify-center rounded-[18px] border border-dashed border-border px-4 text-center">
             <p className="text-[11px] leading-4 text-muted-foreground/70">
               {celular
                 ? "Nada nesta etapa"
@@ -2594,8 +2597,8 @@ function ListView({
                   onClick={() => onCreateFromTask(task, dateKey)}
                   className="flex w-full flex-col gap-3 rounded-lg px-3 py-4 text-left transition-colors hover:bg-violet-500/[0.06] sm:flex-row sm:items-center sm:gap-4"
                 >
-                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-[13px] font-semibold text-foreground">
+                  <div className="flex min-w-[104px] items-center gap-2 sm:block">
+                    <p className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">
                       {new Intl.DateTimeFormat("pt-BR", {
                         day: "2-digit",
                         month: "short",
@@ -2629,7 +2632,7 @@ function ListView({
                   </div>
                   <Badge
                     variant="outline"
-                    className="w-fit border-violet-500/25 bg-violet-500/10 text-violet-500"
+                    className="h-6 w-fit border-transparent bg-violet-500/15 px-2.5 text-violet-500"
                   >
                     Abrir ou preparar
                   </Badge>
@@ -2666,8 +2669,8 @@ function ListView({
                   className="flex w-full flex-col gap-3 rounded-lg px-3 py-4 text-left transition-colors hover:bg-muted/60 sm:flex-row sm:items-center sm:gap-4"
                 >
                   <EditorialFileThumbnail post={post} className="h-14 w-14" />
-                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-[15px] font-semibold tabular-nums text-foreground">{dia}</p>
+                  <div className="flex min-w-[104px] items-center gap-2 sm:block">
+                    <p className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{dia}</p>
                     <p className="text-[12px] text-muted-foreground">Prazo da tarefa</p>
                   </div>
                   <span className={cn("h-9 w-1 shrink-0 rounded-full", corDaEtapa(etapa).ponto)} />
@@ -2684,7 +2687,7 @@ function ListView({
                   </div>
                   <Badge
                     variant="outline"
-                    className={cn("w-fit", stageClasses[etapa] || stageClasses.draft)}
+                    className={cn("h-6 w-fit px-2.5", stageClasses[etapa] || stageClasses.draft)}
                   >
                     {nomeEtapa}
                   </Badge>
@@ -2743,8 +2746,8 @@ function ListView({
                     publication={item.publication}
                     className="h-14 w-14"
                   />
-                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-[13px] font-semibold text-foreground">
+                  <div className="flex min-w-[104px] items-center gap-2 sm:block">
+                    <p className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">
                       {new Intl.DateTimeFormat("pt-BR", {
                         timeZone: "America/Sao_Paulo",
                         day: "2-digit",
@@ -2791,7 +2794,7 @@ function ListView({
                     return (
                       <Badge
                         variant="outline"
-                        className={cn("w-fit", stageClasses[listStage] || stageClasses.draft)}
+                        className={cn("h-6 w-fit px-2.5", stageClasses[listStage] || stageClasses.draft)}
                       >
                         {listStage === "published" && (
                           <CheckCircle2 className="mr-1 h-3 w-3" />
@@ -2804,7 +2807,7 @@ function ListView({
                 <div className="flex shrink-0 items-center gap-1">
                   {draggable && !moving && (
                     <span
-                      className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground"
+                      className="inline-flex h-8 items-center gap-1 rounded-full border border-border px-3 text-[11px] text-muted-foreground"
                       title="Use a visualização de calendário para arrastar"
                     >
                       <GripVertical className="h-3 w-3" />
@@ -2908,7 +2911,7 @@ function ListView({
                 type="button"
                 onClick={() => onCreateFromTask(task)}
                 aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. Contexto: ${taskContentContext(task) || "não informado"}. ${taskDeliveryTypeLabel(task)}.${descricaoDaArteDoEstudio(arte)}`}
-                className="flex items-start gap-3 rounded-md border border-violet-500/20 bg-violet-500/[0.06] p-4 text-left transition-colors hover:border-violet-500/45"
+                className="flex items-start gap-3 rounded-[18px] border border-violet-500/25 bg-violet-500/10 p-4 text-left transition-colors hover:border-violet-500/50 sm:p-5"
               >
                 {arte && (
                   <MiniaturaDaArteDoEstudio
@@ -2953,7 +2956,7 @@ function ListView({
                 type="button"
                 onClick={() => onSelectPost(post)}
                 className={cn(
-                  "flex items-start gap-3 rounded-md border p-4 text-left transition-colors hover:border-foreground/25",
+                  "flex items-start gap-3 rounded-[18px] border p-4 text-left transition-colors hover:border-foreground/25 sm:p-5",
                   cor.borda,
                   cor.fundo,
                 )}
