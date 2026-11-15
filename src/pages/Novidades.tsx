@@ -1,3 +1,4 @@
+import { StatCard, StatGrid } from "@/components/ds";
 import { CheckCircle2, Hammer, Sparkles } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { CabecalhoDePagina, EstadoVazio, Secao, foco, juntar, superficie, texto } from "@/components/sistema";
@@ -70,6 +71,13 @@ export default function Novidades() {
         descricao={RELEASE_NOTES.length ? `${RELEASE_NOTES.length} ${RELEASE_NOTES.length === 1 ? "registro" : "registros"}` : undefined}
         ajuda="O painel evolui toda semana. Aqui fica o que mudou e o que está sendo construído agora. Nada some nem muda de lugar sem estar escrito aqui."
       />
+
+      {RELEASE_NOTES.length > 0 && (
+        <StatGrid cols={2} label="Novidades em números" className="max-w-3xl">
+          <StatCard variant="ink" icon={<Sparkles className="h-4 w-4" />} label="Já no ar" value={live.length} hint={live.length === 1 ? "registro publicado" : "registros publicados"} />
+          <StatCard variant="accent" icon={<Hammer className="h-4 w-4" />} label="Chegando nesta semana" value={building.length} hint="Em construção agora" />
+        </StatGrid>
+      )}
 
       <div className="max-w-3xl space-y-6">
         {building.length > 0 && (

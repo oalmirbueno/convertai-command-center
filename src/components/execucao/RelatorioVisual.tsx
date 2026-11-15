@@ -42,7 +42,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
   return (
     <div className="space-y-5">
       {/* O fluxo numa barra: de onde para onde o trabalho está andando. */}
-      <div className={juntar(superficie.painel, "p-4")}>
+      <div className={juntar(superficie.painel, "p-5")}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {listas.map(({ c, lista }) => (
             <div key={c.id} className="flex items-center gap-3">
@@ -98,7 +98,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
         })}
       </div>
 
-      <section className={juntar(superficie.painel, "p-4")}>
+      <section className={juntar(superficie.painel, "p-5")}>
         <h3 className="flex items-center gap-1.5 text-[14px] font-semibold"><AlertTriangle className={juntar("h-4 w-4", incidentes.length ? "text-warning" : "text-success")} aria-hidden="true" />Últimos 7 dias</h3>
         <p className="mt-1 text-[13px] text-muted-foreground">{recentes.length} execuções registradas · {incidentes.length ? `${incidentes.length} pararam no meio ou falharam` : "nenhuma falhou"}</p>
         {incidentes.length > 0 && (

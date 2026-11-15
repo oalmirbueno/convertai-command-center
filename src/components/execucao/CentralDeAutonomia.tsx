@@ -599,7 +599,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
       className="h-full min-h-0"
     />
   ) : (
-    <section className={juntar(superficie.painel, "p-4")}><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="O resumo, o histórico e as decisões ao lado continuam abertos para a equipe." /></section>
+    <section className={juntar(superficie.painel, "p-5")}><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="O resumo, o histórico e as decisões ao lado continuam abertos para a equipe." /></section>
   );
 
   const chatDoHermes = ehAdmin ? (
@@ -794,7 +794,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
           ))}
         </div>
       )}
-      {ehAdmin && conversasNoCelular && <div className={juntar(superficie.painel, "p-3")}>{listaDeConversas}</div>}
+      {ehAdmin && conversasNoCelular && <div className={juntar(superficie.painel, "p-4 sm:p-5")}>{listaDeConversas}</div>}
       <div ref={refDoCelular} style={{ height: alturaNoCelular }}>
         {ferramentaGrande ? (
           <div className={juntar(superficie.painel, "h-full overflow-hidden")}><FerramentaEmbutida ferramenta={ferramentaGrande} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} conteudo={conteudoDa(ferramentaGrande)} aoRecarregar={() => recarregarFerramenta(ferramentaGrande.caminho)} /></div>

@@ -145,7 +145,7 @@ export default function ConexoesDaConta() {
                 aria-checked={destino === d.valor}
                 onClick={() => setDestino(d.valor)}
                 data-destino={d.valor}
-                className={juntar(superficie.painel, "flex min-w-0 items-center p-3 text-left transition-colors", destino === d.valor ? "border-primary" : "hover:border-muted-foreground/40")}
+                className={juntar(superficie.painel, "flex min-w-0 items-center p-4 sm:p-5 text-left transition-colors", destino === d.valor ? "border-primary" : "hover:border-muted-foreground/40")}
               >
                 <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", destino === d.valor ? "bg-primary text-primary-foreground" : "bg-accent-soft text-primary")}>{d.icone}</span>
                 <span className="min-w-0 flex-1">

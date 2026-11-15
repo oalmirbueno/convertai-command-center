@@ -101,7 +101,7 @@ function CartaoDeCobranca({ m, aoMudar }: { m: MensagemAutomatica; aoMudar: () =
   };
 
   return (
-    <li className={juntar(superficie.painel, "flex min-w-0 flex-col p-4")} data-cobranca={m.id}>
+    <li className={juntar(superficie.painel, "flex min-w-0 flex-col p-5")} data-cobranca={m.id}>
       <div className="flex min-w-0 items-center">
         <div className="min-w-0 flex-1">
           <p className={juntar(texto.corpo, "truncate font-medium")}>{m.cliente}</p>
@@ -181,7 +181,7 @@ function ModeloDoLembrete({ modelo, painel, aoMudar }: { modelo: ModeloDeMensage
   };
 
   return (
-    <div className={juntar(superficie.painel, "min-w-0 p-4")} data-modelo-lembrete={aprovado ? "aprovado" : "sem-aprovacao"}>
+    <div className={juntar(superficie.painel, "min-w-0 p-5")} data-modelo-lembrete={aprovado ? "aprovado" : "sem-aprovacao"}>
       <div className="flex min-w-0 items-center">
         <ShieldCheck className={juntar("mr-2 h-4 w-4 shrink-0", aprovado ? "text-success" : "text-warning")} aria-hidden="true" />
         <p className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>
