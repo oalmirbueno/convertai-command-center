@@ -81,7 +81,7 @@ function CorpoDoPainel({
         <div className={juntar("flex min-w-0 items-start justify-between", semEspaco || fechado ? "px-5 py-4" : "px-5 pt-5 sm:px-6 sm:pt-6", semEspaco && !fechado && "border-b border-border", fechado && "sm:px-6")}>
           <div className="mr-3 min-w-0 flex-1">
             {titulo && (
-              <div className="flex min-w-0 items-center">
+              <div className="flex min-w-0 items-start">
                 {recolhivel ? (
                   <>
                     {/* Setinha pequena; o título continua título (clicar nele também alterna). relative -left-1, nunca margem negativa. */}
@@ -96,12 +96,12 @@ function CorpoDoPainel({
                     >
                       <ChevronDown className={juntar("h-4 w-4 transition-transform duration-200", fechado ? "-rotate-90" : "")} aria-hidden="true" />
                     </button>
-                    <h3 className={juntar(texto.tituloSecao, "min-w-0 cursor-pointer select-none truncate")} onClick={onAlternar}>
+                    <h3 className={juntar(texto.tituloSecao, "min-w-0 cursor-pointer select-none line-clamp-2 break-words [text-wrap:balance]")} onClick={onAlternar}>
                       {titulo}
                     </h3>
                   </>
                 ) : (
-                  <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{titulo}</h3>
+                  <h3 className={juntar(texto.tituloSecao, "min-w-0 line-clamp-2 break-words [text-wrap:balance]")}>{titulo}</h3>
                 )}
                 {ajuda && !fechado && <AjudaRecolhida className="no-print ml-1.5">{ajuda}</AjudaRecolhida>}
               </div>
