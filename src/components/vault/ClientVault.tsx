@@ -217,6 +217,8 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
     { password: [], link: [], system: [] }
   );
 
+  // A aba escolhida some quando o grupo fica vazio: volta para "Tudo" em vez de mostrar o cofre vazio.
+  const abaCofre = abaDoCofre !== "todos" && !(grouped[abaDoCofre as Category] || []).length ? "todos" : abaDoCofre;
   const total = (items || []).length;
   const novoItem = canManage ? (
     <button type="button" onClick={() => setEditing({ category: "password" })} className={botao.primario}>
@@ -263,7 +265,7 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
             <PillTabs
               className="mb-6 sm:mb-8"
               label="Grupos do cofre"
-              value={abaDoCofre}
+              value={abaCofre}
               onChange={setAbaDoCofre}
               tabs={[{ value: "todos", label: "Tudo", count: total }].concat(
                 (Object.keys(CATEGORY_META) as Category[])
@@ -276,7 +278,7 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
             {(Object.keys(CATEGORY_META) as Category[]).map((cat) => {
               const list = grouped[cat];
               if (!list || list.length === 0) return null;
-              if (amplo && abaDoCofre !== "todos" && abaDoCofre !== cat) return null;
+              if (amplo && abaCofre !== "todos" && abaCofre !== cat) return null;
               return (
                 <GrupoDoCofre key={cat} clientId={clientId} categoria={cat} total={list.length}>
                   <ul className={juntar(espaco.grade, "grid-cols-1", amplo && "xl:grid-cols-2")}>

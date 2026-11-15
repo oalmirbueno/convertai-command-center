@@ -488,9 +488,12 @@ export default function ClientJourneyUpdates() {
   );
 
   // v4 F2 (passada estrutural): o que vem depois do retrato fica em abas, no lugar de sete seções empilhadas.
-  const [aba, setAba] = useEstadoDaTela("onde-estamos:aba", "andamento", {
+  const [abaSalva, setAba] = useEstadoDaTela("onde-estamos:aba", "andamento", {
     validar: (v) => v === "andamento" || v === "resultados" || v === "diario" || v === "atualizacoes",
   });
+
+  // "Atualizações" só existe com rituais: sem eles, a aba salva volta para "Andamento".
+  const aba = abaSalva === "atualizacoes" && rituals.length === 0 ? "andamento" : abaSalva;
 
   // Todos os hooks já rodaram: agora sim o staff sem "Ver como Cliente" sai.
   if (deveRedirecionar) {
