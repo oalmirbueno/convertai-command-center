@@ -154,18 +154,18 @@ export function TrioDeNumeros({ itens, className = "" }: { itens: Array<{ rotulo
  * Passos ligados por linha (referência "Financial Roadmap"): círculo com ✓
  * quando feito, anel na cor da marca no atual, apagado no que falta.
  */
-export function Passos({ itens, rotulo, className = "" }: { itens: Array<{ rotulo: string; feito: boolean; atual?: boolean; apoio?: string }>; rotulo: string; className?: string }) {
+export function Passos({ itens, rotulo, compacto = false, className = "" }: { itens: Array<{ rotulo: string; feito: boolean; atual?: boolean; apoio?: string }>; rotulo: string; /** Só os círculos e a linha; o nome do passo fica na dica. */ compacto?: boolean; className?: string }) {
   if (itens.length === 0) return null;
   return (
     <ol aria-label={rotulo} className={juntar("flex min-w-0 items-start", className)} data-passos="">
       {itens.map((p, i) => (
-        <li key={`${p.rotulo}-${i}`} className="relative flex min-w-0 flex-1 flex-col items-center text-center" aria-current={p.atual ? "step" : undefined}>
-          {i > 0 && <span aria-hidden="true" className={juntar("absolute right-1/2 top-[11px] mr-3 h-0.5 w-[calc(100%-24px)] rounded-full", p.feito || p.atual ? "bg-primary" : "bg-border")} />}
+        <li key={`${p.rotulo}-${i}`} title={compacto ? `${i + 1}. ${p.rotulo}${p.feito ? " (feito)" : ""}` : undefined} className="relative flex min-w-0 flex-1 flex-col items-center text-center" aria-current={p.atual ? "step" : undefined}>
+          {i > 0 && <span aria-hidden="true" className={juntar("absolute right-1/2 top-[11px] mr-3 h-0.5 w-[calc(100%-24px)] rounded-full", itens[i - 1].feito ? "bg-primary" : "bg-border")} />}
           <span aria-hidden="true" className={juntar("relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums", p.feito ? "bg-accent-solid text-on-accent" : p.atual ? "bg-card text-foreground ring-2 ring-primary" : "bg-muted text-muted-foreground")}>
             {p.feito ? <Check className="h-3.5 w-3.5" /> : i + 1}
           </span>
-          <span className={juntar("mt-1.5 block w-full truncate px-1 text-[11px] leading-4", p.atual ? "font-semibold text-foreground" : "text-muted-foreground")} title={p.rotulo}>{p.rotulo}{p.feito && <span className="sr-only">, feito</span>}</span>
-          {p.apoio && <span className="block w-full truncate px-1 text-[10.5px] leading-4 text-muted-foreground">{p.apoio}</span>}
+          {compacto ? <span className="sr-only">{p.rotulo}{p.feito ? ", feito" : ""}</span> : <span className={juntar("mt-1.5 block w-full truncate px-1 text-[11px] leading-4", p.atual ? "font-semibold text-foreground" : "text-muted-foreground")} title={p.rotulo}>{p.rotulo}{p.feito && <span className="sr-only">, feito</span>}</span>}
+          {!compacto && p.apoio && <span className="block w-full truncate px-1 text-[10.5px] leading-4 text-muted-foreground">{p.apoio}</span>}
         </li>
       ))}
     </ol>
