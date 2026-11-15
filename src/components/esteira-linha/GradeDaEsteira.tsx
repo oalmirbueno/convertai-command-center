@@ -34,7 +34,9 @@ export const CLASSES_DA_ROLAGEM_DAS_DATAS = "relative min-h-0 min-w-0 flex-1 ove
  * individual em cada coluna"); substitui o "+N" de 21h08. Só na vertical.
  * Sem `overscroll-contain`: no fim da célula, a rolagem segue para a área.
  */
-export const CLASSES_DA_ROLAGEM_DA_CELULA = "-m-0.5 max-h-[196px] space-y-2 overflow-y-auto overflow-x-hidden p-0.5 sm:max-h-[264px] sm:space-y-2.5";
+// Rolagem (S1, 15/11): só no computador o dia cheio rola dentro da célula (barra fina, sem arrastar a grade
+// no fim); no celular e no tablet a célula cresce e a página rola, sem rolagem dentro de rolagem prendendo o dedo.
+export const CLASSES_DA_ROLAGEM_DA_CELULA = "rolagem-fina space-y-2 sm:space-y-2.5 lg:-m-0.5 lg:max-h-[264px] lg:overflow-y-auto lg:overflow-x-hidden lg:p-0.5";
 
 function Colunas({ dias }: { dias: DiaDaGrade[] }) {
   return (
