@@ -62,7 +62,7 @@ export function BarraSegmentada({ itens, rotulo, className = "" }: { itens: Segm
         const estilo: CSSProperties = { flexGrow: s.valor, flexBasis: 0, minWidth: 68 };
         const classe = juntar("block min-w-0", i > 0 && "ml-1.5");
         return s.aoClicar ? (
-          <button key={s.rotulo} type="button" onClick={s.aoClicar} style={estilo} title={`${s.rotulo}: ${s.valor}`} className={juntar(classe, "toque-compacto rounded-2xl text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
+          <button key={s.rotulo} type="button" onClick={s.aoClicar} style={estilo} title={`${s.rotulo}: ${s.valor}`} className={juntar(classe, "toque-compacto rounded-xl text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
             {miolo}
           </button>
         ) : (

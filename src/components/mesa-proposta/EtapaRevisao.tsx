@@ -75,7 +75,7 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
   const [comparar, setComparar] = useState<number | null>(null);
   const semOrigem = useMemo(() => (proposta ? conteudoSemNumeroInventado(proposta.conteudo, origemNaTela(proposta)).tiradas : []), [proposta]);
 
-  if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
+  if (!proposta) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
   const conferencia = proposta.contexto.conferencia || [];
   const ultima = revisao || (proposta.contexto.revisao ? { avisos: proposta.contexto.revisao.avisos || [], notas: proposta.contexto.revisao.notas || {} } : null);
   const listaDeVersoes = versoes.data || [];

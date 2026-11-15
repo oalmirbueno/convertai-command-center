@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Search, X } from "lucide-react";
-import { botao, campo, juntar } from "@/components/sistema/estilos";
+import { botao, campo, juntar, superficie } from "@/components/sistema/estilos";
 
 /** Campo de busca em pílula. */
 export function SearchField({
@@ -41,6 +41,7 @@ export default function Toolbar({
   filters,
   views,
   actions,
+  surface = false,
   label = "Ferramentas",
   className = "",
 }: {
@@ -52,9 +53,18 @@ export default function Toolbar({
   views?: ReactNode;
   /** Ações da barra, à direita. */
   actions?: ReactNode;
+  /** A barra dentro de uma faixa branca arredondada (linha de filtros das referências). */
+  surface?: boolean;
   label?: string;
   className?: string;
 }) {
+  if (surface) {
+    return (
+      <div data-toolbar-surface="" className={juntar(superficie.painel, "min-w-0 p-2 sm:p-2.5", className)}>
+        <Toolbar search={search} filters={filters} views={views} actions={actions} label={label} />
+      </div>
+    );
+  }
   return (
     <div role="group" aria-label={label} data-toolbar="" className={juntar("-m-1 flex min-w-0 flex-wrap items-center", className)}>
       {search && <div className="m-1 min-w-[180px] max-w-full flex-1 sm:max-w-[320px]">{search}</div>}

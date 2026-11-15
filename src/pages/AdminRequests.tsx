@@ -49,7 +49,7 @@ import {
   useEstadoDaTela,
   useLargo,
 } from "@/components/sistema";
-import { Avatar, PageHeader, StatCard, StatGrid } from "@/components/ds";
+import { Avatar, PageHeader } from "@/components/ds";
 
 const statusOptions = [
   { value: "new", label: "Novo", cls: "bg-info-soft text-info" },
@@ -675,22 +675,6 @@ export default function AdminRequests() {
           </>
         }
       />
-
-      {/* Os números do filtro de status, grandes; clicar filtra. Só no computador (a tela tem a altura da janela). */}
-      {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a lista não pula quando os números chegam. */}
-      {(isLoading || todos.length > 0) && (
-        <StatGrid cols={filters.length >= 5 ? 5 : 4} label="Resumo dos pedidos" className="mt-6 hidden lg:grid">
-          {filters.slice(0, 5).map((item, i) => (
-            <StatCard
-              key={item.value}
-              variant={i === 0 ? "ink" : i === 1 ? "accent" : "default"}
-              label={item.label}
-              value={isLoading ? "–" : contagemStatus(item.value)}
-              onClick={() => setFilter(item.value)}
-            />
-          ))}
-        </StatGrid>
-      )}
 
       <AreaDeTrabalho principalRolavel={false} className="mt-5">
         {/* Busca primeiro; status, cliente e prioridade na linha 2 (no máximo

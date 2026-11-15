@@ -296,7 +296,7 @@ export default function MesaAds() {
       }
     >
 
-      {!clientId && <EstadoVazio titulo="Escolha um cliente para abrir a Mesa Ads dele." descricao="Oferta, referências, plano de teste, criativos, conta ao vivo e resultados." />}
+      {!clientId && <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Escolha um cliente para abrir a Mesa Ads dele." descricao="Oferta, referências, plano de teste, criativos, conta ao vivo e resultados." />}
 
       {valor && (
         <MesaProvider valor={valor}>

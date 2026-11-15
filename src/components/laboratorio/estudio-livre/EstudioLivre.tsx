@@ -14,10 +14,11 @@ import { DetalheDoItem } from "@/components/mesa/AbaEstudio";
 import { emColunas, useFaixa } from "@/components/mesa/EstudioAltura";
 import { temJanelaAberta } from "@/components/mesa/TelaCheiaDaMesa";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
-import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { Carregando } from "@/components/sistema/Estados";
 import { NOVA_ARTE_RAPIDA } from "../../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import GuardarNoLaboratorio from "./GuardarNoLaboratorio";
 import { JanelaDeCreditos, useCreditosDoLab } from "../CreditosDoLab";
+import { ZonaVazia } from "../visual";
 import { chaveDosCreditos } from "@/lib/laboratorio/api";
 
 /**
@@ -168,7 +169,7 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         value={livre ? LIVRE : pedido}
         onChange={(e) => setEscolhido(e.target.value)}
         aria-label="Cliente do trabalho"
-        className="h-8 w-full min-w-0 rounded-md border border-border bg-background px-2 text-[13px]"
+        className="h-9 w-full min-w-0 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-cliente-do-estudio-livre={livre ? "livre" : pedido}
       >
         <option value={LIVRE}>Livre</option>
@@ -186,12 +187,13 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
   if (!valor) {
     if (clientesQuery.isLoading || (livre && !clientesQuery.isSuccess)) return <Carregando forma="aba" rotulo="Abrindo o Estúdio livre" />;
     return (
-      <div className="min-w-0 space-y-3" data-estudio-livre="sem-cliente">
-        {seletor}
-        <EstadoVazio
+      <div className="min-w-0 space-y-4" data-estudio-livre="sem-cliente">
+        {seletor ? <div className="w-full max-w-[320px]">{seletor}</div> : null}
+        <ZonaVazia
           icone={<Palette className="h-5 w-5" />}
           titulo={livre ? "Estúdio livre indisponível" : "Cliente indisponível"}
           descricao={livre ? "O Estúdio livre não abriu agora. Atualize a página ou escolha um cliente." : "Escolha outro cliente ou Livre."}
+          className="py-16"
         />
       </div>
     );

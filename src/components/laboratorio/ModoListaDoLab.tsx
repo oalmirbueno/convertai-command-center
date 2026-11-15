@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import { ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { ChevronDown, ChevronRight, Lock, Workflow } from "lucide-react";
 import { juntar, lista, texto } from "@/components/sistema";
 import { TIPOS_DE_NO, ordemTopologica, resumoDoNo, type CanvasDoLab, type TipoDeNo } from "@/lib/laboratorio/nos";
 import type { ExecucaoDoLab } from "@/lib/laboratorio/api";
 import { EstadoDoNo } from "./ResultadoDoNo";
 import { IconeDoNo } from "./icones";
 import Paleta from "./Paleta";
+import { CirculoDoIcone, ZonaVazia } from "./visual";
 
 /**
  * Modo lista (celular, abaixo de 768 px, como o da Mesa Foto): o mesmo grafo
@@ -34,18 +35,18 @@ export default function ModoListaDoLab({
   return (
     <div className="min-w-0 space-y-3" data-modo-lista-do-lab="">
       <Paleta onPor={onPor} vertical={false} />
-      {!nos.length && <p className={texto.auxiliar}>Nenhum nó ainda. Toque num ícone acima.</p>}
-      <ul className={juntar(lista.aberta, lista.divisoria)}>
+      {!nos.length && <ZonaVazia icone={<Workflow className="h-5 w-5" />} titulo="Nenhum nó ainda" descricao="Toque num ícone acima." className="py-8" />}
+      <ul className="min-w-0 space-y-2">
         {nos.map((n) => {
           const aberto = selecionado === n.id;
           const e = execucoes[n.id];
           const def = TIPOS_DE_NO[n.tipo];
           return (
-            <li key={n.id} className="min-w-0 py-1" data-linha-do-no={n.id}>
-              <button type="button" className={juntar(lista.linha, "w-full text-left")} onClick={() => onSelecionar(aberto ? null : n.id)} aria-expanded={aberto}>
-                <span className="mr-2 inline-flex shrink-0" style={{ color: def.cor }}>
+            <li key={n.id} className="min-w-0 rounded-[22px] bg-card shadow-card" data-linha-do-no={n.id}>
+              <button type="button" className={juntar(lista.linha, "w-full rounded-[22px] px-2.5 py-2.5 text-left")} onClick={() => onSelecionar(aberto ? null : n.id)} aria-expanded={aberto}>
+                <CirculoDoIcone cor={def.cor} className="mr-3">
                   <IconeDoNo tipo={n.tipo} />
-                </span>
+                </CirculoDoIcone>
                 <span className="min-w-0 flex-1">
                   <span className={juntar(texto.corpo, "block truncate font-medium")}>{def.rotulo}</span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>{resumoDoNo(n) || def.dica}</span>
@@ -58,7 +59,7 @@ export default function ModoListaDoLab({
                 ) : null}
                 {aberto ? <ChevronDown className="ml-1 h-4 w-4 shrink-0" aria-hidden="true" /> : <ChevronRight className="ml-1 h-4 w-4 shrink-0" aria-hidden="true" />}
               </button>
-              {aberto ? <div className="min-w-0 px-2 pb-3 pt-1">{inspetor}</div> : null}
+              {aberto ? <div className="min-w-0 px-3 pb-4 pt-1">{inspetor}</div> : null}
             </li>
           );
         })}

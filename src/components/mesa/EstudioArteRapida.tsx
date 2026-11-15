@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lerAgendaDoCliente } from "./agendaInteligenteApi";
 import { avisoDoDia, dataBr, horaLivre, proximoEspaco, somarDias as somarDiasNaAgenda } from "../../../supabase/functions/_shared/agenda-inteligente";
 import { Link, useSearchParams } from "react-router-dom";
-import { Archive, CalendarPlus, FileText, ImagePlus, Link2, ListChecks, Loader2, Paperclip, Plus, Sparkles, Wand2, X, Zap } from "lucide-react";
+import { Archive, CalendarPlus, Eye, FileText, ImagePlus, Link2, ListChecks, Loader2, Paperclip, Plus, Sparkles, Wand2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -495,7 +495,7 @@ function PedidoDaArteRapida({
             <ul className="grid grid-cols-3 gap-2 sm:gap-3 px-3 pb-2 sm:grid-cols-4 xl:grid-cols-6" aria-label="Imagens do pedido">
               {fotosDoAcervo.map((f) => (
                 <li key={f.id} className="min-w-0">
-                  <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: "100%" }}>
+                  <div className={`relative overflow-hidden rounded-md bg-muted ${primeiraImagem ? "" : "ds-hatch"}`} style={{ paddingBottom: "100%" }}>
                     <ImagemDaMesa caminho={f.caminho} bucket={f.bucket} alt={f.nome} className="absolute inset-0 h-full w-full object-cover" />
                     <button type="button" onClick={() => setFotosDoAcervo((l) => l.filter((x) => x.id !== f.id))} aria-label={`Tirar ${f.nome}`} title={`Tirar ${f.nome}`} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
                       <X className="h-3.5 w-3.5" />
@@ -506,7 +506,7 @@ function PedidoDaArteRapida({
               ))}
               {anexos.lista.map((a) => (
                 <li key={a.id} className="min-w-0">
-                  <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: "100%" }}>
+                  <div className={`relative overflow-hidden rounded-md bg-muted ${primeiraImagem ? "" : "ds-hatch"}`} style={{ paddingBottom: "100%" }}>
                     {a.previa ? <img src={a.previa} alt={a.nome} className="absolute inset-0 h-full w-full object-cover" /> : <ImagemDaMesa caminho={a.caminho} alt={a.nome} className="absolute inset-0 h-full w-full object-cover" />}
                     {a.estado === "subindo" && (
                       <span className="absolute inset-0 flex items-center justify-center bg-background/60"><Loader2 className="h-4 w-4 animate-spin" /></span>
@@ -730,7 +730,8 @@ function PedidoDaArteRapida({
 
   const cabecalho = (
     <div className="flex min-w-0 items-center">
-      <h2 className="shrink-0 text-[15px] font-semibold leading-tight">{origem === "laboratorio" ? "Estúdio livre" : "Arte rápida"}</h2>
+      <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-solid text-on-accent"><Zap className="h-4 w-4" /></span>
+      <h2 className="shrink-0 text-[18px] font-medium leading-6 tracking-[-0.02em]">{origem === "laboratorio" ? "Estúdio livre" : "Arte rápida"}</h2>
       {/* 14/11/2026 (dono: "explicação longa atrás do ?"): a linha explicativa saiu do lado do título. */}
       <AjudaRecolhida className="ml-1.5" rotulo={origem === "laboratorio" ? "O que é o Estúdio livre" : "O que é a Arte rápida"}>
         {origem === "laboratorio" ? "Trabalho avulso, com o diretor de arte de sempre. Fica no arquivo livre, fora da Mesa do cliente." : "Fora do plano do mês, com a marca, a campanha e o diretor de arte de sempre."}
@@ -741,12 +742,13 @@ function PedidoDaArteRapida({
   // Prévia à direita (tela larga): como a peça vai sair, com o que já foi escolhido.
   const previa = (
     <aside className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-col overflow-hidden")} aria-label="Como vai sair" data-previa-da-arte-rapida="">
-      <div className="shrink-0 border-b border-border px-4 py-3">
-        <p className="text-[13px] font-semibold">Como vai sair</p>
+      <div className="flex shrink-0 items-center px-4 pb-1 pt-4">
+        <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary"><Eye className="h-4 w-4" /></span>
+        <p className="min-w-0 truncate text-[15px] font-medium tracking-[-0.01em]">Como vai sair</p>
       </div>
       <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="space-y-4 p-4" sobre="cartao">
         <div className="mx-auto w-full max-w-[220px]">
-          <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: `${Math.round(100 / (FORMATOS_DO_POST.filter((f) => f.valor === formato)[0] || FORMATOS_DO_POST[0]).proporcao)}%` }}>
+          <div className={`relative overflow-hidden rounded-md bg-muted ${primeiraImagem ? "" : "ds-hatch"}`} style={{ paddingBottom: `${Math.round(100 / (FORMATOS_DO_POST.filter((f) => f.valor === formato)[0] || FORMATOS_DO_POST[0]).proporcao)}%` }}>
             {primeiraImagem ? (
               primeiraImagem.src ? (
                 <img src={primeiraImagem.src} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -761,7 +763,7 @@ function PedidoDaArteRapida({
                 <SeloDaCampanha campanha={escolhida} tamanho="h-8 w-8" />
               </span>
             )}
-            <span className="absolute bottom-2 right-2 rounded bg-background/90 px-1.5 text-[11px] font-medium tabular-nums">{rotuloDoFormato}</span>
+            <span className="absolute bottom-2 right-2 inline-flex h-6 items-center rounded-full bg-foreground px-2 text-[11px] font-semibold tabular-nums text-background">{rotuloDoFormato}</span>
           </div>
         </div>
         <dl className="space-y-2.5 text-[13px]">
@@ -783,10 +785,19 @@ function PedidoDaArteRapida({
             <dd className="ml-3 text-right font-medium tabular-nums">{documentos.length}</dd>
           </div>
         </dl>
-        <ol className="space-y-1.5 border-t border-border pt-3 text-[12px] leading-snug text-muted-foreground">
-          <li>1. {semMarca ? "O diretor lê só o pedido e as imagens, sem marca de cliente." : `O diretor lê o pedido com a marca${escolhida ? " e a campanha" : ""}.`}</li>
-          <li>2. {geraJunto ? "A arte única já entra na fila de geração." : "Você confere a direção e gera."}</li>
-          <li>3. {origem === "laboratorio" ? "Depois: ajustar no Estúdio e guardar no arquivo livre (fora da Mesa do cliente)." : "Depois: ajustar no Estúdio e levar para a Agenda com a data."}</li>
+        {/* v4 (etapas das referências): os três passos com o número num círculo e a linha ligando. */}
+        <ol className="rounded-md bg-muted/60 p-3 text-[12px] leading-snug text-muted-foreground">
+          {[
+            semMarca ? "O diretor lê só o pedido e as imagens, sem marca de cliente." : `O diretor lê o pedido com a marca${escolhida ? " e a campanha" : ""}.`,
+            geraJunto ? "A arte única já entra na fila de geração." : "Você confere a direção e gera.",
+            origem === "laboratorio" ? "Depois: ajustar no Estúdio e guardar no arquivo livre (fora da Mesa do cliente)." : "Depois: ajustar no Estúdio e levar para a Agenda com a data.",
+          ].map((passo, i, todos) => (
+            <li key={i} className="relative flex min-w-0 pb-3 last:pb-0">
+              {i < todos.length - 1 && <span aria-hidden="true" className="absolute bottom-0 left-[11px] top-6 w-px bg-border" />}
+              <span aria-hidden="true" className={`mr-2.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums ${i === 0 ? "bg-accent-solid text-on-accent" : "bg-card text-foreground"}`}>{i + 1}</span>
+              <span className="min-w-0 flex-1 pt-0.5"><span className="sr-only">{i + 1}. </span>{passo}</span>
+            </li>
+          ))}
         </ol>
       </RegiaoRolavel>
     </aside>
@@ -1325,7 +1336,13 @@ export default function EstudioArteRapida({
         </div>
       )}
       {lista.isError && <p className="p-2 text-[12px] text-destructive">{textoDoErro(lista.error)}</p>}
-      {lista.isSuccess && !historico.length && <p className="px-2 py-4 text-center text-[12px] text-muted-foreground">Nenhuma arte rápida ainda. As que você criar ficam aqui para voltar e ajustar.</p>}
+      {lista.isSuccess && !historico.length && (
+        <div className="ds-hatch flex flex-col items-center rounded-md px-3 py-6 text-center" data-empty-state="">
+          <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-card"><Zap className="h-4 w-4" /></span>
+          <p className="mt-3 text-[13px] font-medium text-foreground">Nenhuma arte rápida ainda</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">As que você criar ficam aqui.</p>
+        </div>
+      )}
       <ul className="space-y-0.5" aria-label="Histórico da arte rápida">
         {historico.map((t) => (
           <li key={t.id} className="min-w-0">

@@ -13,6 +13,8 @@ import { juntar } from "@/components/sistema/estilos";
  */
 export default function PageHeader({
   title,
+  eyebrow,
+  stats,
   greeting,
   subtitle,
   help,
@@ -24,6 +26,10 @@ export default function PageHeader({
   className = "",
 }: {
   title: ReactNode;
+  /** Sobretítulo miúdo e apagado em cima do título ("Operação / Semana"). */
+  eyebrow?: ReactNode;
+  /** Números-resumo sem cartão, logo abaixo do título (use o StatTrio). */
+  stats?: ReactNode;
   /** Segunda parte do título, apagada, na mesma linha (o nome na saudação). */
   greeting?: ReactNode;
   /** Uma linha curta de apoio embaixo do título (some no celular). */
@@ -41,7 +47,9 @@ export default function PageHeader({
 }) {
   return (
     <div className={juntar("min-w-0", className)} data-page-header="">
+      {eyebrow && <p className="mb-1 min-w-0 truncate text-[12px] font-medium leading-4 text-muted-foreground">{eyebrow}</p>}
       <CabecalhoDePagina titulo={greeting ? <>{title} <span className="font-normal text-muted-foreground">{greeting}</span></> : title} descricao={subtitle} ajuda={help} acoes={actions} voltar={back ? { para: back.to, rotulo: back.label } : undefined} aoLado={beside} nivel={level} />
+      {stats && <div className="mt-4 min-w-0 sm:mt-5">{stats}</div>}
       {toolbar && <div className="mt-5 min-w-0 sm:mt-6">{toolbar}</div>}
     </div>
   );

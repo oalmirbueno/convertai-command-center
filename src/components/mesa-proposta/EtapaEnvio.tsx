@@ -63,7 +63,7 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
   const [editada, setEditada] = useState<{ origem: string; texto: string } | null>(null);
   const [mandandoEmail, setMandandoEmail] = useState(false);
 
-  if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
+  if (!proposta) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
   const bloqueios = proposta.pendencias.filter((p) => p.bloqueia);
   const link = linkPublico(proposta.status !== "rascunho" ? proposta.token : null);
   // Ordem: a resposta do enviar, depois o contato lido, depois vazio (nunca inventa nome nem número).

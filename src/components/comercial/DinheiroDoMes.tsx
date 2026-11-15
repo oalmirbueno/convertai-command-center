@@ -52,6 +52,12 @@ export default function DinheiroDoMes({ recebido, caixa }: { recebido?: Recebido
                   <span className="ml-2 shrink-0 font-medium tabular-nums text-foreground">{Math.round((caixa.saiuNoMes / recebido.total) * 100)}%</span>
                 </span>
               </span>
+            ) : !recebido || !caixa ? (
+              // v4 (15/11/2026): enquanto os números chegam, a barra reserva o lugar (o cartão não cresce depois).
+              <span aria-hidden="true" className="block min-w-0">
+                <span className="block h-2.5 rounded-full bg-muted" />
+                <span className="mt-2 block h-4" />
+              </span>
             ) : undefined
           }
         />
@@ -75,6 +81,7 @@ export default function DinheiroDoMes({ recebido, caixa }: { recebido?: Recebido
       <CardSurface padded className="flex min-w-0 flex-col xl:col-span-5" data-de-onde-entrou="">
         <p className={texto.tituloSecao}>De onde entrou</p>
         <div role="group" aria-label="De onde entrou" className="mt-5 flex min-w-0 flex-1 flex-col items-center sm:flex-row">
+          {!recebido && <span aria-hidden="true" className="mb-4 block h-[132px] w-[132px] shrink-0 rounded-full border-[16px] border-muted sm:mb-0 sm:mr-6" />}
           {recebido && recebido.total > 0 && (
             <Donut segments={partes} size={132} thickness={16} className="mb-4 shrink-0 sm:mb-0 sm:mr-6" label="Partes do recebido do mês">
               <span className="block text-center text-[11px] font-medium leading-4 text-muted-foreground">recebido</span>

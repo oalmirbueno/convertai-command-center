@@ -183,7 +183,7 @@ function CartaoDoAngulo({
         </label>
         <div className="min-w-0 flex-1">
           <p className={texto.rotulo}>Ângulo {indice + 1}</p>
-          <h3 className="text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{angulo.nome}</h3>
+          <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug" title={angulo.nome}>{angulo.nome}</h3>
           <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
             {temQualidade && (
               <span
@@ -576,7 +576,7 @@ export default function AbaPlano({
         {planos.isError && <AvisoDeErro erro={planos.error} />}
         {planos.isLoading && <Carregando forma="aba" rotulo="Lendo os planos" />}
         {planos.data && !plano && desdeGerar === null && (
-          <EstadoVazio icone={<FlaskConical className="h-5 w-5" />} titulo="Nenhum plano ainda" descricao="Escolha uma oferta na etapa Oferta, destaque algumas referências e gere o primeiro plano." />
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<FlaskConical className="h-5 w-5" />} titulo="Nenhum plano ainda" descricao="Escolha uma oferta na etapa Oferta, destaque algumas referências e gere o primeiro plano." />
         )}
         {desdeGerar !== null && !plano && <div className="h-64 animate-pulse rounded-lg bg-muted/70" aria-label="Gerando o plano" />}
 

@@ -566,7 +566,7 @@ export default function AbaReferencias() {
       {referencias.isError && <AvisoDeErro erro={referencias.error} />}
       {!parte.recolhido && referencias.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo as referências" />}
       {!parte.recolhido && referencias.data && filtradas.length === 0 && (
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Library className="h-5 w-5" />}
           titulo={todas.length ? "Nenhuma referência com esses filtros" : "A biblioteca ainda está vazia"}
           descricao={todas.length ? "Limpe os filtros para ver todas." : "Importe os anúncios do cliente, peça os padrões do nicho, cole um link ou suba um print."}

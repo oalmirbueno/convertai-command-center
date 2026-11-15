@@ -1594,7 +1594,7 @@ export default function EtapaModelos() {
         </div>
       ) : personasQ.isLoading ? null : (
         <EstadoVazio
-          className="mt-6"
+          className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground mt-6"
           icone={<UserRound className="h-5 w-5" />}
           titulo="Crie a primeira persona"
           descricao="Candidatas em vários motores, a âncora, a folha das 6 vistas e o 4K."

@@ -47,7 +47,6 @@ import {
   useEstadoDaTela,
   useLargo,
 } from "@/components/sistema";
-import { ProgressBar, StatCard, StatGrid } from "@/components/ds";
 
 const clientApprovalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning-soft text-warning border-transparent", label: "Aguardando cliente" },
@@ -614,23 +613,6 @@ export default function AdminApprovals() {
             ) : undefined
           }
         />
-
-      {/* Os números da fila aberta (os mesmos do seletor "Situação"), grandes; clicar num deles filtra. Só no computador. */}
-      {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a lista não pula quando os números chegam. */}
-      {(isLoading || approvalFiles.length > 0) && (
-        <StatGrid cols={4} label="Resumo da fila" className="mt-6 hidden lg:grid">
-          {tabs.slice(0, 4).map((t, i) => (
-            <StatCard
-              key={t.id}
-              variant={t.id === "pending" ? "accent" : i === 0 ? "ink" : "default"}
-              label={t.label}
-              value={isLoading ? "–" : contagemDaAba(t.id)}
-              onClick={() => setActiveTab(t.id)}
-              chart={t.id !== "all" && approvalFiles.length > 0 ? <ProgressBar value={contagemDaAba(t.id)} max={approvalFiles.length} tone={t.id === "pending" ? "current" : 1} label={`${contagemDaAba(t.id)} de ${approvalFiles.length}`} /> : undefined}
-            />
-          ))}
-        </StatGrid>
-      )}
 
       <AreaDeTrabalho principalRolavel={false} className="mt-5">
         <div className="shrink-0 border-b border-border">

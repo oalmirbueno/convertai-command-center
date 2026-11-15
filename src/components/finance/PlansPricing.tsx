@@ -413,7 +413,7 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                   </tfoot>
                 </table>
 
-                <ul className="divide-y divide-border/60 px-1 lg:hidden">
+                <ul className="px-1 lg:hidden">
                   {marginRows.map((r) => (
                     <li key={r.id} className="min-w-0 py-3">
                       <div className="flex min-w-0 items-center">
@@ -625,7 +625,7 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                 </tbody>
               </table>
 
-              <ul className="divide-y divide-border/60 px-1 lg:hidden">
+              <ul className="px-1 lg:hidden">
                 {ONE_OFF_CATALOG.map((o) => (
                   <li key={o.name} className="min-w-0 py-3">
                     <div className="flex min-w-0 items-center">
@@ -781,7 +781,7 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
               Entram com o preço de lançamento, alíquota ilustrativa de 6% e custo direto estimado de {fmt(defaultDirectCost)}. Planos que já existem não mudam.
             </p>
             <RegiaoRolavel modo="sempre" sobre="cartao" className="max-h-52">
-              <ul className="divide-y divide-border">
+              <ul>
                 {missingSeeds.map((s) => (
                   <li key={s.code} className="flex min-w-0 items-center py-2 text-[13px]">
                     <span className="mr-3 min-w-0 flex-1 truncate text-foreground">{s.name}</span>

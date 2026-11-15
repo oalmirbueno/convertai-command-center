@@ -629,7 +629,7 @@ export default function MesaDoCliente() {
         </>
       }
     >
-      {!clientId && !painel && <EstadoVazio icone={<Building2 className="h-5 w-5" />} titulo="Escolha um cliente para abrir a mesa dele." />}
+      {!clientId && !painel && <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Building2 className="h-5 w-5" />} titulo="Escolha um cliente para abrir a mesa dele." />}
 
       {mostrarFila && (
         <Suspense fallback={<EsqueletoDaAba />}>

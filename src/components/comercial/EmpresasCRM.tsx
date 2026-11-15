@@ -150,7 +150,7 @@ export default function EmpresasCRM({
           )
         ) : (
           <Painel semEspaco as="section" aria-label="Fichas de empresa">
-            <ul className="divide-y divide-border/60">
+            <ul>
               {fichas.map((ficha) => {
                 const expandida = aberta === ficha.empresa.id;
                 return (
@@ -258,7 +258,7 @@ export default function EmpresasCRM({
                           {ficha.contatos.length === 0 ? (
                             <p className={texto.auxiliar}>Nenhuma pessoa cadastrada.</p>
                           ) : (
-                            <ul className="divide-y divide-border/60">
+                            <ul>
                               {ficha.contatos.map((contato) => (
                                 <li key={contato.id} className="flex min-w-0 items-center py-2">
                                   <User className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -284,7 +284,7 @@ export default function EmpresasCRM({
                           {ficha.negocios.length === 0 ? (
                             <p className={texto.auxiliar}>Nenhum negócio ainda.</p>
                           ) : (
-                            <ul className="divide-y divide-border/60">
+                            <ul>
                               {ficha.negocios.map((negocio) => (
                                 <li key={negocio.id} className="min-w-0">
                                   <button

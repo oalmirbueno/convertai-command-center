@@ -21,7 +21,6 @@ import {
   PackageCheck,
   Repeat,
   Send,
-  ShieldCheck,
 } from "lucide-react";
 import {
   AjudaRecolhida,
@@ -29,7 +28,6 @@ import {
   Carregando,
   EstadoDeErro,
   EstadoVazio,
-  Secao,
   botao,
   campoTexto,
   espaco,
@@ -39,7 +37,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { Card, CardSurface, Donut, List, ListRow, PageHeader, ProgressBar, StatCard, StatGrid, StatusPill, chartColor, type ChartTone, type Tone } from "@/components/ds";
+import { Card, CardSurface, Donut, IconButton, List, ListRow, PageHeader, PillTabs, ProgressBar, StatCard, StatusPill, chartColor, type ChartTone, type Tone } from "@/components/ds";
 import CircularProgress from "./CircularProgress";
 import { AvisoEmFaixa, Azulejo, Bolha, Legenda, Metrica, Trilha } from "./pecasOusadas";
 import { FadeUp, StaggerContainer } from "./motion";
@@ -135,6 +133,11 @@ export default function ClientJourneyDashboard({
     validar: (v) => typeof v === "boolean",
   });
   const recolhidoNoCelular = pequena && !maisDetalhes;
+  // v4: entregas, frentes e diário dividem um cartão com abas; a aba aberta fica lembrada por cliente.
+  type AbaDoInicio = "entregas" | "frentes" | "diario";
+  const [aba, setAba] = useEstadoDaTela<AbaDoInicio>(`inicio:aba:${clientId}`, "entregas", {
+    validar: (v) => v === "entregas" || v === "frentes" || v === "diario",
+  });
   const { loadingProjects, loadingDetails, errorProjects, refetchProjects, errorAprovacoes, refetchAprovacoes, data } = useClientDashboardData(clientId);
   const {
     activeProjects,
@@ -335,10 +338,13 @@ export default function ClientJourneyDashboard({
   // Rosca do ciclo: as publicações que a tela já tem, separadas por situação.
   const publicadosAntes = Math.max(0, published.length - publishedThisMonth.length);
   const totalDePublicacoes = scheduled.length + published.length;
+  const temAgenda = scheduled.length > 0 || published.length > 0 || upcomingMilestones.length > 0;
+  const tituloDaPendencia = pendingFiles.length === 1 ? "entrega aguarda a sua aprovação" : "entregas aguardam a sua aprovação";
+  const ajudaDaPendencia = "Sua aprovação libera o agendamento da publicação. Aprovou, a Aceleriq programa na data planejada.";
 
   return (
     <StaggerContainer className={espaco.pagina}>
-      {/* 1 · Boas-vindas: saudação grande com o nome apagado, data como estado, explicação no "?" */}
+      {/* 1 · Boas-vindas: saudação grande com o nome apagado; no computador os atalhos são ícones em círculo ao lado */}
       <FadeUp>
         <PageHeader
           title={pequena ? "Olá," : "Bem-vindo de volta,"}
@@ -346,38 +352,52 @@ export default function ClientJourneyDashboard({
           subtitle={`${hoje}${isImpersonation ? " · somente leitura" : ""}`}
           help="Acompanhe suas frentes, entregas e publicações liberadas pela Aceleriq. Os números se atualizam sozinhos."
           actions={
-            closedProjects.length > 0 ? (
-              <div className="hidden items-center rounded-full bg-card py-1.5 pl-1.5 pr-4 shadow-card sm:flex" title="Média dos projetos com prazo">
-                <CircularProgress progress={closedAvgProgress} size={44} strokeWidth={4} />
-                <span className={juntar(texto.auxiliar, "ml-2.5 leading-4")}>Projetos<br />com prazo</span>
-              </div>
-            ) : undefined
+            pequena ? undefined : (
+              <nav aria-label="Atalhos" className="flex min-w-0 items-center rounded-full bg-card p-1.5 shadow-card">
+                {ATALHOS.map((atalho, i) => {
+                  const pede = atalho.to === "/aprovacoes" && temPendencia;
+                  return (
+                    <IconButton
+                      key={atalho.to}
+                      label={pede ? `${atalho.label}: ${pendingFiles.length} aguardando` : atalho.label}
+                      icon={<atalho.icon />}
+                      tone={pede ? "accent" : "ghost"}
+                      onClick={() => navigate(atalho.to)}
+                      className={i > 0 ? "ml-1" : undefined}
+                    />
+                  );
+                })}
+              </nav>
+            )
           }
         />
-        <nav aria-label="Atalhos" className="mt-5 grid min-w-0 grid-cols-3 gap-3 sm:mt-6 sm:gap-4 lg:grid-cols-6">
-          {ATALHOS.map((atalho) => (
-            <Azulejo
-              key={atalho.to}
-              icone={<atalho.icon className="h-5 w-5" />}
-              rotulo={atalho.label}
-              aoClicar={() => navigate(atalho.to)}
-              destaque={atalho.to === "/aprovacoes" && temPendencia}
-              contador={atalho.to === "/aprovacoes" ? pendingFiles.length : undefined}
-            />
-          ))}
-        </nav>
+        {pequena && (
+          <nav aria-label="Atalhos" className="mt-5 grid min-w-0 grid-cols-3 gap-3">
+            {ATALHOS.map((atalho) => (
+              <Azulejo
+                key={atalho.to}
+                icone={<atalho.icon className="h-5 w-5" />}
+                rotulo={atalho.label}
+                aoClicar={() => navigate(atalho.to)}
+                destaque={atalho.to === "/aprovacoes" && temPendencia}
+                contador={atalho.to === "/aprovacoes" ? pendingFiles.length : undefined}
+              />
+            ))}
+          </nav>
+        )}
       </FadeUp>
 
-      {/* 1b · Dia Prioritário (12/10/2026): o dia fixo de atenção estratégica; sem dia confirmado, estado neutro */}
-      {/* 23/10/2026: no celular recolhido ele vira uma linha, sempre à vista (antes sumia em "Mais detalhes" e o cliente não via o dia). */}
-      {diaRecorrente && recolhidoNoCelular ? (
-        // Cliente recorrente sempre tem a linha do dia: o lugar dela fica guardado enquanto o dia carrega (nada pula).
-        <div className="min-h-[84px] min-w-0 min-[380px]:min-h-[68px] [&>[data-compacto]]:min-h-[84px] min-[380px]:[&>[data-compacto]]:min-h-[68px]">
-          <CartaoDoDiaPrioritario clientId={clientId} recorrente compacto />
-        </div>
-      ) : (
-        <CartaoDoDiaPrioritario clientId={clientId} recorrente={diaRecorrente} compacto={recolhidoNoCelular} />
-      )}
+      {/* 1b · Dia Prioritário (12/10/2026). No celular fica aqui em cima (recolhido vira uma linha, 23/10/2026);
+          no computador entra na coluna da direita do bento, em uma linha. */}
+      {pequena &&
+        (diaRecorrente && recolhidoNoCelular ? (
+          // Cliente recorrente sempre tem a linha do dia: o lugar dela fica guardado enquanto o dia carrega (nada pula).
+          <div className="min-h-[84px] min-w-0 min-[380px]:min-h-[68px] [&>[data-compacto]]:min-h-[84px] min-[380px]:[&>[data-compacto]]:min-h-[68px]">
+            <CartaoDoDiaPrioritario clientId={clientId} recorrente compacto />
+          </div>
+        ) : (
+          <CartaoDoDiaPrioritario clientId={clientId} recorrente={diaRecorrente} compacto={recolhidoNoCelular} />
+        ))}
 
       {/* 2 · Avisos importantes: atraso e renovação chegando */}
       {overdueBills.length > 0 && (
@@ -419,48 +439,28 @@ export default function ClientJourneyDashboard({
         />
       )}
 
-      {/* 3 · Ação necessária: o que precisa aprovar. É o cartão sólido da tela (cor da marca, texto quase preto). */}
-      {temPendencia && (
+      {/* 3 · Só no celular: o que precisa aprovar, em faixa sólida (no computador é o cartão verde do bento). */}
+      {pequena && temPendencia && (
         <FadeUp>
           <section aria-label="Aprovações pendentes" className="min-w-0">
-          <CardSurface variant="accent" className="overflow-hidden">
-            <div className="flex min-w-0 flex-wrap items-center p-5 sm:flex-nowrap sm:p-6">
-              <span className="mr-4 shrink-0 text-[64px] font-medium leading-[64px] tracking-[-0.05em] tabular-nums text-foreground max-sm:text-[56px] max-sm:leading-[56px]" aria-hidden="true">
-                {pendingFiles.length}
-              </span>
-              <div className="flex min-w-0 flex-1 items-center sm:mr-4">
-                <h2 className="min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
-                  <span className="sr-only">{pendingFiles.length} </span>
-                  {pendingFiles.length === 1 ? "entrega aguarda a sua aprovação" : "entregas aguardam a sua aprovação"}
-                </h2>
-                <AjudaRecolhida className="ml-1.5">
-                  Sua aprovação libera o agendamento da publicação. Aprovou, a Aceleriq programa na data planejada.
-                </AjudaRecolhida>
+            <CardSurface variant="accent" className="overflow-hidden">
+              <div className="flex min-w-0 flex-wrap items-center p-5">
+                <span className="mr-4 shrink-0 text-[56px] font-medium leading-[56px] tracking-[-0.05em] tabular-nums text-foreground" aria-hidden="true">
+                  {pendingFiles.length}
+                </span>
+                <div className="flex min-w-0 flex-1 items-center">
+                  <h2 className="min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
+                    <span className="sr-only">{pendingFiles.length} </span>
+                    {tituloDaPendencia}
+                  </h2>
+                  <AjudaRecolhida className="ml-1.5">{ajudaDaPendencia}</AjudaRecolhida>
+                </div>
+                <button type="button" onClick={() => navigate("/aprovacoes")} className={juntar(botao.primario, "mt-4 h-12 w-full px-6 text-[14px]")}>
+                  Aprovar agora
+                  <ArrowUpRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => navigate("/aprovacoes")}
-                className={juntar(botao.primario, "mt-4 h-12 w-full px-6 text-[14px] sm:mt-0 sm:h-11 sm:w-auto")}
-              >
-                Aprovar agora
-                <ArrowUpRight className="ml-2 h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            <ul className="hidden min-w-0 border-t border-border px-6 py-2 sm:block">
-              {pendingFiles.slice(0, 3).map((file: any) => (
-                <li key={file.id} className="flex min-w-0 items-center py-2 text-[13px] leading-5 text-muted-foreground">
-                  <span aria-hidden="true" className="mr-3 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground" />
-                  <span className="min-w-0 truncate">
-                    <span className="font-medium text-foreground">{file.file_name}</span>
-                    {file.project?.name ? ` · ${file.project.name}` : ""}
-                  </span>
-                </li>
-              ))}
-              {pendingFiles.length > 3 && (
-                <li className="py-2 pl-[18px] text-[13px] leading-5 text-muted-foreground">e mais {pendingFiles.length - 3} na área de Aprovações</li>
-              )}
-            </ul>
-          </CardSurface>
+            </CardSurface>
           </section>
         </FadeUp>
       )}
@@ -501,413 +501,419 @@ export default function ClientJourneyDashboard({
         </FadeUp>
       )}
 
-      {/* 4 · Números gerais: número grande, um cartão de tinta e (sem pendência) um sólido */}
+      {/* 4 · Bento (v4, passada estrutural): três colunas como na referência.
+          Esquerda: o cartão verde com a ação da tela e um número. Meio: conteúdos do ciclo.
+          Direita: etapa do processo e o Dia Prioritário. No celular empilha (dentro de "Mais detalhes"). */}
       {!recolhidoNoCelular && (
-      <FadeUp>
-        <StatGrid cols={4} label="Resumo">
-          <StatCard
-            variant={temPendencia ? "default" : "accent"}
-            size="xl"
-            label="Frentes ativas"
-            value={activeProjects.length}
-            hint={doneProjects.length ? `${doneProjects.length} concluída(s)` : "Nenhuma concluída"}
-            icon={<Briefcase className="h-4 w-4" />}
-          />
-          <StatCard
-            variant="ink"
-            size="xl"
-            label="Entregas liberadas"
-            value={totalFiles}
-            hint={approvedFiles ? `${approvedFiles} aprovada(s)` : "Aguardando decisões"}
-            icon={<PackageCheck className="h-4 w-4" />}
-            chart={totalFiles > 0 ? <ProgressBar value={approvedFiles || 0} max={totalFiles} tone={1} label={`${approvedFiles || 0} de ${totalFiles} entregas aprovadas`} /> : undefined}
-          />
-          <StatCard
-            size="xl"
-            label="Etapas concluídas"
-            value={completedMilestonesCount}
-            hint={`${totalMilestones} etapa(s) no total`}
-            icon={<CheckCircle2 className="h-4 w-4" />}
-            chart={totalMilestones > 0 ? <ProgressBar value={completedMilestonesCount || 0} max={totalMilestones} tone={1} striped label={`${completedMilestonesCount || 0} de ${totalMilestones} etapas concluídas`} /> : undefined}
-          />
-          <StatCard
-            size="xl"
-            label="Aprovações pendentes"
-            value={pendingFiles.length}
-            hint={temPendencia ? <span className="font-medium text-warning">Ação necessária</span> : "Nenhuma pendência"}
-            icon={<FileCheck className="h-4 w-4" />}
-            to={temPendencia ? "/aprovacoes" : undefined}
-            corner={temPendencia ? <ArrowUpRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> : undefined}
-          />
-        </StatGrid>
-      </FadeUp>
-      )}
-
-      {/* 5 e 6 · Conteúdos do ciclo (só para quem tem frente de conteúdo) e a etapa do processo, lado a lado */}
-      {!recolhidoNoCelular && (
-      <FadeUp>
-        <div className={juntar(espaco.grade, "grid-cols-1", hasContentFront && "lg:grid-cols-5")}>
-          {hasContentFront && (
-            <Card
-              className="lg:col-span-3"
-              collapsible={false}
-              title="Conteúdos do ciclo"
-              subtitle={
-                nextPublication ? (
-                  <span className="block truncate">
-                    Próxima publicação {dataEHora(nextPublication.scheduled_at)}
-                    {nextPublication.platform ? ` · ${platformLabel[nextPublication.platform] || nextPublication.platform}` : ""}
-                  </span>
-                ) : undefined
-              }
-              action={
-                <button type="button" onClick={() => navigate("/calendario")} className={botao.secundario} aria-label="Ver calendário completo">
-                  <CalendarDays className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                  <span className="hidden sm:inline">Calendário</span>
-                </button>
-              }
-            >
-              <div className="flex min-w-0 flex-col sm:flex-row sm:items-center">
-                {totalDePublicacoes > 0 && (
-                  <div className="mb-5 flex shrink-0 justify-center sm:mb-0 sm:mr-8">
-                    <Donut
-                      size={148}
-                      thickness={16}
-                      segments={[
-                        { label: "Publicados no mês", value: publishedThisMonth.length, tone: 1 },
-                        { label: "Programados", value: scheduled.length, tone: 2 },
-                        { label: "Publicados antes", value: publicadosAntes, tone: "muted" },
-                      ]}
+        <FadeUp>
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+            <div className="flex min-w-0 flex-col gap-4 lg:col-span-3 lg:gap-5">
+              {!pequena && (
+                <section aria-label={temPendencia ? "Aprovações pendentes" : "Entregas"} className="flex min-w-0 flex-1">
+                  <CardSurface variant="accent" className="flex min-w-0 flex-1 flex-col p-6">
+                    <div className="flex min-w-0 items-center justify-between">
+                      <span className="truncate text-[13px] font-medium leading-5 text-foreground">Aprovações pendentes</span>
+                      {temPendencia && <AjudaRecolhida>{ajudaDaPendencia}</AjudaRecolhida>}
+                    </div>
+                    <span className="mt-4 block text-[72px] font-normal leading-[72px] tracking-[-0.05em] tabular-nums text-foreground" aria-hidden="true">
+                      {pendingFiles.length}
+                    </span>
+                    <h2 className="mt-2 min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
+                      <span className="sr-only">{pendingFiles.length} </span>
+                      {temPendencia ? tituloDaPendencia : "Tudo em dia: nada esperando você"}
+                    </h2>
+                    {temPendencia && (
+                      <ul className="mb-5 mt-3 min-w-0">
+                        {pendingFiles.slice(0, 2).map((file: any) => (
+                          <li key={file.id} className="truncate text-[13px] leading-6 text-foreground">{file.file_name}</li>
+                        ))}
+                        {pendingFiles.length > 2 && <li className="text-[13px] leading-6 text-foreground">e mais {pendingFiles.length - 2}</li>}
+                      </ul>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => navigate(temPendencia ? "/aprovacoes" : "/documentos")}
+                      className={juntar(botao.primario, "mt-auto h-11 w-full px-6 text-[14px]")}
                     >
-                      <span className="text-[28px] font-semibold leading-8 tracking-[-0.03em] tabular-nums">{totalDePublicacoes}</span>
-                      <span className="text-[11px] leading-4 text-muted-foreground">publicações</span>
-                    </Donut>
+                      {temPendencia ? "Aprovar agora" : "Ver entregas"}
+                      <ArrowUpRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </CardSurface>
+                </section>
+              )}
+              <StatCard
+                label="Entregas liberadas"
+                value={totalFiles}
+                hint={approvedFiles ? `${approvedFiles} aprovada(s)` : "Aguardando decisões"}
+                icon={<PackageCheck className="h-4 w-4" />}
+                progress={totalFiles > 0 ? { value: approvedFiles || 0, max: totalFiles } : undefined}
+              />
+            </div>
+
+            {hasContentFront && (
+              <Card
+                className="lg:col-span-5"
+                collapsible={false}
+                icon={<Send className="h-4 w-4" />}
+                title="Conteúdos do ciclo"
+                subtitle={
+                  nextPublication ? (
+                    <span className="block truncate">
+                      Próxima {dataEHora(nextPublication.scheduled_at)}
+                      {nextPublication.platform ? ` · ${platformLabel[nextPublication.platform] || nextPublication.platform}` : ""}
+                    </span>
+                  ) : undefined
+                }
+                action={<IconButton label="Ver calendário completo" icon={<CalendarDays />} onClick={() => navigate("/calendario")} />}
+              >
+                <div className="flex min-w-0 flex-col items-center">
+                  {totalDePublicacoes > 0 && (
+                    <div className="mb-6 flex shrink-0 justify-center">
+                      <Donut
+                        size={176}
+                        thickness={20}
+                        segments={[
+                          { label: "Publicados no mês", value: publishedThisMonth.length, tone: 1 },
+                          { label: "Programados", value: scheduled.length, tone: 2 },
+                          { label: "Publicados antes", value: publicadosAntes, tone: "muted" },
+                        ]}
+                      >
+                        <span className="text-[36px] font-medium leading-10 tracking-[-0.03em] tabular-nums">{totalDePublicacoes}</span>
+                        <span className="text-[12px] leading-4 text-muted-foreground">publicações</span>
+                      </Donut>
+                    </div>
+                  )}
+                  <div role="group" aria-label="Conteúdos do ciclo" className="grid w-full min-w-0 grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+                    <Metrica
+                      rotulo="Aguardando"
+                      valor={pendingFiles.length}
+                      corDoValor={temPendencia ? "text-warning" : "text-muted-foreground"}
+                    />
+                    <Metrica rotulo={<Ponto tom={2}>Programados</Ponto>} valor={scheduled.length} />
+                    <Metrica rotulo={<Ponto tom={1}>No mês</Ponto>} valor={publishedThisMonth.length} />
+                    <Metrica rotulo="No total" valor={published.length} />
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            <div className={juntar("flex min-w-0 flex-col gap-4 lg:gap-5", hasContentFront ? "lg:col-span-4" : "lg:col-span-9")}>
+              <Card
+                className="flex-1"
+                collapsible={false}
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                title="Etapa do processo"
+                help={STAGE_HINTS[currentStage]}
+              >
+                <div className="flex min-w-0 items-end">
+                  <span className={juntar(texto.numeroGrande, "shrink-0 font-medium")}>
+                    {currentStage + 1}
+                    <span className="text-[20px] font-medium tracking-normal text-muted-foreground">/{STAGES.length}</span>
+                  </span>
+                  <span className="mb-1 ml-4 min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold leading-5 text-foreground">{STAGES[currentStage]}</span>
+                    <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>{`Etapa ${currentStage + 1} de ${STAGES.length}`}</span>
+                  </span>
+                </div>
+                <div className="mt-6 min-w-0">
+                  <Trilha etapas={STAGES} atual={currentStage} rotulo="Etapas do trabalho" />
+                </div>
+                {totalMilestones > 0 && (
+                  <div className="mt-6 min-w-0">
+                    <ProgressBar value={completedMilestonesCount || 0} max={totalMilestones} height={6} label="Etapas concluídas" />
+                    <p className={juntar(texto.auxiliar, "mt-2 flex min-w-0 justify-between")}>
+                      <span className="truncate">Etapas concluídas</span>
+                      <span className="ml-2 shrink-0 tabular-nums text-foreground">{completedMilestonesCount} de {totalMilestones}</span>
+                    </p>
                   </div>
                 )}
-                <div role="group" aria-label="Conteúdos do ciclo" className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-6">
-                  <Metrica
-                    rotulo="Aguardando aprovação"
-                    valor={pendingFiles.length}
-                    corDoValor={temPendencia ? "text-warning" : "text-muted-foreground"}
-                  />
-                  <Metrica rotulo={<Ponto tom={2}>Programados</Ponto>} valor={scheduled.length} />
-                  <Metrica rotulo={<Ponto tom={1}>Publicados no mês</Ponto>} valor={publishedThisMonth.length} />
-                  <Metrica rotulo="Publicados no total" valor={published.length} />
+              </Card>
+              {!pequena && (
+                <div className={juntar("min-w-0", diaRecorrente && "min-h-[60px]")}>
+                  <CartaoDoDiaPrioritario clientId={clientId} recorrente={diaRecorrente} compacto />
                 </div>
-              </div>
-            </Card>
-          )}
-
-          <Card
-            className={hasContentFront ? "lg:col-span-2" : undefined}
-            collapsible={false}
-            title="Etapa do processo"
-            help={STAGE_HINTS[currentStage]}
-          >
-            <div className="flex min-w-0 items-end">
-              <span className={juntar(texto.numeroGrande, "shrink-0")}>
-                {currentStage + 1}
-                <span className="text-[20px] font-medium tracking-normal text-muted-foreground">/{STAGES.length}</span>
-              </span>
-              <span className="mb-1 ml-4 min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold leading-5 text-foreground">{STAGES[currentStage]}</span>
-                <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>{`Etapa ${currentStage + 1} de ${STAGES.length}`}</span>
-              </span>
+              )}
             </div>
-            <div className="mt-6 min-w-0">
-              <Trilha etapas={STAGES} atual={currentStage} rotulo="Etapas do trabalho" />
-            </div>
-          </Card>
-        </div>
-      </FadeUp>
+          </div>
+        </FadeUp>
       )}
 
-      {/* 7 · O que estamos fazendo, onde estamos e o próximo passo
-          (no celular os cartões 3b já fazem esse papel: fica em "Mais detalhes") */}
+      {/* 5 · Um cartão com abas (entregas, frentes e projetos, diário) no lugar de quatro blocos empilhados;
+          à direita, onde estamos e a agenda. No computador cada painel rola por dentro. */}
       {!recolhidoNoCelular && (
-      <FadeUp>
-        <Secao
-          titulo="Onde estamos agora"
-          acao={
-            <button type="button" onClick={() => navigate("/onde-estamos")} className={botao.secundario} aria-label="Abrir Onde Estamos">
-              <span className="hidden sm:inline">Abrir</span>
-              <ArrowUpRight className="h-4 w-4 sm:ml-1" aria-hidden="true" />
-            </button>
-          }
-        >
-          {!(latestReport && reportIsFresh) && (
-            <button
-              type="button"
-              onClick={() => navigate("/onde-estamos")}
-              className={juntar(superficie.painel, "group flex w-full min-w-0 items-center p-5 text-left transition-transform duration-200 hover:-translate-y-0.5 sm:p-6", foco)}
-            >
-              <Bolha tom="marca" tamanho="lg" className="mr-4">
-                <Newspaper className="h-5 w-5" />
-              </Bolha>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-medium leading-6 text-foreground">
-                  {deliveredFiles.length > 0
-                    ? `Trabalho em movimento: ${deliveredFiles.length} entrega(s) já liberada(s).`
-                    : "Estamos organizando o seu ciclo de trabalho."}
-                  {nextPublication?.scheduled_at &&
-                    ` Próxima publicação em ${new Date(nextPublication.scheduled_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}.`}
-                </span>
-                <span className="mt-1.5 flex items-center text-[13px] font-medium text-primary">
-                  Ver o retrato completo em tempo real
-                  <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-              </span>
-            </button>
-          )}
-          {latestReport && reportIsFresh && (
-            <button
-              type="button"
-              onClick={() => navigate("/onde-estamos")}
-              className={juntar(superficie.painel, "group block w-full min-w-0 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)}
-            >
-              <span className="flex min-w-0 items-center p-5 sm:p-6">
-                <Bolha tom="solido" tamanho="lg" className="mr-4">
-                  <FileText className="h-5 w-5" />
-                </Bolha>
-                <span className="min-w-0 flex-1">
-                  <Legenda>Última atualização</Legenda>
-                  <span className="mt-0.5 block truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">{latestReport.title}</span>
-                </span>
-                <span aria-hidden="true" className="ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-foreground group-hover:text-background">
-                  <ArrowUpRight className="h-4 w-4" />
-                </span>
-              </span>
-              <span className="grid min-w-0 grid-cols-1 gap-x-8 gap-y-5 border-t border-border/70 p-5 sm:p-6 lg:grid-cols-3">
-                {latestReport.highlights && (
-                  <span className="block min-w-0">
-                    <Legenda>O que estamos fazendo</Legenda>
-                    <span className={juntar(texto.corpo, "mt-1.5 line-clamp-4 block")}>{latestReport.highlights}</span>
-                  </span>
+        <FadeUp>
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+            <CardSurface className="flex min-w-0 flex-col p-5 sm:p-6 lg:col-span-8">
+              <div className="flex min-w-0 items-center">
+                <PillTabs<AbaDoInicio>
+                  label="Detalhes do trabalho"
+                  variant="soft"
+                  value={aba}
+                  onChange={setAba}
+                  className="mr-3 flex-1"
+                  tabs={[
+                    { value: "entregas", label: "Entregas recentes", count: deliveredFiles.length },
+                    { value: "frentes", label: "Frentes e projetos", count: activeProjects.length },
+                    { value: "diario", label: "Diário" },
+                  ]}
+                />
+                {aba === "entregas" && deliveredFiles.length > 0 && (
+                  <IconButton label="Ver todas as entregas em Documentos" icon={<ArrowUpRight />} onClick={() => navigate("/documentos")} />
                 )}
-                {latestReport.summary && (() => {
-                  // Cartao de entrada: a abertura e o primeiro bloco inteiros, sem
-                  // asteriscos e sem "..." no meio da frase; o resto fica em
-                  // "Onde Estamos", que e para onde o cartao leva.
-                  const e = estruturaDoRitual(latestReport.summary);
-                  const resumo = e.blocos.length > 0 ? resumoDoRitual(latestReport.summary, 260) : String(latestReport.summary);
-                  const demais = e.blocos.slice(1).map((b) => b.titulo.replace(/[:*]/g, "").trim());
-                  return (
-                    <span className="block min-w-0">
-                      <Legenda>Resultado explicado</Legenda>
-                      <span className={juntar(texto.corpo, "mt-1.5 block text-muted-foreground", e.blocos.length > 0 ? "" : "line-clamp-4 whitespace-pre-line")}>{resumo}</span>
-                      {demais.length > 0 && (
-                        <span className={juntar(texto.auxiliar, "mt-1.5 block")}>Também nesta atualização: {demais.join(" · ")}.</span>
+              </div>
+
+              <div className="mt-5 min-w-0 lg:max-h-[440px] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
+                {aba === "entregas" &&
+                  (deliveredFiles.length === 0 ? (
+                    <EstadoVazio compacto titulo="Nenhuma entrega liberada ainda." />
+                  ) : (
+                    <List label="Entregas recentes">
+                      {deliveredFiles.slice(0, 6).map((file: any) => (
+                        <ListRow
+                          key={file.id}
+                          leading={<Bolha tom="sucesso"><PackageCheck className="h-4 w-4" /></Bolha>}
+                          title={file.file_name}
+                          subtitle={file.project?.name || "Entrega"}
+                          value={`v${file.version || 1}`}
+                        />
+                      ))}
+                    </List>
+                  ))}
+
+                {aba === "frentes" && (
+                  <div className="min-w-0 space-y-5">
+                    {temProjetos && (
+                      <p className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+                        <span className="min-w-0 flex-1 truncate">
+                          {activeProjects.length} ativa(s){doneProjects.length > 0 ? ` · ${doneProjects.length} concluída(s)` : ""}
+                        </span>
+                        {closedProjects.length > 0 && (
+                          <span className="ml-3 flex shrink-0 items-center" title="Média dos projetos com prazo">
+                            <CircularProgress progress={closedAvgProgress} size={36} strokeWidth={4} />
+                            <span className="ml-2">média dos projetos com prazo</span>
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    {recurringFronts.length > 0 && (
+                      <div className="min-w-0">
+                        <Legenda className="mb-1 px-3">Frentes recorrentes · ciclo mensal</Legenda>
+                        <List label="Frentes recorrentes">
+                          {recurringFronts.map((project: any) => {
+                            const projectDeliveredMonth = monthDelivered.filter((f: any) => f.project_id === project.id).length;
+                            const projectPending = pendingFiles.filter((f: any) => f.project?.name === project.name).length;
+                            return (
+                              <ListRow
+                                key={project.id}
+                                onClick={() => onSelectProject(project)}
+                                leading={<Bolha tom="marca" tamanho="lg"><Repeat className="h-5 w-5" /></Bolha>}
+                                title={project.name}
+                                subtitle={
+                                  <>
+                                    {typeLabels[project.project_type] || "Recorrente"}
+                                    {" · "}
+                                    {projectStatusLabel[project.status] || project.status}
+                                    {nextPublication && ` · Próxima publicação ${formatDateShort(nextPublication.scheduled_at)}`}
+                                  </>
+                                }
+                                status={projectPending > 0 ? <StatusPill tone="warning">{projectPending} aguardando sua aprovação</StatusPill> : undefined}
+                                value={projectDeliveredMonth}
+                                valueHint="entrega(s) no mês"
+                                action={<ChevronRight className="pointer-events-none h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+                              />
+                            );
+                          })}
+                        </List>
+                      </div>
+                    )}
+                    {projetosComPrazo.length > 0 && (
+                      <div className="min-w-0">
+                        <Legenda className="mb-1 px-3">Projetos com prazo</Legenda>
+                        <List label="Projetos com prazo">
+                          {projetosComPrazo.map((project: any) => {
+                            const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
+                            const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
+                            const deadlineDistance = project.deadline ? daysUntil(project.deadline) : null;
+                            return (
+                              <ListRow
+                                key={project.id}
+                                onClick={() => onSelectProject(project)}
+                                leading={<CircularProgress progress={project.progress || 0} size={48} strokeWidth={4} />}
+                                title={project.name}
+                                subtitle={
+                                  <>
+                                    {typeLabels[project.project_type] || "Projeto"}
+                                    {" · "}
+                                    {completed}/{projectMilestones.length} etapas
+                                    {project.deadline &&
+                                      (deadlineDistance !== null && deadlineDistance < 0
+                                        ? " · Prazo em atualização"
+                                        : ` · Previsão ${formatDateShort(project.deadline)}`)}
+                                  </>
+                                }
+                                status={<StatusPill tone={tomDoProjeto[project.status] || "neutral"}>{projectStatusLabel[project.status] || project.status}</StatusPill>}
+                                action={<ChevronRight className="pointer-events-none h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+                              />
+                            );
+                          })}
+                        </List>
+                      </div>
+                    )}
+                    {!temProjetos && (
+                      <EstadoVazio
+                        icone={<Briefcase className="h-5 w-5" />}
+                        titulo="Nenhum projeto ainda"
+                        descricao="Novos projetos aparecerão aqui quando forem iniciados."
+                      />
+                    )}
+                  </div>
+                )}
+
+                {aba === "diario" && clientId && <ProjectJournal clientId={clientId} canWrite={false} />}
+              </div>
+            </CardSurface>
+
+            <div className="flex min-w-0 flex-col gap-4 lg:col-span-4 lg:gap-5">
+              {/* Onde estamos agora (no celular os cartões 3b já fazem esse papel) */}
+              {!pequena && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/onde-estamos")}
+                  aria-label="Abrir Onde Estamos"
+                  className={juntar(superficie.painel, superficie.tinta, "group block w-full min-w-0 p-6 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)}
+                >
+                  <span className="flex min-w-0 items-start">
+                    <span className="min-w-0 flex-1">
+                      <Legenda>{latestReport && reportIsFresh ? "Última atualização" : "Onde estamos agora"}</Legenda>
+                      <span className="mt-1 line-clamp-2 block text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
+                        {latestReport && reportIsFresh
+                          ? latestReport.title
+                          : deliveredFiles.length > 0
+                            ? `Trabalho em movimento: ${deliveredFiles.length} entrega(s) já liberada(s).`
+                            : "Estamos organizando o seu ciclo de trabalho."}
+                      </span>
+                    </span>
+                    <span aria-hidden="true" className="ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                      <ArrowUpRight className="h-4 w-4" />
+                    </span>
+                  </span>
+                  {!(latestReport && reportIsFresh) && (
+                    <span className={juntar(texto.corpo, "mt-3 block text-muted-foreground")}>
+                      {nextPublication?.scheduled_at &&
+                        `Próxima publicação em ${new Date(nextPublication.scheduled_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}. `}
+                      Ver o retrato completo em tempo real.
+                    </span>
+                  )}
+                  {latestReport && reportIsFresh && (
+                    <span className="mt-4 block min-w-0 space-y-4">
+                      {latestReport.highlights && (
+                        <span className="block min-w-0">
+                          <Legenda>O que estamos fazendo</Legenda>
+                          <span className={juntar(texto.corpo, "mt-1 line-clamp-3 block")}>{latestReport.highlights}</span>
+                        </span>
+                      )}
+                      {latestReport.summary && (() => {
+                        // Cartao de entrada: a abertura e o primeiro bloco inteiros, sem
+                        // asteriscos e sem "..." no meio da frase; o resto fica em
+                        // "Onde Estamos", que e para onde o cartao leva.
+                        const e = estruturaDoRitual(latestReport.summary);
+                        const resumo = e.blocos.length > 0 ? resumoDoRitual(latestReport.summary, 260) : String(latestReport.summary);
+                        const demais = e.blocos.slice(1).map((b) => b.titulo.replace(/[:*]/g, "").trim());
+                        return (
+                          <span className="block min-w-0">
+                            <Legenda>Resultado explicado</Legenda>
+                            <span className={juntar(texto.corpo, "mt-1 block text-muted-foreground", e.blocos.length > 0 ? "" : "line-clamp-4 whitespace-pre-line")}>{resumo}</span>
+                            {demais.length > 0 && (
+                              <span className={juntar(texto.auxiliar, "mt-1.5 block")}>Também nesta atualização: {demais.join(" · ")}.</span>
+                            )}
+                          </span>
+                        );
+                      })()}
+                      {latestReport.next_steps && (
+                        <span className="block min-w-0">
+                          <Legenda>Próxima etapa</Legenda>
+                          <span className={juntar(texto.corpo, "mt-1 block text-muted-foreground")}>{primeiraFrase(String(latestReport.next_steps).replace(/\*/g, ""))}</span>
+                        </span>
                       )}
                     </span>
-                  );
-                })()}
-                {latestReport.next_steps && (
-                  <span className="block min-w-0">
-                    <Legenda>Próxima etapa</Legenda>
-                    <span className={juntar(texto.corpo, "mt-1.5 block text-muted-foreground")}>{primeiraFrase(String(latestReport.next_steps).replace(/\*/g, ""))}</span>
-                  </span>
-                )}
-              </span>
-            </button>
-          )}
-        </Secao>
-      </FadeUp>
-      )}
-
-      {/* 8 · Projetos com prazo e Entregas recentes lado a lado. Sem projetos
-          com prazo, as Entregas ocupam a linha inteira (sem buraco ao lado).
-          Listas curtas (até 6): a página rola, nada de caixa com rolagem própria. */}
-      {!recolhidoNoCelular && (
-      <FadeUp>
-        <div className={juntar(espaco.grade, "grid-cols-1", projetosComPrazo.length > 0 && "lg:grid-cols-2")}>
-          {projetosComPrazo.length > 0 && (
-            <Card
-              title="Projetos com prazo"
-              subtitle={`${closedProjects.length} ativo(s)${doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}`}
-            >
-              <List label="Projetos com prazo">
-                {projetosComPrazo.map((project: any) => {
-                  const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
-                  const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
-                  const deadlineDistance = project.deadline ? daysUntil(project.deadline) : null;
-                  return (
-                    <ListRow
-                      key={project.id}
-                      onClick={() => onSelectProject(project)}
-                      leading={<CircularProgress progress={project.progress || 0} size={48} strokeWidth={4} />}
-                      title={project.name}
-                      subtitle={
-                        <>
-                          {typeLabels[project.project_type] || "Projeto"}
-                          {" · "}
-                          {completed}/{projectMilestones.length} etapas
-                          {project.deadline &&
-                            (deadlineDistance !== null && deadlineDistance < 0
-                              ? " · Prazo em atualização"
-                              : ` · Previsão ${formatDateShort(project.deadline)}`)}
-                        </>
-                      }
-                      status={<StatusPill tone={tomDoProjeto[project.status] || "neutral"}>{projectStatusLabel[project.status] || project.status}</StatusPill>}
-                      action={<ChevronRight className="pointer-events-none h-4 w-4 text-muted-foreground" aria-hidden="true" />}
-                    />
-                  );
-                })}
-              </List>
-            </Card>
-          )}
-          <Card
-            title="Entregas recentes"
-            subtitle={deliveredFiles.length > 0 ? `${deliveredFiles.length} liberada(s)` : undefined}
-            action={
-              deliveredFiles.length > 0 ? (
-                <button type="button" onClick={() => navigate("/documentos")} className={botao.secundario} aria-label="Ver todas as entregas em Documentos">
-                  <span className="hidden sm:inline">Ver todas</span>
-                  <ChevronRight className="h-4 w-4 sm:ml-1" aria-hidden="true" />
-                </button>
-              ) : undefined
-            }
-          >
-            {deliveredFiles.length === 0 ? (
-              <EstadoVazio compacto titulo="Nenhuma entrega liberada ainda." />
-            ) : (
-              <List label="Entregas recentes">
-                {deliveredFiles.slice(0, 6).map((file: any) => (
-                  <ListRow
-                    key={file.id}
-                    leading={<Bolha tom="sucesso"><PackageCheck className="h-4 w-4" /></Bolha>}
-                    title={file.file_name}
-                    subtitle={file.project?.name || "Entrega"}
-                    value={`v${file.version || 1}`}
-                  />
-                ))}
-              </List>
-            )}
-          </Card>
-        </div>
-      </FadeUp>
-      )}
-
-      {/* 9 · Frentes recorrentes + diário à esquerda; agenda e próximas entregas à direita */}
-      {!recolhidoNoCelular && (
-      <FadeUp>
-        <div className={juntar(espaco.grade, "grid-cols-1 lg:grid-cols-3")}>
-          <div className="min-w-0 space-y-4 sm:space-y-5 lg:col-span-2">
-            {/* Frentes recorrentes: ciclo mensal, sem porcentagem eterna */}
-            {recurringFronts.length > 0 && (
-              <Card title="Frentes recorrentes" subtitle="Ciclo mensal">
-                <List label="Frentes recorrentes">
-                  {recurringFronts.map((project: any) => {
-                    const projectDeliveredMonth = monthDelivered.filter((f: any) => f.project_id === project.id).length;
-                    const projectPending = pendingFiles.filter((f: any) => f.project?.name === project.name).length;
-                    return (
-                      <ListRow
-                        key={project.id}
-                        onClick={() => onSelectProject(project)}
-                        leading={<Bolha tom="marca" tamanho="lg"><Repeat className="h-5 w-5" /></Bolha>}
-                        title={project.name}
-                        subtitle={
-                          <>
-                            {typeLabels[project.project_type] || "Recorrente"}
-                            {" · "}
-                            {projectStatusLabel[project.status] || project.status}
-                            {nextPublication && ` · Próxima publicação ${formatDateShort(nextPublication.scheduled_at)}`}
-                          </>
-                        }
-                        status={projectPending > 0 ? <StatusPill tone="warning">{projectPending} aguardando sua aprovação</StatusPill> : undefined}
-                        value={projectDeliveredMonth}
-                        valueHint="entrega(s) no mês"
-                        action={<ChevronRight className="pointer-events-none h-4 w-4 text-muted-foreground" aria-hidden="true" />}
-                      />
-                    );
-                  })}
-                </List>
-              </Card>
-            )}
-
-            {clientId && <ProjectJournal clientId={clientId} canWrite={false} />}
-
-            {!temProjetos && (
-              <EstadoVazio
-                icone={<Briefcase className="h-5 w-5" />}
-                titulo="Nenhum projeto ainda"
-                descricao="Novos projetos aparecerão aqui quando forem iniciados."
-              />
-            )}
-          </div>
-
-          <div className="min-w-0 space-y-4 sm:space-y-5">
-            {/* Quando será postado: agenda das publicações confirmadas */}
-            {(scheduled.length > 0 || published.length > 0) && (
-              <Card
-                title="Quando será postado"
-                action={
-                  <button type="button" onClick={() => navigate("/calendario")} className={botao.icone} aria-label="Ver calendário">
-                    <CalendarDays className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                }
-              >
-                <List label="Quando será postado">
-                  {scheduled.length === 0 ? (
-                    <li className={juntar(texto.auxiliar, "px-3 py-3")}>Nenhuma publicação programada no momento.</li>
-                  ) : (
-                    scheduled
-                      .filter((p: any) => p.scheduled_at)
-                      .slice(0, 5)
-                      .map((publication: any) => (
-                        <ListRow
-                          key={publication.id}
-                          dense
-                          leading={<Bolha tom="info"><Send className="h-4 w-4" /></Bolha>}
-                          title={dataEHora(publication.scheduled_at)}
-                          subtitle={`${platformLabel[publication.platform] || publication.platform || "Rede social"} · Programado`}
-                        />
-                      ))
                   )}
-                  {published
-                    .filter((p: any) => p.permalink)
-                    .slice(0, 2)
-                    .map((publication: any) => (
-                      <li key={publication.id} className="relative min-w-0">
-                        <a
-                          href={publication.permalink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={juntar("flex min-w-0 items-center rounded-lg px-3 py-2.5 text-[13px] font-medium text-success no-underline transition-colors hover:bg-muted/60", foco)}
-                        >
-                          <Bolha tom="sucesso" className="mr-3"><CheckCircle2 className="h-4 w-4" /></Bolha>
-                          <span className="min-w-0 flex-1 truncate">Publicado · ver no {platformLabel[publication.platform] || "perfil"}</span>
-                          <ArrowUpRight className="ml-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                        </a>
-                      </li>
-                    ))}
-                </List>
-              </Card>
-            )}
+                </button>
+              )}
 
-            {/* Próximas entregas (etapas com data) */}
-            {upcomingMilestones.length > 0 && (
-              <Card title="Próximas entregas">
-                <List label="Próximas entregas">
-                  {upcomingMilestones.map((milestone: any) => (
-                    <ListRow
-                      key={milestone.id}
-                      dense
-                      leading={<Bolha><CalendarDays className="h-4 w-4" /></Bolha>}
-                      title={milestone.title}
-                      subtitle={milestone.project?.name || "Projeto"}
-                      value={formatDateShort(milestone.target_date)}
-                      valueHint="previsão"
-                    />
-                  ))}
-                </List>
-              </Card>
-            )}
+              {/* Agenda: quando será postado e as próximas entregas, num cartão só */}
+              {temAgenda && (
+                <Card
+                  className="flex-1"
+                  collapsible={false}
+                  icon={<CalendarDays className="h-4 w-4" />}
+                  title="Quando será postado"
+                  action={<IconButton label="Ver calendário" icon={<ArrowUpRight />} onClick={() => navigate("/calendario")} />}
+                >
+                  <div className="min-w-0 lg:max-h-[320px] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
+                    {(scheduled.length > 0 || published.length > 0) && (
+                      <List label="Quando será postado">
+                        {scheduled.length === 0 ? (
+                          <li className={juntar(texto.auxiliar, "px-3 py-3")}>Nenhuma publicação programada no momento.</li>
+                        ) : (
+                          scheduled
+                            .filter((p: any) => p.scheduled_at)
+                            .slice(0, 5)
+                            .map((publication: any) => (
+                              <ListRow
+                                key={publication.id}
+                                dense
+                                leading={<Bolha tom="info"><Send className="h-4 w-4" /></Bolha>}
+                                title={dataEHora(publication.scheduled_at)}
+                                subtitle={`${platformLabel[publication.platform] || publication.platform || "Rede social"} · Programado`}
+                              />
+                            ))
+                        )}
+                        {published
+                          .filter((p: any) => p.permalink)
+                          .slice(0, 2)
+                          .map((publication: any) => (
+                            <li key={publication.id} className="relative min-w-0">
+                              <a
+                                href={publication.permalink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={juntar("flex min-w-0 items-center rounded-lg px-3 py-2.5 text-[13px] font-medium text-success no-underline transition-colors hover:bg-muted/60", foco)}
+                              >
+                                <Bolha tom="sucesso" className="mr-3"><CheckCircle2 className="h-4 w-4" /></Bolha>
+                                <span className="min-w-0 flex-1 truncate">Publicado · ver no {platformLabel[publication.platform] || "perfil"}</span>
+                                <ArrowUpRight className="ml-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                              </a>
+                            </li>
+                          ))}
+                      </List>
+                    )}
+                    {upcomingMilestones.length > 0 && (
+                      <div className={juntar("min-w-0", (scheduled.length > 0 || published.length > 0) && "mt-4")}>
+                        <Legenda className="mb-1 px-3">Próximas entregas</Legenda>
+                        <List label="Próximas entregas">
+                          {upcomingMilestones.map((milestone: any) => (
+                            <ListRow
+                              key={milestone.id}
+                              dense
+                              leading={<Bolha><CalendarDays className="h-4 w-4" /></Bolha>}
+                              title={milestone.title}
+                              subtitle={milestone.project?.name || "Projeto"}
+                              value={formatDateShort(milestone.target_date)}
+                              valueHint="previsão"
+                            />
+                          ))}
+                        </List>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </div>
           </div>
-        </div>
-      </FadeUp>
+        </FadeUp>
       )}
 
-      {/* 10 · Pulso Aceleriq: avaliação rápida da experiência (formulário em destaque) */}
+      {/* 6 · Pulso Aceleriq: avaliação rápida da experiência */}
       {showPulse && (
         <FadeUp>
           <Card
@@ -959,24 +965,6 @@ export default function ClientJourneyDashboard({
             )}
           </Card>
         </FadeUp>
-      )}
-
-      {/* 11 · Evolução acumulada: a faixa de tinta que fecha a tela, com os números grandes */}
-      {!recolhidoNoCelular && (
-      <FadeUp>
-        <CardSurface variant="ink" padded>
-          <p className="flex min-w-0 items-center text-[13px] font-medium leading-5 text-muted-foreground">
-            <ShieldCheck className="mr-2 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-            Evolução acumulada
-          </p>
-          <div className="mt-5 grid min-w-0 grid-cols-2 gap-x-6 gap-y-6 lg:grid-cols-4">
-            <Metrica tamanho="xl" rotulo="Entregas liberadas" valor={totalFiles} />
-            <Metrica tamanho="xl" rotulo="Aprovadas" valor={approvedFiles} />
-            {published.length > 0 && <Metrica tamanho="xl" rotulo="Publicações realizadas" valor={published.length} />}
-            {doneProjects.length > 0 && <Metrica tamanho="xl" rotulo="Projetos concluídos" valor={doneProjects.length} />}
-          </div>
-        </CardSurface>
-      </FadeUp>
       )}
     </StaggerContainer>
   );

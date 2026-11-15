@@ -23,7 +23,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { Card, Chip, PageHeader, ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
+import { Card, Chip, PageHeader, StatusPill, type Tone } from "@/components/ds";
 import { Bolha, type TomDaBolha } from "@/components/client/pecasOusadas";
 
 const statusBadgeBase: Record<string, { cls: string; label: string }> = {
@@ -178,22 +178,6 @@ export default function ClientRequests() {
           )
         }
       />
-
-      {/* Os números do filtro, grandes; tocar num deles filtra. No celular a tela é só a lista. */}
-      {!isLoading && !pequena && todos.length > 0 && (
-        <StatGrid cols={4} label="Resumo dos pedidos">
-          <StatCard variant="accent" size="xl" label="Abertos" value={contagem.abertos} onClick={() => setFiltro("abertos")} />
-          <StatCard variant="ink" size="xl" label="Em andamento" value={contagem.andamento} onClick={() => setFiltro("andamento")} />
-          <StatCard
-            size="xl"
-            label="Concluídos"
-            value={contagem.concluidos}
-            onClick={() => setFiltro("concluidos")}
-            chart={<ProgressBar value={contagem.concluidos} max={todos.length} tone={1} striped label={`${contagem.concluidos} de ${todos.length} pedidos concluídos`} />}
-          />
-          <StatCard size="xl" label="Todos" value={contagem.todos} onClick={() => setFiltro("todos")} />
-        </StatGrid>
-      )}
 
       {/* Celular: os três números numa faixa só; tocar filtra (tocar de novo volta para todos). */}
       {!isLoading && pequena && todos.length > 0 && (

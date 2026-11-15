@@ -85,7 +85,7 @@ export default function PillTabs<V extends string = string>({
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
                 : aberta
-                  ? "bg-foreground text-background"
+                  ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
@@ -95,7 +95,7 @@ export default function PillTabs<V extends string = string>({
               <span
                 className={juntar(
                   "ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[11px] font-semibold leading-none tabular-nums",
-                  aberta && variant === "ink" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                  aberta && variant === "ink" ? "bg-black/15 text-primary-foreground" : "bg-muted text-muted-foreground",
                   aberta && variant === "soft" && "bg-muted text-foreground",
                 )}
               >

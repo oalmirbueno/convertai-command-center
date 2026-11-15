@@ -54,6 +54,42 @@ export function Avatar({
   );
 }
 
+/**
+ * Pilha de avatares (v4, como nas referências): círculos sobrepostos com a
+ * borda na cor do cartão e, no fim, o "+N" do que não coube. Decorativa: os
+ * nomes vão no resumo para leitor de tela.
+ */
+export function AvatarStack({
+  people,
+  max = 4,
+  size = "sm",
+  label,
+  className = "",
+}: {
+  people: Array<{ name?: string | null; src?: string | null } | string | null | undefined>;
+  max?: number;
+  size?: keyof typeof TAMANHO;
+  /** Resumo para leitor de tela. Sem ele, os nomes. */
+  label?: string;
+  className?: string;
+}) {
+  const lista = (people || []).filter(Boolean).map((p) => (typeof p === "string" ? { name: p } : (p as { name?: string | null; src?: string | null })));
+  if (lista.length === 0) return null;
+  const visiveis = lista.slice(0, Math.max(1, max));
+  const resto = lista.length - visiveis.length;
+  return (
+    <span data-avatar-stack="" className={juntar("inline-flex shrink-0 items-center", className)} title={label || lista.map((p) => p.name).filter(Boolean).join(", ")}>
+      {visiveis.map((p, i) => (
+        <Avatar key={i} name={p.name} src={p.src} size={size} tone={i % 2 === 0 ? "neutral" : "accent"} className={juntar("ring-2 ring-card", i > 0 && "-ml-2.5")} />
+      ))}
+      {resto > 0 && (
+        <span aria-hidden="true" className={juntar("-ml-2.5 inline-flex shrink-0 select-none items-center justify-center rounded-full bg-foreground font-semibold leading-none tabular-nums text-background ring-2 ring-card", TAMANHO[size])}>+{resto}</span>
+      )}
+      <span className="sr-only">{label || lista.map((p) => p.name).filter(Boolean).join(", ")}</span>
+    </span>
+  );
+}
+
 export interface ListRowProps {
   /** Texto principal (uma linha, com reticências). */
   title: ReactNode;

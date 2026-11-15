@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowDownLeft, ArrowUpRight, Loader2, RotateCcw, SlidersHorizontal, Wallet } from "lucide-react";
-import { JanelaCentral, botao, campo, juntar, lista, texto } from "@/components/sistema";
+import { JanelaCentral, botao, campo, juntar, lista, superficie, texto } from "@/components/sistema";
+import { ProgressBar } from "@/components/ds";
 import { textoDoErro, usd } from "@/lib/mesa/api";
 import { carregarCreditos, chaveDosCreditos, definirLimiteDosCreditos, lerCreditos, type CreditosDoLab, type MovimentoDeCredito } from "@/lib/laboratorio/api";
 
@@ -55,13 +56,15 @@ function LinhaDoExtrato({ m }: { m: MovimentoDeCredito }) {
   const Icone = m.tipo === "carga" ? ArrowDownLeft : m.tipo === "estorno" ? RotateCcw : m.tipo === "ajuste" ? SlidersHorizontal : ArrowUpRight;
   const detalhe = [m.projeto_nome, m.nota].filter(Boolean).join(" · ");
   return (
-    <li className={juntar(lista.linha, "items-start")} data-movimento={m.tipo}>
-      <Icone className={juntar("mr-2.5 mt-0.5 h-4 w-4 shrink-0", entra ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+    <li className={juntar(lista.linha, "py-2")} data-movimento={m.tipo}>
+      <span className={juntar("mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full", entra ? "bg-accent-soft text-primary" : "bg-muted text-foreground")} aria-hidden="true">
+        <Icone className="h-4 w-4" />
+      </span>
       <span className="min-w-0 flex-1">
         <span className={juntar(texto.corpo, "block truncate")}>{ROTULO_DO_TIPO[m.tipo]}{detalhe ? ` · ${detalhe}` : ""}</span>
         <span className={juntar(texto.auxiliar, "block truncate")}>{quando(m.criado_em)} · saldo {usd(m.saldo_depois)}</span>
       </span>
-      <span className={juntar(texto.corpo, "ml-3 shrink-0 tabular-nums", entra ? "text-primary" : "")}>
+      <span className={juntar(texto.corpo, "ml-3 shrink-0 font-medium tabular-nums", entra ? "text-primary" : "")}>
         {m.tipo === "ajuste" ? "" : entra ? "+" : "−"}
         {m.tipo === "ajuste" ? "" : usd(m.valor_usd)}
       </span>
@@ -156,14 +159,15 @@ export function JanelaDeCreditos({ aberta, onFechar }: { aberta: boolean; onFech
       ) : c ? (
         <div className="min-w-0 space-y-6">
           {!c.disponivel ? <p className={juntar(texto.auxiliar, "text-warning")}>Os créditos entram quando o banco for atualizado. Até lá, nada trava.</p> : null}
-          <div className="grid min-w-0 grid-cols-2 gap-4">
-            <div className="min-w-0">
+          {/* v4: saldo no cartão verde e gasto do mês no cartão de tinta, com os centavos apagados. */}
+          <div className="grid min-w-0 grid-cols-2 gap-3">
+            <div className={juntar(superficie.painel, superficie.destaque, "min-w-0 p-4")}>
               <p className={texto.rotulo}>Saldo</p>
-              <p className={juntar(texto.numero, "truncate")} data-saldo-do-lab="">{usd(c.saldo_usd)}</p>
+              <p className={juntar(texto.numero, "mt-3 truncate font-medium")} data-saldo-do-lab="">{usd(c.saldo_usd)}</p>
             </div>
-            <div className="min-w-0">
+            <div className={juntar(superficie.painel, superficie.tinta, "min-w-0 p-4")}>
               <p className={texto.rotulo}>Gasto do mês</p>
-              <p className={juntar(texto.numero, "truncate")}>{usd(c.gasto_mes_usd)}</p>
+              <p className={juntar(texto.numero, "mt-3 truncate font-medium")}>{usd(c.gasto_mes_usd)}</p>
             </div>
           </div>
 
@@ -172,11 +176,14 @@ export function JanelaDeCreditos({ aberta, onFechar }: { aberta: boolean; onFech
           {c.por_projeto.length ? (
             <section aria-label="Gasto por projeto">
               <h3 className={juntar(texto.rotulo, "mb-1")}>Gasto por projeto (mês)</h3>
-              <ul className={juntar(lista.aberta, lista.divisoria)}>
+              <ul className={lista.aberta}>
                 {c.por_projeto.map((p) => (
-                  <li key={p.projeto_id || "sem"} className={juntar(lista.linha, "justify-between")}>
-                    <span className={juntar(texto.corpo, "min-w-0 truncate")}>{p.projeto_nome}</span>
-                    <span className={juntar(texto.corpo, "ml-3 shrink-0 tabular-nums")}>{usd(p.gasto_usd)}</span>
+                  <li key={p.projeto_id || "sem"} className={juntar(lista.linha, "block py-2")}>
+                    <span className="flex min-w-0 items-center justify-between">
+                      <span className={juntar(texto.corpo, "min-w-0 truncate")}>{p.projeto_nome}</span>
+                      <span className={juntar(texto.corpo, "ml-3 shrink-0 font-medium tabular-nums")}>{usd(p.gasto_usd)}</span>
+                    </span>
+                    {c.gasto_mes_usd > 0 ? <ProgressBar value={p.gasto_usd} max={c.gasto_mes_usd} height={6} tone={1} className="mt-1.5" label={`${p.projeto_nome}: ${usd(p.gasto_usd)} de ${usd(c.gasto_mes_usd)} no mês`} /> : null}
                   </li>
                 ))}
               </ul>
@@ -186,7 +193,7 @@ export function JanelaDeCreditos({ aberta, onFechar }: { aberta: boolean; onFech
           <section aria-label="Extrato">
             <h3 className={juntar(texto.rotulo, "mb-1")}>Extrato</h3>
             {c.movimentos.length ? (
-              <ul className={juntar(lista.aberta, lista.divisoria)} data-extrato="">
+              <ul className={lista.aberta} data-extrato="">
                 {c.movimentos.map((m) => (
                   <LinhaDoExtrato key={m.id} m={m} />
                 ))}

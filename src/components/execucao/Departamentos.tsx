@@ -6,9 +6,18 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { JanelaCentral, botao, campo } from "@/components/sistema";
 
-export default function Departamentos({ agentes }: { agentes: { slug: string; display_name: string; area?: string | null }[] }) {
-  const [aberto, setAberto] = useState(false);
-  const [projetoAberto, setProjetoAberto] = useState(false);
+/**
+ * v4 (15/11, passada estrutural): com `janela`/`aoFechar` a tela abre as janelas pelo menu "…" do
+ * cabeçalho e os dois botões de ícone não são desenhados. Sem eles, segue como antes (dois ícones).
+ */
+export default function Departamentos({ agentes, janela, aoFechar }: { agentes: { slug: string; display_name: string; area?: string | null }[]; janela?: "projeto" | "departamentos" | null; aoFechar?: () => void }) {
+  const controlado = janela !== undefined;
+  const [abertoLocal, setAbertoLocal] = useState(false);
+  const [projetoLocal, setProjetoLocal] = useState(false);
+  const aberto = controlado ? janela === "departamentos" : abertoLocal;
+  const projetoAberto = controlado ? janela === "projeto" : projetoLocal;
+  const setAberto = (v: boolean) => { if (controlado) { if (!v) aoFechar?.(); } else setAbertoLocal(v); };
+  const setProjetoAberto = (v: boolean) => { if (controlado) { if (!v) aoFechar?.(); } else setProjetoLocal(v); };
   const [agente, setAgente] = useState("");
   const [nome, setNome] = useState("");
   const qc = useQueryClient();
@@ -22,9 +31,9 @@ export default function Departamentos({ agentes }: { agentes: { slug: string; di
     onError: e => toast.error(e.message),
   });
   return <>
-    <button type="button" className={botao.icone} onClick={() => setProjetoAberto(true)} aria-label="Novo projeto" title="Novo projeto"><FolderPlus className="h-4 w-4" aria-hidden="true" /></button>
+    {!controlado && <button type="button" className={botao.icone} onClick={() => setProjetoAberto(true)} aria-label="Novo projeto" title="Novo projeto"><FolderPlus className="h-4 w-4" aria-hidden="true" /></button>}
     <CreateProjectModal open={projetoAberto} onClose={() => setProjetoAberto(false)} />
-    <button type="button" className={botao.icone} onClick={() => setAberto(true)} aria-label="Departamentos" title="Departamentos"><Network className="h-4 w-4" aria-hidden="true" /></button>
+    {!controlado && <button type="button" className={botao.icone} onClick={() => setAberto(true)} aria-label="Departamentos" title="Departamentos"><Network className="h-4 w-4" aria-hidden="true" /></button>}
     <JanelaCentral aberta={aberto} onMudar={setAberto} titulo="Organizar departamentos" largura="md">
       <form className="space-y-4" onSubmit={e => { e.preventDefault(); salvar.mutate(); }}>
         <label className="block space-y-1 text-[13px]">Agente<select required value={agente} onChange={e => { setAgente(e.target.value); setNome(agentes.find(a => a.slug === e.target.value)?.area || ""); }} className={campo}><option value="">Escolher agente</option>{agentes.map(a => <option key={a.slug} value={a.slug}>{a.display_name}</option>)}</select></label>

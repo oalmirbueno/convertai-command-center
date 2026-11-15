@@ -1438,13 +1438,15 @@ function LegacyFinanceiro() {
                   <StatCard
                     key={n.rotulo}
                     label={n.rotulo}
-                    value={billingLoading ? <span className="block h-9 w-32 animate-pulse rounded-full bg-muted" aria-label={`Carregando ${n.rotulo}`} /> : n.valor}
-                    hint={billingLoading ? (i === 0 ? undefined : <span aria-hidden="true" className="block h-4 w-24 animate-pulse rounded-full bg-muted" />) : n.sub}
+                    // v4 (15/11/2026): enquanto carrega, o lugar do número é texto do mesmo tamanho ("R$ --.---,--"), apagado e pulsando.
+                    // O bloco cinza que havia aqui tinha outra altura de linha e o cartão pulava quando o número chegava.
+                    value={billingLoading ? "R$ --.---,--" : n.valor}
+                    hint={billingLoading ? (i === 0 ? undefined : <span aria-hidden="true" className="block h-4 w-24 animate-pulse rounded-full bg-muted max-sm:mb-4" />) : i === 0 ? n.sub : <span className="block max-sm:min-h-[32px]">{n.sub}</span>}
                     icon={n.icone}
                     help={n.ajuda}
                     size={i === 0 ? "xl" : "lg"}
                     variant={i === 0 ? "ink" : i === 1 ? "accent" : "default"}
-                    className={juntar(semIconeNoCelular, i === 0 && "max-sm:col-span-2", i === 3 && overdueVal > 0 && "[&_.ds-stat-valor]:text-destructive")}
+                    className={juntar(semIconeNoCelular, i === 0 && "max-sm:col-span-2", billingLoading ? "[&_.ds-stat-valor]:animate-pulse [&_.ds-stat-valor]:text-muted-foreground/40" : i === 3 && overdueVal > 0 && "[&_.ds-stat-valor]:text-destructive")}
                     chart={
                       // Carregando: a barra reserva o lugar (o cartão não cresce quando o número chega).
                       billingLoading ? (i >= 1 && i <= 3 ? <span aria-hidden="true" className="block h-2 rounded-full bg-muted" /> : undefined) : i === 0 && reservedInBoxes > 0 && cashBalance > 0 ? (
@@ -1464,7 +1466,7 @@ function LegacyFinanceiro() {
                 <StatCard
                   label="Próximo mês"
                   value={fmt(nextMonthTotal)}
-                  hint={`${nextMonthFull} ${nextYear} · ${nextMonthSub}`}
+                  hint={<span className="block max-sm:min-h-[32px]">{`${nextMonthFull} ${nextYear} · ${nextMonthSub}`}</span>}
                   corner={<span aria-hidden="true" className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground"><ChevronRight className="h-4 w-4" /></span>}
                   to="/financeiro/projecao"
                   className={numeros.length % 2 === 1 ? "max-sm:col-span-2" : ""}
@@ -1806,7 +1808,7 @@ function LegacyFinanceiro() {
                           </div>
                           <span className="ml-3 shrink-0 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(clientTotal)}</span>
                         </div>
-                        <ul className={juntar(superficie.poco, "mt-3 divide-y divide-border/60")}>
+                        <ul className={juntar(superficie.poco, "mt-3")}>
                           {clientWallets.map((w: any) => (
                             <li key={w.id} className="flex min-w-0 items-center px-4 py-2.5">
                               <span className={juntar(texto.auxiliar, "w-24 shrink-0 truncate capitalize")}>{w.platform} Ads</span>
@@ -1906,7 +1908,7 @@ function LegacyFinanceiro() {
                             </span>
                             <span className="ml-3 shrink-0 text-[12px] font-semibold tabular-nums text-foreground">{fmt(planMRR)}/mês</span>
                           </div>
-                          <ul className="divide-y divide-border/60">
+                          <ul>
                             {planClients.map((c: any) => {
                               const renewalDate = parseAppDate(c.plan_renewal_date);
                               const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - todayStart.getTime()) / 86400000) : null;
@@ -2054,7 +2056,7 @@ function LegacyFinanceiro() {
                             </StatusPill>
                           </div>
                           {totalFaturado > 0 && <ProgressBar className="mt-3" value={totalPago} max={totalFaturado} height={6} label={`Pago ${fmt(totalPago)} de ${fmt(totalFaturado)}`} />}
-                          <ul className={juntar(superficie.poco, "mt-3 divide-y divide-border/60")}>
+                          <ul className={juntar(superficie.poco, "mt-3")}>
                             {clientProjects.map((pp: any) => {
                               const paid = sumInstallmentsPaid([pp]);
                               const total = Number(pp.total_value) || 0;

@@ -177,12 +177,13 @@ export default function NovaSequencia({
                 aria-checked={ativo}
                 onClick={() => mudar({ modelo: m.chave })}
                 className={juntar(
-                  "flex min-w-0 items-start rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  ativo ? "border-primary bg-primary/[0.06]" : "border-border hover:border-primary/50",
+                  // v4 (referências): ícone num círculo; o modelo escolhido é o cartão de tinta.
+                  "flex min-w-0 items-center rounded-md border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  ativo ? "ds-ink border-transparent" : "border-border bg-card hover:border-foreground/30",
                 )}
                 data-modelo={m.chave}
               >
-                <Icone className={juntar("mr-2.5 mt-0.5 h-4 w-4 shrink-0", ativo ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+                <span aria-hidden="true" className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full", ativo ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground")}><Icone className="h-4 w-4" /></span>
                 <span className="min-w-0">
                   <span className={juntar(texto.corpo, "block truncate font-medium")}>{m.nome}</span>
                   <span className={juntar(texto.auxiliar, "mt-0.5 line-clamp-2 hidden sm:block")}>{m.descricao}</span>

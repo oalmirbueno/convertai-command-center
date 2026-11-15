@@ -507,9 +507,9 @@ export default function EstudioDeMockups({
   if (catalogo.isLoading) return <Carregando rotulo="Abrindo o catálogo de mockups" />;
   if (catalogo.isError) return <EstadoDeErro titulo="O catálogo não abriu" acao={<button className={botao.secundario} onClick={() => void catalogo.refetch()}>Tentar de novo</button>} />;
   if (catalogo.data && catalogo.data.semBanco) {
-    return <EstadoVazio icone={<ImageOff className="h-5 w-5" />} titulo="O catálogo de mockups ainda não foi ativado" descricao="Falta aplicar a migration do estúdio e subir o primeiro lote." />;
+    return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<ImageOff className="h-5 w-5" />} titulo="O catálogo de mockups ainda não foi ativado" descricao="Falta aplicar a migration do estúdio e subir o primeiro lote." />;
   }
-  if (!itens.length) return <EstadoVazio icone={<ImageOff className="h-5 w-5" />} titulo="Nenhum mockup no catálogo ainda" />;
+  if (!itens.length) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<ImageOff className="h-5 w-5" />} titulo="Nenhum mockup no catálogo ainda" />;
 
   const semLogo = !logos.isLoading && !logosProntas.length;
   const enviadas = (aplicacoes.data || []).filter((a) => a.status === "enviado").length;
@@ -744,7 +744,7 @@ export default function EstudioDeMockups({
             </div>
           ) : null}
           {!listaParaAplicar.length ? (
-            <EstadoVazio titulo="Nenhum mockup marcado" acao={<button className={botao.secundario} onClick={() => setEtapa("categorias")}>Escolher categorias</button>} />
+            <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhum mockup marcado" acao={<button className={botao.secundario} onClick={() => setEtapa("categorias")}>Escolher categorias</button>} />
           ) : (
             <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 desk:grid-cols-4">
               {listaParaAplicar.map((id) => {
@@ -837,7 +837,7 @@ export default function EstudioDeMockups({
           }
         >
           {!escolhidos.length ? (
-            <EstadoVazio titulo="Nada escolhido ainda" acao={<button className={botao.secundario} onClick={() => setEtapa("aplicar")}>Voltar para Aplicar</button>} />
+            <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nada escolhido ainda" acao={<button className={botao.secundario} onClick={() => setEtapa("aplicar")}>Voltar para Aplicar</button>} />
           ) : (
             <>
               <div className="mb-2 flex min-w-0 flex-wrap items-center">

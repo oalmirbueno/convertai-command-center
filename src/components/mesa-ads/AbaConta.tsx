@@ -642,7 +642,7 @@ export default function AbaConta({
         {conta.isLoading && <div className="min-h-[calc(100vh-260px)]"><Carregando forma="aba" rotulo="Lendo a conta" /></div>}
 
         {dados && !dados.conta.conectada && (
-          <EstadoVazio
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
             icone={<BarChart3 className="h-5 w-5" />}
             titulo="A conta de anúncios deste cliente não está conectada"
             descricao="Conecte a conta da Meta no cadastro do cliente para ver campanhas, anúncios e métricas aqui."

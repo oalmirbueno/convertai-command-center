@@ -19,7 +19,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { Avatar, PageHeader, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
+import { Avatar, PageHeader, StatCard, StatGrid, StatusPill } from "@/components/ds";
 import { groupReports, getClientName, PERIOD_ORDER } from "@/lib/reportGrouping";
 import { recordMemory } from "@/lib/clientMemory";
 
@@ -175,7 +175,8 @@ export default function AdminReports() {
             value={primeiraCarga ? "–" : lista.length - rascunhos}
             icon={<Send className="h-4 w-4" />}
             onClick={() => setFiltroStatus("publicados")}
-            chart={<ProgressBar value={lista.length - rascunhos} max={lista.length} label={`${lista.length - rascunhos} de ${lista.length} publicados`} />}
+            progress={lista.length > 0 ? { value: lista.length - rascunhos, max: lista.length } : undefined}
+            hint={primeiraCarga ? "Carregando" : `de ${lista.length} no total`}
           />
           <StatCard
             className="max-lg:col-span-2"

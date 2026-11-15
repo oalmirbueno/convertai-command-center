@@ -918,7 +918,7 @@ export default function AdminMetricas() {
                             <span className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-foreground group-hover:text-background md:order-last md:ml-0" aria-hidden="true">
                               <ChevronRight className="h-4 w-4" />
                             </span>
-                            <p className={juntar(texto.auxiliar, "mt-1.5 basis-full truncate md:mt-0 md:basis-auto")}>
+                            <p className={juntar(texto.auxiliar, "mt-1.5 w-full min-w-0 basis-full [overflow-wrap:anywhere] md:mt-0 md:w-auto md:basis-auto md:truncate")}>
                               {/* No celular a linha de baixo diz de que número se trata; no computador, a coluna. */}
                               <span className="md:hidden">
                                 Alcance {formatMetricNumber(latest.reach)} · </span>

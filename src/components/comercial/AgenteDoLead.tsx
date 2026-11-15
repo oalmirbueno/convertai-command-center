@@ -161,7 +161,7 @@ export default function AgenteDoLead({ lead, aoMudar }: { lead: Lead; aoMudar: (
         {(historia.data || []).length === 0 ? (
           <p className={texto.auxiliar}>Nada registrado pelo agente ainda.</p>
         ) : (
-          <ul className="min-w-0 divide-y divide-border/60">
+          <ul className="min-w-0">
             {(historia.data || []).map((e) => (
               <li key={e.id} className="py-1.5 text-[13px] leading-5 text-muted-foreground">
                 {e.note}

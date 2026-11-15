@@ -297,7 +297,7 @@ export default function MesaDeVideo({
         ) : null
       }
     >
-      {!clientId && <EstadoVazio icone={icone} titulo={vazio.titulo} descricao={vazio.descricao} />}
+      {!clientId && <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={icone} titulo={vazio.titulo} descricao={vazio.descricao} />}
 
       {valor && !redirecionando && (
         <MesaProvider valor={valor}>

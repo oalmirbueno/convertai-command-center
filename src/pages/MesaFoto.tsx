@@ -633,7 +633,7 @@ export default function MesaFoto() {
       }
     >
 
-      {!clientId && <EstadoVazio icone={<Camera className="h-5 w-5" />} titulo="Escolha um cliente" descricao="A Mesa Foto abre com as fotos dele." />}
+      {!clientId && <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Camera className="h-5 w-5" />} titulo="Escolha um cliente" descricao="A Mesa Foto abre com as fotos dele." />}
 
       {valor && (
         <MesaProvider valor={valor}>

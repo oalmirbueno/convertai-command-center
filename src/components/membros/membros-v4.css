@@ -1343,3 +1343,468 @@ button.membros-vitrine-cartao:hover {
     border-bottom: 1px solid hsl(var(--border));
   }
 }
+
+/* ================= Passada 2: cabeçalho, barra e destaque no padrão das referências ================= */
+/* Ações do topo em ícones dentro de círculos. A aparência vira um único círculo:
+   mostra só o tema para o qual se troca (os dois botões continuam no HTML). */
+.membros-aparencia {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.membros-aparencia button {
+  width: 42px;
+  height: 42px;
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+.membros-aparencia button[aria-pressed="true"] {
+  display: none;
+}
+.membros-aparencia button:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.membros-topo-lupa,
+.membros-topo-busca-fechar {
+  display: none;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  color: hsl(var(--foreground));
+}
+.membros-topo-lupa:focus-visible,
+.membros-topo-busca-fechar:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.membros-portal .membros-topo-busca {
+  border-radius: 999px;
+}
+.membros-portal .membros-topo nav {
+  gap: 10px;
+}
+.membros-portal .membros-conta summary {
+  border-radius: 999px;
+}
+.membros-portal .membros-conta summary:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+@media (min-width: 901px) {
+  .membros-portal .membros-conta summary {
+    padding: 3px 12px 3px 3px;
+    background: hsl(var(--muted));
+  }
+  .membros-portal .membros-conta .membros-avatar {
+    background: hsl(var(--card));
+  }
+}
+
+/* Andamento dentro do destaque (rótulo em cima, barra fina embaixo). */
+.membros-destaque-andamento {
+  display: grid;
+  gap: 7px;
+  width: min(100%, 340px);
+  margin-top: 16px;
+}
+.membros-destaque-andamento > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #ccdacd;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.membros-destaque-andamento small {
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.membros-destaque-andamento > i {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: #ffffff2e;
+  overflow: hidden;
+}
+.membros-destaque-andamento b {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #35d23a;
+}
+.membros-portal .membros-destaque .membros-destaque-titulo > button[data-ajuda-recolhida]:last-child {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ffffff1f;
+  color: #eef6ee;
+  backdrop-filter: blur(8px);
+}
+.membros-portal .membros-destaque .membros-destaque-titulo > button[data-ajuda-recolhida]:last-child svg {
+  width: 17px;
+  height: 17px;
+}
+
+@media (max-width: 767px) {
+  /* --- Topo: uma linha só, 60px --- */
+  :root[data-membros-tema] {
+    --membros-topo-altura: 60px;
+  }
+  .membros-portal .membros-topo > .membros-topo-interno,
+  .membros-portal.membros-estudio-ativo .membros-topo > .membros-topo-interno {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 60px;
+    padding: 9px 16px;
+  }
+  .membros-portal .membros-marca-legenda {
+    display: none;
+  }
+  .membros-portal .membros-marca img {
+    height: 22px;
+    max-width: 132px;
+  }
+  .membros-portal .membros-topo nav {
+    gap: 8px;
+    flex: none;
+  }
+  .membros-topo-lupa {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    background: hsl(var(--muted));
+  }
+  .membros-portal.membros-estudio-ativo .membros-topo-lupa {
+    display: none;
+  }
+  .membros-portal .membros-aparencia button {
+    width: 40px;
+    height: 40px;
+  }
+  .membros-portal .membros-conta summary {
+    min-height: 40px;
+    gap: 0;
+  }
+  .membros-portal .membros-conta summary > svg {
+    display: none;
+  }
+  .membros-portal .membros-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 13px;
+  }
+  .membros-portal .membros-conta-menu {
+    top: calc(100% + 10px);
+  }
+  /* Busca: fechada é o ícone; aberta cobre a barra inteira, sem empurrar nada. */
+  .membros-portal .membros-topo-busca {
+    display: none;
+  }
+  .membros-portal:not(.membros-estudio-ativo) .membros-topo-busca[data-aberta="true"] {
+    position: absolute;
+    inset: 8px 16px;
+    z-index: 2;
+    display: flex;
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0 6px 0 16px;
+    gap: 10px;
+    border-radius: 999px;
+    background: hsl(var(--muted));
+    box-shadow: 0 0 0 9px hsl(var(--card));
+  }
+  .membros-portal .membros-topo-busca[data-aberta="true"]:focus-within {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 9px hsl(var(--card));
+  }
+  .membros-portal .membros-topo-busca input {
+    padding-block: 0;
+    font-size: 16px;
+  }
+  .membros-topo-busca-fechar {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    background: hsl(var(--card));
+  }
+
+  /* --- Barra inferior flutuante: ícones em círculo, o atual em pílula cheia com o nome --- */
+  .membros-portal .membros-menu,
+  .membros-portal .membros-menu:has(> :nth-child(8)) {
+    inset: auto 12px calc(10px + env(safe-area-inset-bottom)) 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 6px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 999px;
+    background: hsl(var(--card) / 0.97);
+    box-shadow: 0 10px 28px -10px rgb(0 0 0 / 0.3);
+    overflow: hidden;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao,
+  .membros-portal .membros-biblioteca-corpo .membros-menu:has(> :nth-child(8)) .membros-acao {
+    flex: 0 1 auto;
+    flex-direction: row;
+    gap: 7px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    line-height: 1.2;
+    color: hsl(var(--muted-foreground));
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao:not([aria-current="page"]) > span {
+    display: none;
+  }
+  :root[data-membros-tema] .membros-portal .membros-biblioteca-corpo .membros-menu .membros-acao[aria-current="page"] {
+    flex: 0 0 auto;
+    padding-inline: 16px;
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    font-weight: 600;
+  }
+  .membros-portal .membros-conteudo {
+    padding-top: 16px;
+  }
+  .membros-foco-compacto.flutuante {
+    bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+
+  /* --- Abertura enxuta --- */
+  .membros-portal .membros-saudacao {
+    margin-bottom: 2px;
+    font-size: 13px;
+  }
+
+  /* --- Destaque: proporção fixa, selo no canto, título forte, uma ação --- */
+  .membros-portal .membros-destaque {
+    aspect-ratio: 1 / 1;
+    min-height: 0;
+    border-radius: 24px;
+    align-items: flex-end;
+  }
+  .membros-esqueleto .membros-esqueleto-destaque {
+    aspect-ratio: 1 / 1;
+    min-height: 0;
+  }
+  .membros-portal .membros-destaque-texto {
+    padding: 18px;
+  }
+  .membros-portal .membros-destaque-selo {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    margin: 0;
+    border-color: #ffffff40;
+    background: #0a140dbf;
+    backdrop-filter: blur(8px);
+  }
+  .membros-portal .membros-destaque .membros-destaque-titulo > button[data-ajuda-recolhida]:last-child {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+  .membros-portal .membros-destaque h2 {
+    font-size: 26px;
+    line-height: 1.12;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+  }
+  .membros-portal .membros-destaque-meta {
+    margin-top: 8px;
+  }
+  .membros-destaque-andamento {
+    width: 100%;
+    margin-top: 12px;
+  }
+  .membros-portal .membros-destaque-acao {
+    margin-top: 14px;
+    min-height: 48px;
+    font-size: 15px;
+  }
+  .membros-portal .membros-destaque::after {
+    background: linear-gradient(0deg, #06160dfa 0%, #06160de0 42%, #06160d33 72%, #06160d00 100%);
+  }
+}
+
+/* ================= Pomodoro: trilho de etapas, relógio em anel, ações sem vazar ================= */
+.membros-pomodoro-etapas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+.membros-pomodoro-etapas .membros-acao {
+  justify-content: center;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 4px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: hsl(var(--muted-foreground));
+  background: none;
+}
+.membros-pomodoro-etapas .membros-acao[aria-pressed="true"] {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.14);
+}
+.membros-pomodoro .membros-relogio {
+  display: grid;
+  place-items: center;
+  width: min(232px, 68vw);
+  aspect-ratio: 1;
+  margin: 10px auto 6px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: clamp(46px, 14vw, 58px);
+  line-height: 1;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(closest-side, hsl(var(--card)) calc(100% - 11px), transparent calc(100% - 10px)),
+    conic-gradient(hsl(var(--primary)) calc(var(--andamento, 0) * 1%), hsl(var(--muted)) 0);
+}
+.membros-pomodoro-acoes {
+  flex-wrap: wrap;
+}
+.membros-pomodoro-acoes .membros-acao {
+  min-height: 46px;
+  padding-inline: 18px;
+  border-radius: 999px;
+}
+.membros-pomodoro-acoes .membros-acao.bg-primary {
+  padding-inline: 26px;
+  font-weight: 600;
+}
+@media (max-width: 639px) {
+  .membros-pomodoro {
+    width: 100%;
+    max-width: none;
+    padding: 26px 18px calc(22px + env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0;
+  }
+  .membros-pomodoro-etapas .membros-acao {
+    font-size: 11.5px;
+    letter-spacing: -0.01em;
+  }
+  .membros-pomodoro-acoes .membros-acao.bg-primary {
+    flex: 1 1 100%;
+  }
+  .membros-pomodoro-acoes .membros-acao:not(.bg-primary) {
+    flex: 1 1 0;
+  }
+}
+
+/* Marcador da capa: círculo de verdade no celular (a regra de toque esticava para 44px de altura). */
+@media (max-width: 767px) {
+  .membros-portal .membros-favoritar {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 50%;
+  }
+}
+
+/* ================= Passada 2: jornada com anel, abas do leitor em trilho, ações em pílula ================= */
+/* Anel de progresso em volta do ícone (dado real da jornada). */
+.membros-portal .membros-jornada-icone {
+  width: 52px;
+  height: 52px;
+  color: hsl(var(--accent-foreground));
+  background:
+    radial-gradient(closest-side, hsl(var(--accent)) calc(100% - 5px), transparent calc(100% - 4px)),
+    conic-gradient(hsl(var(--primary)) calc(var(--andamento, 0) * 1%), hsl(var(--muted)) 0);
+}
+.membros-portal .membros-jornada-resumo strong {
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+/* Abas do leitor: trilho em pílula, a atual cheia (sem sublinhado). */
+.membros-modal .membros-abas {
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+.membros-modal .membros-abas .membros-acao {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+}
+.membros-modal .membros-abas .membros-acao[aria-current="page"] {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.14);
+}
+@media (min-width: 768px) {
+  .membros-modal .membros-abas {
+    align-self: flex-start;
+    max-width: 100%;
+  }
+}
+
+/* Ferramentas: ação principal em pílula, como no resto da área. */
+.membros-portal .membros-ferramenta-rodape .membros-acao {
+  border-radius: 999px;
+  padding-inline: 18px;
+}
+
+/* Controles do leitor (Pomodoro, tela cheia): ícones em círculo, iguais ao fechar. */
+.membros-modal .membros-curso-controles .membros-acao {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+}
+@media (max-width: 767px) {
+  .membros-modal .membros-curso-controles .membros-acao {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+  }
+}
+
+/* Barra do celular com 7 itens (Estúdio e Créditos liberados): os ícones dividem
+   o espaço que sobra da pílula atual, e o Pomodoro continua à vista. */
+@media (max-width: 767px) {
+  .membros-portal .membros-menu:has(> :nth-child(8)) {
+    gap: 0;
+  }
+  .membros-portal .membros-biblioteca-corpo .membros-menu:has(> :nth-child(8)) .membros-acao:not([aria-current="page"]) {
+    flex: 1 1 0;
+    min-width: 30px;
+    padding-inline: 2px;
+  }
+  :root[data-membros-tema] .membros-portal .membros-biblioteca-corpo .membros-menu:has(> :nth-child(8)) .membros-acao[aria-current="page"] {
+    padding-inline: 12px;
+    gap: 6px;
+  }
+}

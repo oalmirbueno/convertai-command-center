@@ -447,7 +447,7 @@ export default function MesaProposta() {
       }
     >
       {!clientId && (
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<BriefcaseBusiness className="h-5 w-5" />}
           titulo={lead ? `Escolha o cliente da proposta de ${lead.company || lead.name}.` : "Escolha um cliente para abrir a Mesa Proposta."}
           descricao={lead ? "Lead sem ficha: em Clientes › Propostas, Nova proposta cria o cliente na hora." : "Proposta comercial com link e aceite."}

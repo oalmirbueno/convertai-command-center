@@ -2739,10 +2739,11 @@ export default function Workspace() {
                         className={juntar(
                           "relative overflow-hidden transition-shadow",
                           // Pasta e arquivo sem miniatura: cartão branco (14/11/2026); mídia continua com a imagem mandando.
-                          temImagem ? "rounded-lg bg-muted" : superficie.painel,
+                          // v4 (15/11): pasta vazia vira zona listrada (o vazio das referências), sem cartão.
+                          temImagem ? "rounded-lg bg-muted" : isFolder && !n.__virtual && total === 0 ? "rounded-lg border border-dashed border-border" : superficie.painel,
                           dragActive ? "ring-2 ring-primary" : "group-hover:ring-1 group-hover:ring-border",
                         )}
-                        style={{ paddingBottom: "100%" }}
+                        style={{ paddingBottom: "100%", ...(!temImagem && isFolder && !n.__virtual && total === 0 ? { backgroundImage: "repeating-linear-gradient(135deg, hsl(var(--muted-foreground) / 0.12) 0, hsl(var(--muted-foreground) / 0.12) 2px, transparent 2px, transparent 8px)" } : {}) }}
                       >
                         {temImagem ? (
                           <WorkspaceThumb
@@ -2754,8 +2755,12 @@ export default function Workspace() {
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center">
                             {/* Rodada ousada (15/11/2026): o ícone num círculo grande; a pasta no círculo de tinta. */}
-                            <span className={juntar("flex h-16 w-16 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-105 max-sm:h-14 max-sm:w-14", isFolder ? "bg-foreground text-background" : "bg-muted")}>
+                            <span className={juntar("relative flex h-16 w-16 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-105 max-sm:h-14 max-sm:w-14", isFolder ? (n.__virtual || total > 0 ? "bg-foreground text-background" : "bg-card text-muted-foreground ring-1 ring-border") : "bg-muted")}>
                               <Icon className={juntar("h-7 w-7", isFolder ? "" : KIND_META[k].color)} aria-hidden="true" />
+                              {/* v4 (15/11): quantos itens a pasta tem, num selo no círculo. */}
+                              {isFolder && !n.__virtual && total > 0 && (
+                                <span className="absolute -right-1.5 -top-1.5 inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-accent-solid px-1.5 text-[11px] font-semibold tabular-nums text-on-accent ring-2 ring-card" aria-hidden="true">{total > 99 ? "99+" : total}</span>
+                              )}
                             </span>
                             {!isFolder && extOf(n.name) && (
                               <span className={juntar(etiqueta, "mt-3 rounded-full bg-muted px-2", KIND_META[k].accent)}>{extOf(n.name)}</span>

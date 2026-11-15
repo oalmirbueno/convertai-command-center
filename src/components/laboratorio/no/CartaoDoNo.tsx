@@ -150,7 +150,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
     <div
       className={juntar(
         superficie.painel,
-        "group/no relative rounded-xl text-left transition-shadow duration-200",
+        "group/no relative rounded-[22px] text-left transition-shadow duration-200",
         construindo && "duration-300 animate-in fade-in-0 zoom-in-90 slide-in-from-left-3 fill-mode-both motion-reduce:animate-none",
       )}
       style={estilo}
@@ -165,10 +165,9 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
       {def.entradas.length > 0 ? (
         <Handle type="target" position={Position.Left} id="entrada" className={ALCA} style={{ background: "hsl(var(--card))", borderColor: def.cor }} isConnectable={!a.travado} />
       ) : null}
-      <span className="pointer-events-none absolute inset-x-4 top-0 h-[3px] rounded-b-full" style={{ background: def.cor }} aria-hidden="true" />
-
-      <div className={juntar("flex min-w-0 items-center px-3 pb-2 pt-3", !a.travado && "cursor-grab active:cursor-grabbing")}>
-        <span className="mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: `${def.cor}1f`, color: def.cor }}>
+      {/* v4 (15/11/2026): o cabeçalho é uma faixa pastel na cor do tipo (como os nós das referências), com o ícone num círculo branco. */}
+      <div className={juntar("mb-2 flex min-w-0 items-center rounded-t-[21px] px-3 py-2.5", !a.travado && "cursor-grab active:cursor-grabbing")} style={{ background: `${def.cor}1f` }} data-cabecalho-do-no="">
+        <span className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card" style={{ color: def.cor }}>
           <IconeDoNo tipo={no.tipo} className="h-4 w-4" />
         </span>
         <span className="min-w-0 flex-1 truncate text-[14px] font-semibold leading-snug" title={`${def.rotulo}: ${def.dica}`}>

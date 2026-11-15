@@ -74,16 +74,20 @@ interface Props {
   fim?: ReactNode;
 }
 
+// B2 (15/11/2026): a barra virou uma pílula de cartão; o destino aberto é a pílula verde viva inteira
+// (ícone e nome dentro, letra escura), os outros ficam em ícone e nome cinza.
 const ITEM_DA_BARRA =
-  "toque-compacto flex h-full min-w-0 flex-1 flex-col items-center justify-center text-[11px] font-medium leading-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+  "toque-compacto flex h-full min-w-0 flex-1 flex-col items-center justify-center rounded-full text-[11px] font-medium leading-[14px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+const ITEM_ACESO = "bg-primary text-primary-foreground shadow-[0_6px_16px_-8px_hsl(var(--primary)/0.8)]";
+const ITEM_PARADO = "text-muted-foreground";
 
 function IconeDaBarra({ ativo, children }: { ativo: boolean; children: ReactNode }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "mb-0.5 inline-flex h-7 w-12 items-center justify-center rounded-full transition-all duration-200",
-        ativo ? "bg-primary text-primary-foreground" : "",
+        "inline-flex h-[22px] w-10 items-center justify-center",
+        ativo ? "" : "",
       )}
     >
       {children}
@@ -106,23 +110,24 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
   return (
     <>
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border/70 bg-card"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Navegação principal"
         data-barra-de-baixo=""
       >
-        <div className="mx-auto flex h-14 max-w-[560px] items-stretch">
+        <div className="mx-auto flex h-14 max-w-[560px] items-stretch px-2 pb-1.5">
+          <div className="flex h-full min-w-0 flex-1 items-stretch rounded-full border border-border bg-card p-[3px] shadow-card" data-pilula-da-barra="">
           {destinos.map((d) => (
             <NavLink
               key={d.url}
               to={d.url}
               end={d.fimExato}
-              className={({ isActive }) => cn(ITEM_DA_BARRA, isActive ? "text-foreground" : "text-muted-foreground")}
+              className={({ isActive }) => cn(ITEM_DA_BARRA, isActive ? ITEM_ACESO : ITEM_PARADO)}
             >
               {({ isActive }) => (
                 <>
                   <IconeDaBarra ativo={isActive}>
-                    <d.icon className="h-5 w-5" />
+                    <d.icon className="h-[18px] w-[18px]" />
                   </IconeDaBarra>
                   <span className="max-w-full truncate px-0.5">{d.title}</span>
                 </>
@@ -136,13 +141,14 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
             aria-expanded={maisAberto}
             aria-haspopup="dialog"
             data-botao-mais=""
-            className={cn(ITEM_DA_BARRA, maisAceso ? "text-foreground" : "text-muted-foreground")}
+            className={cn(ITEM_DA_BARRA, maisAceso ? ITEM_ACESO : ITEM_PARADO)}
           >
             <IconeDaBarra ativo={maisAceso}>
-              <MoreHorizontal className="h-5 w-5" />
+              <MoreHorizontal className="h-[18px] w-[18px]" />
             </IconeDaBarra>
             <span>Mais</span>
           </button>
+          </div>
         </div>
       </nav>
 
@@ -180,7 +186,7 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
                         className={({ isActive }) =>
                           cn(
                             "flex h-11 min-w-0 items-center rounded-full px-3.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            isActive ? "bg-accent-soft font-medium text-primary" : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                            isActive ? "bg-primary font-medium text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
                           )
                         }
                       >

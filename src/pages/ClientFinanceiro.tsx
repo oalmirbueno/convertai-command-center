@@ -434,7 +434,7 @@ export default function ClientFinanceiro() {
                   size="xl"
                   icon={<Zap className="h-4 w-4" />}
                   label={platformLabels[w.platform] || w.platform}
-                  value={<Dinheiro valor={balance} />}
+                  value={formatCurrency(balance)}
                   corner={<StatusPill tone={statusTone}>{statusText}</StatusPill>}
                   chart={
                     <>

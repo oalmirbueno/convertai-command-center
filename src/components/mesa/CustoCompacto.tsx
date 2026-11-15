@@ -25,7 +25,7 @@ const ROTULOS_FORA_DO_CATALOGO: Record<string, string> = {
 };
 
 export const botaoPequeno =
-  "inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * Saldo e gasto do mês numa linha curta. Tocar abre o detalhe (por modelo,
@@ -63,7 +63,7 @@ export function CustoCompacto({
           <button
             type="button"
             aria-label="Saldo e gasto do mês"
-            className="inline-flex h-8 min-w-0 items-center rounded-full px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex h-8 min-w-0 items-center rounded-full px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:bg-muted/70 sm:px-3"
           >
             {/* 16/10/2026 (dono: "cara de aplicativo" no celular): abaixo de 640 px o saldo vira só o ícone da
                 carteira (com o ponto vermelho do alerta); o valor e o gasto aparecem ao tocar. */}

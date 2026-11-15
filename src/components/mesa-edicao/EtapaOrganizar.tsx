@@ -385,7 +385,7 @@ export default function EtapaOrganizar({ irPara }: { irPara: IrPara }) {
         {arquivosQ.isLoading ? (
           <Carregando linhas={5} rotulo="Lendo os vídeos" />
         ) : !arquivos.length ? (
-          <EstadoVazio
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
             icone={<FolderTree className="h-5 w-5" />}
             titulo="Nenhum vídeo ainda"
             descricao="Suba os vídeos na Entrada."

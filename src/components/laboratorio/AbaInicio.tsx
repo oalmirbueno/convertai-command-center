@@ -14,7 +14,7 @@ import GaleriaDeFluxos, { ROLAGEM_DA_COLUNA } from "./GaleriaDeFluxos";
 import PerguntasGuiadas from "./PerguntasGuiadas";
 import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
 import { useCreditosDoLab } from "./CreditosDoLab";
-import { CirculoDoIcone, ZonaVazia, pastelDe, tom } from "./visual";
+import { ZonaVazia, pastelDe, tom } from "./visual";
 
 /**
  * Início do Laboratório: uma caixa de pedido ("peça um projeto, uma arte,
@@ -100,9 +100,10 @@ function ResumoDoLab({ projetos, carregando }: { projetos: ProjetoDoLab[]; carre
     <div className="grid min-w-0 shrink-0 grid-cols-2 gap-3" data-resumo-do-lab="">
       <div className={juntar(superficie.painel, superficie.destaque, "flex h-[148px] min-w-0 flex-col p-4")}>
         <div className="flex min-w-0 items-center">
-          <CirculoDoIcone tamanho="sm" tinta className="mr-2">
+          {/* Preto e branco fixos: dentro do cartão verde os tokens de texto mudam e o círculo de tinta perdia o ícone no escuro. */}
+          <span className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white" aria-hidden="true">
             <FolderOpen className="h-4 w-4" />
-          </CirculoDoIcone>
+          </span>
           <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>Projetos ativos</span>
         </div>
         <div className="mt-auto flex min-w-0 items-end">

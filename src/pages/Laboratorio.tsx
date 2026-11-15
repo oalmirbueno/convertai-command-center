@@ -123,7 +123,7 @@ export default function Laboratorio() {
 
   return (
     <div
-      className={juntar(cheia && !noCanvas ? "fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-background px-4 py-3" : larguraDaMesa, espaco.pagina)}
+      className={juntar(cheia && !noCanvas ? "fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-background px-4 py-3" : larguraDaMesa, noCanvas ? undefined : espaco.pagina)}
       style={cheia && !noCanvas ? { paddingTop: "calc(env(safe-area-inset-top) + 12px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" } : undefined}
       data-pagina-laboratorio=""
       data-tela-cheia={cheia ? "" : undefined}
@@ -133,7 +133,12 @@ export default function Laboratorio() {
         em pílula (antes só o ícone) e, à direita, créditos e tela cheia em círculos. No celular as abas descem
         para a linha de baixo e rolam por dentro; nada muda de altura depois de carregar.
       */}
-      <header className="flex min-w-0 flex-wrap items-center" data-cabecalho-do-lab="">
+      {/*
+        Passada estrutural (15/11/2026, 17:07): com um projeto aberto o cabeçalho sai da vista e o canvas fica
+        com a tela, como nas referências; a seta da barra do editor volta para os projetos (e para as abas) e
+        os créditos vão para a barra dele.
+      */}
+      <header className={juntar("min-w-0 flex-wrap items-center", noCanvas ? "hidden" : "flex")} data-cabecalho-do-lab="">
         <div className="order-1 mr-3 min-w-0 flex-1 lg:flex-none">
           <p className={juntar(texto.etiqueta, "truncate uppercase tracking-[0.08em] text-muted-foreground")}>Criação livre</p>
           <div className="flex min-w-0 items-center">
@@ -145,7 +150,7 @@ export default function Laboratorio() {
         </div>
         <div className="order-2 ml-auto flex shrink-0 items-center lg:order-3" data-acoes-do-cabecalho="">
           {/* Créditos do Laboratório (20/10): carteira + saldo; abre a janela com carregar e extrato. */}
-          <ChipDeCreditos />
+          {noCanvas ? null : <ChipDeCreditos />}
           {noCanvas ? null : (
             <button type="button" className={juntar(botaoEmCirculo, "ml-2")} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia} data-tela-cheia-do-lab="">
               {cheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
@@ -160,7 +165,7 @@ export default function Laboratorio() {
       </header>
       <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo" />}>
         {aba === "inicio" && <AbaInicio clienteId={clienteId} onCliente={mudarCliente} clientes={clientes} onAbrirProjeto={(id) => abrirProjeto(id)} />}
-        {aba === "projetos" && <AbaProjetos projetoAberto={projeto} onAbrir={abrirProjeto} clienteId={clienteId} clientes={clientes} telaCheia={cheia} onTelaCheia={setCheia} />}
+        {aba === "projetos" && <AbaProjetos projetoAberto={projeto} onAbrir={abrirProjeto} clienteId={clienteId} clientes={clientes} telaCheia={cheia} onTelaCheia={setCheia} creditos={noCanvas ? <ChipDeCreditos /> : null} />}
         {/* 19/10 (dono): o Estúdio começa Livre, sem o cliente lembrado das outras abas; o cliente se escolhe nele. */}
         {aba === "estudio" && <EstudioLivre />}
         {aba === "logos" && <AbaLogos clienteId={clienteId} onCliente={mudarCliente} clientes={clientes} onVerArquivos={() => ir("arquivos")} />}

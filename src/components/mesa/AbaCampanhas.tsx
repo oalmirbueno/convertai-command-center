@@ -7,7 +7,8 @@ import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
-import { juntar, superficie, texto } from "@/components/sistema/estilos";
+import { foco, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { ArrowUpRight } from "@/components/ds";
 import { AvisoDeErro } from "./Custo";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { campanhaDaMarcaNaTela } from "@/lib/mesa/marcas";
@@ -122,32 +123,37 @@ function EstadoVazio({
 }) {
   const recentes = lista.slice(0, 4);
   return (
-    <div className="mx-auto w-full min-w-0 max-w-2xl py-6 sm:py-10">
-      <div className="text-center">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-          <Megaphone className="h-5 w-5 text-primary" />
+    <div className="mx-auto w-full min-w-0 max-w-3xl py-2 sm:py-6">
+      {/* v4 (cartão de chamada das referências): o convite é o cartão de tinta, com o ícone num círculo e UMA ação. */}
+      <div className={juntar(superficie.painel, superficie.tinta, "relative flex min-w-0 items-center overflow-hidden p-5 sm:p-6")} data-card="ink">
+        <span aria-hidden="true" className="pointer-events-none absolute -right-10 -top-16 h-44 w-44 rounded-full bg-foreground/[0.06]" />
+        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-foreground/15 text-foreground sm:h-14 sm:w-14">
+          <Megaphone className="h-5 w-5" aria-hidden="true" />
         </span>
         {/* Só o título; o que é uma campanha fica no "?" (28/09). */}
-        <div className="mt-4 flex min-w-0 items-center justify-center">
-          <h2 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{lista.length ? "Abra uma campanha ou comece outra" : "A primeira campanha deste cliente"}</h2>
-          <AjudaRecolhida className="ml-1.5" rotulo="O que é uma campanha">
+        <div className="relative ml-4 flex min-w-0 flex-1 items-center">
+          <h2 className="min-w-0 text-[18px] font-medium leading-6 tracking-[-0.02em] text-foreground line-clamp-2 sm:text-[22px] sm:leading-7">{lista.length ? "Abra uma campanha ou comece outra" : "A primeira campanha deste cliente"}</h2>
+          <AjudaRecolhida className="ml-1.5 shrink-0" rotulo="O que é uma campanha">
             Uma campanha junta o tema, a identidade com o selo e os conteúdos do período. O agente cria tudo a partir de uma frase e ajusta pela conversa.
           </AjudaRecolhida>
         </div>
-        <Button type="button" className="mt-5 h-10 w-10 rounded-full p-0" onClick={onNova} aria-label="Nova campanha" title="Nova campanha">
+        <button type="button" className={juntar("toque-compacto relative ml-3 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-solid text-on-accent transition-colors hover:bg-accent-solid/85", foco)} onClick={onNova} aria-label="Nova campanha" title="Nova campanha">
           <Plus className="h-5 w-5" aria-hidden="true" />
-        </Button>
+        </button>
       </div>
       {carregando && (
-        <div className="mt-8 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <div className="h-[68px] animate-pulse rounded-lg bg-muted" />
-          <div className="h-[68px] animate-pulse rounded-lg bg-muted" />
+        <div className="gap-bento mt-8 grid grid-cols-1 sm:grid-cols-2" aria-hidden="true">
+          <div className="h-[76px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <div className="h-[76px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
         </div>
+      )}
+      {!carregando && lista.length === 0 && (
+        <div className="ds-hatch mt-5 flex h-24 items-center justify-center rounded-lg px-4 text-center text-[13px] font-medium text-muted-foreground" data-empty-state="">Nenhuma campanha ainda</div>
       )}
       {recentes.length > 0 && (
         <div className="mt-8">
-          <p className={juntar(texto.rotulo, "mb-2")}>Recentes</p>
-          <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2" aria-label="Campanhas recentes">
+          <p className={juntar(texto.rotulo, "mb-3")}>Recentes</p>
+          <ul className="gap-bento grid grid-cols-1 sm:grid-cols-2" aria-label="Campanhas recentes">
             {recentes.map((c) => {
               const n = contagem(c);
               return (
@@ -155,11 +161,11 @@ function EstadoVazio({
                   <button
                     type="button"
                     onClick={() => onAbrir(c.id)}
-                    className="flex w-full min-w-0 items-center rounded-lg p-2.5 text-left transition-colors hover:bg-muted"
+                    className={juntar(superficie.painel, "group flex h-[76px] w-full min-w-0 items-center p-3.5 text-left transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0", foco)}
                   >
                     <SeloPequeno campanha={c} tamanho="h-11 w-11" />
                     <span className="ml-3 min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium">{c.nome}</span>
+                      <span className="block truncate text-[14px] font-medium tracking-[-0.01em]">{c.nome}</span>
                       <span className="mt-0.5 flex min-w-0 items-center text-[12px] text-muted-foreground">
                         <span className="mr-1.5 min-w-0 truncate">
                           {periodoCurto(c.periodo_inicio, c.periodo_fim)}
@@ -169,6 +175,7 @@ function EstadoVazio({
                         <SeloDoEstado estado={c.status} />
                       </span>
                     </span>
+                    <span aria-hidden="true" className="ml-2 hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-foreground group-hover:text-background sm:flex"><ArrowUpRight className="h-4 w-4" /></span>
                   </button>
                 </li>
               );

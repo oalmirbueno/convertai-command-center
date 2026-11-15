@@ -201,7 +201,7 @@ export function ProgressBar({
       style={{ height, color: cor(tone) }}
     >
       <span aria-hidden="true" className="absolute inset-0 rounded-full" style={trilho} />
-      {parte > 0 && <span aria-hidden="true" className="absolute inset-y-0 left-0 rounded-full bg-current transition-[width] duration-500" style={{ width: `${Math.max(pct, 2)}%`, minWidth: height }} />}
+      {parte > 0 && <span aria-hidden="true" className="absolute inset-y-0 left-0 rounded-full bg-current" style={{ width: `${Math.max(pct, 2)}%`, minWidth: height }} />}
     </span>
   );
 }
@@ -296,5 +296,164 @@ export function ChartLegend({ items, className = "" }: { items: Array<{ label: R
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Ícone dentro de um anel de progresso (v4, como nas referências): o círculo do
+ * indicador vira medidor quando o número tem meta (feito de total, recebido de
+ * previsto). Sem `max` válido, desenha só o círculo com o ícone.
+ */
+export function RingIcon({
+  value,
+  max = 100,
+  size = 44,
+  thickness = 4,
+  tone,
+  children,
+  label,
+  className = "",
+}: {
+  value?: number;
+  max?: number;
+  size?: number;
+  thickness?: number;
+  tone?: ChartTone;
+  /** O ícone do miolo. */
+  children?: ReactNode;
+  /** Resumo para leitor de tela. Sem ele: "X de Y (Z%)". */
+  label?: string;
+  className?: string;
+}) {
+  const valido = typeof value === "number" && isFinite(value) && typeof max === "number" && isFinite(max) && max > 0;
+  const parte = valido ? Math.max(0, Math.min(1, (value as number) / max)) : 0;
+  const raio = 50 - (thickness / size) * 50;
+  const tracoSvg = (thickness / size) * 100;
+  const volta = 2 * Math.PI * raio;
+  return (
+    <span className={juntar("relative inline-flex shrink-0 items-center justify-center text-foreground", className)} data-ds-chart="ring" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden="true" focusable="false" className="absolute inset-0 block -rotate-90" style={{ color: cor(tone) || COR["1"] }}>
+        <circle cx={50} cy={50} r={raio} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth={tracoSvg} opacity={0.2} />
+        {parte > 0 && <circle cx={50} cy={50} r={raio} fill="none" stroke="currentColor" strokeWidth={tracoSvg} strokeLinecap="round" strokeDasharray={`${(parte * volta).toFixed(3)} ${volta.toFixed(3)}`} />}
+      </svg>
+      {children !== undefined && children !== null && <span aria-hidden="true" className="relative inline-flex items-center justify-center">{children}</span>}
+      {valido && <Resumo>{label || `${fmt(value as number)} de ${fmt(max)} (${Math.round(parte * 100)}%)`}</Resumo>}
+    </span>
+  );
+}
+
+export interface BarSegment {
+  value: number;
+  label: string;
+  tone?: ChartTone;
+  /** Parte prevista, ainda não realizada: sai hachurada. */
+  hatched?: boolean;
+}
+
+/**
+ * Barra segmentada em pílulas (v4): partes de um total lado a lado, cada uma
+ * com a sua porcentagem dentro quando há largura. Parte com valor zero fica de
+ * fora; sem nenhuma parte, não desenha.
+ */
+export function SegmentBar({
+  segments,
+  height = 36,
+  showLabels = true,
+  label,
+  className = "",
+}: {
+  segments: BarSegment[];
+  height?: number;
+  /** Nome de cada parte em cima da barra. */
+  showLabels?: boolean;
+  label?: string;
+  className?: string;
+}) {
+  const partes = (segments || []).filter((s) => typeof s.value === "number" && isFinite(s.value) && s.value > 0);
+  const total = partes.reduce((soma, s) => soma + s.value, 0);
+  if (total <= 0) return null;
+  const colunas = partes.map((s) => `minmax(${height}px, ${s.value}fr)`).join(" ");
+  return (
+    <span className={juntar("block min-w-0", className)} data-ds-chart="segments">
+      {showLabels && (
+        <span aria-hidden="true" className="mb-1.5 grid min-w-0 gap-1 text-[11px] leading-4 text-muted-foreground" style={{ gridTemplateColumns: colunas }}>
+          {partes.map((s, i) => (
+            <span key={i} className="min-w-0 truncate">{s.label}</span>
+          ))}
+        </span>
+      )}
+      <span aria-hidden="true" className="grid min-w-0 gap-1" style={{ gridTemplateColumns: colunas, height }}>
+        {partes.map((s, i) => {
+          const tom = chartColor(s.tone, i);
+          const pct = Math.round((s.value / total) * 100);
+          return (
+            <span
+              key={i}
+              className="flex min-w-0 items-center overflow-hidden rounded-full px-2.5 text-[12px] font-medium leading-none tabular-nums"
+              style={s.hatched
+                ? { color: "hsl(var(--foreground))", backgroundImage: `repeating-linear-gradient(135deg, ${tom} 0, ${tom} 2px, transparent 2px, transparent 7px)`, boxShadow: `inset 0 0 0 1px ${tom}` }
+                : { backgroundColor: tom, color: s.tone === 3 || (s.tone === undefined && i % 5 === 2) ? "hsl(var(--background))" : "hsl(var(--on-accent))" }}
+            >
+              <span className="truncate">{pct}%</span>
+            </span>
+          );
+        })}
+      </span>
+      <Resumo>{label || partes.map((s) => `${s.label}: ${fmt(s.value)} (${Math.round((s.value / total) * 100)}%)`).join(", ")}</Resumo>
+    </span>
+  );
+}
+
+/**
+ * Etapas em linha (v4): círculos ligados por um traço; as feitas ficam cheias
+ * com o visto, a atual com o anel, as próximas vazias. Só mostra o estado que
+ * a tela já tem. No celular os nomes somem, menos o da etapa atual.
+ */
+export function Stepper({ steps, current, label, className = "" }: { steps: string[]; /** Índice da etapa atual (as anteriores contam como feitas). Igual ao total: tudo feito. */ current: number; label?: string; className?: string }) {
+  if (!steps || steps.length === 0) return null;
+  const atual = Math.max(0, Math.min(steps.length, current));
+  return (
+    <ol aria-label={label || "Etapas"} className={juntar("flex min-w-0 items-start", className)} data-ds-chart="stepper">
+      {steps.map((nome, i) => {
+        const feita = i < atual;
+        const agora = i === atual;
+        return (
+          <li key={i} aria-current={agora ? "step" : undefined} className={juntar("relative flex min-w-0 flex-col items-center", i < steps.length - 1 ? "flex-1" : "flex-none")}>
+            {i < steps.length - 1 && <span aria-hidden="true" className={juntar("absolute left-1/2 top-[11px] h-0.5 w-full", feita ? "bg-primary" : "bg-border")} />}
+            <span aria-hidden="true" className={juntar("relative z-[1] inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full", feita ? "bg-primary text-primary-foreground" : agora ? "border-2 border-primary bg-card" : "border-2 border-border bg-card")}>
+              {feita && (
+                <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 6.5l2.5 2.5 4.5-5.5" /></svg>
+              )}
+              {agora && <span className="h-2 w-2 rounded-full bg-primary" />}
+            </span>
+            <span className={juntar("mt-1.5 max-w-full truncate px-1 text-center text-[11px] leading-4", agora ? "font-medium text-foreground" : "text-muted-foreground max-sm:sr-only")}>
+              {nome}
+              <span className="sr-only">{feita ? " (feita)" : agora ? " (atual)" : ""}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * Mapa de calor em quadrados (v4): um quadrado por dia/semana, quatro tons do
+ * mesmo verde conforme o valor. Zero fica no trilho apagado. Sem valores, não desenha.
+ */
+export function Heatmap({ values, columns = 7, labels, tone, label, className = "" }: { values: number[]; columns?: number; /** Nome de cada quadrado (dia), para a dica e o resumo. */ labels?: string[]; tone?: ChartTone; label?: string; className?: string }) {
+  const celulas = (values || []).map((v) => (typeof v === "number" && isFinite(v) && v > 0 ? v : 0));
+  if (celulas.length === 0) return null;
+  const max = Math.max.apply(null, celulas) || 1;
+  return (
+    <span className={juntar("block min-w-0", className)} data-ds-chart="heatmap" style={{ color: cor(tone) }}>
+      <span aria-hidden="true" className="grid min-w-0 gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, columns)}, minmax(0, 1fr))` }}>
+        {celulas.map((v, i) => {
+          const nivel = v <= 0 ? 0 : Math.max(1, Math.ceil((v / max) * 4));
+          return <span key={i} title={labels && labels[i] ? `${labels[i]}: ${fmt(v)}` : fmt(v)} className="block w-full rounded-sm bg-current pb-[100%]" style={{ opacity: nivel === 0 ? 0.1 : 0.25 + nivel * 0.1875 }} />;
+        })}
+      </span>
+      <Resumo>{label || celulas.map((v, i) => `${labels && labels[i] ? `${labels[i]}: ` : ""}${fmt(v)}`).join(", ")}</Resumo>
+    </span>
   );
 }

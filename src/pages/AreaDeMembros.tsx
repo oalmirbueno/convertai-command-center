@@ -1,7 +1,7 @@
 import AtalhoDoProduto from "@/components/produto/AtalhoDoProduto";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import TituloMembros from "@/components/membros/TituloMembros";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -29,6 +29,7 @@ import {
   Megaphone,
   Coins,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -221,7 +222,9 @@ export function TrilhoProdutos({
                     {!estado.ferramenta && p.progresso === 100 ? "Concluído" : estado.rotulo}
                     {!estado.ferramenta && estado.liberado &&
                       p.materiais_total !== undefined &&
-                      ` · ${p.materiais_total} materiais`}
+                      (p.progresso > 0 && p.progresso < 100 && p.materiais_concluidos !== undefined
+                        ? ` · ${p.materiais_concluidos}/${p.materiais_total} materiais`
+                        : ` · ${p.materiais_total} materiais`)}
                   </p>
                   {!estado.ferramenta && p.progresso > 0 && estado.liberado && (
                     <div
@@ -269,7 +272,7 @@ function Jornada({ jornada }: { jornada: NonNullable<Catalogo["jornada"]> }) {
   return (
     <section className="membros-jornada" aria-label="Sua jornada">
       <div className="membros-jornada-resumo">
-        <span className="membros-jornada-icone" aria-hidden="true">
+        <span className="membros-jornada-icone" aria-hidden="true" style={{ "--andamento": percentual } as CSSProperties}>
           <BookCheck size={20} />
         </span>
         <div className="min-w-0">
@@ -421,6 +424,9 @@ function ConteudoAreaDeMembros() {
   const [comunidade, setComunidade] = useState("");
   const [avisoLista, setAvisoLista] = useState("");
   const [busca, setBusca] = useState("");
+  // No celular a busca mora num ícone e abre por cima da barra, sem empurrar a página.
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const campoDaBusca = useRef<HTMLInputElement>(null);
   const [categoria, setCategoria] = useState("");
   const [parametros, setParametros] = useSearchParams();
   const teste: TesteCliente | undefined =
@@ -659,10 +665,11 @@ function ConteudoAreaDeMembros() {
               <MarcaAceleriq altura={estudioAtivo ? 26 : 32} />
               <span className="membros-marca-legenda">Área de membros</span>
             </Link>
-            <label className="membros-topo-busca">
+            <label className="membros-topo-busca" data-aberta={buscaAberta || !!busca ? "true" : undefined}>
               <Search size={18} aria-hidden="true" />
               <span className="sr-only">Buscar produtos</span>
               <input
+                ref={campoDaBusca}
                 type="search"
                 value={busca}
                 onChange={(e) => {
@@ -671,13 +678,44 @@ function ConteudoAreaDeMembros() {
                 }}
                 placeholder="Buscar na biblioteca"
                 autoComplete="off"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setBusca("");
+                    setBuscaAberta(false);
+                  }
+                }}
               />
+              <button
+                type="button"
+                className="membros-topo-busca-fechar"
+                aria-label="Fechar busca"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setBusca("");
+                  setBuscaAberta(false);
+                }}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
             </label>
             <nav
               aria-label="Navegação da biblioteca"
               className="membros-topo-acoes"
             >
               <AtualizacaoDosMembros />
+              <button
+                type="button"
+                className="membros-topo-lupa"
+                aria-label="Abrir busca"
+                aria-expanded={buscaAberta || !!busca}
+                onClick={() => {
+                  setBuscaAberta(true);
+                  // O campo só existe na tela depois de aberto; foca no próximo quadro.
+                  requestAnimationFrame(() => campoDaBusca.current?.focus());
+                }}
+              >
+                <Search size={18} aria-hidden="true" />
+              </button>
               <BotaoAparenciaMembros />
               <details
                 className="membros-conta"
@@ -1000,6 +1038,20 @@ function ConteudoAreaDeMembros() {
                           </AjudaRecolhida>
                         </div>
                         <span className="membros-destaque-meta">{acessoDestaque?.rotulo} · {destaque.formato}</span>
+                        {/* Andamento real do produto em destaque (só para quem já começou). */}
+                        {!acessoDestaque?.ferramenta && podeAbrir(destaque) && destaque.progresso > 0 && (
+                          <div className="membros-destaque-andamento" aria-hidden="true">
+                            <span>
+                              <small>Progresso</small>
+                              <small>
+                                {destaque.materiais_total
+                                  ? `${destaque.materiais_concluidos ?? 0}/${destaque.materiais_total} materiais`
+                                  : `${Math.round(destaque.progresso)}%`}
+                              </small>
+                            </span>
+                            <i><b style={{ width: `${Math.min(100, Math.max(0, destaque.progresso))}%` }} /></i>
+                          </div>
+                        )}
                         <button
                           className="membros-acao membros-destaque-acao bg-primary text-primary-foreground"
                           onClick={() => abrirProduto(destaque)}

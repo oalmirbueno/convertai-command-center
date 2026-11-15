@@ -25,7 +25,8 @@ import {
   SquareKanban,
 } from "lucide-react";
 import { toast } from "sonner";
-import { MiniBars } from "@/components/ds";
+import { StatTrio } from "@/components/ds";
+import TrilhoDaAgenda from "@/components/editorial/TrilhoDaAgenda";
 import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import {
@@ -299,68 +300,12 @@ function resumoDoCalendario(
 }
 
 /**
- * Anel de progresso em volta do ícone (referências: o KPI com meta mostra a
- * fatia no próprio ícone). Só desenho: o número e o rótulo ficam ao lado.
+ * Números do período SEM cartão, na linha do título (passada estrutural,
+ * 15/11/2026: a fileira de quatro cartões saiu; o calendário sobe). Conta o
+ * mesmo que a linha do cabeçalho (resumoDoCalendario); não lê nada novo. Sem
+ * publicação, não desenha.
  */
-function AnelDoNumero({ valor, total, children }: { valor: number; total: number; children: ReactNode }) {
-  const raio = 20;
-  const volta = 2 * Math.PI * raio;
-  const fatia = total > 0 ? Math.max(0, Math.min(1, valor / total)) : 0;
-  return (
-    <span className="relative inline-flex h-12 w-12 shrink-0 items-center justify-center" aria-hidden="true">
-      <svg viewBox="0 0 48 48" className="absolute inset-0 h-full w-full -rotate-90">
-        <circle cx="24" cy="24" r={raio} fill="none" strokeWidth="4" className="stroke-current opacity-[0.14]" />
-        {fatia > 0 && <circle cx="24" cy="24" r={raio} fill="none" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${fatia * volta} ${volta}`} className="stroke-current" />}
-      </svg>
-      <span className="text-foreground">{children}</span>
-    </span>
-  );
-}
-
-/** Um número da faixa: anel com ícone, rótulo pequeno, número grande e, se houver, um minigráfico à direita. */
-function NumeroDaFaixa({
-  tipo = "default", rotulo, valor, total, apoio, icone, grafico,
-}: {
-  tipo?: "default" | "accent" | "ink";
-  rotulo: string;
-  valor: number;
-  /** Com total, o anel mostra a fatia (valor de total). */
-  total?: number;
-  apoio?: string;
-  icone: ReactNode;
-  grafico?: ReactNode;
-}) {
-  return (
-    <div
-      className={juntar(superficie.painel, tipo === "accent" && superficie.destaque, tipo === "ink" && superficie.tinta, "flex h-[88px] min-w-0 items-center px-4 xl:px-5")}
-      data-stat-card={tipo}
-      title={total !== undefined ? `${valor} de ${total} publicações` : undefined}
-    >
-      <span className={tipo === "default" ? "text-primary" : "text-foreground"}>
-        <AnelDoNumero valor={total !== undefined ? valor : 0} total={total ?? 0}>{icone}</AnelDoNumero>
-      </span>
-      <div className="ml-3 min-w-0 flex-1">
-        <p className="truncate text-[12px] font-medium leading-4 text-muted-foreground">{rotulo}</p>
-        <p className="mt-0.5 flex min-w-0 items-baseline">
-          <span className="text-[28px] font-semibold leading-8 tracking-[-0.035em] tabular-nums text-foreground">{valor}</span>
-          {apoio && <span className="ml-2 min-w-0 truncate text-[12px] leading-4 text-muted-foreground">{apoio}</span>}
-        </p>
-      </div>
-      {grafico && <span className="ml-3 hidden w-[84px] shrink-0 text-foreground xl:block">{grafico}</span>}
-    </div>
-  );
-}
-
-const DIAS_DA_FAIXA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-
-/**
- * Faixa de números do período (rodada ousada, 15/11/2026; polimento v4 no
- * mesmo dia): baixa (88 px, antes 181 com mais da metade vazia) e preenchida.
- * O total de conteúdos com as publicações por dia da semana em barras; cada
- * estado com a fatia dele no anel do ícone. Conta o mesmo que a linha do
- * cabeçalho (resumoDoCalendario); não lê nada novo. Sem publicação, não desenha.
- */
-function FaixaDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
+function NumerosDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
   const publications = posts.flatMap((post) => post.publications.map(({ publication }) => publication));
   if (posts.length === 0 || publications.length === 0) return null;
   const contar = (estado: string) => publications.filter((publication) => publication.status === estado).length;
@@ -368,30 +313,18 @@ function FaixaDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
   const publicados = contar("published");
   const falhas = contar("failed");
   const outros = publications.length - agendados - publicados - falhas;
-  const total = publications.length;
-  // Publicações com data, por dia da semana (segunda primeiro).
-  const porDia = [0, 0, 0, 0, 0, 0, 0];
-  for (const publication of publications) {
-    const quando = publication.scheduled_at ? new Date(publication.scheduled_at) : null;
-    if (quando && Number.isFinite(quando.getTime())) porDia[(quando.getDay() + 6) % 7] += 1;
-  }
-  const temDatas = porDia.some((n) => n > 0);
   return (
-    <div className="mb-4 hidden min-w-0 lg:block" data-faixa-do-calendario="" role="group" aria-label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}>
-      <div className={juntar("grid min-w-0 gap-3", falhas > 0 ? "grid-cols-5" : "grid-cols-4")}>
-        <NumeroDaFaixa
-          tipo="ink"
-          rotulo={posts.length === 1 ? "Conteúdo" : "Conteúdos"}
-          valor={posts.length}
-          apoio={`${total} ${total === 1 ? "publicação" : "publicações"}`}
-          icone={<CalendarDays className="h-4 w-4" />}
-          grafico={temDatas ? <MiniBars values={porDia} labels={DIAS_DA_FAIXA} highlightIndex={(new Date().getDay() + 6) % 7} height={40} tone="current" label="Publicações por dia da semana" /> : undefined}
-        />
-        <NumeroDaFaixa tipo="accent" rotulo="Publicados" valor={publicados} total={total} icone={<CheckCircle2 className="h-4 w-4" />} />
-        <NumeroDaFaixa rotulo="Agendados" valor={agendados} total={total} icone={<CalendarClock className="h-4 w-4" />} />
-        <NumeroDaFaixa rotulo="Em preparo" valor={outros} total={total} icone={<PenLine className="h-4 w-4" />} />
-        {falhas > 0 && <NumeroDaFaixa rotulo="Falhas" valor={falhas} total={total} icone={<AlertTriangle className="h-4 w-4" />} />}
-      </div>
+    <div data-faixa-do-calendario="">
+      <StatTrio
+        label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}
+        items={[
+          { label: posts.length === 1 ? "Conteúdo" : "Conteúdos", value: posts.length },
+          { label: "Publicados", value: publicados, hint: `de ${publications.length}` },
+          { label: "Agendados", value: agendados },
+          { label: "Em preparo", value: outros },
+          falhas > 0 && { label: "Falhas", value: falhas },
+        ]}
+      />
     </div>
   );
 }
@@ -1810,6 +1743,12 @@ export default function EditorialCalendar() {
               }
             />
           }
+          numeros={
+            // Os números do período sem cartão, na linha do título (como nas referências). Enquanto lê, o lugar já está reservado.
+            celular ? undefined : calendarQuery.isLoading
+              ? <div className="h-12 w-[340px] animate-pulse rounded-full bg-muted motion-reduce:animate-none" aria-hidden="true" data-esqueleto-da-faixa="" />
+              : <NumerosDoCalendario posts={filteredPosts} />
+          }
           inicioDaLinha={
             canUseTeamData ? (
               <div className="flex min-w-0 items-center">
@@ -1892,13 +1831,6 @@ export default function EditorialCalendar() {
             setScheduleOpen(true);
           }}
         />
-
-        {/* Enquanto lê, a faixa de números já tem o lugar dela: o calendário não desce quando ela chega. */}
-        {!celular && (calendarQuery.isLoading ? (
-          <div className="mb-4 hidden min-w-0 grid-cols-4 gap-3 lg:grid" aria-hidden="true" data-esqueleto-da-faixa="">
-            {[0, 1, 2, 3].map((i) => <div key={i} className="h-[88px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />)}
-          </div>
-        ) : <FaixaDoCalendario posts={filteredPosts} />)}
 
         {approvedReadyToSchedule.length > 0 && (
           <div className="ds-accent mb-3 flex min-w-0 items-center rounded-lg px-4 py-3 sm:px-5">
@@ -1995,8 +1927,22 @@ export default function EditorialCalendar() {
             estava em cada visão; no celular a página rola normal. */}
         {/* Na visão Conteúdos a principal não rola: o quadro organiza a
             rolagem (colunas de 1280 px para cima), sem rolagem dentro de rolagem. */}
+        <div className="flex min-w-0 items-start">
+        {!celular && view !== "board" && (
+          <TrilhoDaAgenda
+            dateKey={dateKey}
+            todayKey={todayKey}
+            semana={view === "week"}
+            posts={filteredPosts}
+            carregando={calendarQuery.isLoading}
+            podeCriar={canScheduleEditorial}
+            onEscolherDia={(dia) => setParam("date", dia)}
+            onAbrir={openDetail}
+            onCriarNoDia={openCreateOnDate}
+          />
+        )}
         <AreaDeTrabalho
-          className="mt-1"
+          className={juntar("mt-0 min-w-0 flex-1", view !== "board" && "xl:ml-4")}
           principalRolavel={view !== "board"}
           rotuloDoPrincipal="Calendário editorial"
           memoriaDaRolagem={`agenda:${view}`}
@@ -2040,6 +1986,7 @@ export default function EditorialCalendar() {
             />
           )}
         </AreaDeTrabalho>
+        </div>
 
         <p className="sr-only" aria-live="polite">
           {pendingMoveKeys.size > 0

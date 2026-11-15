@@ -84,7 +84,7 @@ function Cenas({ irPara, fotosDeCena }: { irPara: IrPara; fotosDeCena: FotoDoAce
   if (!historias.length) {
     return (
       <div className="space-y-6">
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Clapperboard className="h-5 w-5" />}
           titulo="Nenhuma história ainda"
           descricao="Marque os Resultados como cenas no Canvas da Mesa Foto."
@@ -209,7 +209,7 @@ function Roteiros({ irPara }: { irPara: IrPara }) {
   }
   if (!roteiro) {
     return (
-      <EstadoVazio
+      <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
         icone={<ScrollText className="h-5 w-5" />}
         titulo="Nenhum roteiro aprovado"
         descricao="Aprove um roteiro na Mesa Roteiros."

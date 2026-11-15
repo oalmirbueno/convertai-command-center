@@ -303,22 +303,21 @@ function ResumoDasEtapas({ faixas }: { faixas: FaixaDaEsteira[] }) {
         <span className="text-[32px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{total}</span>
         <span className="ml-2 text-[13px] text-muted-foreground">{total === 1 ? "peça" : "peças"}</span>
       </p>
-      <div className="min-w-0 flex-1">
-        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
-          {partes.map((e) => (
-            <span key={e.etapa} className={juntar("h-full border-r-2 border-background last:border-r-0", ESTILO_DA_ETAPA[e.etapa].ponto)} style={{ width: `${(e.n / total) * 100}%` }} />
-          ))}
-        </div>
-        <ul className="mt-2 flex min-w-0 flex-wrap items-center">
-          {partes.map((e) => (
-            <li key={e.etapa} className="mr-4 flex items-center text-[12px] leading-4 text-muted-foreground">
-              <span className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", ESTILO_DA_ETAPA[e.etapa].ponto)} aria-hidden="true" />
-              {e.rotulo}
-              <span className="ml-1.5 font-semibold tabular-nums text-foreground">{e.n}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {/* Barra segmentada em pílulas (polimento v4): cada etapa é um segmento na cor dela, com o nome e a contagem dentro; a largura acompanha a fatia. */}
+      <ul className="flex min-w-0 flex-1 items-center">
+        {partes.map((e, i) => (
+          <li
+            key={e.etapa}
+            className={juntar("flex h-9 min-w-[104px] items-center rounded-full px-3.5 text-[12px] font-medium leading-4 text-foreground", i > 0 && "ml-1.5", ESTILO_DA_ETAPA[e.etapa].cartao)}
+            style={{ flexGrow: e.n, flexBasis: 0 }}
+            title={`${e.rotulo}: ${e.n} de ${total}`}
+          >
+            <span className={juntar("mr-2 h-2 w-2 shrink-0 rounded-full", e.etapa === "no_ar" ? "bg-foreground" : ESTILO_DA_ETAPA[e.etapa].ponto)} aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">{e.rotulo}</span>
+            <span className="ml-2 shrink-0 text-[13px] font-semibold tabular-nums">{e.n}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

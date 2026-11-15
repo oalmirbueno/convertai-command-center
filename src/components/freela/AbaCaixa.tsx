@@ -161,7 +161,7 @@ export default function AbaCaixa() {
             descricao="Gere as parcelas de um projeto na aba Projetos."
           />
         ) : (
-          <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-6")}>
+          <ul className={juntar(superficie.painel, "overflow-hidden py-1.5 [&>li]:px-4 sm:[&>li]:px-6")}>
             {lista.map((p) => {
               const visual = statusVisualDaParcela(p, hoje);
               const projeto = projetoPorId.get(p.projeto_id);

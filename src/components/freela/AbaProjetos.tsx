@@ -361,7 +361,7 @@ export default function AbaProjetos() {
             descricao="Aceite uma proposta e vire projeto, ou crie direto aqui."
           />
         ) : (
-          <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-6")}>
+          <ul className={juntar(superficie.painel, "overflow-hidden py-1.5 [&>li]:px-4 sm:[&>li]:px-6")}>
             {lista.map((p) => {
               const doProjeto = parcelasPorProjeto.get(p.id) || [];
               const pagas = doProjeto.filter((x) => x.status === "paga").length;
@@ -473,7 +473,7 @@ export default function AbaProjetos() {
               {parcelasAbertas.length === 0 ? (
                 <EstadoVazio compacto titulo="Nenhuma parcela ainda" descricao="Gere parcelas iguais ou adicione uma a uma." />
               ) : (
-                <ul className="divide-y divide-border/60 rounded-md bg-muted/60">
+                <ul className="rounded-md bg-muted/60">
                   {parcelasAbertas.map((parcela) => {
                     const visual = statusVisualDaParcela(parcela);
                     return (

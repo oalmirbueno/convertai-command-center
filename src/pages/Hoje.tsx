@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight, Bot, CheckCircle2, ExternalLink, Flame, KeyRound, Megaphone, MessageCircle, RefreshCw, ShieldCheck, Sparkles,
@@ -7,9 +7,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
 import {
-  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, espaco, foco, juntar, larguraDaMesa, superficie, texto,
+  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, botao, espaco, foco, juntar, larguraDaMesa, superficie, texto,
 } from "@/components/sistema";
-import { ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
+import { OverflowMenu, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 import {
   destinoDaCampanha, destinoDoFeito, destinoDoPedido, destinoDoRisco, normalizarResumo, resumoEstaVazio, rpcAusente,
   type ClienteEmRisco, type NivelDoDia, type ResumoDoDia, type TipoDoPedido,
@@ -51,6 +51,20 @@ const cartaoLink = juntar(superficie.painel, "group flex h-full min-w-0 flex-col
 const grade4 = juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-4");
 
 type Leitura = { resumo: ResumoDoDia; ausente: boolean };
+
+/** As quatro abas da tela: cada número do topo abre só a sua parte (15/11, dono: "menos poluído"). */
+type AbaDoDia = "precisa" | "calendario" | "anuncios" | "feito";
+
+/** Parte da tela ligada a um número: só a escolhida aparece; as outras ficam no DOM, escondidas. */
+function Parte({ aba, ativa, children }: { aba: AbaDoDia; ativa: AbaDoDia; children: ReactNode }) {
+  return (
+    <section id={`hoje-${aba}`} hidden={aba !== ativa} data-parte-do-dia={aba} className="min-w-0 space-y-6">
+      {children}
+    </section>
+  );
+}
+
+const subtitulo = "text-[13px] font-medium leading-5 text-muted-foreground";
 
 export function useResumoDoDia() {
   return useQuery({
@@ -165,10 +179,14 @@ export default function Hoje() {
   const pedidosDasMensagens = normalizarResumo({ precisa_de_voce: decisoesDasMensagens.data ?? [] }).precisaDeVoce;
   const pedidos = (r?.precisaDeVoce ?? []).concat(pedidosDasMensagens);
   const logoDe = (id: string | null) => (id ? identidades.data?.get(id)?.profile_picture_url ?? null : null);
-  const irPara = (id: string) => () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const navegar = useNavigate();
+  const [escolhida, setEscolhida] = useState<AbaDoDia | null>(null);
 
   const urgentes = r ? r.alertas.filter((a) => a.nivel === "critico").length : 0;
-  const atencao = r ? r.alertas.filter((a) => a.nivel === "atencao").length : 0;
+  const anuncios = r ? r.alertas.length + r.mudancas.length : 0;
+  // Sem escolha da pessoa, abre a primeira parte que tem alguma coisa.
+  const aba: AbaDoDia = escolhida ?? (pedidos.length ? "precisa" : r && (r.clientesEmRisco.length || r.campanhas.length) ? "calendario" : anuncios ? "anuncios" : r && r.feitoOntem.length ? "feito" : "precisa");
+  const numero = (qual: AbaDoDia) => ({ variant: aba === qual ? ("accent" as const) : ("default" as const), onClick: () => setEscolhida(qual) });
 
   return (
     <div className={juntar(larguraDaMesa, espaco.pagina, "pb-10")} data-hoje="">
@@ -177,8 +195,11 @@ export default function Hoje() {
         descricao={r?.geradoEm ? `Resumo de ${quando(r.geradoEm)}` : consulta.isLoading ? undefined : "Sem resumo ainda"}
         ajuda="Um resumo por dia do trabalho dos agentes: o que só você decide, quem está sem post, o que mudou nos anúncios e o que ficou pronto ontem com prova. Cada cartão leva direto ao lugar certo. O sino avisa uma vez por dia."
         acoes={<>
-          <Link to="/execucao" className={botao.icone} title="Abrir a Execução (todos os agentes)" aria-label="Abrir a Execução"><Bot className="h-4 w-4" aria-hidden="true" /></Link>
-          <button type="button" onClick={() => void consulta.refetch()} className={botao.icone} title="Atualizar" aria-label="Atualizar"><RefreshCw className={juntar("h-4 w-4", consulta.isFetching && "animate-spin")} aria-hidden="true" /></button>
+          <button type="button" onClick={() => void consulta.refetch()} className={juntar(botao.icone, "bg-card shadow-card")} title="Atualizar" aria-label="Atualizar"><RefreshCw className={juntar("h-4 w-4", consulta.isFetching && "animate-spin")} aria-hidden="true" /></button>
+          <OverflowMenu items={[
+            { label: "Abrir a Execução", icon: <Bot className="h-4 w-4" />, onSelect: () => navegar("/execucao") },
+            { label: "Abrir Anúncios hoje", icon: <Megaphone className="h-4 w-4" />, onSelect: () => navegar("/anuncios/hoje") },
+          ]} />
         </>}
       />
 
@@ -187,47 +208,16 @@ export default function Hoje() {
           : consulta.data?.ausente ? <EstadoVazio titulo="O resumo do dia ainda não chega a este painel." descricao="Falta ligar o resumo no servidor. Enquanto isso, a Execução mostra o que espera você." acao={<Link to="/execucao" className={botao.secundario}>Abrir a Execução</Link>} />
             : !r || (resumoEstaVazio(r) && !pedidosDasMensagens.length) ? <EstadoVazio icone={<CheckCircle2 className="h-5 w-5" />} titulo="Nada para hoje." descricao="Nenhuma decisão pendente, nenhum cliente sem post e nada mudou nos anúncios." />
               : <>
-                <div data-numeros-do-dia="" role="group" aria-label="O dia em números">
+                <div data-numeros-do-dia="" role="group" aria-label="O dia em números: cada número abre a sua parte">
                   <StatGrid cols={4}>
-                    <StatCard
-                      variant="ink"
-                      size="xl"
-                      label="Precisa de você"
-                      value={String(pedidos.length)}
-                      icon={<ShieldCheck className="h-4 w-4" />}
-                      hint={pedidos.length ? (pedidos.length === 1 ? "decisão sua" : "decisões suas") : "nada esperando"}
-                      onClick={irPara("hoje-precisa")}
-                    />
-                    <StatCard
-                      size="xl"
-                      label="Clientes sem post"
-                      value={String(r.clientesEmRisco.length)}
-                      icon={<Flame className="h-4 w-4" />}
-                      hint={r.clientesEmRisco.length ? `o pior: ${r.clientesEmRisco[0].diasSemPost ?? "-"} dias` : "calendário em dia"}
-                      onClick={irPara("hoje-calendario")}
-                    />
-                    <StatCard
-                      size="xl"
-                      label="Anúncios"
-                      value={String(r.alertas.length + r.mudancas.length)}
-                      icon={<Megaphone className="h-4 w-4" />}
-                      hint={`${urgentes} urgente${urgentes === 1 ? "" : "s"} · ${r.mudancas.length} ${r.mudancas.length === 1 ? "mudança" : "mudanças"}`}
-                      chart={r.alertas.length > 0 ? <ProgressBar value={urgentes + atencao} max={r.alertas.length} tone={urgentes ? 4 : 1} striped label={`${urgentes + atencao} de ${r.alertas.length} alertas pedem ação`} /> : undefined}
-                      to="/anuncios/hoje"
-                    />
-                    <StatCard
-                      variant="accent"
-                      size="xl"
-                      label="Feito ontem"
-                      value={String(r.feitoOntem.length)}
-                      icon={<CheckCircle2 className="h-4 w-4" />}
-                      hint="com prova"
-                      onClick={irPara("hoje-feito")}
-                    />
+                    <StatCard {...numero("precisa")} label="Precisa de você" value={String(pedidos.length)} icon={<ShieldCheck className="h-4 w-4" />} hint={pedidos.length ? (pedidos.length === 1 ? "decisão sua" : "decisões suas") : "nada esperando"} />
+                    <StatCard {...numero("calendario")} label="Clientes sem post" value={String(r.clientesEmRisco.length)} icon={<Flame className="h-4 w-4" />} hint={r.clientesEmRisco.length ? `o pior: ${r.clientesEmRisco[0].diasSemPost ?? "-"} dias` : "calendário em dia"} />
+                    <StatCard {...numero("anuncios")} label="Anúncios" value={String(anuncios)} icon={<Megaphone className="h-4 w-4" />} hint={`${urgentes} urgente${urgentes === 1 ? "" : "s"} · ${r.mudancas.length} ${r.mudancas.length === 1 ? "mudança" : "mudanças"}`} />
+                    <StatCard {...numero("feito")} label="Feito ontem" value={String(r.feitoOntem.length)} icon={<CheckCircle2 className="h-4 w-4" />} hint="com prova" />
                   </StatGrid>
                 </div>
 
-                <Secao id="hoje-precisa" titulo="Precisa de você" recolher="hoje:precisa">
+                <Parte aba="precisa" ativa={aba}>
                   {pedidos.length === 0 ? <EstadoVazio compacto titulo="Nada esperando você." descricao="Os agentes seguem sozinhos." /> : (
                     <Grade itens={pedidos} rotulo="Precisa de você" cartao={(p) => {
                       const d = destinoDoPedido(p);
@@ -249,16 +239,19 @@ export default function Hoje() {
                       );
                     }} />
                   )}
-                </Secao>
+                </Parte>
 
+                <Parte aba="calendario" ativa={aba}>
+                {r.clientesEmRisco.length === 0 && r.campanhas.length === 0 && <EstadoVazio compacto titulo="Calendário em dia." descricao="Nenhum cliente sem post." />}
                 {r.clientesEmRisco.length > 0 && (
-                  <Secao id="hoje-calendario" titulo="Clientes sem post" recolher="hoje:calendario">
+                  <div className="min-w-0">
                     <Grade itens={r.clientesEmRisco} rotulo="Clientes sem post" cartao={(c) => <CartaoDeRisco key={c.clientId} c={c} logo={logoDe(c.clientId)} />} />
-                  </Secao>
+                  </div>
                 )}
 
                 {r.campanhas.length > 0 && (
-                  <Secao titulo="Dá para fazer campanha" descricao={`${r.campanhas.length}`} recolher="hoje:campanhas">
+                  <div className="min-w-0">
+                    <h2 className={juntar(subtitulo, "mb-3")}>Dá para fazer campanha</h2>
                     <Grade itens={r.campanhas} rotulo="Dá para fazer campanha" cartao={(c) => (
                       <li key={c.clientId} className="min-w-0" data-campanha-do-dia={c.clientId}>
                         <Link to={destinoDaCampanha(c)} className={juntar(cartaoLink, "flex-row items-center p-4 sm:p-5")} title="Abrir Campanhas" aria-label={`Abrir Campanhas: ${c.nome} · ${c.tema}`}>
@@ -271,15 +264,14 @@ export default function Hoje() {
                         </Link>
                       </li>
                     )} />
-                  </Secao>
+                  </div>
                 )}
+                </Parte>
 
+                <Parte aba="anuncios" ativa={aba}>
+                {r.alertas.length === 0 && r.mudancas.length === 0 && <EstadoVazio compacto titulo="Nada mudou nos anúncios." />}
                 {(r.alertas.length > 0 || r.mudancas.length > 0) && (
-                  <Secao
-                    titulo="Anúncios"
-                    recolher="hoje:anuncios"
-                    acao={<Link to="/anuncios/hoje" className={botao.icone} title="Abrir Anúncios hoje" aria-label="Abrir Anúncios hoje"><Megaphone className="h-4 w-4" aria-hidden="true" /></Link>}
-                  >
+                  <div className="min-w-0">
                     <div className={juntar(espaco.grade, "lg:grid-cols-2")}>
                       {r.alertas.length > 0 && (
                         <ul className="min-w-0 space-y-3" aria-label="Alertas dos anúncios">
@@ -287,7 +279,7 @@ export default function Hoje() {
                             <li key={a.chave} className="min-w-0" data-alerta-do-dia={a.nivel}>
                               <Link to="/anuncios/hoje" className={juntar(cartaoLink, "flex-row items-center p-4 sm:p-5")} title="Abrir Anúncios hoje">
                                 <StatusPill tone={TOM_DO_NIVEL[a.nivel]} className="mr-3">{NOME_DO_NIVEL[a.nivel]}</StatusPill>
-                                <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{a.cliente ? <span className="font-medium">{a.cliente} </span> : null}<span className="text-muted-foreground">{a.texto}</span></span>
+                                <span className={juntar(texto.corpo, "flex min-w-0 flex-1 items-baseline")}>{a.cliente ? <span className="mr-1 max-w-[45%] shrink-0 truncate font-medium">{a.cliente}</span> : null}<span className="min-w-0 truncate text-muted-foreground">{a.texto}</span></span>
                               </Link>
                             </li>
                           ))}
@@ -303,7 +295,7 @@ export default function Hoje() {
                                 <CartaoQueLeva compacto externo={prova} para="/anuncios/hoje" rotulo={prova ? `Ver a prova: ${m.cliente} · ${m.acao}` : `Abrir Anúncios hoje: ${m.cliente} · ${m.acao}`}>
                                   <span className={juntar(texto.corpo, "flex min-w-0 items-center")}>
                                     <Bot className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                                    <span className="min-w-0 flex-1 truncate"><span className="font-medium">{m.cliente}</span> <span className="text-muted-foreground">{m.acao}{m.alvo ? ` ${m.alvo}` : ""}</span></span>
+                                    <span className="flex min-w-0 flex-1 items-baseline"><span className="mr-1 max-w-[45%] shrink-0 truncate font-medium">{m.cliente}</span><span className="min-w-0 truncate text-muted-foreground">{m.acao}{m.alvo ? ` ${m.alvo}` : ""}</span></span>
                                     {prova && <ExternalLink className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
                                   </span>
                                   {(m.antes || m.depois) && <span className={juntar(texto.auxiliar, "mt-1 block truncate pl-[22px] tabular-nums")}>{`${m.antes || "-"} → ${m.depois || "-"}`}{m.quem ? ` · ${m.quem}` : ""}</span>}
@@ -315,10 +307,12 @@ export default function Hoje() {
                         </ul>
                       )}
                     </div>
-                  </Secao>
+                  </div>
                 )}
+                <Link to="/anuncios/hoje" className={juntar(botao.secundario, "h-10")} title="Abrir Anúncios hoje"><Megaphone className="mr-2 h-4 w-4" aria-hidden="true" />Abrir Anúncios hoje</Link>
+                </Parte>
 
-                <Secao id="hoje-feito" titulo="Feito ontem com prova" recolher="hoje:feito">
+                <Parte aba="feito" ativa={aba}>
                   {r.feitoOntem.length === 0 ? <EstadoVazio compacto titulo="Nenhuma entrega com prova ontem." /> : (
                     <Grade itens={r.feitoOntem} rotulo="Feito ontem com prova" classe={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-4")} cartao={(f) => {
                       const d = destinoDoFeito(f);
@@ -337,7 +331,7 @@ export default function Hoje() {
                       );
                     }} />
                   )}
-                </Secao>
+                </Parte>
               </>}
     </div>
   );

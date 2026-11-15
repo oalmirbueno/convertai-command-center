@@ -409,7 +409,7 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
           <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
             <Secao titulo="Investidores" ajuda="Participação de cada um no capital total aportado." className="lg:col-span-2">
               <Painel>
-              <ul className="-my-2 divide-y divide-border/60">
+              <ul className="-my-2">
                 {investor.contributors.map((c, i) => {
                   const pct = investor.total > 0 ? (c.value / investor.total) * 100 : 0;
                   return (
@@ -449,7 +449,7 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
                       <span className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{fmtCompact(investor.allocation.reduce((a, x) => a + x.value, 0))}</span>
                     </div>
                   </div>
-                  <ul className="mt-4 divide-y divide-border/60">
+                  <ul className="mt-4">
                     {investor.allocation.slice(0, 5).map((c, i) => {
                       const tot = investor.allocation.reduce((a, x) => a + x.value, 0);
                       const pct = tot > 0 ? (c.value / tot) * 100 : 0;

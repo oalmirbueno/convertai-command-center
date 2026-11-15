@@ -70,7 +70,7 @@ export default function EtapaEnvio() {
       />
       {!banco && <AvisoDoRascunho />}
       {!aprovadas.length ? (
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Send className="h-5 w-5" />}
           titulo="Nenhuma foto aprovada ainda."
           acao={

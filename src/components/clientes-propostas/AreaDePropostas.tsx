@@ -163,7 +163,7 @@ export default function AreaDePropostas({
         ) : (
           <>
             <Painel semEspaco>
-              <ul className="divide-y divide-border/60">
+              <ul>
                 {visiveis.map((l) => (
                   <LinhaDaProposta key={l.id} l={l} cliente={nomeDoCliente(l.client_id)} onAbrir={(x) => navigate(enderecoDaProposta(x))} />
                 ))}

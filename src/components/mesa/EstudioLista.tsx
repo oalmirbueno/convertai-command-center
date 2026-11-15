@@ -10,7 +10,8 @@ import {
   CircleDot,
   Copy,
   Film,
-  ImageOff,
+  GalleryHorizontalEnd,
+  Image as ImageIcon,
   Loader2,
   PanelTopClose,
   PanelTopOpen,
@@ -290,8 +291,9 @@ function CartaoDoItem({
           <ImagemDaMesa caminho={capaDaAgenda.caminho} bucket={capaDaAgenda.bucket} alt="" className="h-full w-full" />
         </span>
       ) : (
-        <span className="flex shrink-0 items-center justify-center rounded-[10px] border border-dashed border-border bg-secondary text-muted-foreground" style={capa}>
-          {modoDaPauta(item, t) === "fotos" ? <Camera className="h-4 w-4 text-primary" aria-label="Fotos" /> : <ImageOff className="h-3 w-3" />}
+        // v4 (referências): sem arte ainda, a capa é um azulejo hachurado com o ícone do formato (não o "sem imagem").
+        <span className={`ds-hatch flex shrink-0 items-center justify-center rounded-[10px] ${ativo ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"}`} style={capa} data-capa-sem-arte="">
+          {modoDaPauta(item, t) === "fotos" ? <Camera className="h-4 w-4 text-primary" aria-label="Fotos" /> : /carrossel/i.test(formatoDoItem(item)) ? <GalleryHorizontalEnd className="h-4 w-4" aria-hidden="true" /> : <ImageIcon className="h-4 w-4" aria-hidden="true" />}
         </span>
       )}
       <span className="ml-2.5 min-w-0 flex-1 pr-1">
@@ -566,12 +568,12 @@ export default function EstudioLista({
       )}
       {!carregando && !erro && itens.length === 0 && !itemFora && (
         // 16/10/2026 (dono: "menos texto"): uma frase curta; o caminho (aba Mês) fica no title.
-        <p className="pb-2 text-[12px] text-muted-foreground" title="Complete a agenda pela aba Mês">
+        <p className="ds-hatch mb-2 flex h-14 items-center justify-center rounded-md px-4 text-center text-[13px] font-medium text-muted-foreground" title="Complete a agenda pela aba Mês">
           {proximos ? "Nada na agenda dos próximos 60 dias." : "Nada na agenda deste mês."}
         </p>
       )}
       {!carregando && itens.length > 0 && filtrados.length === 0 && !itemFora && (
-        <p className="pb-2 text-[12px] text-muted-foreground">Nada neste filtro.</p>
+        <p className="ds-hatch mb-2 flex h-14 items-center justify-center rounded-md px-4 text-center text-[13px] font-medium text-muted-foreground">Nada neste filtro.</p>
       )}
     </>
   );
@@ -595,7 +597,7 @@ export default function EstudioLista({
                   const atual = s.semana === semanaDeHoje;
                   const passada = !!s.semana && s.semana < semanaDeHoje;
                   return (
-                    <div key={s.semana || "sem-data"} data-semana={s.semana} className={`flex shrink-0 flex-col ${i < semanas.length - 1 ? "mr-3 border-r border-border pr-3" : ""}`}>
+                    <div key={s.semana || "sem-data"} data-semana={s.semana} className={`flex shrink-0 flex-col ${i < semanas.length - 1 ? "mr-5" : ""}`}>
                       <p className={`mb-1.5 inline-flex h-6 items-center self-start whitespace-nowrap rounded-full px-2.5 text-[11px] font-semibold ${atual ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground"}`}>
                         {s.semana ? `${atual ? "Esta semana · " : passada ? "Já passou · " : ""}${rotuloDaSemana(s.semana)}` : "Sem data"}
                       </p>

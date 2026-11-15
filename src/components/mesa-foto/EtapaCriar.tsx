@@ -92,15 +92,16 @@ export default function EtapaCriar() {
                   aria-pressed={escolhido}
                   title={`${o.texto} Precisa: ${o.precisa}.`}
                   className={juntar(
-                    "flex h-full w-full min-w-0 flex-col items-center justify-center rounded-lg border px-2 pb-3 pt-4 text-center transition-colors hover:border-primary/50 hover:bg-muted/40",
-                    escolhido ? "border-primary bg-primary/[0.06]" : "border-border",
+                    // v4 (azulejos das referências): ícone num círculo grande no centro; o escolhido fica com o círculo de tinta.
+                    "group flex h-full w-full min-w-0 flex-col items-center justify-center rounded-lg border bg-card px-2 pb-4 pt-5 text-center transition-colors hover:border-foreground/30",
+                    escolhido ? "border-foreground/40" : "border-border",
                     foco,
                   )}
                   data-objetivo={o.valor}
                   data-forma-de-criar={o.etapa}
                 >
-                  <Icone className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
-                  <span className="mt-2 block text-[13px] font-semibold leading-tight">{o.titulo}</span>
+                  <span aria-hidden="true" className={juntar("flex h-14 w-14 shrink-0 items-center justify-center rounded-full transition-colors sm:h-16 sm:w-16", escolhido ? "bg-foreground text-background" : "bg-muted text-foreground group-hover:bg-foreground group-hover:text-background")}><Icone className="h-6 w-6" /></span>
+                  <span className="mt-3 block text-[13px] font-medium leading-tight">{o.titulo}</span>
                   {escolhido && (
                     <span className="mt-1 inline-flex items-center text-[11px] font-medium text-primary">
                       <Check className="mr-0.5 h-3 w-3" aria-hidden="true" /> escolhido

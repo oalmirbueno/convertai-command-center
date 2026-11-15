@@ -59,7 +59,7 @@ export default function EtapaAcompanhar({ proposta, onAbrir }: { proposta: Propo
   const [gerandoContrato, setGerandoContrato] = useState(false);
   const [duplicando, setDuplicando] = useState(false);
 
-  if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
+  if (!proposta) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
   const lendoEventos = eventos.isLoading;
   const erroNosEventos = eventos.isError && !eventos.data;
   const r = resumoDoRastreio(eventos.data || []);

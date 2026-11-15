@@ -432,7 +432,7 @@ export default function MesaRoteiros() {
     >
 
       {!clientId && (
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Clapperboard className="h-5 w-5" />}
           titulo="Escolha um cliente para abrir a Mesa Roteiros dele."
           descricao="Roteiros de gravação, com revisão e PDF."

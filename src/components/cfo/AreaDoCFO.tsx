@@ -121,7 +121,7 @@ export default function AreaDoCFO() {
           recolher="financeiro:cfo:mes"
           ajuda="A ordem é a do CFO: primeiro o dinheiro que já é seu (atrasados), depois o que vaza todo mês (custo fixo), depois preço e venda. Cobrança a cliente é sempre você quem envia: o painel não manda nada sozinho."
         >
-          <ol className="min-w-0 divide-y divide-border/60">
+          <ol className="min-w-0">
             {r.acoesDoMes.map((a, i) => (
               <li key={a.chave} className={juntar(texto.corpo, "flex min-w-0 items-start py-3.5")}>
                 <span aria-hidden="true" className={juntar("mr-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums", i === 0 ? "bg-foreground text-background" : "bg-muted text-foreground")}>{i + 1}</span>
@@ -157,7 +157,7 @@ export default function AreaDoCFO() {
           recolher="financeiro:cfo:cortes"
           ajuda="Custos fixos (mensal e anual dividido por 12), do maior para o menor. Essencial (contador, infraestrutura do painel, impostos) fica no fim e não é sugerido. Para cortar com Confirmar e Desfazer, peça ao CFO: 'onde corto?'."
         >
-          <ul className="min-w-0 divide-y divide-border/60">
+          <ul className="min-w-0">
             {r.cortes.map((c) => (
               <li key={c.id} className="flex min-w-0 items-center py-3.5" data-corte-do-cfo={c.essencial ? "essencial" : "cortavel"}>
                 <div className="mr-3 min-w-0 flex-1">
@@ -278,7 +278,7 @@ function Projecao({ retrato: r, meses }: { retrato: Retrato; meses: number }) {
         </ResponsiveContainer>
       </div>
       <div className={tabela.moldura}>
-        <table className={juntar(tabela.tabela, "min-w-[620px] tabular-nums")} data-tabela-da-projecao="">
+        <table className={juntar(tabela.tabela, "min-w-[720px] tabular-nums [&_td]:whitespace-nowrap")} data-tabela-da-projecao="">
           <thead className={tabela.cabeca}>
             <tr>
               <th>Mês</th>
@@ -334,7 +334,7 @@ function Plano({ retrato: r }: { retrato: Retrato }) {
       {r.metas.length > 0 && (
         <div className="min-w-0">
           <p className={texto.rotulo}>Metas guardadas</p>
-          <ul className="mt-1 min-w-0 divide-y divide-border/60">
+          <ul className="mt-1 min-w-0">
             {r.metas.map((m) => (
               <li key={m.id} className="flex min-w-0 items-center py-3" data-meta-guardada="">
                 <span className="mr-2 min-w-0 flex-1 truncate text-[13px] text-foreground">{m.titulo}</span>
@@ -366,7 +366,7 @@ function Movimento({ retrato: r }: { retrato: Retrato }) {
       {r.mes.variaveis.length > 0 && (
         <div className="min-w-0">
           <p className={texto.rotulo}>Maiores gastos variáveis</p>
-          <ul className="mt-1 min-w-0 divide-y divide-border/60">
+          <ul className="mt-1 min-w-0">
             {r.mes.variaveis.slice(0, 8).map((v, i) => (
               <li key={`${v.descricao}-${i}`} className="flex min-w-0 items-center py-3">
                 <span className="mr-2 min-w-0 flex-1 truncate text-[13px] text-foreground">{v.descricao}</span>
@@ -379,7 +379,7 @@ function Movimento({ retrato: r }: { retrato: Retrato }) {
       {r.atrasados.receber.length > 0 && (
         <div className="min-w-0">
           <p className={texto.rotulo}>A cobrar (atrasado) · {reais(r.atrasados.totalReceber)}</p>
-          <ul className="mt-1 min-w-0 divide-y divide-border/60">
+          <ul className="mt-1 min-w-0">
             {r.atrasados.receber.map((x) => (
               <li key={x.id} className="flex min-w-0 items-center py-3">
                 <span className="mr-2 min-w-0 flex-1 truncate text-[13px] text-foreground">{x.cliente}</span>

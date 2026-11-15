@@ -438,7 +438,7 @@ export function ListaCurta({ titulo, itens, vazio, tom = "normal" }: { titulo: s
 export function Vazio({ titulo, children, acao, icone }: { titulo: string; children?: ReactNode; acao?: ReactNode; icone?: ReactNode }) {
   return (
     <EstadoVazio
-      className="py-8"
+      className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground py-8"
       icone={icone}
       titulo={titulo}
       descricao={children ? <span className="block [overflow-wrap:anywhere]">{children}</span> : undefined}

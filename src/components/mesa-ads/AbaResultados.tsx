@@ -152,7 +152,7 @@ export default function AbaResultados() {
         {conta.isLoading && <Carregando forma="aba" rotulo="Lendo os resultados" />}
 
         {dados && !dados.conta.conectada && (
-          <EstadoVazio icone={<BarChart3 className="h-5 w-5" />} titulo="A conta de anúncios deste cliente não está conectada" descricao="Conecte a conta da Meta no cadastro do cliente para ver os resultados aqui." />
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<BarChart3 className="h-5 w-5" />} titulo="A conta de anúncios deste cliente não está conectada" descricao="Conecte a conta da Meta no cadastro do cliente para ver os resultados aqui." />
         )}
 
         {dados && dados.conta.conectada && (

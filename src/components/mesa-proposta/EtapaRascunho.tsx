@@ -724,7 +724,7 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
     [proposta ? proposta.id : "", proposta ? proposta.versao : 0, aceita, mesa.clientId],
   );
 
-  if (!proposta || !atual) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
+  if (!proposta || !atual) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
 
   const mudarBloco = (tipo: TipoDeBloco, m: Partial<Pick<Bloco, "titulo" | "visivel" | "dados">>) => {
     setRascunho({ titulo: atual.titulo, conteudo: comBloco(atual.conteudo, tipo, m) });

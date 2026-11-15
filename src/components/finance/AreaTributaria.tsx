@@ -230,7 +230,7 @@ export default function AreaTributaria({ brutoRecebidoNoMes }: Props) {
           <EstadoVazio compacto titulo="Nenhum mês gravado." descricao="Mês sem registro conta como presumido." />
         ) : (
           <RegiaoRolavel memoria="financeiro:tributaria:historico" rotulo="Alíquotas gravadas" className="lg:max-h-[320px]">
-            <ul className="divide-y divide-border/60">
+            <ul>
               {registros.map((r) => (
                 <li key={r.competencia} className="flex min-w-0 items-center py-3.5">
                   <span className="mr-3 shrink-0 text-[13px] font-medium capitalize text-foreground">{nomeDoMes(r.competencia)}</span>

@@ -61,6 +61,8 @@ export default function EvolucaoDoCliente({ clientes }: { clientes: { id: string
         ) : undefined
       }
     >
+      {/* Altura mínima igual à do "carregando": vazio, carregando e erro ocupam o mesmo lugar (o resto da tela não pula). */}
+      <div className="min-h-[136px] min-w-0">
       {!clientes.length ? (
         <EstadoVazio compacto titulo="Nenhum cliente." descricao="A evolução aparece quando houver cliente com peças." />
       ) : evolucao.isLoading ? (
@@ -127,6 +129,7 @@ export default function EvolucaoDoCliente({ clientes }: { clientes: { id: string
           </table>
         </div>
       )}
+      </div>
     </Secao>
   );
 }
