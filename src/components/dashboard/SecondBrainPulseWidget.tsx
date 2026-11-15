@@ -173,11 +173,14 @@ export default function SecondBrainPulseWidget() {
                     href={c.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] leading-[18px] transition-colors hover:bg-card"
+                    className="block min-w-0 rounded-lg px-2 py-1.5 text-[12px] leading-[18px] transition-colors hover:bg-card"
                   >
-                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{c.short}</span>
-                    <span className="min-w-0 flex-1 truncate text-foreground">{c.message}</span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">{curto(c.committed_at)}</span>
+                    <span className="block truncate text-foreground" title={c.message}>{c.message}</span>
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="font-mono">{c.short}</span>
+                      <span aria-hidden>·</span>
+                      <span className="truncate">{curto(c.committed_at)}</span>
+                    </span>
                   </a>
                 </li>
               ))}
