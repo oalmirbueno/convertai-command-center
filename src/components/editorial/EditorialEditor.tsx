@@ -1647,7 +1647,7 @@ export default function EditorialEditor({
             })}
 
             {publications.length === 0 && (
-              <div className="rounded-lg border border-dashed border-border p-5 text-center text-[12px] text-muted-foreground">
+              <div className="rounded-md border border-dashed border-border p-5 text-center text-[12px] text-muted-foreground">
                 O conteúdo pode ser salvo como rascunho sem plataforma.
               </div>
             )}

@@ -245,7 +245,7 @@ export default function ApprovedMediaPicker({
       ) : error ? (
         <div
           role="alert"
-          className="flex flex-col items-center rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-6 text-center"
+          className="flex flex-col items-center rounded-md bg-danger-soft px-4 py-6 text-center"
         >
           <AlertCircle className="h-5 w-5 text-destructive" />
           <p className="mt-2 text-[12px] leading-4 text-muted-foreground">{error}</p>
@@ -341,7 +341,7 @@ export default function ApprovedMediaPicker({
           })}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-border bg-muted/15 px-4 py-8 text-center">
+        <div className="rounded-md border border-dashed border-border bg-muted/15 px-4 py-8 text-center">
           <FileImage className="mx-auto h-6 w-6 text-muted-foreground/60" />
           <p className="mt-2 text-[12px] font-medium text-foreground">
             {search
