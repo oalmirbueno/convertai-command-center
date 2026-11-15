@@ -18,6 +18,7 @@ import OverflowMenu, { type OverflowItem } from "./OverflowMenu";
  */
 export default function Card({
   title,
+  icon,
   subtitle,
   help,
   action,
@@ -34,6 +35,8 @@ export default function Card({
   ...rest
 }: {
   title?: ReactNode;
+  /** Ícone num círculo antes do título (cabeçalho padrão de cartão das referências). */
+  icon?: ReactNode;
   /** Uma linha curta de estado. Explicação vai em `help`. */
   subtitle?: ReactNode;
   help?: ReactNode;
@@ -63,14 +66,20 @@ export default function Card({
     ) : undefined;
   return (
     <Painel
-      titulo={title}
+      titulo={title && icon ? (
+        <span className="flex min-w-0 items-center">
+          <span aria-hidden="true" className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">{icon}</span>
+          <span className="min-w-0 truncate">{title}</span>
+        </span>
+      ) : title}
       descricao={subtitle}
       ajuda={help}
       acao={direita}
       rodape={footer}
       semEspaco={flush}
       as={as}
-      recolher={collapsible === true ? undefined : collapsible === false ? false : collapsible}
+      // Com ícone o título deixa de ser texto puro: a chave de lembrar o recolhido sai do próprio título.
+      recolher={collapsible === true ? (icon && typeof title === "string" ? `card:${title}` : undefined) : collapsible === false ? false : collapsible}
       resumo={summary}
       className={juntar(variant === "accent" && superficie.destaque, variant === "ink" && superficie.tinta, className)}
       data-card={variant}

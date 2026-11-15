@@ -12,7 +12,7 @@ import Lancador from "@/components/lancador/Lancador";
 import { PedidoDeAcessoPelaUrl } from "@/components/acesso/JanelaDoPedidoDeAcesso";
 import { EVENTO_ABRIR_AGENTE, type PedidoParaAbrirAgente } from "@/lib/lancador";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, RefreshCw } from "lucide-react";
+import { Bell, LogOut, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, RefreshCw, Repeat } from "lucide-react";
 import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -196,7 +196,7 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Base dos agentes", url: "/base-dos-agentes", icon: GraduationCap, soCriacao: true },
       // Laboratório (19/10/2026): trabalhos avulsos com ou sem cliente (admin, gestor e design).
       { title: "Laboratório", url: "/laboratorio", icon: FlaskConical, soCriacao: true },
-      { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
+      { title: "Ciclo", url: "/ciclo", icon: Repeat },
       // 14/11/2026: linha do tempo das peças por cliente e por dia (só leitura).
       { title: "Esteira", url: "/esteira", icon: CalendarRange },
       { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
@@ -289,6 +289,20 @@ const gruposPorPapel = (podeGestao: boolean, podeCriacao = true) =>
  */
 const LINKS_NO_TOPO_ESTREITO = 3;
 
+/**
+ * v4 (15/11/2026): atalhos do trilho lateral do computador largo. Só URLs: o item (nome, ícone,
+ * regra de papel, contador) vem do menu de verdade; URL que o papel não enxerga simplesmente não aparece.
+ */
+const ATALHOS_DO_TRILHO_DA_EQUIPE: Array<{ label: string; urls: string[] }> = [
+  { label: "Dia a dia", urls: ["/hoje", "/central", "/mesas", "/esteira", "/ciclo", "/aprovacoes"] },
+  { label: "Resultado e gestão", urls: ["/metricas", "/anuncios", "/comercial", "/financeiro", "/equipe"] },
+  { label: "Sistema", urls: ["/workspace", "/config"] },
+];
+const ATALHOS_DO_TRILHO_DO_CLIENTE: Array<{ label: string; urls: string[] }> = [
+  { label: "Meu espaço", urls: ["/aprovacoes", "/pedidos", "/financeiro", "/cofre"] },
+  { label: "Mais", urls: ["/membros", "/novidades", "/perfil"] },
+];
+
 const clientMainNav: NavItem[] = semItensOcultos([
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Onde Estamos", url: "/onde-estamos", icon: HeartPulse },
@@ -362,6 +376,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const moreNav = isAdminOrTeam
     ? gruposDoMenu.flatMap((grupo) => grupo.items)
     : menu.mais;
+  // v4: trilho lateral. Sai do MESMO menu já peneirado (papel e itens ocultos): só entra o que o
+  // papel enxerga, na ordem desta lista, em até três pílulas (dia a dia, resultado e gestão, sistema).
+  const trilho = (isAdminOrTeam ? ATALHOS_DO_TRILHO_DA_EQUIPE : ATALHOS_DO_TRILHO_DO_CLIENTE)
+    .map((grupo) => ({
+      label: grupo.label,
+      items: grupo.urls
+        .map((url) => moreNav.find((item) => item.url === url))
+        .filter((item): item is NavItem => !!item),
+    }))
+    .filter((grupo) => grupo.items.length > 0);
   const { data: notifData } = useNotifications();
   // Quem usa as mesas já tem o código delas antes do clique (src/lib/mesa/preCarga.ts).
   usePreCargaOciosaDasMesas(["admin", "manager", "design"].includes(role));
@@ -558,6 +582,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Center: Nav links (desktop) */}
         {/* De 768 a 1023 cabem os LINKS_NO_TOPO_ESTREITO primeiros; o resto vai para o "..." (sem corte nem rolagem lateral). */}
         <div className="hidden md:flex min-w-0 items-center gap-1 flex-1 justify-center">
+          {/* v4: os links moram num trilho cinza em pílula; o ativo é a pílula de tinta (como nas referências). */}
+          <div className="flex min-w-0 items-center rounded-full bg-muted p-1 [&>*+*]:ml-0.5" data-trilho-do-menu="">
           {mainNav.map((item, indice) => {
             const tourId = item.url.replace("/", "nav-");
             return (
@@ -566,9 +592,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 to={item.url}
                 data-tour={tourId}
                 className={({ isActive }) => cn(
-                  "relative inline-flex h-9 items-center whitespace-nowrap px-3 lg:px-3.5 text-[13px] rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "relative inline-flex h-8 items-center whitespace-nowrap px-3 lg:px-3.5 text-[13px] rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   indice >= LINKS_NO_TOPO_ESTREITO && "hidden lg:inline-flex",
-                  isActive ? "bg-foreground font-medium text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  isActive ? "bg-foreground font-medium text-background" : "text-muted-foreground hover:bg-card hover:text-foreground"
                 )}
               >
                 {({ isActive }) => (
@@ -587,7 +613,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               onClick={() => setMoreOpen(!moreOpen)}
               aria-label="Mais páginas"
               aria-expanded={moreOpen}
-              className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", moreOpen && "bg-muted text-foreground")}
+              className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", moreOpen && "bg-card text-foreground")}
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
@@ -658,10 +684,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
+          </div>
         </div>
 
         {/* Right: Icons */}
-        <div className="col-start-3 flex items-center justify-end gap-1">
+        <div className="col-start-3 flex items-center justify-end gap-1.5">
           {/* Voltar para onde eu estava (29/09): o lugar anterior num toque, com a lista dos últimos. */}
           {isAdminOrTeam && <VoltarParaOndeEstava />}
           {/* Cronômetro por cliente (frente CR): o cliente em foco e o tempo do mês nele; clicar abre Horas e custos. */}
@@ -675,7 +702,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setBuscaAberta(true)}
             aria-label="Buscar página (Ctrl+K)"
             title="Buscar página (Ctrl+K)"
-            className="hidden sm:flex w-8 h-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="hidden sm:flex w-8 h-8 items-center justify-center rounded-full bg-muted text-foreground hover:bg-foreground hover:text-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Search className="w-4 h-4" />
           </button>
@@ -687,7 +714,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
             title={theme === "dark" ? "Tema claro" : "Tema escuro"}
             data-prioridade-no-topo="tema"
-            className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-full bg-muted text-foreground hover:bg-foreground hover:text-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -695,12 +722,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             type="button"
             data-tour="nav-notifications"
             aria-label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações"}
-            className="relative w-8 h-8 hidden md:flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="relative w-8 h-8 hidden md:flex items-center justify-center rounded-full bg-muted text-foreground hover:bg-foreground hover:text-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => setNotifOpen(true)}
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center px-1 tabular-nums">
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center px-1 tabular-nums ring-2 ring-card">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -713,13 +740,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               aria-label="Menu do perfil"
               aria-expanded={userMenuOpen}
-              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Avatar className="w-9 h-9 cursor-pointer">
-                <AvatarFallback className="bg-primary/15 text-primary text-[11px] font-semibold">
+                <AvatarFallback className="bg-accent-solid text-on-accent text-[11px] font-semibold">
                   {profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </AvatarFallback>
               </Avatar>
+              {/* v4: nome e papel ao lado do avatar quando há largura (1440 para cima). */}
+              <span className="ml-2 mr-2 hidden max-w-[140px] min-w-0 flex-col items-start text-left desk:flex" data-usuario-no-topo="">
+                <span className="max-w-full truncate text-[12px] font-medium leading-4 text-foreground">{profile?.full_name}</span>
+                <span className="max-w-full truncate text-[11px] leading-[14px] text-muted-foreground">{papelLegivel}</span>
+              </span>
             </button>
             {userMenuOpen && (
               <div className="absolute top-full right-0 mt-2 w-52 rounded-lg bg-popover border border-border p-2 shadow-pop animate-fade-in">
@@ -760,6 +792,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Fim da direita. O menu do celular mora na folha "Mais" da barra de baixo (16/10/2026). */}
         </div>
       </nav>}
+
+      {/* v4: trilho lateral de atalhos (computador largo, 1440 x 720 para cima; ver index.css).
+          Pílulas verticais flutuantes com os lugares de todo dia que ficavam atrás do "...":
+          o mesmo menu, já peneirado pelo papel. O ativo é o círculo de tinta. */}
+      {!celular && trilho.length > 0 && (
+        <aside data-casca="topo" data-trilho-lateral="" aria-label="Atalhos" className="fixed left-6 z-40 flex-col" style={{ top: "calc(env(safe-area-inset-top) + 88px)" }}>
+          {trilho.map((grupo, g) => (
+            <nav key={grupo.label} aria-label={grupo.label} className={cn("flex flex-col items-center rounded-full border border-border bg-card p-1.5 shadow-card [&>*+*]:mt-1", g > 0 && "mt-3")}>
+              {grupo.items.map((item) => (
+                <NavLink
+                  key={item.url}
+                  to={item.url}
+                  end={item.fimExato}
+                  title={item.title}
+                  aria-label={item.title}
+                  className={({ isActive }) => cn(
+                    "relative inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <item.icon className="h-[18px] w-[18px]" />
+                  {item.contador ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-card">{item.contador > 9 ? "9+" : item.contador}</span> : null}
+                </NavLink>
+              ))}
+            </nav>
+          ))}
+        </aside>
+      )}
 
       {/* Topo do celular (16/10/2026, dono: "cara de aplicativo, mais clean"): barra
           cheia, colada no alto, na cor do tema. Esquerda: voltar (quando há para onde)
@@ -834,6 +894,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
         data-tour="finish"
         data-casca="conteudo"
+        data-com-trilho={!celular && trilho.length > 0 ? "" : undefined}
       >
         {children}
       </main>

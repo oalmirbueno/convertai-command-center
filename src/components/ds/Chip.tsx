@@ -71,7 +71,15 @@ export default function Chip({
  * "Pendente", "Atrasado"). É a etiqueta de estado de linha de lista e de
  * tabela. `pulse` faz a bolinha pulsar (algo acontecendo agora).
  */
-export function StatusPill({ children, tone = "neutral", pulse = false, className = "", title }: { children: ReactNode; tone?: Tone; pulse?: boolean; className?: string; title?: string }) {
+export function StatusPill({ children, tone = "neutral", pulse = false, plain = false, className = "", title }: { children: ReactNode; tone?: Tone; pulse?: boolean; /** Sem fundo: só a bolinha e o texto (dentro de tabela, como nas referências). */ plain?: boolean; className?: string; title?: string }) {
+  if (plain) {
+    return (
+      <span title={title} data-status-pill={tone} className={juntar("inline-flex min-w-0 max-w-full shrink-0 items-center whitespace-nowrap text-[12px] font-medium leading-4 text-foreground", className)}>
+        <StatusDot tone={tone} pulse={pulse} className="mr-1.5 h-2 w-2" />
+        <span className="min-w-0 truncate">{children}</span>
+      </span>
+    );
+  }
   return (
     <span
       title={title}

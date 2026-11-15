@@ -14,11 +14,22 @@
  * - Por fileira, no máximo UM cartão sólido na cor da marca (`variant="accent"`) e UM de tinta (`variant="ink"`).
  * - Gráfico pequeno (ds/charts) só com dado que a tela já tem; sem dado, sem gráfico.
  * - Lista e tabela: avatar ou ícone, nome + linha apagada, StatusPill, valor à direita, ações no "…".
+ *
+ * v4 (15/11/2026, o que faltava das referências):
+ * - StatCard: `progress` (anel no ícone), `unit` (unidade em pílula), `footer` (faixa "Ver detalhes"),
+ *   `size="hero"` (número herói leve) e centavos apagados sozinhos em valor "R$ 1.234,56".
+ * - StatTrio: números-resumo sem cartão para o cabeçalho de telas de trabalho.
+ * - IconButton (ícone em círculo com fundo), ArrowUpRight (a seta "abrir") e FloatingToolbar.
+ * - AvatarStack (pilha de avatares com "+N"), StatusPill `plain` (bolinha + texto, para tabela).
+ * - Gráficos: RingIcon, SegmentBar (barra segmentada com % e hachura), Stepper (etapas) e Heatmap.
+ * - Card `icon` (ícone em círculo no cabeçalho), PageHeader `eyebrow` e `stats`, EmptyState hachurado.
+ * - CSS: .ds-hatch / .ds-hatch-forte (hachura), .gap-bento / .gap-section (dois ritmos de espaço).
  */
 export { default as Card, CardSurface } from "./Card";
-export { default as StatCard, StatGrid, type StatCardProps } from "./StatCard";
-export { Sparkline, MiniBars, ProgressBar, Donut, ChartLegend, chartColor, type ChartTone, type DonutSegment } from "./charts";
-export { default as ListRow, List, Avatar, initialsOf, type ListRowProps } from "./ListRow";
+export { default as StatCard, StatGrid, StatTrio, type StatCardProps } from "./StatCard";
+export { Sparkline, MiniBars, ProgressBar, Donut, ChartLegend, RingIcon, SegmentBar, Stepper, Heatmap, chartColor, type ChartTone, type DonutSegment, type BarSegment } from "./charts";
+export { default as ListRow, List, Avatar, AvatarStack, initialsOf, type ListRowProps } from "./ListRow";
+export { default as IconButton, ArrowUpRight, FloatingToolbar } from "./IconButton";
 export { default as PageHeader } from "./PageHeader";
 export { default as Toolbar, SearchField } from "./Toolbar";
 export { default as PillTabs, type PillTab } from "./PillTabs";
