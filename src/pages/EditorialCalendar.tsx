@@ -291,6 +291,52 @@ function resumoDoCalendario(
   return partes.join(" · ");
 }
 
+/**
+ * Faixa de números do período (rodada ousada, 15/11/2026): o total de conteúdos
+ * em número grande e as publicações por estado numa barra só. Conta o mesmo
+ * que a linha do cabeçalho (resumoDoCalendario); não lê nada novo. Sem
+ * publicação, não desenha.
+ */
+function FaixaDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
+  const publications = posts.flatMap((post) => post.publications.map(({ publication }) => publication));
+  if (posts.length === 0 || publications.length === 0) return null;
+  const contar = (estado: string) => publications.filter((publication) => publication.status === estado).length;
+  const agendados = contar("scheduled");
+  const publicados = contar("published");
+  const falhas = contar("failed");
+  const outros = publications.length - agendados - publicados - falhas;
+  const partes = [
+    { chave: "publicados", rotulo: "Publicados", n: publicados, cor: "bg-accent-solid" },
+    { chave: "agendados", rotulo: "Agendados", n: agendados, cor: "bg-info" },
+    { chave: "outros", rotulo: "Em preparo", n: outros, cor: "bg-foreground/25" },
+    { chave: "falhas", rotulo: "Falhas", n: falhas, cor: "bg-destructive" },
+  ].filter((parte) => parte.n > 0);
+  return (
+    <div className="mb-4 hidden min-w-0 items-center lg:flex" data-faixa-do-calendario="" role="group" aria-label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}>
+      <p className="mr-5 flex shrink-0 items-baseline">
+        <span className="text-[32px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{posts.length}</span>
+        <span className="ml-2 text-[13px] text-muted-foreground">{posts.length === 1 ? "conteúdo" : "conteúdos"}</span>
+      </p>
+      <div className="min-w-0 flex-1">
+        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+          {partes.map((parte) => (
+            <span key={parte.chave} className={juntar("h-full border-r-2 border-background last:border-r-0", parte.cor)} style={{ width: `${(parte.n / publications.length) * 100}%` }} />
+          ))}
+        </div>
+        <ul className="mt-2 flex min-w-0 flex-wrap items-center">
+          {partes.map((parte) => (
+            <li key={parte.chave} className="mr-4 flex items-center text-[12px] leading-4 text-muted-foreground">
+              <span className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", parte.cor)} aria-hidden="true" />
+              {parte.rotulo}
+              <span className="ml-1.5 font-semibold tabular-nums text-foreground">{parte.n}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export default function EditorialCalendar() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -1786,10 +1832,12 @@ export default function EditorialCalendar() {
           }}
         />
 
+        {!celular && <FaixaDoCalendario posts={filteredPosts} />}
+
         {approvedReadyToSchedule.length > 0 && (
-          <div className="mb-2 flex min-w-0 items-center rounded-md border border-success/30 bg-success/5 px-3 py-2">
-            <Send className="mr-2 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-            <p className={juntar(texto.corpo, "mr-1.5 min-w-0 truncate")}>
+          <div className="ds-accent mb-3 flex min-w-0 items-center rounded-lg px-4 py-3 sm:px-5">
+            <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-foreground max-sm:hidden"><Send className="h-4 w-4" aria-hidden="true" /></span>
+            <p className={juntar(texto.corpo, "mr-1.5 min-w-0 truncate font-semibold sm:text-[15px]")}>
               {/* 16/10/2026: frase curta no celular para caber numa linha. */}
               {celular
                 ? `${approvedReadyToSchedule.length} ${approvedReadyToSchedule.length === 1 ? "aprovado" : "aprovados"} para agendar`
@@ -1804,7 +1852,7 @@ export default function EditorialCalendar() {
               type="button"
               onClick={() => void scheduleApprovedNow()}
               disabled={batchScheduling}
-              className={juntar(botao.primario, "ml-auto bg-success text-success-foreground hover:bg-success/90", celular ? "h-11 shrink-0" : "h-8")}
+              className={juntar(botao.primario, "ml-auto bg-foreground text-background hover:bg-foreground/90", celular ? "h-11 shrink-0" : "h-9")}
             >
               {batchScheduling ? "Agendando…" : celular ? "Agendar" : "Agendar aprovados"}
             </button>

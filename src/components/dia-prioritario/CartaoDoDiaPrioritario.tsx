@@ -60,9 +60,9 @@ export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora, co
         data-dia-prioritario={dia ? String(dia) : "sem-dia"}
         data-hoje={hoje ? "sim" : undefined}
         data-compacto=""
-        className={juntar("flex min-w-0 items-center rounded-lg border px-3 py-2", hoje ? "border-primary/50 bg-primary/[0.08]" : "border-primary/25 bg-primary/[0.04]")}
+        className={juntar("flex min-w-0 items-center rounded-lg px-4 py-3", hoje ? "ds-accent" : "bg-accent-soft")}
       >
-        <CalendarHeart className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <span className={juntar("mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full", hoje ? "bg-foreground/10 text-foreground" : "bg-accent-solid text-on-accent")}><CalendarHeart className="h-4 w-4" aria-hidden="true" /></span>
         <p className="min-w-0 flex-1 text-[13px] leading-5 text-foreground">
           {hoje ? (
             <strong className="font-semibold text-primary">Hoje é seu Dia Prioritário!</strong>
@@ -72,7 +72,7 @@ export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora, co
             "Seu Dia Prioritário está sendo organizado."
           )}
         </p>
-        <button type="button" onClick={() => setComoFunciona(true)} className={juntar("ml-2 h-9 shrink-0 rounded-md px-2 text-[12px] font-medium text-primary", foco)}>
+        <button type="button" onClick={() => setComoFunciona(true)} className={juntar("ml-2 h-9 shrink-0 rounded-full px-3 text-[12px] font-medium text-primary", foco)}>
           Como funciona
         </button>
         <ComoFuncionaODia aberta={comoFunciona} onFechar={() => setComoFunciona(false)} dia={dia} />
@@ -86,25 +86,26 @@ export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora, co
       data-dia-prioritario={dia ? String(dia) : "sem-dia"}
       data-hoje={hoje ? "sim" : undefined}
       className={juntar(
-        "min-w-0 rounded-lg border px-4 py-3 transition-colors",
-        hoje ? "border-primary/50 bg-primary/[0.08]" : "border-primary/25 bg-primary/[0.04]",
+        // Rodada ousada (15/11/2026): no próprio dia o cartão vira o destaque sólido na cor da marca.
+        "min-w-0 rounded-lg px-5 py-5 transition-colors sm:px-6 sm:py-6",
+        hoje ? "ds-accent" : "bg-accent-soft",
       )}
     >
       <div className="flex min-w-0 items-start">
-        <span className="mr-3 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-          <CalendarHeart className="h-4 w-4" aria-hidden="true" />
+        <span className={juntar("mr-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-full", hoje ? "bg-foreground/10 text-foreground" : "bg-accent-solid text-on-accent")}>
+          <CalendarHeart className="h-5 w-5" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center">
-            <h2 className="mr-2 text-[15px] font-semibold text-foreground">Seu Dia Prioritário</h2>
-            {hoje && <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">Hoje é seu Dia Prioritário!</span>}
+            <h2 className="mr-2 text-[13px] font-medium text-muted-foreground">Seu Dia Prioritário</h2>
+            {hoje && <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground">Hoje é seu Dia Prioritário!</span>}
           </div>
           {dia ? (
             <>
-              <p className="mt-1 text-[14px] leading-5 text-foreground">
+              <p className="mt-1.5 text-[20px] font-semibold leading-7 tracking-[-0.02em] text-foreground sm:text-[24px] sm:leading-8">
                 Seu Dia Prioritário é toda <strong className="font-semibold text-primary">{nomeDoDia(dia)}</strong>.
               </p>
-              <p className="mt-1 text-[13px] leading-5 text-muted-foreground">Um momento especial para falarmos de resultados, ideias e próximos passos.</p>
+              <p className="mt-2 text-[13px] leading-5 text-muted-foreground">Um momento especial para falarmos de resultados, ideias e próximos passos.</p>
               <p className="text-[13px] leading-5 text-muted-foreground">Traga suas dúvidas, necessidades e sugestões.</p>
               <p className="text-[13px] leading-5 text-muted-foreground">Seu negócio segue acompanhado durante toda a semana.</p>
             </>
@@ -117,11 +118,11 @@ export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora, co
           <button
             type="button"
             onClick={() => setComoFunciona(true)}
-            className={juntar("mt-1 text-[12px] font-medium text-primary underline-offset-2 hover:underline", foco)}
+            className={juntar("mt-4 inline-flex h-9 items-center rounded-full bg-foreground px-4 text-[13px] font-medium text-background transition-opacity hover:opacity-90", foco)}
           >
             Entenda como funciona
           </button>
-          <VideoDoDiaPrioritario className="mt-2 sm:max-w-sm" />
+          <VideoDoDiaPrioritario className="mt-4 sm:max-w-sm" />
         </div>
       </div>
       <ComoFuncionaODia aberta={comoFunciona} onFechar={() => setComoFunciona(false)} dia={dia} />

@@ -35,6 +35,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
+import { Card, ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 
 
 
@@ -462,6 +463,7 @@ export default function TimelinePage() {
   const iconeDaLinha = juntar(botao.icone, "h-7 w-7");
   // Seletor pequeno dentro da linha (status da tarefa).
   const seletorDaLinha = juntar(campo, "h-7 w-auto cursor-pointer px-2 text-[12px]");
+  const tomDoStatusDoMarco = (status: string): Tone => (status === "completed" ? "success" : status === "in_progress" ? "info" : "neutral");
   const corDoStatusDoMarco = (status: string) =>
     status === "completed" ? "bg-success/10 text-success" : status === "in_progress" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground";
   const existingMilestones = addMilestoneProject ? (allMilestones || []).filter((m: any) => m.project_id === addMilestoneProject) : [];
@@ -488,16 +490,43 @@ export default function TimelinePage() {
         }
       />
 
-      <AreaDeTrabalho className="mt-4" rotuloDoPrincipal="Projetos na linha do tempo" memoriaDaRolagem="timeline:lista">
+      <AreaDeTrabalho className="mt-6 sm:mt-8" rotuloDoPrincipal="Projetos na linha do tempo" memoriaDaRolagem="timeline:lista">
+      {!carregando && filteredProjects.length > 0 && (() => {
+        // Números da tela (rodada ousada, 15/11/2026): só o que já foi lido para desenhar os projetos abaixo.
+        const ids = new Set(filteredProjects.map((p: any) => p.id));
+        const marcos = (allMilestones || []).filter((m: any) => ids.has(m.project_id));
+        const marcosFeitos = marcos.filter((m: any) => m.status === "completed").length;
+        const marcosAtrasados = marcos.filter((m: any) => m.status !== "completed" && daysUntilDate(m.target_date) < 0).length;
+        const tarefas = (allTasks || []).filter((t: any) => ids.has(t.project_id));
+        const tarefasFeitas = tarefas.filter((t: any) => t.status === "done").length;
+        return (
+          <StatGrid cols={4} className="mb-5 sm:mb-6" label="Linha do tempo em números">
+            <StatCard variant="ink" label="Projetos" value={filteredProjects.length} icon={<GitBranch className="h-4 w-4" />} hint={`${marcos.length} ${marcos.length === 1 ? "marco" : "marcos"}`} />
+            <StatCard
+              variant="accent"
+              label="Marcos concluídos"
+              value={`${marcosFeitos}/${marcos.length}`}
+              icon={<Flag className="h-4 w-4" />}
+              chart={marcos.length > 0 ? <ProgressBar value={marcosFeitos} max={marcos.length} tone="current" /> : undefined}
+            />
+            <StatCard
+              label="Tarefas concluídas"
+              value={`${tarefasFeitas}/${tarefas.length}`}
+              icon={<ListTodo className="h-4 w-4" />}
+              chart={tarefas.length > 0 ? <ProgressBar value={tarefasFeitas} max={tarefas.length} striped /> : undefined}
+            />
+            <StatCard label="Marcos atrasados" value={marcosAtrasados} icon={<AlertCircle className="h-4 w-4" />} hint={marcosAtrasados === 0 ? "tudo no prazo" : "passaram da data"} />
+          </StatGrid>
+        );
+      })()}
       {carregando ? (
         <Carregando rotulo="Carregando a linha do tempo" linhas={4} />
       ) : filteredProjects.length === 0 ? (
         <EstadoVazio icone={<GitBranch className="h-5 w-5" />} titulo="Nenhum projeto encontrado" />
       ) : (
-      <div className="space-y-6">
-      {/* Um projeto por seção ABERTA (sem caixa), separadas por uma linha
-          fina; cada uma recolhe pelo título (SISTEMA.md 4.1 e 4.3). */}
-      {filteredProjects.map((project: any, indice: number) => {
+      <div className="space-y-4 sm:space-y-5">
+      {/* Rodada ousada (15/11/2026): um projeto por cartão, que recolhe pelo título. */}
+      {filteredProjects.map((project: any) => {
         const milestones = (allMilestones || []).filter((m: any) => m.project_id === project.id);
         const projectTasks = (allTasks || []).filter((t: any) => t.project_id === project.id);
         const doneTasks = projectTasks.filter((t: any) => t.status === "done").length;
@@ -516,18 +545,18 @@ export default function TimelinePage() {
         ].filter(Boolean).join(" · ");
 
         return (
-          <Secao
+          <Card
             key={project.id}
-            titulo={project.name}
-            recolher={`timeline:projeto:${project.id}`}
-            descricao={estado}
-            divisoria={indice > 0}
-            corpoClassName="space-y-4"
-            acao={
+            as="section"
+            title={project.name}
+            collapsible={`timeline:projeto:${project.id}`}
+            subtitle={estado}
+            action={
               <>
-                <div className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-muted sm:block" aria-hidden="true">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} />
-                </div>
+                <span className="hidden items-center sm:flex" aria-hidden="true">
+                  <span className="mr-2 text-[15px] font-semibold tabular-nums text-foreground">{project.progress}%</span>
+                  <ProgressBar value={Number(project.progress) || 0} max={100} className="w-24" />
+                </span>
                 {milestones.length > INITIAL_MILESTONES && (
                   <div className="flex items-center">
                     <button
@@ -577,6 +606,7 @@ export default function TimelinePage() {
               </>
             }
           >
+            <div className="space-y-5">
             {/* Timeline */}
             {milestones.length === 0 ? (
               <div className="flex items-center">
@@ -602,23 +632,21 @@ export default function TimelinePage() {
                       onClick={() => setSelectedMilestone(m)}
                       className="relative flex w-full cursor-pointer border-none bg-transparent p-0 pb-5 pl-4 text-left"
                     >
-                      <div className={`absolute -left-[9px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full ${
-                        m.status === "completed" ? "bg-primary" :
-                        m.status === "in_progress" ? "border-[2.5px] border-primary bg-card" : "border-2 border-border bg-card"
+                      <div className={`absolute -left-[11px] top-0 flex h-5 w-5 items-center justify-center rounded-full ${
+                        m.status === "completed" ? "bg-accent-solid" :
+                        m.status === "in_progress" ? "border-[3px] border-foreground bg-card" : "border-2 border-border bg-card"
                       }`}>
-                        {m.status === "completed" && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                        {m.status === "completed" && <Check className="h-3 w-3 text-on-accent" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={juntar(texto.corpo, "truncate font-medium")}>{m.title}</p>
-                        <p className="mt-0.5 truncate text-[11px] tabular-nums text-muted-foreground">
+                        <p className="truncate text-[15px] font-semibold leading-5 text-foreground">{m.title}</p>
+                        <p className="mt-1 truncate text-[12px] tabular-nums text-muted-foreground">
                           {formatDateShort(m.target_date)}
                           {mTasks.length > 0 && <> · {mDone}/{mTasks.length} tarefas</>}
                           {m.status !== "completed" && days < 0 && <span className="text-destructive"> · Atrasado</span>}
                         </p>
                         {mTasks.length > 0 && (
-                          <div className="mt-1.5 h-1 w-20 overflow-hidden rounded-full bg-muted">
-                            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(mDone / mTasks.length) * 100}%` }} />
-                          </div>
+                          <ProgressBar value={mDone} max={mTasks.length} height={6} className="mt-2 max-w-[160px]" />
                         )}
                       </div>
                     </button>
@@ -628,7 +656,7 @@ export default function TimelinePage() {
             ) : (
               /* Desktop horizontal timeline */
               <div className="scrollbar-hidden overflow-x-auto pb-2">
-                <div className="flex min-w-max items-start px-2 py-4">
+                <div className="flex min-w-max items-start px-2 py-3">
                   {visibleMilestones.map((m: any, i: number) => {
                     const mTasks = (allTasks || []).filter((t: any) => t.milestone_id === m.id);
                     const mDone = mTasks.filter((t: any) => t.status === "done").length;
@@ -637,31 +665,32 @@ export default function TimelinePage() {
                     return (
                       <Fragment key={m.id}>
                         {i > 0 && (
-                          <div className={`mt-[14px] h-[3px] w-32 rounded-full transition-colors ${
-                            milestones[i - 1].status === "completed" ? "bg-primary" : "bg-border"
+                          <div className={`mt-[22px] h-1 w-28 rounded-full transition-colors desk:w-36 ${
+                            milestones[i - 1].status === "completed" ? "bg-accent-solid" : "bg-muted"
                           }`} />
                         )}
                         <button
                           type="button"
                           onClick={() => setSelectedMilestone(m)}
                           className="group relative flex cursor-pointer flex-col items-center border-none bg-transparent p-0"
-                          style={{ minWidth: 140 }}
+                          style={{ minWidth: 168 }}
                         >
-                          <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-full transition-transform group-hover:scale-110 ${
+                          <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full transition-transform group-hover:scale-105 ${
                             m.status === "completed"
-                              ? "bg-primary text-primary-foreground"
+                              ? "bg-accent-solid text-on-accent"
                               : m.status === "in_progress"
-                                ? "border-[3px] border-primary bg-card"
-                                : "border-2 border-border bg-card"
+                                ? "bg-foreground text-background"
+                                : "bg-muted text-muted-foreground"
                           }`}>
-                            {m.status === "completed" && <Check className="h-4 w-4" />}
-                            {m.status === "in_progress" && <div className="h-2 w-2 rounded-full bg-primary" />}
+                            {m.status === "completed" && <Check className="h-5 w-5" />}
+                            {m.status === "in_progress" && <Clock className="h-5 w-5" />}
+                            {m.status !== "completed" && m.status !== "in_progress" && <Circle className="h-4 w-4" />}
                           </div>
                           <div className="text-center">
-                            <p className="whitespace-nowrap text-[12px] font-medium text-foreground">{m.title}</p>
-                            <p className="text-[11px] tabular-nums text-muted-foreground">{formatDateShort(m.target_date)}</p>
+                            <p className="whitespace-nowrap text-[13px] font-semibold text-foreground">{m.title}</p>
+                            <p className="mt-0.5 text-[12px] tabular-nums text-muted-foreground">{formatDateShort(m.target_date)}</p>
                             {mTasks.length > 0 && (
-                              <p className="mt-0.5 text-[11px] text-muted-foreground">{mDone}/{mTasks.length} tarefas</p>
+                              <p className="mt-0.5 text-[12px] tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{mDone}</span>/{mTasks.length} tarefas</p>
                             )}
                             {m.status !== "completed" && days < 0 && (
                               <span className="mt-0.5 flex items-center justify-center text-[11px] text-destructive">
@@ -669,9 +698,7 @@ export default function TimelinePage() {
                               </span>
                             )}
                             {mTasks.length > 0 && (
-                              <div className="mx-auto mt-1 h-1 w-16 overflow-hidden rounded-full bg-muted">
-                                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(mDone / mTasks.length) * 100}%` }} />
-                              </div>
+                              <ProgressBar value={mDone} max={mTasks.length} height={6} className="mx-auto mt-2 w-24" />
                             )}
                           </div>
                         </button>
@@ -684,9 +711,9 @@ export default function TimelinePage() {
 
             {/* Expanded details */}
             {isExpanded && (
-              <div className="space-y-5 border-t border-border pt-4">
+              <div className="space-y-6 border-t border-border/70 pt-5">
                 {/* Project info grid */}
-                <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 [&>div]:rounded-md [&>div]:bg-muted/60 [&>div]:px-4 [&>div]:py-3.5 [&_dd]:mt-1 [&_dd]:text-[15px] [&_dd]:font-semibold">
                   <div className="min-w-0">
                     <dt className={texto.rotulo}>Cliente</dt>
                     <dd className={juntar(texto.corpo, "mt-0.5 truncate")}>{clientProfile?.company_name || clientProfile?.full_name || "-"}</dd>
@@ -730,7 +757,7 @@ export default function TimelinePage() {
                             onDrop={(e) => handleDrop(e, m, milestones)}
                             onDragEnd={handleDragEnd}
                             className={juntar(
-                              "flex min-w-0 items-start rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40",
+                              "flex min-w-0 items-start rounded-lg px-2 py-3.5 transition-colors hover:bg-muted/50",
                               isAdmin && "cursor-grab active:cursor-grabbing",
                               isDragOver && "bg-primary/5 ring-2 ring-primary/50",
                               dragId === m.id && "opacity-50",
@@ -741,15 +768,15 @@ export default function TimelinePage() {
                                 <GripVertical className="h-4 w-4" />
                               </div>
                             )}
-                            <div className={`mr-3 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                              m.status === "completed" ? "bg-success text-white" :
-                              m.status === "in_progress" ? "border-2 border-primary" : "border-2 border-border bg-card"
+                            <div className={`mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                              m.status === "completed" ? "bg-accent-solid text-on-accent" :
+                              m.status === "in_progress" ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
                             }`}>
-                              {m.status === "completed" && <Check className="h-3 w-3" />}
+                              {m.status === "completed" ? <Check className="h-4 w-4" /> : m.status === "in_progress" ? <Clock className="h-4 w-4" /> : <Circle className="h-3.5 w-3.5" />}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className={juntar(texto.corpo, "truncate font-medium")}>{m.title}</p>
-                              <p className="mt-0.5 truncate text-[11px] tabular-nums text-muted-foreground">
+                              <p className={juntar(texto.corpo, "truncate font-semibold")}>{m.title}</p>
+                              <p className="mt-0.5 truncate text-[12px] tabular-nums text-muted-foreground">
                                 {new Date(m.target_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
                                 {mTasks.length > 0 && <> · {mDone}/{mTasks.length} tarefas</>}
                                 {m.status !== "completed" && days < 0 && <span className="text-destructive"> · {Math.abs(days)}d atrasado</span>}
@@ -757,13 +784,12 @@ export default function TimelinePage() {
                               </p>
                               {m.description && <p className={juntar(texto.auxiliar, "mt-1 truncate")} title={m.description}>{m.description}</p>}
                               {mTasks.length > 0 && (
-                                <div className="mt-2 h-1.5 w-full max-w-[180px] overflow-hidden rounded-full bg-muted">
-                                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(mDone / mTasks.length) * 100}%` }} />
-                                </div>
+                                <ProgressBar value={mDone} max={mTasks.length} height={6} className="mt-2.5 max-w-[200px]" />
                               )}
                             </div>
                             <div className="ml-2 flex shrink-0 items-center [&>*+*]:ml-0.5">
-                              <span className={juntar(etiqueta, "mr-1 rounded-full", corDoStatusDoMarco(m.status))}>
+                              <StatusPill tone={tomDoStatusDoMarco(m.status)} className="mr-1 max-sm:hidden">{statusLabels[m.status]}</StatusPill>
+                              <span className={juntar(etiqueta, "mr-1 rounded-full sm:hidden", corDoStatusDoMarco(m.status))}>
                                 {statusLabels[m.status]}
                               </span>
                               {(mTasks.length > 0 || isAdmin) && (
@@ -798,10 +824,10 @@ export default function TimelinePage() {
                           {isMilestoneExpanded && (
                             <div className="space-y-1 pb-2 pl-3 pr-1 pt-1 sm:pl-12">
                               {mTasks.map((t: any) => (
-                                <div key={t.id} className="group flex min-w-0 items-center rounded-md px-2 py-2 transition-colors hover:bg-muted/60">
+                                <div key={t.id} className="group flex min-w-0 items-center rounded-md px-3 py-2.5 transition-colors hover:bg-muted/60">
                                   <div className={`mr-2.5 h-2.5 w-2.5 shrink-0 rounded-full ${taskStatusDot[t.status] || "bg-muted-foreground"}`} />
                                   <div className="mr-2 min-w-0 flex-1">
-                                    <p className="truncate text-[12px] text-foreground">{t.title}</p>
+                                    <p className="truncate text-[13px] font-medium text-foreground">{t.title}</p>
                                     <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                                       {t.assignee?.full_name ? <>{t.assignee.full_name} · </> : null}
                                       <span className={priorityColors[t.priority] || "text-muted-foreground"}>{priorityLabels[t.priority] || t.priority}</span>
@@ -950,7 +976,8 @@ export default function TimelinePage() {
                 </div>
               </div>
             )}
-          </Secao>
+            </div>
+          </Card>
         );
       })}
 

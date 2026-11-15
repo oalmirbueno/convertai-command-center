@@ -386,7 +386,7 @@ export default function EditorialToolbar({
                 <Search className="h-[18px] w-[18px]" aria-hidden="true" />
                 {filtrosAtivos > 0 && (
                   <span
-                    className="absolute right-1 top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground"
+                    className="absolute right-1 top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-accent-solid px-1 text-[11px] font-semibold tabular-nums text-on-accent"
                     aria-hidden="true"
                   >
                     {filtrosAtivos}
@@ -416,7 +416,7 @@ export default function EditorialToolbar({
           {view === "board" && canCreate && (
             <button
               type="button"
-              className={juntar(botao.icone, "h-11 w-11 text-primary hover:text-primary")}
+              className={juntar(botao.icone, "ml-1 h-11 w-11 bg-accent-solid text-on-accent hover:bg-accent-solid/90 hover:text-on-accent")}
               onClick={onCreate}
               aria-label="Criar conteúdo"
               title="Criar conteúdo"
@@ -427,7 +427,7 @@ export default function EditorialToolbar({
           {view !== "board" && canSchedule && (
             <button
               type="button"
-              className={juntar(botao.icone, "h-11 w-11 text-primary hover:text-primary")}
+              className={juntar(botao.icone, "ml-1 h-11 w-11 bg-accent-solid text-on-accent hover:bg-accent-solid/90 hover:text-on-accent")}
               onClick={onSchedule}
               aria-label="Agendar publicação"
               title="Agendar publicação"
@@ -499,9 +499,9 @@ export default function EditorialToolbar({
           encaixa na de cima". Uma linha só: título, visões em ícone (o nome
           fica no title e no leitor de tela), período, busca, filtros e a
           ação principal em ícone, sem bordas. Só quebra quando não cabe. */}
-      <div className="mb-2 mr-3 min-w-0 max-w-full">{cabecalho}</div>
+      <div className="mb-3 mr-4 min-w-0 max-w-full">{cabecalho}</div>
 
-      <div className="mb-2 mr-3 flex min-w-0 max-w-full items-center">
+      <div className="mb-3 mr-3 flex min-w-0 max-w-full items-center">
         <Etapas
           soIcone
           rotulo="Área editorial e visualização da agenda"
@@ -515,10 +515,10 @@ export default function EditorialToolbar({
           className="shrink-0"
         />
         {view !== "board" ? (
-          <div className="ml-2 flex min-w-0 items-center">
+          <div className="ml-3 flex min-w-0 items-center">
             <button
               type="button"
-              className={botao.icone}
+              className={juntar(botao.icone, "border border-border bg-card")}
               onClick={onPrevious}
               aria-label="Período anterior"
               title="Período anterior"
@@ -527,7 +527,7 @@ export default function EditorialToolbar({
             </button>
             <button
               type="button"
-              className={juntar(botao.discreto, "h-8 px-2 text-foreground")}
+              className={juntar(botao.secundario, "mx-1 h-8 px-3.5")}
               onClick={onToday}
               title="Voltar para hoje"
             >
@@ -535,14 +535,14 @@ export default function EditorialToolbar({
             </button>
             <button
               type="button"
-              className={botao.icone}
+              className={juntar(botao.icone, "border border-border bg-card")}
               onClick={onNext}
               aria-label="Próximo período"
               title="Próximo período"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
-            <h2 className={juntar(texto.tituloSecao, "ml-1 min-w-0 truncate first-letter:uppercase")}>
+            <h2 className={juntar(texto.tituloSecao, "ml-3 min-w-0 truncate first-letter:uppercase")}>
               {title}
             </h2>
           </div>
@@ -551,14 +551,14 @@ export default function EditorialToolbar({
         )}
       </div>
 
-      <div className="mb-2 ml-auto flex w-full min-w-0 items-center sm:w-auto sm:flex-1 sm:justify-end">
+      <div className="mb-3 ml-auto flex w-full min-w-0 items-center sm:w-auto sm:flex-1 sm:justify-end">
         <div className="relative mr-2 min-w-0 flex-1 lg:w-[200px] lg:flex-none">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <CampoDeBusca
             valor={search}
             onMudar={onSearchChange}
             versaoDoReset={versaoDoReset}
-            className={juntar(campo, "pl-9")}
+            className={juntar(campo, "rounded-full pl-9")}
           />
         </div>
         {clients.length > 0 && (
@@ -583,7 +583,7 @@ export default function EditorialToolbar({
           <PopoverTrigger asChild>
             <button
               type="button"
-              className={juntar(botao.icone, "relative", advancedFilterCount > 0 && "text-foreground")}
+              className={juntar(botao.icone, "relative h-9 w-9 border border-border bg-card", advancedFilterCount > 0 && "text-foreground")}
               aria-label={`Mais filtros, ${advancedFilterCount} ${
                 advancedFilterCount === 1 ? "ativo" : "ativos"
               }`}
@@ -592,7 +592,7 @@ export default function EditorialToolbar({
               <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
               {advancedFilterCount > 0 && (
                 <span
-                  className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground"
+                  className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent-solid px-1 text-[11px] font-semibold tabular-nums text-on-accent"
                   aria-hidden="true"
                 >
                   {advancedFilterCount}
@@ -602,7 +602,7 @@ export default function EditorialToolbar({
           </PopoverTrigger>
           <PopoverContent
             align="end"
-            className="w-[calc(100vw-24px)] max-w-[380px] p-3"
+            className="w-[calc(100vw-24px)] max-w-[380px] rounded-lg p-5"
           >
             {cabecalhoDosFiltros}
             {gradeDosFiltros}
@@ -625,7 +625,7 @@ export default function EditorialToolbar({
         {view === "board" && canCreate && (
           <button
             type="button"
-            className={juntar(botao.icone, "ml-1 text-primary hover:text-primary")}
+            className={juntar(botao.icone, "ml-2 h-9 w-9 bg-accent-solid text-on-accent hover:bg-accent-solid/90 hover:text-on-accent")}
             onClick={onCreate}
             aria-label="Criar conteúdo"
             title="Criar conteúdo"
@@ -637,7 +637,7 @@ export default function EditorialToolbar({
         {view !== "board" && canSchedule && (
           <button
             type="button"
-            className={juntar(botao.icone, "ml-1 text-primary hover:text-primary")}
+            className={juntar(botao.icone, "ml-2 h-9 w-9 bg-accent-solid text-on-accent hover:bg-accent-solid/90 hover:text-on-accent")}
             onClick={onSchedule}
             aria-label="Agendar publicação"
             title="Agendar publicação"

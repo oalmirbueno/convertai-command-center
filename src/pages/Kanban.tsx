@@ -54,6 +54,7 @@ import {
   lerEstadoDaTela,
   gravarEstadoDaTela,
 } from "@/components/sistema";
+import { Chip, ProgressBar, type Tone } from "@/components/ds";
 
 const columns = [
   { id: "backlog", title: "Backlog", dotColor: "bg-muted-foreground" },
@@ -63,17 +64,20 @@ const columns = [
 ];
 
 /** Seta dos seletores nativos (o campo perde a seta do navegador com appearance-none). */
+
 const SETA_DO_SELETOR = {
   backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b9199' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
   backgroundPosition: "right 10px center",
 } as const;
 
-const priorityBorderColors: Record<string, string> = {
-  urgent: "border-l-destructive",
-  high: "border-l-warning",
-  medium: "border-l-muted-foreground",
-  low: "border-l-border",
+const priorityDotColors: Record<string, string> = {
+  urgent: "bg-destructive",
+  high: "bg-warning",
+  medium: "bg-muted-foreground",
+  low: "bg-border",
 };
+
+const priorityTone: Record<string, Tone> = { urgent: "danger", high: "warning", medium: "neutral", low: "neutral" };
 
 const priorityLabels: Record<string, string> = {
   urgent: "Urgente",
@@ -257,7 +261,7 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
   const seloDoCelular = !compacto
     ? null
     : task.status === "blocked"
-      ? { rotulo: "Bloqueada", cor: "bg-warning/10 text-warning" }
+      ? { rotulo: "Bloqueada", cor: "bg-warning-soft text-warning" }
       : tipoDeEntrega
         ? { rotulo: tipoDeEntrega, cor: "bg-info-soft text-info" }
         : null;
@@ -304,8 +308,7 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
             }
           }}
           className={cn(
-            "rounded-md border border-border border-l-[3px] bg-card shadow-card transition-colors hover:border-muted-foreground/30",
-            priorityBorderColors[task.priority] || "border-l-border",
+            "rounded-md border border-border bg-card shadow-card transition-colors hover:border-foreground/25",
             podeArrastar ? "cursor-grab select-none [-webkit-touch-callout:none] active:cursor-grabbing" : "cursor-pointer",
             arrastado && "opacity-40",
             foco,
@@ -313,12 +316,13 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
         >
           {compacto ? (
             // 16/10/2026 (celular): cartão enxuto, texto quebra em vez de vazar.
-            <div className="flex min-w-0 items-start p-3">
+            <div className="flex min-w-0 items-start p-4">
+              <span aria-hidden="true" className={juntar("mr-3 mt-1.5 h-2 w-2 shrink-0 rounded-full", priorityDotColors[task.priority] || "bg-border")} />
               <div className="min-w-0 flex-1">
-                <p className="break-words text-[14px] font-medium leading-snug text-foreground">{task.title}</p>
+                <p className="break-words text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{task.title}</p>
                 {apoioDoCelular && <p className={juntar(texto.auxiliar, "mt-1 truncate tabular-nums")}>{apoioDoCelular}</p>}
                 {seloDoCelular && (
-                  <span className={juntar(etiqueta, "mt-1.5 max-w-full", seloDoCelular.cor)}>
+                  <span className={juntar(etiqueta, "mt-2.5 h-[22px] max-w-full", seloDoCelular.cor)}>
                     <span className="truncate">{seloDoCelular.rotulo}</span>
                   </span>
                 )}
@@ -326,11 +330,14 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
               {menuDeAcoes && <div className="-mr-1 -mt-1 flex shrink-0 items-center">{menuDeAcoes}</div>}
             </div>
           ) : (
-          <div className="p-3">
-            <p className="text-[13px] font-medium leading-snug text-foreground">{task.title}</p>
-            {task.project?.name && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{task.project.name}</p>}
+          <div className="p-4">
+            {priorityLabels[task.priority] && (
+              <Chip dot tone={priorityTone[task.priority] || "neutral"} outline={task.priority === "low"} className="mb-2.5" title={`Prioridade: ${priorityLabels[task.priority]}`}>{priorityLabels[task.priority]}</Chip>
+            )}
+            <p className="text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground desk:text-[15px]">{task.title}</p>
+            {task.project?.name && <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{task.project.name}</p>}
             {(taskDeliveryTypeLabel(task) || editorial || task.status === "blocked" || task.milestone?.title) && (
-              <div className="mt-1.5 flex flex-wrap">
+              <div className="mt-2.5 flex flex-wrap">
                 {taskDeliveryTypeLabel(task) ? (
                   <span className={juntar(etiqueta, "mb-1 mr-1 bg-info-soft text-info")}>
                     {taskDeliveryTypeLabel(task)}
@@ -341,12 +348,12 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
                   </span>
                 )}
                 {task.status === "blocked" && (
-                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-warning/10 text-warning")}>
+                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-warning-soft text-warning")}>
                     Bloqueada
                   </span>
                 )}
                 {task.milestone?.title && (
-                  <span className={juntar(etiqueta, "mb-1 mr-1 max-w-full truncate bg-primary/10 text-primary")}>
+                  <span className={juntar(etiqueta, "mb-1 mr-1 max-w-full truncate bg-accent-soft text-primary")}>
                     {task.milestone.title}
                   </span>
                 )}
@@ -354,17 +361,17 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
             )}
             {noDia !== null && (
               <span
-                className={juntar(etiqueta, "mt-1.5 inline-block", noDia ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}
+                className={juntar(etiqueta, "mt-1.5 inline-block", noDia ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground")}
                 title="O Dia Prioritário é a preferência para captações, não uma trava do calendário."
                 data-captacao-no-dia={noDia ? "sim" : "nao"}
               >
                 {noDia ? "No Dia Prioritário" : `Dia Prioritário: ${nomeDoDia(diaPrioritario)}`}
               </span>
             )}
-            <div className="mt-2 flex items-center justify-between">
-              <div className="flex min-w-0 items-center text-[11px] tabular-nums text-muted-foreground">
+            <div className="mt-3 flex items-center justify-between border-t border-border/70 pt-3">
+              <div className="flex min-w-0 items-center text-[12px] tabular-nums text-muted-foreground">
                 {task.due_date && (
-                  <span className="mr-2 flex items-center">
+                  <span className="mr-3 flex items-center">
                     <Clock className="mr-1 h-3 w-3" aria-hidden="true" />
                     {formatDate(task.due_date)}
                   </span>
@@ -377,8 +384,8 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
                 )}
               </div>
               <div className="flex shrink-0 items-center">
-                <Avatar className="h-6 w-6" title={task.assignee?.full_name || "Sem responsável"}>
-                  <AvatarFallback className="bg-muted text-[11px] font-medium text-muted-foreground">
+                <Avatar className="h-7 w-7" title={task.assignee?.full_name || "Sem responsável"}>
+                  <AvatarFallback className="bg-muted text-[11px] font-semibold text-foreground">
                     {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
                   </AvatarFallback>
                 </Avatar>
@@ -1250,13 +1257,13 @@ export default function Kanban() {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className={juntar(botao.secundario, "px-2.5")}
+            className={juntar(botao.secundario, "px-3.5")}
             aria-label={`Mais filtros, ${filtrosNoBotao} ${filtrosNoBotao === 1 ? "ativo" : "ativos"}`}
           >
             <SlidersHorizontal className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
             <span className="hidden sm:inline">Filtros</span>
             {filtrosNoBotao > 0 && (
-              <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground">
+              <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent-solid px-1 text-[11px] font-semibold tabular-nums text-on-accent">
                 {filtrosNoBotao}
               </span>
             )}
@@ -1265,9 +1272,9 @@ export default function Kanban() {
         <PopoverContent
           align="end"
           // 16/10/2026: no celular a lista é maior (cliente e projeto entram aqui) e rola dentro da janela.
-          className={juntar("w-[calc(100vw-24px)] max-w-[360px] p-3", isMobile && "max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overscroll-contain")}
+          className={juntar("w-[calc(100vw-24px)] max-w-[380px] rounded-lg p-5", isMobile && "max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overscroll-contain")}
         >
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between">
             <p className={texto.tituloSecao}>Filtros</p>
             <button type="button" onClick={limparFiltros} disabled={!hasFilters} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
               <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Limpar
@@ -1569,7 +1576,7 @@ export default function Kanban() {
         <div
           ref={colunaDoCelular}
           data-coluna-kanban={col.id}
-          className={juntar("mt-3 min-h-[50vh] space-y-2 rounded-md pb-4", colunaDoToque === col.id && "bg-primary/5")}
+          className={juntar("mt-4 min-h-[50vh] space-y-3 rounded-md pb-4", colunaDoToque === col.id && "bg-primary/5")}
           onTouchStart={(e) => {
             const t = e.touches[0];
             toqueInicial.current = t ? { x: t.clientX, y: t.clientY } : null;
@@ -1613,7 +1620,7 @@ export default function Kanban() {
     <div className="min-w-0" ref={toque.ligarQuadro}>
       {cabecalho}
 
-      <AreaDeTrabalho principalRolavel={false} className="mt-4">
+      <AreaDeTrabalho principalRolavel={false} className="mt-6">
         {!isLoading && (tasks || []).length === 0 ? (
           <EstadoVazio
             titulo="Nenhuma tarefa ainda."
@@ -1623,7 +1630,7 @@ export default function Kanban() {
           />
         ) : (
           <div
-            className="grid min-w-0 gap-4 md:grid-cols-2 lg:h-full lg:min-h-0 lg:grid-cols-4 lg:grid-rows-[minmax(0,1fr)]"
+            className="grid min-w-0 gap-4 sm:gap-5 md:grid-cols-2 lg:h-full lg:min-h-0 lg:grid-cols-4 lg:grid-rows-[minmax(0,1fr)]"
             data-tour="kanban-board"
           >
             {columns.map((col) => {
@@ -1633,35 +1640,44 @@ export default function Kanban() {
                   key={col.id}
                   aria-label={col.title}
                   data-coluna-kanban={col.id}
-                  className={juntar("flex min-w-0 flex-col rounded-lg bg-muted/50 p-2 lg:min-h-0", colunaDoToque === col.id && "bg-primary/5 ring-2 ring-primary/30")}
+                  className={juntar("flex min-w-0 flex-col rounded-lg bg-muted/70 p-2.5 lg:min-h-0", colunaDoToque === col.id && "bg-primary/5 ring-2 ring-primary/30")}
                   onDragOver={isClient ? undefined : (e) => e.preventDefault()}
                   onDrop={isClient ? undefined : () => handleDrop(col.id)}
                 >
-                  <div className="mb-2 flex h-8 shrink-0 items-center pl-2">
-                    <span aria-hidden="true" className={`mr-2 h-1.5 w-1.5 rounded-full ${col.dotColor}`} />
-                    <h2 className={juntar(texto.rotulo, "text-foreground")}>{col.title}</h2>
-                    <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-card px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{isLoading ? "" : colTasks.length}</span>
-                    {!isClient && (
-                      <button
-                        type="button"
-                        onClick={() => setCreateStatus(col.id)}
-                        className={juntar(botao.icone, "ml-auto h-7 w-7")}
-                        aria-label={`Nova tarefa em ${col.title}`}
-                        title={`Nova tarefa em ${col.title}`}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                  {/* Cabeçalho da coluna (rodada ousada, 15/11/2026): o total em número grande e a fatia da coluna no quadro. Em andamento vai em tinta e Concluído no verde da marca. */}
+                  <div className={juntar("mb-2.5 shrink-0 rounded-md px-4 pb-4 pt-3", col.id === "doing" ? "ds-ink" : col.id === "done" ? "ds-accent" : "bg-card shadow-card")} data-cabecalho-da-coluna={col.id}>
+                    <div className="flex h-8 min-w-0 items-center">
+                      <span aria-hidden="true" className={juntar("mr-2 h-2 w-2 shrink-0 rounded-full", col.id === "doing" || col.id === "done" ? "bg-foreground" : col.dotColor)} />
+                      <h2 className="min-w-0 truncate text-[13px] font-medium leading-5 text-muted-foreground">{col.title}</h2>
+                      {!isClient && (
+                        <button
+                          type="button"
+                          onClick={() => setCreateStatus(col.id)}
+                          className={juntar(botao.icone, "ml-auto h-8 w-8 bg-muted text-foreground hover:bg-foreground hover:text-background")}
+                          aria-label={`Nova tarefa em ${col.title}`}
+                          title={`Nova tarefa em ${col.title}`}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="mt-1 flex min-h-[36px] items-baseline">
+                      <span className="text-[32px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{isLoading ? "" : colTasks.length}</span>
+                      {!isLoading && filteredTasks.length > 0 && <span className="ml-2 text-[12px] tabular-nums text-muted-foreground">de {filteredTasks.length}</span>}
+                    </p>
+                    {!isLoading && filteredTasks.length > 0 && (
+                      <ProgressBar value={colTasks.length} max={filteredTasks.length} height={6} tone={col.id === "doing" ? 1 : "current"} className="mt-2.5" label={`${col.title}: ${colTasks.length} de ${filteredTasks.length} tarefas`} />
                     )}
                   </div>
                   <RegiaoRolavel
                     rotulo={`Tarefas em ${col.title}`}
                     memoria={`kanban:coluna:${col.id}`}
-                    className="min-h-[120px] space-y-2 pb-16"
+                    className="min-h-[120px] space-y-2.5 pb-16"
                   >
                     {isLoading ? (
                       <Carregando rotulo={`Carregando ${col.title}`} linhas={3} />
                     ) : colTasks.length === 0 ? (
-                      <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-border/80 px-3 text-center">
+                      <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-foreground/15 px-3 text-center">
                         <p className={texto.auxiliar}>{isClient ? "Sem tarefas." : "Sem tarefas. Arraste para cá."}</p>
                       </div>
                     ) : (
