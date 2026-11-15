@@ -433,13 +433,50 @@ export default function AdminHoras() {
       />
     );
   } else {
-    corpo = (
-      <>
-        <Secao
-          titulo="Escalar, segurar ou contratar"
-          descricao={decisao.titulo}
-          ajuda={<AjudaDaDecisao carga={carga} />}
-          acao={
+    // v4 (15/11/2026): no celular os controles descem para dentro da seção; ao lado do título eles
+    // cortavam o nome dela pela metade.
+    const recortes = (
+            <div className="flex min-w-0 flex-wrap items-center sm:justify-end">
+              <SeletorCompacto
+                rotulo="Recorte"
+                valor={chaveDoRecorte}
+                onEscolher={(v) => setRecorte(v)}
+                opcoes={[
+                  { valor: "mes", rotulo: "Mês" },
+                  { valor: "semana", rotulo: "Semana" },
+                  { valor: "dia", rotulo: "Dia" },
+                ]}
+                className="mb-1 mr-2"
+              />
+              {chaveDoRecorte === "semana" && (
+                <select aria-label="Semana" value={semanaUsada} onChange={(e) => setSemana(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto rounded-full px-3")}>
+                  {semanas.map((s) => (
+                    <option key={s} value={s}>
+                      Semana de {s.slice(8, 10)}/{s.slice(5, 7)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {chaveDoRecorte === "dia" && diasComTempo.length > 0 && (
+                <select aria-label="Dia" value={dia} onChange={(e) => setDia(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto rounded-full px-3")}>
+                  {diasComTempo.map((d) => (
+                    <option key={d} value={d}>
+                      {d.slice(8, 10)}/{d.slice(5, 7)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <SeletorCompacto
+                rotulo="Período do dia"
+                valor={periodo}
+                onEscolher={(v) => setPeriodo(v)}
+                opcoes={[{ valor: "todos", rotulo: "Dia todo" }].concat(PERIODOS.map((p) => ({ valor: p.chave, rotulo: p.rotulo })))}
+                modo={telaLarga ? undefined : "lista"}
+                className="mb-1"
+              />
+            </div>
+    );
+    const campoDaCarga = (
             <label className="inline-flex items-center text-[12px] text-muted-foreground">
               <span className="mr-2">Carga mensal (h){pessoasNoFiltro > 1 ? ` × ${pessoasNoFiltro}` : ""}</span>
               <input
@@ -456,9 +493,17 @@ export default function AdminHoras() {
                 className={juntar(campo, "h-8 w-20 px-2 text-right tabular-nums")}
               />
             </label>
-          }
+    );
+    corpo = (
+      <>
+        <Secao
+          titulo="Escalar, segurar ou contratar"
+          descricao={decisao.titulo}
+          ajuda={<AjudaDaDecisao carga={carga} />}
+          acao={telaLarga ? campoDaCarga : undefined}
           data-decisao={cap.decisao}
         >
+          {!telaLarga && <div className="mb-3 flex min-w-0 justify-end">{campoDaCarga}</div>}
           <div className="grid min-w-0 gap-3 sm:gap-5 lg:grid-cols-3">
           <CardSurface padded variant={cap.decisao === "escalar" ? "accent" : "ink"} className="flex min-w-0 flex-col">
             <p className="text-[13px] font-medium leading-5 text-muted-foreground">Decisão do mês</p>
@@ -541,48 +586,9 @@ export default function AdminHoras() {
           titulo="Por cliente"
           descricao={`${ordenadas.length} cliente${ordenadas.length === 1 ? "" : "s"}${rotuloDoRecorte ? ` · ${rotuloDoRecorte}` : ""}`}
           ajuda="Toque num cliente para ver as entregas por tipo e a comparação com o mês anterior e a média de 3 meses. Custo e entregas são do mês inteiro; o recorte muda só o tempo."
-          acao={
-            <div className="flex min-w-0 flex-wrap items-center justify-end">
-              <SeletorCompacto
-                rotulo="Recorte"
-                valor={chaveDoRecorte}
-                onEscolher={(v) => setRecorte(v)}
-                opcoes={[
-                  { valor: "mes", rotulo: "Mês" },
-                  { valor: "semana", rotulo: "Semana" },
-                  { valor: "dia", rotulo: "Dia" },
-                ]}
-                className="mb-1 mr-2"
-              />
-              {chaveDoRecorte === "semana" && (
-                <select aria-label="Semana" value={semanaUsada} onChange={(e) => setSemana(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto rounded-full px-3")}>
-                  {semanas.map((s) => (
-                    <option key={s} value={s}>
-                      Semana de {s.slice(8, 10)}/{s.slice(5, 7)}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {chaveDoRecorte === "dia" && diasComTempo.length > 0 && (
-                <select aria-label="Dia" value={dia} onChange={(e) => setDia(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto rounded-full px-3")}>
-                  {diasComTempo.map((d) => (
-                    <option key={d} value={d}>
-                      {d.slice(8, 10)}/{d.slice(5, 7)}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <SeletorCompacto
-                rotulo="Período do dia"
-                valor={periodo}
-                onEscolher={(v) => setPeriodo(v)}
-                opcoes={[{ valor: "todos", rotulo: "Dia todo" }].concat(PERIODOS.map((p) => ({ valor: p.chave, rotulo: p.rotulo })))}
-                modo={telaLarga ? undefined : "lista"}
-                className="mb-1"
-              />
-            </div>
-          }
+          acao={telaLarga ? recortes : undefined}
         >
+          {!telaLarga && <div className="mb-2 min-w-0">{recortes}</div>}
           {ordenadas.length === 0 ? (
             <EstadoVazio
               compacto
@@ -711,12 +717,21 @@ export default function AdminHoras() {
         descricao={dados && dados.escopo === "todos" ? "Equipe toda" : ehAdmin && pessoa && user && pessoa !== user.id ? "Uma pessoa" : "Seu tempo"}
         ajuda={<AjudaDaPagina />}
         acoes={
-          <div className="flex min-w-0 flex-wrap items-center justify-end">
-            {seletorDoMes}
-            {seletorDePessoa}
-          </div>
+          telaLarga ? (
+            <div className="flex min-w-0 flex-wrap items-center justify-end">
+              {seletorDoMes}
+              {seletorDePessoa}
+            </div>
+          ) : undefined
         }
       />
+      {/* v4 (15/11/2026): no celular os dois seletores ganham a linha deles (na linha do título ficavam cortados na borda). */}
+      {!telaLarga && (
+        <div className="flex min-w-0 items-center [&>select]:mb-0 [&>select]:min-w-0 [&>select]:max-w-none [&>select]:flex-1">
+          {seletorDoMes}
+          {seletorDePessoa}
+        </div>
+      )}
       {corpo}
     </div>
   );

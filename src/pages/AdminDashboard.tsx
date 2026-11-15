@@ -95,7 +95,6 @@ export default function AdminDashboard() {
     enabled: isAdmin,
   });
   const isTeam = ["design", "traffic", "manager"].includes(profile?.role || "");
-  const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [menuProject, setMenuProject] = useState<string | null>(null);
   const [editProject, setEditProject] = useState<any>(null);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
@@ -232,17 +231,24 @@ export default function AdminDashboard() {
   const totalDueSoon7 = dueSoon7Billing + dueSoon7Individual;
 
   const stats = [
-    { label: "Projetos Ativos", value: String(activeProjects.length), color: "bg-primary" },
-    { label: "Clientes Ativos", value: String((clients || []).filter((c: any) => c.plan_status === "active" && (c.client_type || "recurring") !== "one_off" && !isInternalClient(c)).length), color: "bg-success" },
-    { label: "Tarefas Pendentes", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
-    { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
+    { label: "Projetos", value: String(activeProjects.length), color: "bg-primary" },
+    { label: "Clientes", value: String((clients || []).filter((c: any) => c.plan_status === "active" && (c.client_type || "recurring") !== "one_off" && !isInternalClient(c)).length), color: "bg-success" },
+    { label: "Tarefas", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
+    { label: "Em revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
   ];
 
+  // Linha de apoio curta: de onde vem o valor (recorrente, projetos ou os dois). O valor cheio fica na dica.
+  const curto = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
+  const origem = (recorrente: number, projetos: number, antes?: string) => {
+    const partes = recorrente > 0 && projetos > 0 ? `${curto(recorrente)} recorrente + ${curto(projetos)} projetos` : recorrente > 0 ? "recorrente" : projetos > 0 ? "projetos" : "";
+    const linha = [antes, partes].filter(Boolean).join(" · ");
+    return linha ? <span title={`Recorrente ${fmt(recorrente)} · Projetos ${fmt(projetos)}`}>{linha}</span> : undefined;
+  };
   const financeStats = [
-    { label: "Recebido no Mês", value: fmt(totalReceivedThisMonth), color: "bg-success", sub: `Recorrente ${fmt(monthlyRevenue)} · Projetos ${fmt(individualPaidThisMonth)}` },
-    { label: "Pendente do Mês", value: fmt(totalPendingThisMonth), color: "bg-warning", sub: `Recorrente ${fmt(pendingBillsThisMonth)} · Projetos ${fmt(individualPendingThisMonth)}` },
-    { label: "Vence em 7 dias", value: fmt(totalDueSoon7), color: totalDueSoon7 > 0 ? "bg-warning" : "bg-muted-foreground", sub: `Recorrente ${fmt(dueSoon7Billing)} · Projetos ${fmt(dueSoon7Individual)}` },
-    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive", sub: `Recorrente ${fmt(overdueTotal)} · Projetos ${fmt(individualOverdue)}` },
+    { label: "Recebido", value: fmt(totalReceivedThisMonth), color: "bg-success", sub: origem(monthlyRevenue, individualPaidThisMonth, "no mês") },
+    { label: "Pendente", value: fmt(totalPendingThisMonth), color: "bg-warning", sub: origem(pendingBillsThisMonth, individualPendingThisMonth, "no mês") },
+    { label: "A vencer", value: fmt(totalDueSoon7), color: totalDueSoon7 > 0 ? "bg-warning" : "bg-muted-foreground", sub: origem(dueSoon7Billing, dueSoon7Individual, "em 7 dias") },
+    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive", sub: origem(overdueTotal, individualOverdue) },
   ];
 
   const formatDate = (d: string) => {
@@ -360,15 +366,15 @@ export default function AdminDashboard() {
     },
     {
       chart: recorrentes.length > 0 ? <ProgressBar value={recorrentesAtivos} max={recorrentes.length} striped /> : undefined,
-      hint: recorrentes.length > 0 ? `de ${recorrentes.length} recorrentes` : undefined,
+      hint: recorrentes.length > 0 ? `ativos de ${recorrentes.length} recorrentes` : undefined,
     },
     {
       chart: totalDeTarefas > 0 ? <ProgressBar value={tarefasFeitas} max={totalDeTarefas} striped tone={2} label={`${tarefasFeitas} feitas de ${totalDeTarefas}`} /> : undefined,
-      hint: totalDeTarefas > 0 ? `${tarefasFeitas} feitas de ${totalDeTarefas}` : undefined,
+      hint: totalDeTarefas > 0 ? `pendentes · ${tarefasFeitas} de ${totalDeTarefas} ${tarefasFeitas === 1 ? "feita" : "feitas"}` : undefined,
     },
     {
       chart: activeProjects.length > 0 ? <ProgressBar value={emRevisao} max={activeProjects.length} striped tone={4} /> : undefined,
-      hint: activeProjects.length > 0 ? `de ${activeProjects.length} ativos` : undefined,
+      hint: activeProjects.length > 0 ? `de ${activeProjects.length} ${activeProjects.length === 1 ? "projeto" : "projetos"}` : undefined,
     },
   ];
   const previstoNoMes = totalReceivedThisMonth + totalPendingThisMonth;
@@ -377,6 +383,26 @@ export default function AdminDashboard() {
   return (
     <div className="min-w-0 space-y-8 animate-fade-in sm:space-y-10">
       <PageHeader title={primeiroNome ? `${saudacao},` : "Dashboard"} greeting={primeiroNome || undefined} subtitle={<span className="first-letter:uppercase">{hojePorExtenso}</span>} />
+
+      {/* Quick Actions: uma linha só. No celular a faixa rola de lado por dentro (nada quebra em 4 linhas). */}
+      <div className="-mx-4 min-w-0 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden" data-tour="dash-quick-actions">
+        <div className="-m-1 flex w-max min-w-full flex-nowrap sm:w-auto sm:flex-wrap">
+          {quickActions.map((a, i) => (
+            <button
+              key={a.label}
+              onClick={a.action}
+              className={`toque-compacto m-1 inline-flex h-10 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-full pl-1.5 pr-4 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                i === 0 && isAdmin ? "bg-foreground text-background hover:bg-foreground/90" : "bg-card text-foreground shadow-card hover:bg-muted"
+              }`}
+            >
+              <span aria-hidden="true" className={`mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${i === 0 && isAdmin ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`}>
+                <a.icon className="h-3.5 w-3.5" />
+              </span>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Stats */}
       <div data-tour="dash-stats">
@@ -461,7 +487,7 @@ export default function AdminDashboard() {
               </div>
             </CardSurface>
             <Card title="Parcelas por projeto" subtitle={`${(projectPayments || []).length} ${(projectPayments || []).length === 1 ? "projeto" : "projetos"}`} collapsible={false} className="lg:col-span-2">
-              <List label="Projetos individuais">
+              <List label="Projetos individuais" divided={false}>
                 {(projectPayments || []).map((pp: any) => {
                   const paid = (pp.installments || [])
                     .filter((i: any) => i.status === "paid" || i.status === "partial")
@@ -495,13 +521,13 @@ export default function AdminDashboard() {
       {(isAdmin || isTeam) && (wallets || []).length > 0 && (
         <section className="min-w-0">
           <TituloDoBloco icone={<Wallet className="h-4 w-4" />}>Ads Wallet</TituloDoBloco>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
             {(wallets || []).map((w: any) => (
               <StatCard
                 key={w.id}
                 label={w.client?.company_name || w.client?.full_name}
                 value={fmt(Number(w.balance))}
-                icon={<Wallet className="h-4 w-4" />}
+                size="md"
                 hint={<StatusPill tone={Number(w.balance) < 100 ? "warning" : "neutral"}>{w.platform}</StatusPill>}
                 onClick={() => navigate("/financeiro")}
               />
@@ -509,24 +535,6 @@ export default function AdminDashboard() {
           </div>
         </section>
       )}
-
-      {/* Quick Actions */}
-      <div className="-m-1.5 flex flex-wrap" data-tour="dash-quick-actions">
-        {quickActions.map((a, i) => (
-          <button
-            key={a.label}
-            onClick={a.action}
-            className={`m-1.5 inline-flex h-11 cursor-pointer items-center rounded-full pl-1.5 pr-5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              i === 0 && isAdmin ? "bg-foreground text-background hover:bg-foreground/90" : "border border-border bg-card text-foreground shadow-card hover:bg-muted"
-            }`}
-          >
-            <span aria-hidden="true" className={`mr-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${i === 0 && isAdmin ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`}>
-              <a.icon className="h-4 w-4" />
-            </span>
-            {a.label}
-          </button>
-        ))}
-      </div>
 
       <Card
         as="section"
@@ -544,23 +552,22 @@ export default function AdminDashboard() {
           className="mb-4"
         />
         {loadingProjects ? (
-          <div className="py-8 text-center text-[13px] text-muted-foreground">Carregando...</div>
+          <div aria-busy="true" className="space-y-2">{[0, 1, 2, 3].map((n) => <div key={n} className="h-[60px] rounded-lg bg-muted/60" />)}</div>
         ) : filteredProjects.length === 0 ? (
           <EmptyState icon={<Briefcase className="h-5 w-5" />} title="Nenhum projeto encontrado." />
         ) : (
-          <div className="-mx-3 min-w-0 divide-y divide-border/60">
+          <div className="-mx-3 min-w-0">
             {filteredProjects.map((p: any) => {
-              const isHovered = hoveredProject === p.id;
               const showMenu = menuProject === p.id;
               const projectTeam = teamByProject[p.id] || [];
               const cliente = p.client?.company_name || p.client?.full_name;
               return (
                 <div
                   key={p.id}
-                  className={`relative cursor-pointer rounded-lg px-3 py-4 transition-colors hover:bg-muted/60 ${showMenu ? "z-50" : ""}`}
+                  className={`relative cursor-pointer rounded-lg px-3 py-3 transition-colors hover:bg-muted/60 ${showMenu ? "z-50" : ""}`}
                   onClick={() => setDrawerProject(p)}
-                  onMouseEnter={() => setHoveredProject(p.id)}
-                  onMouseLeave={() => { setHoveredProject(null); setMenuProject(null); }}
+                  title={p.description || undefined}
+                  onMouseLeave={() => setMenuProject(null)}
                 >
                   <div className="flex min-w-0 items-center">
                     <span className="relative mr-3 shrink-0">
@@ -571,10 +578,10 @@ export default function AdminDashboard() {
                       <div className="flex min-w-0 flex-wrap items-center">
                         <span className="mr-2 min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{p.name}</span>
                         <Chip className="mr-1.5 max-sm:hidden">{p.project_type?.replace("_", " ")}</Chip>
-                        <Chip tone="accent">{getProjectBrand(p.project_type)}</Chip>
+                        {brandFilter === "all" && <Chip tone="accent">{getProjectBrand(p.project_type)}</Chip>}
                       </div>
                       <div className="mt-0.5 flex min-w-0 items-center">
-                        <p className="min-w-0 truncate text-[12px] leading-4 text-muted-foreground">{cliente}</p>
+                        <p className="min-w-0 truncate text-[12px] leading-4 text-muted-foreground">{cliente}<span className="sm:hidden">{p.deadline ? ` · ${new Date(p.deadline).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}` : ""}</span></p>
                         {projectTeam.length > 0 && (
                           <span className="ml-2 hidden min-w-0 items-center text-[11px] text-muted-foreground sm:flex">
                             <Users className="mr-1 h-3 w-3 shrink-0" />
@@ -590,10 +597,13 @@ export default function AdminDashboard() {
                       </div>
                       <ProgressBar value={Number(p.progress) || 0} max={100} height={6} label={`${p.progress}% concluído`} />
                     </div>
-                    <div className="mr-1 hidden shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-[12px] tabular-nums text-muted-foreground sm:flex">
-                      <Clock className="mr-1.5 h-3 w-3" />
-                      {formatDate(p.deadline)}
-                    </div>
+                    {p.deadline && (
+                      <div className="mr-1 hidden shrink-0 items-center text-[12px] tabular-nums text-muted-foreground sm:flex">
+                        <Clock className="mr-1.5 h-3 w-3" />
+                        {formatDate(p.deadline)}
+                      </div>
+                    )}
+                    <span className="mr-1 shrink-0 text-[12px] font-medium tabular-nums text-muted-foreground md:hidden">{Number(p.progress) || 0}%</span>
                     {/* Editar, status, progresso e excluir mudam o projeto: só o admin pode (RLS). */}
                     {isAdmin && (
                     <button
@@ -634,12 +644,6 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
-                  {isHovered && !showMenu && p.description && (
-                    <div className="mt-3 flex items-center justify-between pl-[52px] animate-fade-in">
-                      <p className="mr-3 min-w-0 text-[12px] leading-[18px] text-muted-foreground">{p.description}</p>
-                      <button className="shrink-0 text-[12px] font-medium text-primary hover:underline">Abrir</button>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -651,8 +655,8 @@ export default function AdminDashboard() {
       {isAdmin && (clientsRenewalAlert.length > 0 || stalledProjects.length > 0) && (
         <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
           {clientsRenewalAlert.length > 0 && (
-            <Card title="Clientes com vencimento próximo" subtitle={`${clientsRenewalAlert.length} ${clientsRenewalAlert.length === 1 ? "cliente" : "clientes"}`} collapsible={false}>
-              <List label="Clientes com vencimento próximo">
+            <Card title="Vencimento próximo" subtitle={`${clientsRenewalAlert.length} ${clientsRenewalAlert.length === 1 ? "cliente" : "clientes"}`} collapsible={false} className={stalledProjects.length === 0 ? "lg:col-span-2" : ""}>
+              <List label="Clientes com vencimento próximo" divided={false}>
                 {clientsRenewalAlert.map((c: any) => {
                   const renewal = new Date(c.plan_renewal_date + "T00:00:00");
                   const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
@@ -678,8 +682,8 @@ export default function AdminDashboard() {
           )}
 
           {stalledProjects.length > 0 && (
-            <Card title="Projetos sem progresso recente" subtitle={`${stalledProjects.length} ${stalledProjects.length === 1 ? "projeto" : "projetos"}`} collapsible={false}>
-              <List label="Projetos sem progresso recente">
+            <Card title="Sem progresso recente" subtitle={`${stalledProjects.length} ${stalledProjects.length === 1 ? "projeto" : "projetos"}`} collapsible={false} className={clientsRenewalAlert.length === 0 ? "lg:col-span-2" : ""}>
+              <List label="Projetos sem progresso recente" divided={false}>
                 {stalledProjects.map((p: any) => {
                   const daysSince = Math.floor((now.getTime() - new Date(p.updated_at || p.created_at).getTime()) / 86400000);
                   return (
@@ -708,17 +712,17 @@ export default function AdminDashboard() {
             houve. */}
         <Card title="Atualizações recentes" collapsible={false}>
           {loadingActivity ? (
-            <div className="py-4 text-center text-[13px] text-muted-foreground">Carregando...</div>
+            <div aria-busy="true" className="space-y-2">{[0, 1, 2, 3].map((n) => <div key={n} className="h-[52px] rounded-lg bg-muted/60" />)}</div>
           ) : (activity || []).length === 0 ? (
             <EmptyState compact title="Nenhuma atualização." />
           ) : (
-            <div className="-mx-3 divide-y divide-border/60">
+            <div className="-mx-3">
               {(activity || []).map((entrada) => (
                 /* items-start + min-w-0 + quebra de palavra: no celular a linha
                    longa quebrava desalinhada do ponto colorido. */
                 <div
                   key={entrada.id}
-                  className="flex min-w-0 cursor-pointer items-start rounded-lg px-3 py-3.5 transition-colors hover:bg-muted/60"
+                  className="flex min-w-0 cursor-pointer items-start rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/60"
                   onClick={() => {
                     if (entrada.origin === "entrega") navigate("/relatorios");
                     else if (entrada.origin === "avulso" || entrada.origin === "ciclo") navigate("/ciclo");
@@ -729,9 +733,8 @@ export default function AdminDashboard() {
                   <div className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full mr-3 ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
                   <div className="min-w-0 flex-1">
                     <p className="break-words text-[13px] leading-5 text-foreground">{entrada.message}</p>
-                    <p className="mt-1.5 flex items-center text-[12px] text-muted-foreground">
-                      <Chip className="mr-2">{entrada.originLabel}</Chip>
-                      {new Date(entrada.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground">
+                      {entrada.originLabel} · {new Date(entrada.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
                 </div>
@@ -744,7 +747,7 @@ export default function AdminDashboard() {
           {urgentTasks.length === 0 ? (
             <EmptyState compact title="Nenhuma tarefa urgente." />
           ) : (
-            <List label="Tarefas urgentes">
+            <List label="Tarefas urgentes" divided={false}>
               {urgentTasks.map((t: any) => (
                 <ListRow
                   key={t.id}

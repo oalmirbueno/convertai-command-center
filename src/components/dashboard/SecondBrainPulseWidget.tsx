@@ -78,9 +78,11 @@ export default function SecondBrainPulseWidget() {
   return (
     <Card
       title="Segundo Cérebro"
-      collapsible={false}
+      collapsible="dashboard:segundo-cerebro"
       subtitle={
-        data ? (
+        data && !data.configured ? (
+          "Bridge não configurado"
+        ) : data ? (
           <span className="inline-flex items-center">
             {data.configured && <StatusPill tone="success" pulse className="mr-2">ao vivo</StatusPill>}
             Atualizado {relTime(data.fetched_at)}
@@ -88,9 +90,8 @@ export default function SecondBrainPulseWidget() {
         ) : undefined
       }
       action={
-        <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching} className="h-9 rounded-full px-3.5 text-[12px]">
-          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-          Atualizar
+        <Button size="icon" variant="ghost" onClick={() => refetch()} disabled={isFetching} aria-label="Atualizar" title="Atualizar" className="h-9 w-9 rounded-full">
+          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
         </Button>
       }
     >
@@ -103,8 +104,8 @@ export default function SecondBrainPulseWidget() {
       )}
 
       {data && !data.configured && (
-        <p className="text-[12px] text-muted-foreground">
-          Bridge não configurado. Defina os segredos <code className="font-mono">SECOND_BRAIN_GITHUB_*</code>.
+        <p className="text-[12px] leading-4 text-muted-foreground [overflow-wrap:anywhere]">
+          Defina os segredos <code className="font-mono">SECOND_BRAIN_GITHUB_*</code>.
         </p>
       )}
 
@@ -154,7 +155,7 @@ export default function SecondBrainPulseWidget() {
                   rel="noreferrer"
                   className="block rounded-sm px-2 py-1.5 text-[12px] leading-[18px] transition-colors hover:bg-card"
                 >
-                  <span className="font-mono text-primary">{c.short}</span>{" "}
+                  <span className="font-mono text-muted-foreground">{c.short}</span>{" "}
                   <span className="text-foreground line-clamp-1">{c.message}</span>
                   <span className="block text-[11px] text-muted-foreground">
                     {c.author ?? "-"} · {relTime(c.committed_at)}

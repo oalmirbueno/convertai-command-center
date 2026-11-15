@@ -358,7 +358,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   ) : (
     <div className="min-w-0 space-y-3">
       <Painel semEspaco>
-        <ul className="divide-y divide-border/60">
+        <ul className="py-1.5">
           {filtrados.map((c) => {
             const client = clientById(c.client_id);
             const arquivado = c.status === "completed" && !!c.arquivado_em;
@@ -374,7 +374,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                   type="button"
                   tabIndex={-1}
                   onClick={() => void abrirContrato(c)}
-                  className={juntar(toqueCompacto, "flex min-w-0 flex-1 items-start px-4 py-4 text-left focus-visible:outline-none sm:px-6 sm:py-5")}
+                  className={juntar(toqueCompacto, "flex min-w-0 flex-1 items-start px-4 py-3.5 text-left focus-visible:outline-none sm:px-6 sm:py-4")}
                   data-linha-do-contrato=""
                 >
                   {/* Rodada ousada (15/11/2026): ícone num círculo (sólido quando assinado), título maior e o estado em pílula. */}
@@ -416,7 +416,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                   </span>
                 </button>
                 <div className="flex shrink-0 items-center [&>*+*]:ml-1.5 sm:[&>*+*]:ml-2">
-                  <button type="button" onClick={() => void abrirContrato(c)} className={botao.secundario} aria-label={`Abrir ${c.title}`}>
+                  <button type="button" onClick={() => void abrirContrato(c)} className={juntar(botao.secundario, "max-sm:w-9 max-sm:border-transparent max-sm:bg-transparent max-sm:px-0 max-sm:text-muted-foreground")} aria-label={`Abrir ${c.title}`}>
                     <IconeDeAbrir className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                     <span className="hidden sm:inline">Abrir</span>
                   </button>
@@ -551,6 +551,14 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
         }
       />
 
+      {/* v4 (15/11/2026): a barra de busca e filtros reserva o lugar enquanto a lista chega (antes ela aparecia depois e empurrava tudo: CLS 0,14 no celular). */}
+      {isLoading && contracts.length === 0 && !contratoAberto && !vistaModelos && (
+        <div aria-hidden="true" className="-m-1 flex flex-wrap items-center [&>*]:m-1" data-esqueleto-da-barra="">
+          <div className="h-9 flex-1 basis-full animate-pulse rounded-full bg-muted sm:basis-[240px]" />
+          <div className="h-9 w-36 animate-pulse rounded-full bg-muted" />
+          <div className="h-9 w-36 animate-pulse rounded-full bg-muted" />
+        </div>
+      )}
       {contracts.length > 0 && !contratoAberto && !vistaModelos && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
           <CampoDeBusca
