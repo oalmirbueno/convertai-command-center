@@ -110,3 +110,16 @@ describe("tela", () => {
     expect(ler("src/pages/AdminFinanceiro.tsx")).toContain('if (type === "extra") return "EXT";');
   });
 });
+
+describe("financeiro mostra o que vence depois do mês", () => {
+  const FIN = readFileSync("src/pages/AdminFinanceiro.tsx", "utf8");
+  it("a visão do mês tem a lista dos próximos meses, com o mesmo Pagar", () => {
+    expect(FIN).toContain('titulo="A receber nos próximos meses"');
+    expect(FIN).toContain("{aReceberDepois.map(linhaAReceber)}");
+    expect(FIN).toContain("{allPending.map(linhaAReceber)}");
+    expect(FIN).toContain("data.getFullYear() * 12 + data.getMonth() > selYear * 12 + selMonth");
+  });
+  it("o saldo de um pagamento parcial de extra continua ligado ao extra", () => {
+    expect(FIN).toContain("extra_id: (currentBill as any).extra_id");
+  });
+});
