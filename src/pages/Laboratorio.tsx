@@ -1,15 +1,16 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Brush, FolderOpen, Home, Maximize2, Minimize2, Palette, Workflow } from "lucide-react";
-import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import Etapas, { type ItemDeEtapa } from "@/components/sistema/Etapas";
 import { Carregando } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, espaco, juntar, larguraDaMesa } from "@/components/sistema/estilos";
+import { espaco, juntar, larguraDaMesa, texto } from "@/components/sistema/estilos";
 import { useModoFoco } from "@/lib/modoFoco";
 import { useSemRolagemDaPagina } from "@/lib/laboratorio/semRolagemDaPagina";
 import { useClientesDoLab } from "@/components/laboratorio/Seletores";
 import { ChipDeCreditos } from "@/components/laboratorio/CreditosDoLab";
+import { botaoEmCirculo } from "@/components/laboratorio/visual";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import "@/components/laboratorio/telaCheiaDoLab.css";
 
@@ -118,7 +119,7 @@ export default function Laboratorio() {
     }
   };
 
-  const itens: ItemDeEtapa[] = ABAS_DO_LABORATORIO.map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: ICONES[a.valor], ajuda: AJUDAS[a.valor], dados: { "data-aba-do-lab": a.valor } }));
+  const itens: ItemDeEtapa[] = ABAS_DO_LABORATORIO.map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: ICONES[a.valor], dica: AJUDAS[a.valor], dados: { "data-aba-do-lab": a.valor } }));
 
   return (
     <div
@@ -127,22 +128,36 @@ export default function Laboratorio() {
       data-pagina-laboratorio=""
       data-tela-cheia={cheia ? "" : undefined}
     >
-      <CabecalhoDePagina
-        titulo="Laboratório"
-        ajuda="Trabalhos avulsos com ou sem cliente, com a inteligência das mesas. Nada gera sem o custo à vista e o seu confirmar; o que sai fica em Arquivos e não entra na Mesa do cliente."
-        aoLado={<Etapas itens={itens} valor={aba} onEscolher={(v) => ir(v as Aba)} rotulo="Abas do Laboratório" soIcone />}
-        acoes={
-          <>
-            {/* Créditos do Laboratório (20/10): carteira + saldo; abre a janela com carregar e extrato. */}
-            <ChipDeCreditos />
-            {noCanvas ? null : (
-              <button type="button" className={botao.icone} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia} data-tela-cheia-do-lab="">
-                {cheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
-              </button>
-            )}
-          </>
-        }
-      />
+      {/*
+        Cabeçalho (v4, 15/11/2026): sobretítulo + título, as abas com ícone e nome sempre à vista num trilho
+        em pílula (antes só o ícone) e, à direita, créditos e tela cheia em círculos. No celular as abas descem
+        para a linha de baixo e rolam por dentro; nada muda de altura depois de carregar.
+      */}
+      <header className="flex min-w-0 flex-wrap items-center" data-cabecalho-do-lab="">
+        <div className="order-1 mr-3 min-w-0 flex-1 lg:flex-none">
+          <p className={juntar(texto.etiqueta, "truncate uppercase tracking-[0.08em] text-muted-foreground")}>Criação livre</p>
+          <div className="flex min-w-0 items-center">
+            <h1 className={juntar(texto.tituloPagina, "min-w-0 truncate font-medium")}>Laboratório</h1>
+            <AjudaRecolhida className="ml-2">
+              Trabalhos avulsos com ou sem cliente, com a inteligência das mesas. Nada gera sem o custo à vista e o seu confirmar; o que sai fica em Arquivos e não entra na Mesa do cliente. {AJUDAS[aba]}
+            </AjudaRecolhida>
+          </div>
+        </div>
+        <div className="order-2 ml-auto flex shrink-0 items-center lg:order-3" data-acoes-do-cabecalho="">
+          {/* Créditos do Laboratório (20/10): carteira + saldo; abre a janela com carregar e extrato. */}
+          <ChipDeCreditos />
+          {noCanvas ? null : (
+            <button type="button" className={juntar(botaoEmCirculo, "ml-2")} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia} data-tela-cheia-do-lab="">
+              {cheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
+            </button>
+          )}
+        </div>
+        <div className="order-3 mt-3 w-full min-w-0 lg:order-2 lg:ml-5 lg:mt-0 lg:w-auto lg:flex-1">
+          <div className="inline-flex max-w-full rounded-full bg-card p-1 shadow-card" data-trilho-das-abas="">
+            <Etapas itens={itens} valor={aba} onEscolher={(v) => ir(v as Aba)} rotulo="Abas do Laboratório" />
+          </div>
+        </div>
+      </header>
       <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo" />}>
         {aba === "inicio" && <AbaInicio clienteId={clienteId} onCliente={mudarCliente} clientes={clientes} onAbrirProjeto={(id) => abrirProjeto(id)} />}
         {aba === "projetos" && <AbaProjetos projetoAberto={projeto} onAbrir={abrirProjeto} clienteId={clienteId} clientes={clientes} telaCheia={cheia} onTelaCheia={setCheia} />}

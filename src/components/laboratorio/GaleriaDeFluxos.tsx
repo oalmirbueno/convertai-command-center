@@ -28,6 +28,7 @@ import {
 import { CampoDeBusca, Carregando, botao, juntar, superficie, texto, toqueCompacto } from "@/components/sistema";
 import { CATEGORIA_SEM_NOME, type FluxoDaGaleria } from "@/lib/laboratorio/api";
 import { TIPOS_DE_NO, type CanvasDoLab } from "@/lib/laboratorio/nos";
+import { CirculoDoIcone, ZonaVazia, botaoDeTinta, pastelDe, tom } from "./visual";
 
 /**
  * Galeria de fluxos da Início (20/10/2026, pedido do dono: "fluxos mais
@@ -119,8 +120,8 @@ export function filtrarFluxos(fluxos: FluxoDaGaleria[], aba: AbaDaGaleria, busca
 }
 
 /** Miniatura do fluxo: cada nó um bloco na cor do tipo, ligações em curva. */
-export function MiniaturaDoFluxo({ canvas }: { canvas: CanvasDoLab }) {
-  if (!canvas.nos.length) return <div className={juntar(superficie.poco, "h-24")} aria-hidden="true" />;
+export function MiniaturaDoFluxo({ canvas, semFundo = false }: { canvas: CanvasDoLab; semFundo?: boolean }) {
+  if (!canvas.nos.length) return <div className={juntar(semFundo ? "" : superficie.poco, "h-24")} aria-hidden="true" />;
   const L = 200;
   const A = 64;
   const xs = canvas.nos.map((n) => n.x);
@@ -136,7 +137,7 @@ export function MiniaturaDoFluxo({ canvas }: { canvas: CanvasDoLab }) {
   };
   const traco = Math.max(5, larg / 150);
   return (
-    <svg viewBox={`0 0 ${larg} ${alt}`} className={juntar(superficie.poco, "block h-24 w-full")} preserveAspectRatio="xMidYMid meet" aria-hidden="true" data-miniatura-do-fluxo="">
+    <svg viewBox={`0 0 ${larg} ${alt}`} className={juntar(semFundo ? "" : superficie.poco, "block h-24 w-full")} preserveAspectRatio="xMidYMid meet" aria-hidden="true" data-miniatura-do-fluxo="">
       {canvas.ligacoes.map((l) => {
         const a = pos(l.de);
         const b = pos(l.para);
@@ -157,20 +158,35 @@ export function MiniaturaDoFluxo({ canvas }: { canvas: CanvasDoLab }) {
   );
 }
 
+/**
+ * Cartão do fluxo (v4, 15/11/2026): a capa é um bloco pastel na cor da categoria, de altura fixa, com a
+ * etiqueta da categoria em cima e a miniatura do fluxo dentro; embaixo, ícone em círculo, nome, descrição
+ * em até duas linhas, a contagem de nós numa pílula e o "Usar fluxo" em botão de tinta.
+ */
 function CartaoDoFluxo({ f, usando, onUsar }: { f: FluxoDaGaleria; usando: string | null; onUsar: (id: string) => void }) {
   const Icone = ICONES_DO_TEMPLATE[f.icone] || Workflow;
   const nos = f.canvas.nos.length;
+  const cor = pastelDe(f.oficial ? f.categoria : "pessoal");
   return (
-    <article className={juntar(superficie.painel, "flex min-w-0 flex-col p-4 sm:p-5")} data-template={f.id} data-categoria={f.categoria}>
-      <MiniaturaDoFluxo canvas={f.canvas} />
-      <div className="mt-3 flex min-w-0 items-center">
-        <Icone className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <h3 className={juntar(texto.corpo, "min-w-0 truncate font-medium")} title={f.nome}>{f.nome}</h3>
+    <article className={juntar(superficie.painel, "flex min-w-0 flex-col p-3")} data-template={f.id} data-categoria={f.categoria}>
+      <div className="relative min-w-0 overflow-hidden rounded-[18px] px-2 pb-1 pt-8" style={{ backgroundColor: tom(cor, 0.14) }}>
+        <span className="absolute left-2.5 top-2.5 inline-flex h-[22px] max-w-[70%] items-center rounded-full bg-card px-2 text-[11px] font-medium leading-none text-foreground">
+          <span className="truncate">{f.oficial ? f.categoria : "Seu fluxo"}</span>
+        </span>
+        <MiniaturaDoFluxo canvas={f.canvas} semFundo />
       </div>
-      <p className={juntar(texto.auxiliar, "mt-1 line-clamp-2 min-h-[32px]")} title={f.descricao || undefined}>{f.descricao}</p>
-      <div className="mt-auto flex min-w-0 items-center justify-between pt-3">
-        <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>{nos} {nos === 1 ? "nó" : "nós"}</span>
-        <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-2.5")} onClick={() => onUsar(f.id)} disabled={!!usando} data-usar-fluxo={f.id}>
+      <div className="mt-3 flex min-w-0 items-center px-1.5">
+        <CirculoDoIcone tamanho="sm" cor={cor} className="mr-2.5">
+          <Icone className="h-4 w-4" />
+        </CirculoDoIcone>
+        <h3 className="min-w-0 truncate text-[15px] font-semibold leading-5 text-foreground" title={f.nome}>{f.nome}</h3>
+      </div>
+      <p className={juntar(texto.auxiliar, "mt-1.5 line-clamp-2 min-h-[32px] px-1.5")} title={f.descricao || undefined}>{f.descricao}</p>
+      <div className="mt-auto flex min-w-0 items-center justify-between px-1.5 pb-1.5 pt-3">
+        <span className="inline-flex h-6 min-w-0 items-center rounded-full bg-muted px-2.5 text-[11px] font-medium tabular-nums text-foreground">
+          <span className="truncate">{nos} {nos === 1 ? "nó" : "nós"}</span>
+        </span>
+        <button type="button" className={juntar(botaoDeTinta, "ml-2 h-8 px-3.5")} onClick={() => onUsar(f.id)} disabled={!!usando} data-usar-fluxo={f.id}>
           {usando === f.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
           Usar fluxo
         </button>
@@ -187,14 +203,14 @@ function Chip({ ativo, icone: Icone, rotulo, total, onClick, dados }: { ativo: b
       aria-pressed={ativo}
       className={juntar(
         toqueCompacto,
-        "mb-2 mr-2 inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[12px] font-medium transition-colors",
-        ativo ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+        "mb-2 mr-2 inline-flex h-9 shrink-0 items-center rounded-full pl-3 pr-1.5 text-[13px] font-medium transition-colors",
+        ativo ? "bg-foreground text-background" : "bg-card text-foreground shadow-card hover:bg-muted",
       )}
       {...dados}
     >
       <Icone className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
       {rotulo}
-      <span className={juntar(texto.etiqueta, "ml-1.5 tabular-nums opacity-70")}>{total}</span>
+      <span className={juntar("ml-2 inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums", ativo ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>{total}</span>
     </button>
   );
 }
@@ -227,12 +243,14 @@ export default function GaleriaDeFluxos({
     <section className="flex min-h-0 min-w-0 flex-col lg:h-full" aria-label="Fluxos" data-galeria-de-fluxos="">
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between">
         <h2 className={juntar(texto.tituloSecao, "mb-2 mr-3 flex items-center")}>
-          <LayoutTemplate className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <CirculoDoIcone tamanho="sm" className="mr-2.5">
+            <LayoutTemplate className="h-4 w-4" />
+          </CirculoDoIcone>
           Fluxos
         </h2>
         <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar fluxo" rotulo="Buscar fluxo" className="mb-2 w-full sm:w-56" />
       </div>
-      <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Categorias de fluxo">
+      <div className="scrollbar-hidden -mx-1 flex min-w-0 items-center overflow-x-auto overscroll-x-contain px-1 sm:flex-wrap sm:overflow-visible" role="group" aria-label="Categorias de fluxo">
         <Chip ativo={abaValida === "todos"} icone={LayoutGrid} rotulo="Todos" total={oficiais.length} onClick={() => setAba("todos")} dados={{ "data-chip-categoria": "todos" }} />
         {mostrarCategorias
           ? categorias.map((c) => (
@@ -254,9 +272,7 @@ export default function GaleriaDeFluxos({
             ))}
           </div>
         ) : (
-          <p className={texto.auxiliar} data-galeria-vazia="">
-            {busca.trim() ? `Nenhum fluxo com "${busca.trim()}".` : abaValida === "pessoais" ? "Você ainda não salvou fluxo. No editor, use Mais ações › Salvar como fluxo pessoal." : "Nenhum fluxo oficial ainda."}
-          </p>
+          <ZonaVazia icone={<LayoutTemplate className="h-5 w-5" />} titulo="Nenhum fluxo aqui" descricao={busca.trim() ? `Nenhum fluxo com "${busca.trim()}".` : abaValida === "pessoais" ? "Você ainda não salvou fluxo. No editor, use Mais ações › Salvar como fluxo pessoal." : "Nenhum fluxo oficial ainda."} data-galeria-vazia="" />
         )}
       </div>
     </section>

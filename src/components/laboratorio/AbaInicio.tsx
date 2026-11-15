@@ -1,8 +1,10 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Workflow } from "lucide-react";
+import { CalendarDays, FolderOpen, Wallet, Workflow } from "lucide-react";
 import { espaco, juntar, lista as estiloDaLista, superficie, texto } from "@/components/sistema";
+import { MiniBars, ProgressBar } from "@/components/ds";
+import { usd } from "@/lib/mesa/api";
 import { textoDoErro } from "@/lib/mesa/api";
 import { chaveDosProjetos, criarProjeto, listarFluxosDaGaleria, listarProjetos, pedidoInicio, perguntasDoPedido, usarTemplate, type PerguntaGuiada, type ProjetoDoLab } from "@/lib/laboratorio/api";
 import { ATALHOS_DE_PROJETO_COMPLETO, MODELO_PADRAO_DO_LAB, ehProjetoCompleto } from "@/lib/laboratorio/nos";
@@ -11,6 +13,8 @@ import CaixaDoPedido, { ATALHOS_DA_INICIO } from "./CaixaDoPedido";
 import GaleriaDeFluxos, { ROLAGEM_DA_COLUNA } from "./GaleriaDeFluxos";
 import PerguntasGuiadas from "./PerguntasGuiadas";
 import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
+import { useCreditosDoLab } from "./CreditosDoLab";
+import { CirculoDoIcone, ZonaVazia, pastelDe, tom } from "./visual";
 
 /**
  * Início do Laboratório: uma caixa de pedido ("peça um projeto, uma arte,
@@ -47,16 +51,17 @@ function quandoMudou(iso: string): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
-/** Linha compacta de projeto recente (a coluna da direita da Início). */
+/** Linha de projeto recente (v4): miniatura quadrada de 44 px, nome, cliente e nós, e a data numa pílula à direita. */
 function LinhaDeRecente({ p, clientes, onAbrir }: { p: ProjetoDoLab; clientes: ClienteDoLab[]; onAbrir: () => void }) {
   const quando = quandoMudou(p.updated_at);
+  const cor = pastelDe(p.id);
   return (
     <li>
-      <button type="button" onClick={onAbrir} title={`Abrir ${p.nome} no canvas`} className={juntar(estiloDaLista.linha, "w-full text-left")} data-recente={p.id}>
+      <button type="button" onClick={onAbrir} title={`Abrir ${p.nome} no canvas`} className={juntar(estiloDaLista.linha, "w-full py-2 text-left")} data-recente={p.id}>
         {p.previa_url ? (
-          <img src={p.previa_url} alt="" className="mr-3 block h-9 w-9 shrink-0 rounded-md object-cover" loading="lazy" />
+          <img src={p.previa_url} alt="" width={44} height={44} className="mr-3 block h-11 w-11 shrink-0 rounded-[14px] object-cover" loading="lazy" />
         ) : (
-          <span className={juntar(superficie.poco, "mr-3 flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground")} aria-hidden="true">
+          <span className="mr-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px]" style={{ backgroundColor: tom(cor, 0.16), color: cor }} aria-hidden="true">
             <Workflow className="h-4 w-4" />
           </span>
         )}
@@ -64,11 +69,77 @@ function LinhaDeRecente({ p, clientes, onAbrir }: { p: ProjetoDoLab; clientes: C
           <span className={juntar(texto.corpo, "block truncate font-medium")}>{p.nome}</span>
           <span className={juntar(texto.auxiliar, "block truncate")}>
             {nomeDoCliente(clientes, p.client_id, p.cliente_nome || "Livre")} · {p.total_nos} {p.total_nos === 1 ? "nó" : "nós"}
-            {quando ? ` · ${quando}` : ""}
           </span>
         </span>
+        {quando ? (
+          <span className="ml-2 inline-flex h-6 shrink-0 items-center rounded-full border border-border px-2 text-[11px] font-medium tabular-nums text-muted-foreground">
+            <CalendarDays className="mr-1 h-3 w-3" aria-hidden="true" />
+            {quando}
+          </span>
+        ) : null}
       </button>
     </li>
+  );
+}
+
+/**
+ * Resumo do Laboratório (v4): dois cartões cheios lado a lado, como nas referências. O verde conta os
+ * projetos ativos, com uma barra por projeto recente (altura = nós do projeto); o de tinta mostra o saldo
+ * da carteira do Laboratório e quanto do que entrou no mês já foi gasto. Só dado que a tela já lê
+ * (projetos_listar e creditos); enquanto carrega, o lugar fica reservado com um traço.
+ */
+function ResumoDoLab({ projetos, carregando }: { projetos: ProjetoDoLab[]; carregando: boolean }) {
+  const creditos = useCreditosDoLab();
+  const c = creditos.data && creditos.data.disponivel ? creditos.data : null;
+  const ativos = projetos.filter((p) => p.status === "ativo");
+  const nos = ativos.reduce((soma, p) => soma + (p.total_nos || 0), 0);
+  const barras = ativos.slice(0, 8).map((p) => p.total_nos || 0).reverse();
+  const saldo = c ? usd(c.saldo_usd) : "";
+  const corte = saldo.lastIndexOf(",");
+  return (
+    <div className="grid min-w-0 shrink-0 grid-cols-2 gap-3" data-resumo-do-lab="">
+      <div className={juntar(superficie.painel, superficie.destaque, "flex h-[148px] min-w-0 flex-col p-4")}>
+        <div className="flex min-w-0 items-center">
+          <CirculoDoIcone tamanho="sm" tinta className="mr-2">
+            <FolderOpen className="h-4 w-4" />
+          </CirculoDoIcone>
+          <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>Projetos ativos</span>
+        </div>
+        <div className="mt-auto flex min-w-0 items-end">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[32px] font-medium leading-9 tracking-[-0.03em] tabular-nums text-foreground">{carregando ? "–" : ativos.length}</span>
+            <span className={juntar(texto.auxiliar, "block truncate")}>{carregando ? " " : `${nos} ${nos === 1 ? "nó" : "nós"} no total`}</span>
+          </span>
+          {barras.length > 1 ? <MiniBars values={barras} height={44} tone="current" highlightIndex={barras.length - 1} label={`Nós por projeto recente: ${barras.join(", ")}`} className="ml-2 w-[72px] shrink-0" /> : null}
+        </div>
+      </div>
+      <div className={juntar(superficie.painel, superficie.tinta, "flex h-[148px] min-w-0 flex-col p-4")}>
+        <div className="flex min-w-0 items-center">
+          <span className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">
+            <Wallet className="h-4 w-4" />
+          </span>
+          <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>Saldo</span>
+        </div>
+        <div className="mt-auto min-w-0">
+          <span className="block truncate text-[24px] font-medium leading-8 tracking-[-0.03em] tabular-nums text-foreground">
+            {c ? (
+              corte > 0 ? (
+                <>
+                  {saldo.slice(0, corte)}
+                  <span className="text-muted-foreground">{saldo.slice(corte)}</span>
+                </>
+              ) : (
+                saldo
+              )
+            ) : (
+              "–"
+            )}
+          </span>
+          <span className={juntar(texto.auxiliar, "mb-1.5 block truncate")}>{c ? `${usd(c.gasto_mes_usd)} gastos no mês` : " "}</span>
+          {c && c.saldo_usd + c.gasto_mes_usd > 0 ? <ProgressBar value={c.gasto_mes_usd} max={c.saldo_usd + c.gasto_mes_usd} height={6} tone={1} striped label={`${usd(c.gasto_mes_usd)} gastos no mês; ${usd(c.saldo_usd)} de saldo`} /> : <span className="block h-1.5" aria-hidden="true" />}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -216,7 +287,10 @@ export default function AbaInicio({
         />
       ) : (
       <>
-      <div className="mx-auto w-full min-w-0 max-w-[760px]">
+      <div className="mx-auto w-full min-w-0 max-w-[860px]" data-heroi-do-lab="">
+        <p className="mb-4 text-center text-[24px] font-medium leading-8 tracking-[-0.03em] text-foreground sm:mb-5 sm:text-[32px] sm:leading-10">
+          O que vamos criar <span className="text-muted-foreground">hoje?</span>
+        </p>
         <CaixaDoPedido
           ref={campoRef}
           valor={pedido}
@@ -255,15 +329,18 @@ export default function AbaInicio({
           <GaleriaDeFluxos fluxos={templates.data || []} carregando={templates.isLoading} erro={templates.isError ? textoDoErro(templates.error) : null} usando={usando} onUsar={(id) => void usar(id)} />
         </div>
         <section className="flex min-w-0 flex-col lg:min-h-0" aria-label="Projetos recentes" data-coluna-recentes="">
-          <h2 className={juntar(texto.tituloSecao, "mb-5 flex h-9 items-center")}>Recentes</h2>
+          <ResumoDoLab projetos={projetos.data || []} carregando={projetos.isLoading} />
+          <h2 className={juntar(texto.tituloSecao, "mb-2 mt-6 flex h-9 shrink-0 items-center")}>Recentes</h2>
           {recentes.length ? (
             <ul className={juntar(estiloDaLista.aberta, "space-y-0.5", ROLAGEM_DA_COLUNA)} data-rolagem-dos-recentes="">
               {recentes.map((p) => (
                 <LinhaDeRecente key={p.id} p={p} clientes={clientes} onAbrir={() => onAbrirProjeto(p.id)} />
               ))}
             </ul>
+          ) : projetos.isLoading ? (
+            <p className={texto.auxiliar}>Lendo os projetos…</p>
           ) : (
-            <p className={texto.auxiliar}>{projetos.isLoading ? "Lendo os projetos…" : "Os projetos que você abrir aparecem aqui."}</p>
+            <ZonaVazia icone={<Workflow className="h-5 w-5" />} titulo="Nada por aqui ainda" descricao="Os projetos que você abrir aparecem aqui." className="py-8" />
           )}
         </section>
       </div>

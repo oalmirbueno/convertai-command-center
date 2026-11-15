@@ -1,6 +1,8 @@
 import { forwardRef, type ReactNode } from "react";
 import { ArrowUp, Brush, Clapperboard, CreditCard, Globe, Images, ListChecks, Loader2, Megaphone, Presentation, Rocket, Route, ShoppingBag, Sparkles, SquarePen, Store, type LucideIcon } from "lucide-react";
 import { botao, campoTexto, juntar, superficie } from "@/components/sistema";
+import { ATALHOS_DE_PROJETO_COMPLETO } from "@/lib/laboratorio/nos";
+import { CirculoDoIcone, pastelDe } from "./visual";
 import { SeletorDeCliente, SeletorDeModelo, type ClienteDoLab } from "./Seletores";
 
 /**
@@ -63,13 +65,39 @@ interface Props {
 }
 
 const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPedido(p, ref) {
-  const atalhos = (
-    <div className={juntar("flex min-w-0 flex-wrap", p.compacta ? "items-center" : "mt-2 justify-center")} role="group" aria-label={p.compacta ? "Atalhos do Canvas Studio" : "Atalhos do pedido"}>
+  // Canvas Studio (compacta): ícones em fila, o nome no title. Início (v4, 15/11/2026): cada atalho é uma
+  // pílula com o ícone em círculo e o NOME à vista (antes era só o ícone e ninguém sabia o que era); os de
+  // projeto completo levam o círculo de tinta. No celular a fila rola de lado por dentro, numa linha só.
+  const atalhos = p.compacta ? (
+    <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Atalhos do Canvas Studio">
       {p.atalhos.map((a) => {
         const I = a.icone;
         return (
-          <button key={a.id} type="button" className={juntar(botao.icone, p.compacta ? "h-8 w-8" : "m-0.5")} aria-label={a.rotulo} title={a.rotulo} data-atalho={a.id} onClick={() => p.onAtalho(a)}>
+          <button key={a.id} type="button" className={juntar(botao.icone, "h-8 w-8")} aria-label={a.rotulo} title={a.rotulo} data-atalho={a.id} onClick={() => p.onAtalho(a)}>
             <I className="h-4 w-4" aria-hidden="true" />
+          </button>
+        );
+      })}
+    </div>
+  ) : (
+    <div className="scrollbar-hidden -mx-1 mt-4 flex min-w-0 items-center overflow-x-auto overscroll-x-contain px-1 pb-1 sm:flex-wrap sm:justify-center sm:overflow-visible" role="group" aria-label="Atalhos do pedido">
+      {p.atalhos.map((a) => {
+        const I = a.icone;
+        const completo = ATALHOS_DE_PROJETO_COMPLETO.indexOf(a.id) >= 0;
+        return (
+          <button
+            key={a.id}
+            type="button"
+            className="toque-compacto mb-2 mr-2 inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-full bg-card pl-1 pr-4 text-[13px] font-medium text-foreground shadow-card transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={a.rotulo}
+            title={completo ? `${a.rotulo}: projeto completo, do zero até pôr no ar` : a.rotulo}
+            data-atalho={a.id}
+            onClick={() => p.onAtalho(a)}
+          >
+            <CirculoDoIcone tamanho="sm" tinta={completo} cor={completo ? undefined : pastelDe(a.id)} className="mr-2">
+              <I className="h-4 w-4" />
+            </CirculoDoIcone>
+            {a.rotulo}
           </button>
         );
       })}
@@ -83,12 +111,12 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
         p.onEnviar();
       }}
     >
-      <div className={juntar(superficie.painel, "min-w-0", p.compacta ? "px-2 py-1.5" : "p-3")}>
+      <div className={juntar(superficie.painel, "min-w-0", p.compacta ? "px-2 py-1.5" : "rounded-[28px] p-4 sm:p-5")}>
         <textarea
           ref={ref}
           aria-label={p.rotulo}
           rows={p.compacta ? 1 : undefined}
-          className={juntar(campoTexto, "resize-none border-0 bg-transparent px-1 focus-visible:ring-0 focus-visible:ring-offset-0", p.compacta ? "min-h-[36px] text-[14px]" : "min-h-[96px] text-[15px]")}
+          className={juntar(campoTexto, "resize-none border-0 bg-transparent px-1 focus-visible:ring-0 focus-visible:ring-offset-0", p.compacta ? "min-h-[36px] text-[14px]" : "min-h-[84px] text-[15px] leading-6")}
           placeholder={p.placeholder}
           value={p.valor}
           onChange={(e) => p.onMudar(e.target.value)}
@@ -109,7 +137,7 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
             {p.compacta ? atalhos : null}
             {p.extra}
           </div>
-          <button type="submit" className={juntar(botao.primario, "ml-2 shrink-0", p.compacta ? "h-8 w-8 px-0" : "h-9 w-9 px-0")} disabled={p.enviando || !p.valor.trim()} aria-label="Enviar o pedido" title={p.tituloDoEnviar} data-enviar-pedido="">
+          <button type="submit" className={juntar(botao.primario, "ml-2 shrink-0", p.compacta ? "h-8 w-8 px-0" : "h-11 w-11 bg-foreground px-0 text-background hover:bg-foreground/85")} disabled={p.enviando || !p.valor.trim()} aria-label="Enviar o pedido" title={p.tituloDoEnviar} data-enviar-pedido="">
             {p.enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
