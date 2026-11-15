@@ -271,7 +271,8 @@ export default function AprovacoesExplicadas({
     <Secao
       nivel={3}
       titulo="Pedidos de aprovação"
-      descricao={`${ativas.length} ${ativas.length === 1 ? "pedido" : "pedidos"}${vencidas.length ? ` · ${vencidas.length} ${vencidas.length === 1 ? "vencido" : "vencidos"}` : ""}`}
+      // v4 (15/11, passada estrutural): a mesa já diz "1 de N"; a linha de apoio só aparece quando há vencidos (ou nenhum ativo).
+      descricao={vencidas.length || ativas.length === 0 ? `${ativas.length} ${ativas.length === 1 ? "pedido" : "pedidos"}${vencidas.length ? ` · ${vencidas.length} ${vencidas.length === 1 ? "vencido" : "vencidos"}` : ""}` : undefined}
       ajuda="Um pedido por vez. Aprovar, pedir ajuste (diga o quê) ou rejeitar; decidiu, entra o próximo. O que for executado depois do sim é exatamente o que está no cartão: mudou o plano, nasce outra versão."
     >
       {ativas.length > 0 && <MesaDeDecisao

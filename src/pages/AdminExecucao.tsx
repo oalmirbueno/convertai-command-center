@@ -1296,6 +1296,9 @@ export default function AdminExecucao() {
   const COR_DO_ESTADO: Record<string, string> = {
     done: "bg-success", blocked: "bg-destructive", review: "bg-warning", awaiting_input: "bg-warning", in_progress: "bg-info", queued: "bg-muted-foreground/60",
   };
+  const PASTEL_DO_ESTADO: Record<string, string> = {
+    done: "bg-success-soft text-success", blocked: "bg-danger-soft text-destructive", review: "bg-warning-soft text-warning", awaiting_input: "bg-warning-soft text-warning", in_progress: "bg-info-soft text-info",
+  };
   const Cartao = ({ v }: { v: Vinculo }) => {
     const t = tarefaDoVinculo(v, tarefas);
     const op = opDe(v.operator_id);
@@ -1332,36 +1335,38 @@ export default function AdminExecucao() {
         }}
         onContextMenu={(e) => { e.preventDefault(); setMenuCartao({ x: e.clientX, y: e.clientY, v }); }}
         className={juntar(
-          superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col p-5 transition-colors hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col p-5 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           destacado && "ring-2 ring-primary/50",
         )}
       >
-        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className={juntar("h-2 w-2 shrink-0 rounded-full", COR_DO_ESTADO[v.status] || "bg-muted-foreground/60")} aria-hidden="true" />
-          <span className="font-medium text-foreground/80">{STATUS_ROTULO[v.status] || v.status}</span>
+        {/* v4 (15/11, passada estrutural): cartão de quadro como nas referências: selo pastel do estado, título, cliente, e no pé a pessoa, o prazo em ficha e as ações em círculo. A data da atualização foi para o "ver mais". */}
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className={juntar(etiqueta, "h-6 px-2.5", PASTEL_DO_ESTADO[v.status] || "bg-muted text-muted-foreground")}>
+            <span className={juntar("mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full", COR_DO_ESTADO[v.status] || "bg-muted-foreground/60")} aria-hidden="true" />
+            {STATUS_ROTULO[v.status] || v.status}
+          </span>
           {origem !== "interno" && (
-            <span className={juntar("rounded px-1.5 py-px font-medium", origem === "aguardando_almir" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive")}>
+            <span className={juntar(etiqueta, "h-6 px-2.5", origem === "aguardando_almir" ? "bg-warning-soft text-warning" : "bg-danger-soft text-destructive")}>
               {ROTULO_ORIGEM[origem]}
             </span>
           )}
-          <span className="ml-auto shrink-0 tabular-nums">{dataCurta(v.updated_at)}</span>
         </div>
 
-        {/* 26/10: "Cliente · Área" em cima e o assunto embaixo (lê-se "Cliente · Área · assunto"); o código fica em "ver mais". */}
-        <p className="mt-1.5 truncate text-[12px] text-primary/90" title={nome.texto}>{nome.cliente} · {nome.area}</p>
-        <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
+        {/* 26/10: "Cliente · Área" e o assunto (lê-se "Cliente · Área · assunto"); o código fica em "ver mais". */}
+        <p className="mt-3 line-clamp-2 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
           {nome.assunto}
         </p>
+        <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground" title={nome.texto}>{nome.cliente} · {nome.area}</p>
 
-        {aviso && <p className={juntar("mt-1.5 line-clamp-2 text-[12px]", aviso.tom)}>{aviso.texto}</p>}
+        {aviso && <p className={juntar("mt-2 line-clamp-2 text-[12px] leading-4", aviso.tom)}>{aviso.texto}</p>}
 
-        <div className="mt-auto flex min-w-0 items-center gap-2 pt-2.5 text-[12px] text-muted-foreground">
-          <span className="inline-flex min-w-0 items-center gap-1.5" title={`humano: ${t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}`}>
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-foreground" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
+        <div className="mt-auto flex min-w-0 items-center gap-2 pt-4 text-[12px] text-muted-foreground">
+          <span className="inline-flex min-w-0 items-center gap-2" title={`humano: ${t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}`}>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-semibold text-primary" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
             <span className="truncate">{op?.display_name || "?"}</span>
           </span>
           {t?.due_date && (
-            <span className={juntar("inline-flex shrink-0 items-center rounded-md px-1.5 tabular-nums", prazoVencido ? "bg-destructive/15 font-semibold text-destructive" : "bg-muted")} title="prazo">
+            <span className={juntar("inline-flex h-6 shrink-0 items-center rounded-full border px-2 tabular-nums", prazoVencido ? "border-destructive/40 bg-danger-soft font-semibold text-destructive" : "border-border")} title="prazo">
               <Clock className="mr-1 h-3 w-3" aria-hidden="true" /> {String(t.due_date).split("-").reverse().slice(0, 2).join("/")}
             </span>
           )}
@@ -1370,33 +1375,34 @@ export default function AdminExecucao() {
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); void abrirDecisaoDoVinculo(v.id); }}
-                className="inline-flex h-7 items-center rounded-md bg-warning/15 px-2 text-[12px] font-medium text-warning hover:bg-warning/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-[12px] font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 title="aprovação necessária: decidir"
               >
-                <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" /> decidir
+                <ShieldAlert className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> decidir
               </button>
             )}
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setDiarioAberto({ linkId: v.id, titulo: nome.texto }); }}
-              className="inline-flex h-7 items-center rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              title="Conversar com o agente nesta execução: instrução, contexto, correção"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              title="Diário: conversar com o agente nesta execução (instrução, contexto, correção)"
+              aria-label="diário"
             >
-              diário
+              <MessageSquareReply className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </span>
         </div>
 
         {temMais && (
           <details
-            className="mt-2 border-t border-border/50 pt-1.5"
+            className="mt-3"
             /* Abrir o detalhe NÃO pode abrir a tarefa: o cartão inteiro é
                clicável, e o clique aqui é outra intenção. */
             onClick={(e) => e.stopPropagation()}
           >
             <summary className="cursor-pointer list-none text-[11px] text-muted-foreground marker:hidden hover:text-foreground">ver mais</summary>
             <div className="mt-1.5 space-y-1.5 text-[12px] text-muted-foreground">
-              <p>humano: <span className="font-medium text-foreground/80">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span>{t?.project?.name ? ` · projeto ${t.project.name}` : ""}{nome.codigo ? ` · código ${nome.codigo}` : ""}</p>
+              <p>atualizado {dataCurta(v.updated_at)} · humano: <span className="font-medium text-foreground/80">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span>{t?.project?.name ? ` · projeto ${t.project.name}` : ""}{nome.codigo ? ` · código ${nome.codigo}` : ""}</p>
               {v.last_action && <p className="text-foreground/85">{falarComoGente(v.last_action).humano}</p>}
               {v.last_evidence && (() => {
                 // Traduz UMA vez: o cartão é redesenhado a cada atualização da fila.
@@ -2045,7 +2051,7 @@ export default function AdminExecucao() {
       />
       {esperandoVoce.length > 0 ? (
         // No celular, o pé da mesa (fixo embaixo) sobe acima do botão "Atenção" da lateral, para um não cobrir o outro.
-        <Secao nivel={3} titulo="Tarefas esperando você" descricao={`${esperandoVoce.length}`} className="max-sm:[&_[data-decidir-no-pe]]:bottom-[64px]">
+        <Secao nivel={3} titulo="Tarefas esperando você" className="max-sm:[&_[data-decidir-no-pe]]:bottom-[64px]">
           <MesaDeDecisao rotulo="Tarefas esperando você" itens={itensDosVinculos(esperandoVoce)} onDecidir={decidirVinculo} />
         </Secao>
       ) : pedidosVisiveis.length === 0 ? (
