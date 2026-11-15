@@ -26,6 +26,8 @@
 
     --primary: 145 100% 50%;
     --primary-foreground: 150 30% 4%;
+    /* Verde usado como TEXTO (text-primary): no escuro é o próprio verde vivo. */
+    --primary-text: 145 100% 50%;
 
     --secondary: 240 5% 11.6%;
     --secondary-foreground: 240 5% 84%;
@@ -38,7 +40,8 @@
     --accent-foreground: 150 30% 4%;
 
     --destructive: 0 92% 66%;
-    --destructive-foreground: 0 0% 100%;
+    /* Vermelho claro no escuro: o texto em cima é quase preto (6,6:1; branco dava 3,2:1). */
+    --destructive-foreground: 0 60% 5%;
 
     --success: 145 100% 50%;
     --warning: 43 100% 56%;
@@ -68,7 +71,7 @@
     --card-ink-muted: 240 4% 36%;
     --card-ink-well: 240 5% 87%;
     --card-ink-border: 240 5% 84%;
-    --card-ink-accent: 145 85% 30%;
+    --card-ink-accent: 145 85% 25%;
 
     /* Gráficos: a marca e os tons de apoio (violeta, lima, âmbar, azul). */
     --chart-1: 145 100% 50%;
@@ -107,8 +110,15 @@
     --popover: 0 0% 100%;
     --popover-foreground: 240 8% 7%;
 
+    /*
+     * v4 (15/11/2026, dono: "botões sem leitura"): o verde de preenchimento
+     * continua vivo e o texto EM CIMA dele é quase preto (7:1; branco dava
+     * 2,9:1). O verde usado como texto (text-primary) é um tom mais fundo
+     * (--primary-text, 5,9:1 sobre branco), ligado no tailwind.config.ts.
+     */
     --primary: 145 80% 38%;
-    --primary-foreground: 0 0% 100%;
+    --primary-foreground: 150 30% 4%;
+    --primary-text: 145 85% 23%;
 
     --secondary: 140 8% 94.5%;
     --secondary-foreground: 240 5% 24%;
@@ -117,14 +127,15 @@
     --muted-foreground: 240 4% 40%;
 
     --accent: 145 80% 38%;
-    --accent-foreground: 0 0% 100%;
+    --accent-foreground: 150 30% 4%;
 
-    --destructive: 0 78% 52%;
+    --destructive: 0 74% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 145 85% 30%;
-    --warning: 32 95% 40%;
-    --info: 212 90% 46%;
+    /* Tons de estado escuros o bastante para texto sobre branco e sobre o tom suave (4,5:1 ou mais). */
+    --success: 145 85% 23%;
+    --warning: 30 95% 31%;
+    --info: 212 90% 40%;
 
     --accent-soft: 145 65% 92%;
     --success-soft: 145 65% 92%;
@@ -162,7 +173,7 @@
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 240 4% 36%;
     --sidebar-primary: 145 80% 38%;
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary-foreground: 150 30% 4%;
     --sidebar-accent: 140 8% 94.5%;
     --sidebar-accent-foreground: 240 8% 7%;
     --sidebar-border: 140 6% 90.5%;
@@ -325,12 +336,14 @@
   --border: var(--accent-solid-deep);
   --input: var(--accent-solid-deep);
   --primary: var(--on-accent);
+  --primary-text: var(--on-accent);
   --primary-foreground: var(--accent-solid);
   --ring: var(--on-accent);
   --success: var(--on-accent);
   --warning: var(--on-accent);
   --info: var(--on-accent);
   --destructive: var(--on-accent);
+  --destructive-foreground: var(--accent-solid);
   --accent-soft: var(--accent-solid-deep);
   --success-soft: var(--accent-solid-deep);
   --warning-soft: var(--accent-solid-deep);
@@ -354,6 +367,7 @@
   --border: var(--card-ink-border);
   --input: var(--card-ink-border);
   --primary: var(--card-ink-accent);
+  --primary-text: var(--card-ink-accent);
   --success: var(--card-ink-accent);
   --ring: var(--card-ink-accent);
   --accent-soft: var(--card-ink-well);
@@ -374,6 +388,7 @@
   --warning: 43 100% 56%;
   --info: 205 100% 62%;
   --destructive: 0 92% 70%;
+  --destructive-foreground: 0 60% 5%;
 }
 /* Tinta no tema escuro é fundo claro: os tons de estado do tema claro. */
 .dark .ds-ink,
@@ -382,6 +397,7 @@
   --warning: 32 95% 36%;
   --info: 212 90% 42%;
   --destructive: 0 78% 46%;
+  --destructive-foreground: 0 0% 100%;
 }
 
 /*
@@ -633,17 +649,12 @@ summary::-webkit-details-marker {
     drop-shadow(0 0 28px hsl(var(--primary) / 0.35)) !important;
 }
 
-/* A barra de navegacao e escura nos dois temas. No claro, as letras cinza
-   sumiam: links inativos ficam quase brancos e o ativo branco puro. */
-.light header nav a {
-  color: hsl(0 0% 92%);
-}
-.light header nav a:hover {
-  color: hsl(0 0% 100%);
-}
-.light header nav a[aria-current="page"],
-.light header nav a.active {
-  color: hsl(0 0% 100%);
+/* v4: a barra do topo segue o tema (cartão claro no claro); saiu a regra que
+   forçava letra branca em "header nav a" e apagava links em cabeçalho claro. */
+
+/* A Área de membros troca --primary no próprio <html>: o verde de texto acompanha. */
+:root[data-membros-tema] {
+  --primary-text: var(--primary);
 }
 
 /* Fundo do app no claro: liso (28/09). As manchas verdes em gradiente

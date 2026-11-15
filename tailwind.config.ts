@@ -92,6 +92,14 @@ export default {
           5: "hsl(var(--chart-5))",
         },
       },
+      // v4 (15/11/2026): o verde como TEXTO usa um tom próprio (--primary-text), mais fundo no tema
+      // claro para dar leitura (text-primary sobre branco e sobre o verde suave). Fundo, borda e anel
+      // continuam no --primary vivo.
+      textColor: {
+        primary: {
+          DEFAULT: "hsl(var(--primary-text))",
+        },
+      },
       // Cantos (rodada ousada de 15/11/2026): cartão 24 px (lg), controle 12 px (md),
       // etiqueta 8 px (sm). xl e 2xl ficam acima do cartão, para folha e janela.
       borderRadius: {
