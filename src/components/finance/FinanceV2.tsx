@@ -571,7 +571,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
                 <th className="px-4 py-3 text-right font-medium">Ação</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/60 [&_td]:py-3.5">
+            <tbody className="[&_td]:py-3.5">
               {rows.map((entry) => {
                 const canSettle = !readOnly && entry.canSettle;
                 return (

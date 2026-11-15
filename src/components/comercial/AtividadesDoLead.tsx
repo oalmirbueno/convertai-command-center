@@ -163,7 +163,7 @@ export default function AtividadesDoLead({ leadId, donoPadrao, onMudou }: Props)
         {doLead.length === 0 ? (
           <EstadoVazio compacto titulo="Nada agendado." descricao="Lead sem próximo compromisso some do funil." />
         ) : (
-          <ul className="divide-y divide-border/60">
+          <ul>
             {doLead.map((atividade) => (
               <Linha
                 key={atividade.id}

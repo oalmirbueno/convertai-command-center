@@ -273,7 +273,7 @@ export function ConteudoDoCrescimento() {
 
       {/* A mesma leitura em linhas: quem não enxerga o gráfico (ou está no celular) tem o número exato. */}
       <div className="min-w-0" data-linhas-do-crescimento="">
-        <ul className="divide-y divide-border/60">
+        <ul>
           {[...serie].reverse().filter((b) => b.entraram > 0 || b.recebido > 0 || b.chave === aberto).map((b) => (
             <li key={b.chave} className="min-w-0">
               <button type="button" aria-expanded={aberto === b.chave} onClick={() => setAberto((a) => (a === b.chave ? null : b.chave))} className="flex w-full min-w-0 items-center rounded-md px-3 py-3 text-left text-[13px] transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
@@ -317,7 +317,7 @@ export function ConteudoDoCrescimento() {
           <button type="button" aria-expanded={verTodos} onClick={() => setVerTodos((v) => !v)} className={juntar(botao.discreto, "h-8 px-2 text-[13px]")}>
             {verTodos ? "Recolher a lista" : `Ver todos que entraram no período (${entrantes.length})`}
           </button>
-          {verTodos && <ul className="mt-1 min-w-0 divide-y divide-border">{entrantes.map(linhaDoCliente)}</ul>}
+          {verTodos && <ul className="mt-1 min-w-0">{entrantes.map(linhaDoCliente)}</ul>}
         </div>
       </div>
 
@@ -332,7 +332,7 @@ export function ConteudoDoCrescimento() {
           <StatCard size="md" label="Mensalidade perdida" value={dinheiro(saidas.mensalidadePerdida)} hint={saidas.quemSaiu.length ? `ficaram em média ${virgula(saidas.permanenciaMedia)} ${saidas.permanenciaMedia === 1 ? "mês" : "meses"}` : "por mês"} />
         </StatGrid>
         {saidas.quemSaiu.length > 0 ? (
-          <ul className="mt-4 min-w-0 divide-y divide-border/60" data-quem-saiu="">
+          <ul className="mt-4 min-w-0" data-quem-saiu="">
             {saidas.quemSaiu.map((c) => (
               <li key={c.id} className="flex min-w-0 flex-wrap items-baseline px-3 py-3 text-[13px]">
                 <span className="w-24 shrink-0 tabular-nums text-muted-foreground">{dataCurta(String(c.saiuEm))}</span>
@@ -350,7 +350,7 @@ export function ConteudoDoCrescimento() {
             <button type="button" aria-expanded={verConcluidos} onClick={() => setVerConcluidos((v) => !v)} className={juntar(botao.discreto, "h-8 px-2 text-[13px]")}>
               {verConcluidos ? "Recolher" : `Avulsos concluídos (${saidas.avulsosConcluidos.length}): não contam como saída`}
             </button>
-            {verConcluidos && <ul className="mt-1 min-w-0 divide-y divide-border">{saidas.avulsosConcluidos.map(linhaDoCliente)}</ul>}
+            {verConcluidos && <ul className="mt-1 min-w-0">{saidas.avulsosConcluidos.map(linhaDoCliente)}</ul>}
           </div>
         )}
       </div>

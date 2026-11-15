@@ -162,7 +162,7 @@ export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {
                   <span className="block text-[28px] font-semibold leading-8 tracking-[-0.03em] tabular-nums">{totalDoMes}</span>
                   <span className="block text-[11px] font-medium leading-4 text-muted-foreground">{totalDoMes === 1 ? "lead" : "leads"}</span>
                 </Donut>
-                <ul className="w-full min-w-0 flex-1 divide-y divide-border/60">
+                <ul className="w-full min-w-0 flex-1">
                   {porOrigem.map((linha, i) => (
                     <li key={linha.origem} className="min-w-0 py-3">
                       <div className="flex min-w-0 items-center">

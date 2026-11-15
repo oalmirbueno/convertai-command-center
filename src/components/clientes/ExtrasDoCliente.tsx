@@ -104,7 +104,7 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
     >
       {dados.isError && <p className="text-[13px] text-destructive">Não foi possível ler os extras deste cliente.</p>}
       {extras.length > 0 && (
-        <ul className="divide-y divide-border/60">
+        <ul>
           {extras.map((e) => {
             const doExtra = cobrancas.filter((c) => c.extra_id === e.id);
             const unico = andamentoDoUnico(doExtra, Number(e.valor) || 0);

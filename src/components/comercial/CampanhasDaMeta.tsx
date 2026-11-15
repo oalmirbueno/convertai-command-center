@@ -77,7 +77,7 @@ export default function CampanhasDaMeta({
       ) : lista.length === 0 ? (
         <p className={texto.auxiliar}>Nenhuma campanha da Meta sincronizada ainda.</p>
       ) : (
-        <ul className="min-w-0 divide-y divide-border/60" aria-label="Campanhas da Meta para ligar">
+        <ul className="min-w-0" aria-label="Campanhas da Meta para ligar">
           {achadas.slice(0, MOSTRAR).map((c) => (
             <li key={c.campaign_id} className="flex min-w-0 items-center py-2.5">
               <span className="min-w-0 flex-1">

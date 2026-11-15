@@ -1258,7 +1258,7 @@ function Marketing({
             <span className={juntar(texto.rotulo, "text-right")}>Custo por cliente</span>
             <span />
           </div>
-          <ul className="divide-y divide-border/60 px-3 pb-2">
+          <ul className="px-3 pb-2">
             {campanhas.map((campanha) => {
               const kpi = kpisDaCampanha(campanha, leads);
               const numeros = [
@@ -1837,7 +1837,7 @@ export function EditorDeLead({
                 {historico.length === 0 ? (
                   <p className={juntar(texto.auxiliar, "mt-2")}>Nada registrado ainda.</p>
                 ) : (
-                  <ul className="mt-2 divide-y divide-border">
+                  <ul className="mt-2">
                     {historico.map((evento) => (
                       <li key={evento.id} className={juntar(texto.corpo, "py-2 text-muted-foreground")}>
                         <span className="font-medium text-foreground">
