@@ -311,7 +311,7 @@ export function MemoriaDoAgente() {
   return (
     <div className="space-y-6">
       <Secao titulo="Ensinar algo ao agente" recolher={`mesa:contexto:memoria:ensinar:${clientId}`} corpoClassName="space-y-3">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
           <Select value={novoAgente} onValueChange={(v) => setNovoAgente(v as Agente)}>
             <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
             <SelectContent>{AGENTES.map((a) => <SelectItem key={a.valor} value={a.valor}>{a.rotulo}</SelectItem>)}</SelectContent>

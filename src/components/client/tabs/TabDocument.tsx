@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FileText, Sparkles } from "lucide-react";
 import { NotesPreview } from "@/components/workspace/NotesPreview";
-import { Carregando, EstadoVazio, Painel, etiqueta, juntar, texto } from "@/components/sistema";
+import { Carregando, EstadoVazio, Painel, juntar, texto } from "@/components/sistema";
+import { StatusPill } from "@/components/ds";
+import { Bolha } from "../pecasOusadas";
 
 interface Props { projectId: string }
 
@@ -47,13 +49,16 @@ export default function TabDocument({ projectId }: Props) {
   }
 
   return (
-    <div className="min-w-0 space-y-3">
-      <div className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
-        <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate">Documento vivo · atualizado {new Date(doc.updated_at).toLocaleString("pt-BR")}</span>
-        <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>Ao vivo</span>
+    <div className="min-w-0 space-y-4">
+      <div className="flex min-w-0 items-center">
+        <Bolha tom="marca" className="mr-3"><FileText className="h-4 w-4" /></Bolha>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold leading-5 text-foreground">Documento vivo</span>
+          <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>Atualizado {new Date(doc.updated_at).toLocaleString("pt-BR")}</span>
+        </span>
+        <StatusPill tone="success" pulse className="ml-2">Ao vivo</StatusPill>
       </div>
-      <Painel className="md:px-5 md:py-5">
+      <Painel className="md:px-8 md:py-8">
         <div className="studio-doc mx-auto max-w-3xl">
           <NotesPreview src={doc.notes} clientId={null} clientName={null} />
         </div>

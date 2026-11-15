@@ -145,7 +145,7 @@ export default function PecasDaCampanha({
               </button>
             </p>
           )}
-          <ul className="mt-2 grid min-w-0 grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-10" aria-label="Peças prontas da campanha">
+          <ul className="mt-2 grid min-w-0 grid-cols-3 gap-3 sm:gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-10" aria-label="Peças prontas da campanha">
             {pecas.map((p) => {
               const marcada = escolhidas.indexOf(p.chave) >= 0;
               const quando = faseEData(p.fase, p.data);

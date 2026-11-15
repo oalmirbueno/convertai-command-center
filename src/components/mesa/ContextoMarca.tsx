@@ -201,7 +201,7 @@ export default function ContextoMarca() {
         </div>
       </Secao>
 
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
         <Campo rotulo="Estilo (como a marca se parece)">
           <Textarea value={estilo} onChange={(e) => setEstilo(e.target.value)} rows={5} placeholder="Ex.: fotografia natural com luz de manhã, tipografia serifada nos títulos, muito respiro." />
         </Campo>

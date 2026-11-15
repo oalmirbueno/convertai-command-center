@@ -253,7 +253,7 @@ export default function EditorDoStory({
           {opcoes.length ? (
             <div className="min-w-0">
               <p className={texto.rotulo}>Opções</p>
-              <div className="mt-1 grid min-w-0 gap-2 sm:grid-cols-2">
+              <div className="mt-1 grid min-w-0 gap-2 sm:gap-3 sm:grid-cols-2">
                 {opcoes.map((o, i) => (
                   <input
                     key={i}

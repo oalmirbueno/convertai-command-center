@@ -475,7 +475,7 @@ export default function ReportComparison({
       type="button"
       onClick={() => setOpen(o => !o)}
       aria-expanded={open}
-      className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/30", foco)}
+      className={juntar("flex w-full min-w-0 items-center px-5 py-4 text-left transition-colors hover:bg-muted/40 sm:px-6", foco)}
     >
       <GitCompareArrows className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="mr-3 min-w-0 flex-1">
@@ -562,9 +562,9 @@ export default function ReportComparison({
       <div className="overflow-hidden border-t border-border">
         <div className="-ml-px -mt-px grid grid-cols-1 sm:grid-cols-2">
           {periodos.map((p) => (
-            <div key={p.rotulo} className="min-w-0 border-l border-t border-border px-4 py-3">
+            <div key={p.rotulo} className="min-w-0 border-l border-t border-border px-5 py-4 sm:px-6">
               <p className={texto.rotulo}>{p.rotulo}</p>
-              <p className="mt-0.5 truncate text-[13px] font-medium text-foreground">
+              <p className="mt-1 truncate text-[15px] font-semibold text-foreground">
                 {p.texto}
                 {p.dias > 0 && <span className={juntar(texto.auxiliar, "ml-2 tabular-nums")}>{p.dias} dias</span>}
               </p>
@@ -590,8 +590,8 @@ export default function ReportComparison({
         <div className="overflow-hidden border-t border-border">
           <div className={juntar("-ml-px -mt-px grid grid-cols-1", gains.length > 0 && attention.length > 0 && "md:grid-cols-2")}>
             {gains.length > 0 && (
-              <div className="min-w-0 border-l border-t border-border px-4 py-3">
-                <p className="flex items-center text-[12px] font-medium leading-4 text-primary">
+              <div className="min-w-0 border-l border-t border-border bg-success-soft px-5 py-4 sm:px-6">
+                <p className="flex items-center text-[13px] font-semibold leading-5 text-success">
                   <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Ganhos do período
                 </p>
                 <ul className="mt-2 space-y-1.5">
@@ -605,8 +605,8 @@ export default function ReportComparison({
               </div>
             )}
             {attention.length > 0 && (
-              <div className="min-w-0 border-l border-t border-border px-4 py-3">
-                <p className="flex items-center text-[12px] font-medium leading-4 text-warning">
+              <div className="min-w-0 border-l border-t border-border bg-warning-soft px-5 py-4 sm:px-6">
+                <p className="flex items-center text-[13px] font-semibold leading-5 text-warning">
                   <AlertTriangle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Pontos de atenção
                 </p>
                 <ul className="mt-2 space-y-1.5">
@@ -632,7 +632,7 @@ export default function ReportComparison({
             const meta = META[r.key];
             const TrendIcon = Math.abs(r.rawPct) < 0.5 ? Minus : r.rawPct > 0 ? ArrowUpRight : ArrowDownRight;
             return (
-              <li key={r.key} className="flex min-w-0 items-start border-l border-t border-border px-4 py-3">
+              <li key={r.key} className="flex min-w-0 items-start border-l border-t border-border px-5 py-4 sm:px-6">
                 <div className="mr-3 min-w-0 flex-1">
                   <div className="flex min-w-0 items-center">
                     <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{meta.label}</span>
@@ -641,7 +641,7 @@ export default function ReportComparison({
                   <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>{r.narrative}</p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-[15px] font-semibold leading-5 tabular-nums text-foreground">{meta.format(r.cur)}</p>
+                  <p className="text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{meta.format(r.cur)}</p>
                   <p className={juntar(texto.auxiliar, "mt-0.5 inline-flex items-center tabular-nums")}>
                     <TrendIcon className="mr-0.5 h-3 w-3" aria-hidden="true" />
                     {Math.abs(r.rawPct) < 0.5 ? "0%" : (r.rawPct > 0 ? "+" : "") + r.rawPct.toFixed(1) + "%"}
@@ -657,7 +657,7 @@ export default function ReportComparison({
 
       {/* Investimento campanha a campanha */}
       {breakdownChart.length >= 2 && (
-        <div className="border-t border-border px-4 py-4">
+        <div className="border-t border-border px-5 py-5 sm:px-6">
           <h3 className="text-[13px] font-semibold leading-5 text-foreground">Investimento por campanha</h3>
           <p className={juntar(texto.auxiliar, "mt-0.5")}>Agora e no período anterior</p>
           <div className="mt-3 h-72">

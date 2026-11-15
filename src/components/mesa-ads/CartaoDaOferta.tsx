@@ -46,7 +46,7 @@ function Lista({ itens }: { itens: string[] }) {
 
 const STATUS: Record<StatusDaOferta, { rotulo: string; tom: string }> = {
   rascunho: { rotulo: "Proposta", tom: "bg-muted text-muted-foreground" },
-  escolhida: { rotulo: "Escolhida", tom: "bg-success/10 text-success" },
+  escolhida: { rotulo: "Escolhida", tom: "bg-success-soft text-success" },
   arquivada: { rotulo: "Arquivada", tom: "bg-muted text-muted-foreground" },
 };
 
@@ -213,7 +213,7 @@ export default function CartaoDaOferta({
 
       {o.promessa && <p className="mt-2 tracking-[-0.01em] text-[20px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{o.promessa}</p>}
 
-      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
         {o.mecanismo && <Bloco rotulo="Mecanismo">{o.mecanismo}</Bloco>}
         {o.garantia && <Bloco rotulo="Garantia">{o.garantia}</Bloco>}
         {o.urgencia_real && <Bloco rotulo="Urgência real">{o.urgencia_real}</Bloco>}
@@ -226,7 +226,7 @@ export default function CartaoDaOferta({
             {detalhes ? "Menos detalhes" : "O que entra, bônus e riscos"}
           </button>
           {detalhes && (
-            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
               {o.entregaveis.length > 0 && <Bloco rotulo="O que entra"><Lista itens={o.entregaveis} /></Bloco>}
               {o.bonus.length > 0 && <Bloco rotulo="Bônus"><Lista itens={o.bonus} /></Bloco>}
               {o.ancoragem && <Bloco rotulo="Ancoragem">{o.ancoragem}</Bloco>}
@@ -284,7 +284,7 @@ export default function CartaoDaOferta({
             </span>
           )}
           {onLapidar && !arquivada && (
-            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (doContexto) && "bg-primary/10 text-primary")} type="button" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar." aria-label="Lapidar com o agente">
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (doContexto) && "bg-accent-soft text-primary")} type="button" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar." aria-label="Lapidar com o agente">
               <Sparkles className="h-4 w-4" aria-hidden="true" />
             </button>
           )}

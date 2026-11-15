@@ -607,7 +607,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
       {estado.referencias.length > 0 && (
         <section>
           <h3 className={juntar(texto.rotulo, "mb-2")}>Referências do estilo</h3>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">
             {estado.referencias.map((r) => (
               <div key={r.id} className="min-w-0">
                 <Miniatura url={r.url} alt={r.nome}>
@@ -635,7 +635,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
             Sugeridas pelas entregas
             <AjudaRecolhida titulo="Sugeridas pelas entregas">As artes entregues que renderam melhor ou foram aprovadas sem ajuste. Entram no estilo só quando você usar.</AjudaRecolhida>
           </h3>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">
             {estado.sugeridas_pelas_entregas.map((s) => (
               <div key={s.trabalho_id} className="min-w-0">
                 <Miniatura url={s.url} alt={s.titulo} />
@@ -721,7 +721,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
   ) : !testes.length ? (
     <EstadoVazio compacto titulo="Nenhum teste ainda" descricao="Gere de 1 a 4 imagens com o gerador do Estúdio." />
   ) : (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-testes-do-estilo="">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3" data-testes-do-estilo="">
       {testes.map((t) => (
         <div key={t.id} className="min-w-0">
           <Miniatura url={t.url} alt={t.tema || "Teste do estilo"} />

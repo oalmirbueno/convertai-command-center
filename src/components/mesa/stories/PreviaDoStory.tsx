@@ -149,7 +149,7 @@ export function SeloDoCaminho({ adesivo, className = "" }: { adesivo: Adesivo; c
   const app = caminhoDoAdesivo(adesivo) === "pelo_app";
   return (
     <span
-      className={juntar("inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-medium leading-none", app ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary", className)}
+      className={juntar("inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-medium leading-none", app ? "bg-warning/15 text-warning" : "bg-accent-soft text-primary", className)}
       title={app ? "Tem adesivo: a equipe posta pelo app" : "Sem adesivo: o painel publica sozinho"}
       data-caminho={app ? "pelo_app" : "automatico"}
     >

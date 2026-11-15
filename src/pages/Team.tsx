@@ -2,26 +2,22 @@ import { useEffect, useState } from "react";
 import { useTeamMembers, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar as Foto, CardSurface, MiniBars, PillTabs, SearchField, StatCard, StatGrid, StatusPill, Toolbar, type Tone } from "@/components/ds";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { UserPlus, Loader2, Trash2, Edit3, AlertTriangle, Check, Search, MoreHorizontal, Filter } from "lucide-react";
+import { UserPlus, Loader2, Trash2, Edit3, AlertTriangle, Check, Search, MoreHorizontal, Users, ListChecks, ShieldCheck, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 import {
   AjudaRecolhida,
   CabecalhoDePagina,
-  CampoDeBusca,
   CampoDeFormulario,
   Carregando,
   EstadoDeErro,
   EstadoVazio,
   GrupoDeCampos,
-  RegiaoRolavel,
-  SeletorCompacto,
   botao,
   campo,
-  etiqueta,
   foco,
   juntar,
   superficie,
@@ -32,11 +28,11 @@ import {
 // Mesma regra do servidor (manage-team): 12+ com maiúscula, minúscula, número e símbolo.
 const senhaForte = (senha: string) => senha.length >= 12 && /[a-z]/.test(senha) && /[A-Z]/.test(senha) && /[0-9]/.test(senha) && /[^A-Za-z0-9]/.test(senha);
 
-const roleBadge: Record<string, { cls: string; label: string }> = {
-  admin: { cls: "bg-primary/10 text-primary", label: "Admin" },
-  design: { cls: "bg-info/10 text-info", label: "Design" },
-  traffic: { cls: "bg-warning/10 text-warning", label: "Tráfego" },
-  manager: { cls: "bg-success/10 text-success", label: "Manager" },
+const roleBadge: Record<string, { tom: Tone; label: string }> = {
+  admin: { tom: "accent", label: "Admin" },
+  design: { tom: "info", label: "Design" },
+  traffic: { tom: "warning", label: "Tráfego" },
+  manager: { tom: "success", label: "Manager" },
 };
 
 export default function Team() {
@@ -247,13 +243,21 @@ export default function Team() {
     return (m.full_name || "").toLowerCase().includes(buscaNormalizada) || (m.email || "").toLowerCase().includes(buscaNormalizada);
   });
   const contagemPorPapel = (valor: string) => lista.filter((m: any) => m.role === valor).length;
-  const opcoesDePapel = [
-    { valor: "todos", rotulo: "Todos os papéis", contador: lista.length },
-    ...Object.keys(roleBadge).map((valor) => ({ valor, rotulo: roleBadge[valor].label, contador: contagemPorPapel(valor) })),
+  const abasDePapel = [
+    { value: "todos", label: "Todos", count: lista.length },
+    ...Object.keys(roleBadge).map((valor) => ({ value: valor, label: roleBadge[valor].label, count: contagemPorPapel(valor) })),
   ];
 
-  const iniciais = (nome?: string) => (nome || "").split(" ").map((n: string) => n[0]).join("").slice(0, 2);
   const clientesDe = (m: any) => (assignments[m.id]?.length || 0);
+  // Números da fileira de cima: só o que a tela já tem (membros, tarefas em aberto por pessoa, clientes atribuídos).
+  const tarefasPorMembro = lista.map((m: any) => taskCountFor(m.id));
+  const tarefasEmAberto = tarefasPorMembro.reduce((soma, n) => soma + n, 0);
+  const clientesComResponsavel = Object.keys(
+    Object.keys(assignments).reduce((mapa: Record<string, true>, userId) => {
+      assignments[userId].forEach((clientId) => { mapa[clientId] = true; });
+      return mapa;
+    }, {}),
+  ).length;
 
   const menuDaLinha = (m: any) => (
     <DropdownMenu modal={false}>
@@ -281,11 +285,11 @@ export default function Team() {
 
   const etiquetaDoPapel = (r: string) => {
     const badge = roleBadge[r] || roleBadge.admin;
-    return <span className={juntar(etiqueta, badge.cls)}>{badge.label}</span>;
+    return <StatusPill tone={badge.tom}>{badge.label}</StatusPill>;
   };
 
   return (
-    <div className="min-w-0 space-y-5">
+    <div className="min-w-0 space-y-6 sm:space-y-8">
       <CabecalhoDePagina
         titulo="Equipe"
         descricao={members ? `${lista.length} ${lista.length === 1 ? "membro" : "membros"}` : undefined}
@@ -303,18 +307,28 @@ export default function Team() {
         }
       />
 
-      <div className="flex min-w-0 flex-wrap items-center">
-        <CampoDeBusca
-          valor={busca}
-          onMudar={setBusca}
-          placeholder="Buscar por nome ou e-mail"
-          rotulo="Buscar membro"
-          className="mb-2 mr-2 flex-1 sm:max-w-xs"
-        />
-        <div className="mb-2 shrink-0">
-          <SeletorCompacto rotulo="Papel" icone={<Filter className="h-3.5 w-3.5" />} opcoes={opcoesDePapel} valor={papel} onEscolher={setPapel} />
-        </div>
-      </div>
+      {members && lista.length > 0 && (
+        <StatGrid cols={4} label="Números da equipe">
+          <StatCard variant="ink" icon={<Users className="h-4 w-4" />} label="Membros" value={lista.length} hint={`${Object.keys(roleBadge).filter((r) => contagemPorPapel(r) > 0).length} papéis em uso`} />
+          <StatCard
+            variant="accent"
+            icon={<ListChecks className="h-4 w-4" />}
+            label="Tarefas em aberto"
+            value={tarefasEmAberto}
+            hint="Somando a equipe"
+            chart={tarefasPorMembro.length > 1 && tarefasEmAberto > 0 ? <MiniBars values={tarefasPorMembro} height={40} label="Tarefas em aberto por membro" /> : undefined}
+            chartPosition="side"
+          />
+          <StatCard icon={<Building2 className="h-4 w-4" />} label="Clientes com responsável" value={clientesComResponsavel} hint="Atribuídos a alguém" />
+          <StatCard icon={<ShieldCheck className="h-4 w-4" />} label="Admins" value={contagemPorPapel("admin")} hint="Veem todos os clientes" />
+        </StatGrid>
+      )}
+
+      <Toolbar
+        label="Buscar e filtrar a equipe"
+        search={<SearchField value={busca} onChange={setBusca} placeholder="Buscar por nome ou e-mail" label="Buscar membro" />}
+        filters={<PillTabs tabs={abasDePapel} value={papel} onChange={setPapel} label="Papel" />}
+      />
 
       {isLoading && !members ? (
         <Carregando linhas={5} rotulo="Carregando equipe" />
@@ -337,62 +351,34 @@ export default function Team() {
           acao={<button type="button" className={botao.discreto} onClick={() => { setBusca(""); setPapel("todos"); }}>Limpar filtros</button>}
         />
       ) : (
-        <RegiaoRolavel rotulo="Membros da equipe" memoria="equipe:lista" className="lg:max-h-[70vh]">
-          {/* Computador: tabela */}
-          <table className="hidden w-full min-w-0 table-fixed md:table">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Membro</th>
-                <th scope="col" className={juntar(texto.rotulo, "w-28 py-2 pr-3 text-left")}>Papel</th>
-                <th scope="col" className={juntar(texto.rotulo, "w-24 py-2 pr-3 text-right")}>Clientes</th>
-                <th scope="col" className={juntar(texto.rotulo, "w-24 py-2 pr-3 text-right")}>Tarefas</th>
-                <th scope="col" className="w-12 py-2"><span className="sr-only">Ações</span></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {visiveis.map((m: any) => (
-                <tr key={m.id} className="hover:bg-muted/40">
-                  <td className="py-2.5 pr-3">
-                    <div className="flex min-w-0 items-center">
-                      <Avatar className="mr-3 h-8 w-8 shrink-0">
-                        <AvatarFallback className="bg-primary/15 text-[12px] font-semibold text-primary">{iniciais(m.full_name)}</AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <button type="button" onClick={() => openEdit(m)} className={juntar(texto.corpo, "block max-w-full truncate rounded text-left font-medium hover:underline", foco)}>
-                          {m.full_name}
-                        </button>
-                        <p className={juntar(texto.auxiliar, "truncate")}>{m.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-2.5 pr-3">{etiquetaDoPapel(m.role)}</td>
-                  <td className={juntar(texto.corpo, "py-2.5 pr-3 text-right tabular-nums")}>{m.role === "admin" ? <span className="text-muted-foreground">Todos</span> : clientesDe(m)}</td>
-                  <td className={juntar(texto.corpo, "py-2.5 pr-3 text-right tabular-nums")}>{taskCountFor(m.id)}</td>
-                  <td className="py-2.5 text-right">{menuDaLinha(m)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Celular: lista */}
-          <ul className="divide-y divide-border md:hidden">
-            {visiveis.map((m: any) => (
-              <li key={m.id} className="flex min-w-0 items-center py-2.5">
-                <Avatar className="mr-3 h-8 w-8 shrink-0">
-                  <AvatarFallback className="bg-primary/15 text-[12px] font-semibold text-primary">{iniciais(m.full_name)}</AvatarFallback>
-                </Avatar>
-                <button type="button" onClick={() => openEdit(m)} className={juntar("mr-2 min-w-0 flex-1 rounded text-left", foco)}>
-                  <span className={juntar(texto.corpo, "block truncate font-medium")}>{m.full_name}</span>
-                  <span className={juntar(texto.auxiliar, "block truncate")}>
-                    {m.role === "admin" ? "Todos os clientes" : `${clientesDe(m)} ${clientesDe(m) === 1 ? "cliente" : "clientes"}`} · {taskCountFor(m.id)} tarefas
-                  </span>
-                </button>
-                <span className="mr-1 shrink-0">{etiquetaDoPapel(m.role)}</span>
-                {menuDaLinha(m)}
-              </li>
-            ))}
-          </ul>
-        </RegiaoRolavel>
+        /* Rodada ousada (15/11/2026): um cartão por pessoa, com a foto de iniciais grande, o papel em pílula e os dois números. */
+        <ul aria-label="Membros da equipe" className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+          {visiveis.map((m: any) => (
+            <CardSurface as="li" key={m.id} padded className="flex flex-col">
+              <div className="flex min-w-0 items-start">
+                <Foto name={m.full_name} size="lg" tone={m.role === "admin" ? "ink" : "accent"} />
+                <div className="ml-3 min-w-0 flex-1">
+                  <button type="button" onClick={() => openEdit(m)} className={juntar("block max-w-full truncate rounded text-left text-[15px] font-semibold leading-6 text-foreground hover:underline", foco)}>
+                    {m.full_name}
+                  </button>
+                  <p className={juntar(texto.auxiliar, "truncate")}>{m.email}</p>
+                </div>
+                <span className="-mr-2 -mt-1 ml-1 shrink-0">{menuDaLinha(m)}</span>
+              </div>
+              <div className="mt-4">{etiquetaDoPapel(m.role)}</div>
+              <dl className="mt-4 grid min-w-0 grid-cols-2 gap-3">
+                <div className={juntar(superficie.poco, "min-w-0 px-4 py-3")}>
+                  <dt className={juntar(texto.auxiliar, "truncate")}>Clientes</dt>
+                  <dd className="mt-0.5 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{m.role === "admin" ? "Todos" : clientesDe(m)}</dd>
+                </div>
+                <div className={juntar(superficie.poco, "min-w-0 px-4 py-3")}>
+                  <dt className={juntar(texto.auxiliar, "truncate")}>Tarefas</dt>
+                  <dd className="mt-0.5 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{taskCountFor(m.id)}</dd>
+                </div>
+              </dl>
+            </CardSurface>
+          ))}
+        </ul>
       )}
 
       {/* Adicionar / editar */}

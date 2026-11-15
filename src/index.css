@@ -4,92 +4,117 @@
 
 @layer base {
   /*
-   * Tokens do painel (redesenho de 14/11/2026, pedido do dono: "mais clean,
-   * minimalista e moderno, igual às referências"). Uma fonte só de verdade:
-   * superfícies neutras levemente tingidas, UM destaque (o verde da marca, que
-   * não mudou), tons suaves para estado, cantos grandes no cartão (20 px),
-   * médios no controle (12 px) e pílula em botão, etiqueta e aba.
+   * Tokens do painel. Rodada OUSADA de 15/11/2026 (dono, sobre a rodada de
+   * 14/11: "ficou igual"): escuro de verdade (fundo quase preto neutro, cartão
+   * um degrau acima, borda de 1 px quase invisível), número grande, cartão com
+   * canto de 24 px e mais ar, e DOIS cartões de destaque por fileira no máximo:
+   * o sólido na cor da marca (.ds-accent) e o de tinta (.ds-ink: preto no tema
+   * claro, claro no tema escuro), como nas referências.
    * Os nomes do shadcn continuam os mesmos: nada sem estilo quebra.
    */
   :root,
   .dark {
-    --background: 150 7% 5.5%;
-    --foreground: 150 6% 97%;
+    /* Página #0b0b0c, cartão #151517, poço e controle #1c1c1f. */
+    --background: 240 4% 4.5%;
+    --foreground: 0 0% 98%;
 
-    --card: 150 5% 9.5%;
-    --card-foreground: 150 6% 97%;
+    --card: 240 5% 8.6%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 150 5% 8.5%;
-    --popover-foreground: 150 6% 97%;
+    --popover: 240 5% 10.5%;
+    --popover-foreground: 0 0% 98%;
 
     --primary: 145 100% 50%;
-    --primary-foreground: 0 0% 5%;
+    --primary-foreground: 150 30% 4%;
 
-    --secondary: 150 4% 14%;
-    --secondary-foreground: 150 4% 72%;
+    --secondary: 240 5% 11.6%;
+    --secondary-foreground: 240 5% 84%;
 
-    --muted: 150 4% 14%;
-    --muted-foreground: 150 4% 56%;
+    --muted: 240 5% 11.6%;
+    /* #a1a1aa: 7,4:1 sobre o cartão. */
+    --muted-foreground: 240 5% 65%;
 
     --accent: 145 100% 50%;
-    --accent-foreground: 0 0% 5%;
+    --accent-foreground: 150 30% 4%;
 
-    --destructive: 0 100% 62%;
+    --destructive: 0 92% 66%;
     --destructive-foreground: 0 0% 100%;
 
     --success: 145 100% 50%;
-    --warning: 43 100% 50%;
-    --info: 200 100% 50%;
+    --warning: 43 100% 56%;
+    --info: 205 100% 62%;
 
     /* Tons suaves de estado (fundo de etiqueta, de aviso, de célula). */
-    --accent-soft: 145 60% 13%;
-    --success-soft: 145 60% 13%;
-    --warning-soft: 43 70% 14%;
-    --danger-soft: 0 60% 16%;
-    --info-soft: 205 60% 15%;
+    --accent-soft: 145 70% 11%;
+    --success-soft: 145 70% 11%;
+    --warning-soft: 43 75% 12%;
+    --danger-soft: 0 62% 15%;
+    --info-soft: 205 65% 14%;
 
-    --border: 150 4% 15.5%;
-    --input: 150 4% 19%;
+    /* Borda: o branco a 6% sobre o cartão, em cor sólida. */
+    --border: 240 4% 14%;
+    --input: 240 4% 19%;
     --ring: 145 100% 50%;
 
-    /* Cantos: cartão 20 px (lg), controle 12 px (md), etiqueta 8 px (sm). */
-    --radius: 1.25rem;
+    /* Destaque sólido (cartão verde) e o texto quase preto que vai em cima. */
+    --accent-solid: 145 100% 50%;
+    --on-accent: 150 30% 4%;
+    --on-accent-muted: 150 45% 14%;
+    --accent-solid-deep: 145 100% 41%;
+
+    /* Cartão de tinta: no escuro ele é o cartão CLARO da fileira. */
+    --card-ink: 240 6% 94%;
+    --card-ink-foreground: 240 6% 7%;
+    --card-ink-muted: 240 4% 36%;
+    --card-ink-well: 240 5% 87%;
+    --card-ink-border: 240 5% 84%;
+    --card-ink-accent: 145 85% 30%;
+
+    /* Gráficos: a marca e os tons de apoio (violeta, lima, âmbar, azul). */
+    --chart-1: 145 100% 50%;
+    --chart-2: 255 92% 76%;
+    --chart-3: 75 95% 62%;
+    --chart-4: 28 100% 64%;
+    --chart-5: 205 100% 62%;
+
+    /* Cantos: cartão 24 px (lg), controle 12 px (md), etiqueta 8 px (sm). */
+    --radius: 1.5rem;
     --radius-control: 0.75rem;
     --radius-tag: 0.5rem;
 
-    /* Sombra: quase nenhuma. No escuro quem separa é o tom da superfície. */
-    --shadow-card: 0 0 0 0 transparent;
-    --shadow-pop: 0 18px 48px -16px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.35);
+    /* Sombra: nenhuma no cartão; um fio de luz por dentro, em cima. */
+    --shadow-card: inset 0 1px 0 0 rgba(255, 255, 255, 0.035);
+    --shadow-pop: 0 24px 56px -16px rgba(0, 0, 0, 0.8), 0 2px 8px rgba(0, 0, 0, 0.4);
 
-    --sidebar-background: 150 7% 5.5%;
-    --sidebar-foreground: 150 4% 56%;
+    --sidebar-background: 240 4% 4.5%;
+    --sidebar-foreground: 240 5% 65%;
     --sidebar-primary: 145 100% 50%;
-    --sidebar-primary-foreground: 0 0% 5%;
-    --sidebar-accent: 150 4% 14%;
-    --sidebar-accent-foreground: 150 6% 97%;
-    --sidebar-border: 150 4% 15.5%;
+    --sidebar-primary-foreground: 150 30% 4%;
+    --sidebar-accent: 240 5% 11.6%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 4% 14%;
     --sidebar-ring: 145 100% 50%;
   }
 
   .light {
-    /* Fundo cinza-gelo levemente tingido e cartão branco por cima. */
-    --background: 140 12% 95.5%;
-    --foreground: 160 14% 8%;
+    /* Fundo cinza claro quase neutro e cartão branco por cima, sem borda pesada. */
+    --background: 140 8% 94.5%;
+    --foreground: 240 8% 7%;
 
     --card: 0 0% 100%;
-    --card-foreground: 160 14% 8%;
+    --card-foreground: 240 8% 7%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 160 14% 8%;
+    --popover-foreground: 240 8% 7%;
 
     --primary: 145 80% 38%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 140 10% 93.5%;
-    --secondary-foreground: 160 6% 25%;
+    --secondary: 140 8% 94.5%;
+    --secondary-foreground: 240 5% 24%;
 
-    --muted: 140 10% 93.5%;
-    --muted-foreground: 160 5% 40%;
+    --muted: 140 8% 94.5%;
+    --muted-foreground: 240 4% 40%;
 
     --accent: 145 80% 38%;
     --accent-foreground: 0 0% 100%;
@@ -97,30 +122,50 @@
     --destructive: 0 78% 52%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 145 80% 38%;
-    --warning: 38 92% 48%;
-    --info: 210 90% 48%;
+    --success: 145 85% 30%;
+    --warning: 32 95% 40%;
+    --info: 212 90% 46%;
 
-    --accent-soft: 145 60% 93%;
-    --success-soft: 145 60% 93%;
-    --warning-soft: 42 95% 91%;
+    --accent-soft: 145 65% 92%;
+    --success-soft: 145 65% 92%;
+    --warning-soft: 42 95% 90%;
     --danger-soft: 0 85% 95%;
     --info-soft: 210 90% 95%;
 
-    --border: 140 9% 90%;
-    --input: 140 8% 87%;
+    --border: 140 6% 90.5%;
+    --input: 140 6% 86%;
     --ring: 145 80% 38%;
 
-    --shadow-card: 0 1px 2px rgba(16, 24, 20, 0.04), 0 10px 28px -18px rgba(16, 24, 20, 0.14);
-    --shadow-pop: 0 20px 48px -18px rgba(16, 24, 20, 0.28), 0 2px 8px rgba(16, 24, 20, 0.06);
+    /* Verde mais vivo no cartão sólido, com texto quase preto (10:1). */
+    --accent-solid: 145 78% 46%;
+    --on-accent: 150 30% 4%;
+    --on-accent-muted: 150 45% 13%;
+    --accent-solid-deep: 145 80% 38%;
+
+    /* Cartão de tinta: quase preto (#18181b), como o cartão preto das referências. */
+    --card-ink: 240 6% 10%;
+    --card-ink-foreground: 0 0% 98%;
+    --card-ink-muted: 240 5% 65%;
+    --card-ink-well: 240 5% 16%;
+    --card-ink-border: 240 4% 19%;
+    --card-ink-accent: 145 100% 50%;
+
+    --chart-1: 145 80% 38%;
+    --chart-2: 255 70% 60%;
+    --chart-3: 240 6% 10%;
+    --chart-4: 24 95% 53%;
+    --chart-5: 212 90% 46%;
+
+    --shadow-card: 0 1px 2px rgba(16, 18, 20, 0.03), 0 14px 32px -22px rgba(16, 18, 20, 0.16);
+    --shadow-pop: 0 24px 56px -18px rgba(16, 18, 20, 0.3), 0 2px 8px rgba(16, 18, 20, 0.06);
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 160 5% 35%;
+    --sidebar-foreground: 240 4% 36%;
     --sidebar-primary: 145 80% 38%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 140 10% 93.5%;
-    --sidebar-accent-foreground: 160 14% 8%;
-    --sidebar-border: 140 9% 90%;
+    --sidebar-accent: 140 8% 94.5%;
+    --sidebar-accent-foreground: 240 8% 7%;
+    --sidebar-border: 140 6% 90.5%;
     --sidebar-ring: 145 80% 38%;
   }
 }
@@ -260,6 +305,121 @@
 .ds-numero {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+/*
+ * ── Rodada ousada (15/11/2026): cartões de destaque ──
+ * As duas classes TROCAM OS TOKENS para quem está dentro: o texto, o apagado,
+ * o poço, a borda, a etiqueta e o gráfico continuam usando os mesmos nomes
+ * (text-foreground, text-muted-foreground, bg-muted, Chip...) e saem certos
+ * sobre o verde ou sobre a tinta, sem classe especial em cada filho.
+ */
+.ds-accent {
+  --card: var(--accent-solid);
+  --card-foreground: var(--on-accent);
+  --foreground: var(--on-accent);
+  --muted-foreground: var(--on-accent-muted);
+  --muted: var(--accent-solid-deep);
+  --secondary: var(--accent-solid-deep);
+  --secondary-foreground: var(--on-accent);
+  --border: var(--accent-solid-deep);
+  --input: var(--accent-solid-deep);
+  --primary: var(--on-accent);
+  --primary-foreground: var(--accent-solid);
+  --ring: var(--on-accent);
+  --success: var(--on-accent);
+  --warning: var(--on-accent);
+  --info: var(--on-accent);
+  --destructive: var(--on-accent);
+  --accent-soft: var(--accent-solid-deep);
+  --success-soft: var(--accent-solid-deep);
+  --warning-soft: var(--accent-solid-deep);
+  --danger-soft: var(--accent-solid-deep);
+  --info-soft: var(--accent-solid-deep);
+  --chart-1: var(--on-accent);
+  --chart-2: var(--on-accent-muted);
+  --shadow-card: 0 0 0 0 transparent;
+  background-color: hsl(var(--accent-solid));
+  border-color: hsl(var(--accent-solid));
+  color: hsl(var(--on-accent));
+}
+.ds-ink {
+  --card: var(--card-ink);
+  --card-foreground: var(--card-ink-foreground);
+  --foreground: var(--card-ink-foreground);
+  --muted-foreground: var(--card-ink-muted);
+  --muted: var(--card-ink-well);
+  --secondary: var(--card-ink-well);
+  --secondary-foreground: var(--card-ink-foreground);
+  --border: var(--card-ink-border);
+  --input: var(--card-ink-border);
+  --primary: var(--card-ink-accent);
+  --success: var(--card-ink-accent);
+  --ring: var(--card-ink-accent);
+  --accent-soft: var(--card-ink-well);
+  --success-soft: var(--card-ink-well);
+  --warning-soft: var(--card-ink-well);
+  --danger-soft: var(--card-ink-well);
+  --info-soft: var(--card-ink-well);
+  --chart-1: var(--card-ink-accent);
+  --chart-3: var(--card-ink-foreground);
+  --shadow-card: 0 0 0 0 transparent;
+  background-color: hsl(var(--card-ink));
+  border-color: hsl(var(--card-ink));
+  color: hsl(var(--card-ink-foreground));
+}
+/* Tinta no tema claro é fundo escuro: aviso e erro precisam do tom claro. */
+.light .ds-ink {
+  --primary-foreground: 150 30% 4%;
+  --warning: 43 100% 56%;
+  --info: 205 100% 62%;
+  --destructive: 0 92% 70%;
+}
+/* Tinta no tema escuro é fundo claro: os tons de estado do tema claro. */
+.dark .ds-ink,
+:root:not(.light) .ds-ink {
+  --primary-foreground: 0 0% 100%;
+  --warning: 32 95% 36%;
+  --info: 212 90% 42%;
+  --destructive: 0 78% 46%;
+}
+
+/*
+ * Número do cartão de indicador: o maior tamanho que cabe NUMA linha.
+ * Base fixa (28 px no celular, 36 px de 640 para cima) para navegador antigo;
+ * onde há consulta de contêiner, o tamanho sai da largura do próprio cartão
+ * dividida pela quantidade de caracteres (--ds-chars, posta pelo StatCard),
+ * entre 20 px e o teto do tamanho pedido (--ds-valor-max).
+ */
+.ds-stat-valor {
+  display: block;
+  min-width: 0;
+  font-size: 28px;
+  line-height: 1.12;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  --ds-valor-max: var(--ds-valor-max-celular, 32px);
+}
+@media (min-width: 640px) {
+  .ds-stat-valor {
+    font-size: 36px;
+    --ds-valor-max: var(--ds-valor-max-tela, 40px);
+  }
+}
+@supports (container-type: inline-size) and (width: 1cqi) {
+  .ds-stat-caixa {
+    container-type: inline-size;
+  }
+  .ds-stat-valor[data-cabe] {
+    white-space: nowrap;
+    font-size: clamp(15px, calc(100cqi / var(--ds-chars, 8) / 0.57), var(--ds-valor-max));
+  }
+}
+
+/* Gráficos do sistema (ds/charts.tsx): a cor vem do token e segue o cartão. */
+[data-ds-chart] {
+  color: hsl(var(--chart-1));
 }
 
 /*

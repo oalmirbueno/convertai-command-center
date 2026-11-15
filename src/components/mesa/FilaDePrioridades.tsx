@@ -23,6 +23,8 @@ import { rotuloDoMes, textoDoErro } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import { botao, juntar, lista, superficie } from "@/components/sistema/estilos";
+import { Avatar, ProgressBar, StatusPill, type Tone } from "@/components/ds";
+import { NumerosOusados } from "./ousado";
 import {
   mensagemDeCobranca,
   montarFila,
@@ -57,10 +59,10 @@ const ICONE: Record<TipoDeAcao, typeof Send> = {
   completar_mes: CalendarRange,
 };
 
-const NIVEL: Record<Nivel, { rotulo: string; barra: string; selo: string; ponto: string }> = {
-  agora: { rotulo: "Agora", barra: "bg-destructive", selo: "bg-destructive/10 text-destructive", ponto: "bg-destructive" },
-  semana: { rotulo: "Esta semana", barra: "bg-warning", selo: "bg-warning/15 text-foreground", ponto: "bg-warning" },
-  depois: { rotulo: "Depois", barra: "bg-border", selo: "bg-muted text-muted-foreground", ponto: "bg-muted-foreground/60" },
+const NIVEL: Record<Nivel, { rotulo: string; barra: string; selo: string; ponto: string; tom: Tone }> = {
+  agora: { rotulo: "Agora", barra: "bg-destructive", selo: "bg-danger-soft text-destructive", ponto: "bg-destructive", tom: "danger" },
+  semana: { rotulo: "Esta semana", barra: "bg-warning", selo: "bg-warning/15 text-foreground", ponto: "bg-warning", tom: "warning" },
+  depois: { rotulo: "Depois", barra: "bg-border", selo: "bg-muted text-muted-foreground", ponto: "bg-muted-foreground/60", tom: "neutral" },
 };
 
 type Filtro = "tudo" | "cobrar" | "mes" | "artes" | "entrega";
@@ -127,12 +129,12 @@ function LinhaDaAcao({
     else toast.error("Não consegui copiar", { description: "Copie o texto à mão pela tela de aprovações." });
   };
   return (
-    <li className="flex min-w-0 flex-wrap items-center py-2 sm:flex-nowrap">
-      <span className={`mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${acao.nivel === "agora" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+    <li className="flex min-w-0 flex-wrap items-center py-3.5 sm:flex-nowrap">
+      <span className={`mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${acao.nivel === "agora" ? "bg-danger-soft text-destructive" : "bg-muted text-foreground"}`}>
         <Icone className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="flex min-w-0 items-center text-[13px] font-semibold leading-tight">
+        <p className="flex min-w-0 items-center text-[13px] font-semibold leading-5">
           <span className="truncate">{acao.titulo}</span>
           <span className={`ml-2 h-1.5 w-1.5 shrink-0 rounded-full ${nivel.ponto}`} aria-label={nivel.rotulo} />
         </p>
@@ -232,7 +234,7 @@ export default function FilaDePrioridades({
   const revisoesVisiveis = (revisoes.data || []).filter(c => normalizarBusca(c.nome).includes(normalizarBusca(busca)));
 
   return (
-    <section aria-label="Prioridades" className="min-w-0 space-y-4">
+    <section aria-label="Prioridades" className="min-w-0 space-y-5 sm:space-y-6">
       {/* Cabeçalho do sistema: título, o "?" com a explicação e o resumo à direita. */}
       <CabecalhoDePagina
         nivel={2}
@@ -241,7 +243,7 @@ export default function FilaDePrioridades({
         acoes={
         <div className="flex items-center">
           {fila && (
-            <ul className="mr-2 flex items-center text-[12px]" aria-label="Resumo">
+            <ul className="mr-2 flex items-center text-[12px] sm:hidden" aria-label="Resumo">
               {(["agora", "semana", "depois"] as Nivel[]).map((n) => (
                 <li key={n} className="mr-3 inline-flex items-center last:mr-0 max-sm:mr-2" title={`${fila.resumo[n]} ${NIVEL[n].rotulo.toLowerCase()}`}>
                   <span className={`mr-1.5 h-2 w-2 rounded-full ${NIVEL[n].ponto}`} />
@@ -267,10 +269,26 @@ export default function FilaDePrioridades({
         <Input aria-label="Buscar cliente nas prioridades" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente" className="h-9 max-w-xs" />
         {consulta.dataUpdatedAt > 0 && <span className="ml-auto text-[11px] text-muted-foreground max-sm:hidden">Conferido às {new Date(consulta.dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
       </div>
-      {primeiro && !consulta.isError && <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Próxima ação recomendada">
-        <div className="min-w-0 flex-1"><p className="text-[12px] leading-4 font-medium text-primary">Comece por aqui · {primeiro.nome}</p><p className="mt-1 text-[13px] leading-5 font-semibold">{tituloComMes(primeiro.acoes[0])}</p><p className="mt-1 text-[12px] leading-4 text-muted-foreground">{primeiro.acoes[0].motivo}</p></div>
-        <button type="button" className={juntar(botao.primario, "h-9 px-3 text-[12px] leading-4")} onClick={() => onAbrir(primeiro.client_id, primeiro.acoes[0].aba, primeiro.acoes[0].mes)}>Começar <ArrowRight className="ml-2 h-4 w-4" /></button>
+      {primeiro && !consulta.isError && <div className={juntar(superficie.painel, superficie.destaque, "flex flex-wrap items-center p-5 sm:p-6")} data-card="accent" aria-label="Próxima ação recomendada">
+        <div className="mb-3 mr-4 min-w-0 flex-1 sm:mb-0"><p className="text-[12px] font-medium leading-4 text-muted-foreground">Comece por aqui · {primeiro.nome}</p><p className="mt-2 text-[20px] font-semibold leading-7 tracking-[-0.02em] text-foreground sm:text-[24px] sm:leading-8">{tituloComMes(primeiro.acoes[0])}</p><p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">{primeiro.acoes[0].motivo}</p></div>
+        <button type="button" className={juntar(botao.primario, "h-11 bg-foreground px-5 text-[13px] text-background hover:bg-foreground/90")} onClick={() => onAbrir(primeiro.client_id, primeiro.acoes[0].aba, primeiro.acoes[0].mes)}>Começar <ArrowRight className="ml-2 h-4 w-4" /></button>
       </div>}
+
+      {/* Rodada ousada (15/11/2026): os três níveis em número grande (a contagem que a fila já traz). */}
+      {fila && fila.grupos.length > 0 && (
+        <NumerosOusados
+          rotulo="Ações por urgência"
+          colunas={3}
+          destaque={-1}
+          tinta={0}
+          data-resumo-da-fila=""
+          itens={(["agora", "semana", "depois"] as Nivel[]).map((n) => ({
+            rotulo: NIVEL[n].rotulo,
+            valor: fila.resumo[n],
+            grafico: <ProgressBar value={fila.resumo[n]} max={Math.max(1, fila.resumo.agora + fila.resumo.semana + fila.resumo.depois)} tone={n === "agora" ? 4 : n === "semana" ? 2 : "muted"} label={`${fila.resumo[n]} de ${fila.resumo.agora + fila.resumo.semana + fila.resumo.depois} ações`} />,
+          }))}
+        />
+      )}
 
       {fila && fila.grupos.length > 0 && (
         <div role="group" aria-label="Filtrar por ação" className="flex flex-wrap">
@@ -283,7 +301,7 @@ export default function FilaDePrioridades({
                 type="button"
                 aria-pressed={filtro === f.chave}
                 onClick={() => setFiltro(f.chave)}
-                className={`mb-1.5 mr-1.5 inline-flex h-7 items-center rounded-full border px-3 text-[12px] font-medium transition-colors ${
+                className={`mb-2 mr-2 inline-flex h-9 items-center rounded-full border px-4 text-[13px] font-medium transition-colors ${
                   filtro === f.chave ? "border-foreground bg-foreground text-background" : "border-border bg-card text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -298,7 +316,7 @@ export default function FilaDePrioridades({
       {(consulta.isLoading || (!consulta.data && !consulta.isError)) && (
         <div aria-busy="true" aria-label="Carregando prioridades" className="space-y-2">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
+            <div key={i} className="h-28 animate-pulse rounded-lg bg-muted" />
           ))}
         </div>
       )}
@@ -317,27 +335,29 @@ export default function FilaDePrioridades({
       )}
 
       {grupos.length > 0 && (
-        <ol className="space-y-2.5">
+        <ol className="space-y-3 sm:space-y-4">
           {grupos.map((g, i) => {
             const nivel = NIVEL[g.acoes[0].nivel];
             return (
               // Cada cliente é uma coisa só (grupo de ações): o cartão sólido do sistema, com a faixa do nível.
-              <li key={g.client_id} className={juntar(superficie.painel, "relative overflow-hidden")}>
-                <span className={`absolute bottom-0 left-0 top-0 w-1 ${nivel.barra}`} aria-hidden="true" />
-                <div className="px-4 pb-1.5 pl-5 pt-3">
+              <li key={g.client_id} className={juntar(superficie.painel, "relative overflow-hidden")} data-nivel={g.acoes[0].nivel}>
+                <div className="px-5 pb-2 pt-5 sm:px-6">
                   <div className="flex min-w-0 items-center">
-                    <span className="mr-2 w-5 shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">{i + 1}</span>
-                    <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold">{g.nome}</h3>
+                    <span className="relative mr-3 shrink-0">
+                      <Avatar name={g.nome} tone={i === 0 ? "ink" : "neutral"} />
+                      <span className="absolute -bottom-1 -right-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-card bg-muted px-1 text-[11px] font-semibold leading-none tabular-nums text-muted-foreground">{i + 1}</span>
+                    </span>
+                    <h3 className="min-w-0 flex-1 truncate text-[18px] font-semibold leading-6 tracking-[-0.02em]">{g.nome}</h3>
                     <button type="button" className="ml-2 text-[12px] leading-4 text-muted-foreground hover:text-primary" aria-label={`Abrir conhecimento de ${g.nome}`} onClick={() => onAbrir(g.client_id, "contexto", null)}>Contexto</button>
-                    <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${nivel.selo}`}>{nivel.rotulo}</span>
+                    <StatusPill className="ml-2" tone={nivel.tom}>{nivel.rotulo}</StatusPill>
                   </div>
                   {g.pronto && (
-                    <p className="ml-7 mt-0.5 flex min-w-0 items-center text-[12px] text-muted-foreground">
+                    <p className="ml-[52px] mt-0.5 flex min-w-0 items-center text-[12px] text-muted-foreground">
                       <CheckCircle2 className="mr-1 h-3 w-3 shrink-0 text-success" />
                       <span className="truncate">{g.pronto}</span>
                     </p>
                   )}
-                  <ul className="mt-1 divide-y divide-border">
+                  <ul className="mt-2 divide-y divide-border/70">
                     {(expandidos[g.client_id] ? g.acoes : g.acoes.slice(0, 1)).map((a) => (
                       <LinhaDaAcao
                         key={`${a.tipo}-${a.mes || ""}`}
@@ -349,7 +369,7 @@ export default function FilaDePrioridades({
                       />
                     ))}
                   </ul>
-                  {g.acoes.length > 1 && <button type="button" aria-expanded={!!expandidos[g.client_id]} className="mb-2 ml-11 text-[12px] leading-4 text-muted-foreground hover:text-foreground" onClick={() => setExpandidos(v => ({ ...v, [g.client_id]: !v[g.client_id] }))}>{expandidos[g.client_id] ? "Recolher outras ações" : `Mais ${g.acoes.length - 1} ${g.acoes.length === 2 ? "ação" : "ações"} deste cliente`}</button>}
+                  {g.acoes.length > 1 && <button type="button" aria-expanded={!!expandidos[g.client_id]} className="mb-3 ml-[52px] text-[12px] leading-4 text-muted-foreground hover:text-foreground" onClick={() => setExpandidos(v => ({ ...v, [g.client_id]: !v[g.client_id] }))}>{expandidos[g.client_id] ? "Recolher outras ações" : `Mais ${g.acoes.length - 1} ${g.acoes.length === 2 ? "ação" : "ações"} deste cliente`}</button>}
                 </div>
               </li>
             );
@@ -375,7 +395,7 @@ export default function FilaDePrioridades({
                     type="button"
                     onClick={() => onAbrir(c.client_id, "mes", null)}
                     title={c.pronto || undefined}
-                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[12px] text-foreground hover:border-primary/50"
+                    className="rounded-full border border-border bg-card px-3.5 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
                   >
                     {c.nome}
                   </button>
@@ -387,7 +407,7 @@ export default function FilaDePrioridades({
       )}
 
       {revisoes.isError && <p className="text-[12px] leading-4 text-muted-foreground">A revisão dos dossiês não pôde ser consultada. Atualize para tentar novamente.</p>}
-      {revisoesVisiveis.length > 0 && <details className="rounded-lg border border-border p-3">
+      {revisoesVisiveis.length > 0 && <details className="rounded-lg border border-border p-5">
         <summary className="cursor-pointer text-[13px] leading-5 font-medium">Contextos a conferir <span className="text-muted-foreground">({revisoesVisiveis.length})</span></summary>
         <p className="mt-2 text-[12px] leading-4 text-muted-foreground">A data sinaliza uma revisão; não significa que as informações estejam erradas.</p>
         <ul className="mt-2 divide-y divide-border">{revisoesVisiveis.map(c => <li key={c.id} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-[13px] leading-5">{c.nome}</p><p className="text-[12px] leading-4 text-muted-foreground">{c.motivo}</p></div><button className={juntar(botao.secundario, "h-8 px-3 text-[12px] leading-4")} onClick={() => onAbrir(c.id, "contexto", null)}>Revisar</button></li>)}</ul>

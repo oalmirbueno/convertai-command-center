@@ -615,7 +615,7 @@ export default function ArteDoCriativo({
                 type="button"
                 aria-pressed={zonaSegura}
                 onClick={() => setZonaSegura((z) => !z)}
-                className={juntar(botao.icone, "mb-1 mr-2 mt-1", zonaSegura && "bg-primary/10 text-primary")}
+                className={juntar(botao.icone, "mb-1 mr-2 mt-1", zonaSegura && "bg-accent-soft text-primary")}
                 aria-label="Zona segura"
                 title="Zona segura: nada importante nos 14% de cima e nos 20% de baixo"
               >
@@ -644,7 +644,7 @@ export default function ArteDoCriativo({
               role="switch"
               aria-checked={corrigirSozinho}
               onClick={() => setCorrigirSozinho((c) => !c)}
-              className={juntar(botao.icone, "mb-1 mr-2 mt-1", corrigirSozinho && "bg-primary/10 text-primary")}
+              className={juntar(botao.icone, "mb-1 mr-2 mt-1", corrigirSozinho && "bg-accent-soft text-primary")}
               aria-label={`Corrigir sozinho${corrigirSozinho ? "" : " (desligado)"}`}
               title={`Corrigir sozinho${corrigirSozinho ? "" : " (desligado)"}: depois de gerar ou ajustar, se a conferência achar erro de texto, logo, identidade, política ou clareza, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a arte.`}
             >
@@ -661,7 +661,7 @@ export default function ArteDoCriativo({
             const e = andamentoIrmaos[i.criativo.id];
             const rotulo =
               e === "fila" ? "na fila" : e === "ajustando" ? "ajustando" : e === "conferindo" ? "conferindo" : e === "feito" ? "feito" : e === "sem_arte" ? "sem arte ainda" : "falhou";
-            const tom = e === "feito" ? "bg-success/10 text-success" : e === "erro" ? "bg-destructive/10 text-destructive" : e === "sem_arte" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary";
+            const tom = e === "feito" ? "bg-success-soft text-success" : e === "erro" ? "bg-danger-soft text-destructive" : e === "sem_arte" ? "bg-muted text-muted-foreground" : "bg-accent-soft text-primary";
             return (
               <span key={i.criativo.id} data-irmao={e} className={`mb-1 mr-1.5 mt-1 inline-flex h-6 items-center rounded-full px-2 text-[11px] ${tom}`}>
                 {formatoDe(i.criativo.formato).rotulo}: {rotulo}

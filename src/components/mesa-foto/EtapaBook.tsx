@@ -491,7 +491,7 @@ function FilaDePedidos({ aberto }: { aberto: BookAberto }) {
                           key={r.id}
                           type="button"
                           aria-pressed={usa}
-                          className={juntar("mb-1 mr-1 max-w-[140px] truncate rounded-full border px-2 py-px", usa ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground", foco)}
+                          className={juntar("mb-1 mr-1 max-w-[140px] truncate rounded-full border px-2 py-px", usa ? "border-primary bg-accent-soft text-primary" : "border-border text-muted-foreground", foco)}
                           onClick={() => mudar(p.id, { referencias: usa ? p.referencias.filter((x) => x !== r.id) : p.referencias.concat([r.id]).slice(-MAX_ESTILO_POR_FOTO) })}
                         >
                           {r.titulo}
@@ -605,7 +605,7 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               </button>
             </div>
             <div className="flex min-w-0 flex-wrap items-center">
-              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (noBook(fotoAberta.id)) && "bg-primary/10 text-primary")} type="button" onClick={() => alternar(fotoAberta.id)} aria-label={noBook(fotoAberta.id) ? "No book" : "Pôr no book"} title={noBook(fotoAberta.id) ? "No book" : "Pôr no book"}>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (noBook(fotoAberta.id)) && "bg-accent-soft text-primary")} type="button" onClick={() => alternar(fotoAberta.id)} aria-label={noBook(fotoAberta.id) ? "No book" : "Pôr no book"} title={noBook(fotoAberta.id) ? "No book" : "Pôr no book"}>
                 <BookImage className="h-4 w-4" aria-hidden="true" />
               </button>
               <AprovarFoto foto={fotoAberta} onMudou={mudou} />
@@ -661,7 +661,7 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               onClick={() => alternar(f.id)}
               aria-label={noBook(f.id) ? "No book" : "Pôr no book"}
               title={noBook(f.id) ? "No book (toque para tirar)" : "Pôr no book"}
-              className={juntar(botao.icone, "mt-1 w-full", noBook(f.id) && "bg-primary/10 text-primary")}
+              className={juntar(botao.icone, "mt-1 w-full", noBook(f.id) && "bg-accent-soft text-primary")}
             >
               {/* 16/10/2026: só o ícone; ligado fica na cor da marca. */}
               {noBook(f.id) ? <Check className="h-4 w-4" aria-hidden="true" /> : <BookImage className="h-4 w-4" aria-hidden="true" />}

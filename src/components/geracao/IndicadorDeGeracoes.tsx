@@ -19,7 +19,7 @@ export default function IndicadorDeGeracoes({ userId }: { userId: string | null 
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-2.5 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-accent-soft px-3.5 text-[12px] font-medium text-primary transition-colors hover:text-foreground"
           title={rotulo}
           aria-label={rotulo}
         >
@@ -28,12 +28,12 @@ export default function IndicadorDeGeracoes({ userId }: { userId: string | null 
           <span className="sm:hidden">{n}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 p-1.5">
+      <PopoverContent align="end" className="w-72 p-2">
         <p className="px-2 pb-1 pt-1.5 text-[12px] text-muted-foreground">A geração segue no servidor, mesmo com a tela fechada.</p>
         <ul>
           {clientes.map((c) => (
             <li key={c.client_id}>
-              <Link to={c.link} className="flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[13px] hover:bg-secondary/60">
+              <Link to={c.link} className="flex min-w-0 items-center justify-between gap-2 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors hover:bg-muted">
                 <span className="min-w-0 truncate">{c.nome}</span>
                 <span className="shrink-0 text-[12px] text-muted-foreground">
                   {c.laminas} {c.laminas === 1 ? "lâmina" : "lâminas"}

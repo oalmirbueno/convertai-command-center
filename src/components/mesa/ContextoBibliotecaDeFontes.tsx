@@ -378,7 +378,7 @@ export default function BibliotecaDeFontes({
                   }}
                   aria-pressed={categoria === c}
                   className={`mr-1.5 shrink-0 rounded-full border px-2.5 py-1 text-[12px] capitalize ${
-                    categoria === c ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    categoria === c ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-card text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {c === "todas" ? "Todas" : c}

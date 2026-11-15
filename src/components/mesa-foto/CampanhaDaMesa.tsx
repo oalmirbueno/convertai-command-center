@@ -128,14 +128,14 @@ export function SeletorDaCampanha({ escolhida, titulo = "Campanha da Mesa" }: { 
                 aria-checked={valor === c.id}
                 onClick={() => escolher(c.id)}
                 title={c.motivo}
-                className={`mb-1.5 mr-1.5 inline-flex h-7 max-w-full items-center rounded-full border px-2.5 text-[12px] transition-colors ${
-                  valor === c.id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
+                className={`mb-1.5 mr-1.5 inline-flex h-8 max-w-full items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors ${
+                  valor === c.id ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-foreground hover:border-primary/50"
                 }`}
                 data-campanha-da-mesa-item={c.id}
               >
                 <span className="truncate">{c.nome}</span>
                 {c.do_mes && (
-                  <span className={`ml-1.5 inline-flex shrink-0 items-center rounded-full px-1.5 text-[11px] font-semibold ${valor === c.id ? "bg-primary-foreground/20" : "bg-primary/10 text-primary"}`} data-do-mes="">
+                  <span className={`ml-1.5 inline-flex shrink-0 items-center rounded-full px-1.5 text-[11px] font-semibold ${valor === c.id ? "bg-primary-foreground/20" : "bg-accent-soft text-primary"}`} data-do-mes="">
                     <CalendarDays className="mr-0.5 h-2.5 w-2.5" /> do mês
                   </span>
                 )}
@@ -146,7 +146,7 @@ export function SeletorDaCampanha({ escolhida, titulo = "Campanha da Mesa" }: { 
               role="radio"
               aria-checked={valor === SEM_CAMPANHA}
               onClick={() => escolher(SEM_CAMPANHA)}
-              className={`mb-1.5 mr-1.5 h-7 rounded-full border px-2.5 text-[12px] ${valor === SEM_CAMPANHA ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/50"}`}
+              className={`mb-1.5 mr-1.5 h-8 rounded-full border px-3.5 text-[12px] font-medium ${valor === SEM_CAMPANHA ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:border-primary/50"}`}
             >
               Sem campanha
             </button>

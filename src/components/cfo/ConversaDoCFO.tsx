@@ -177,7 +177,7 @@ export default function ConversaDoCFO({ semMoldura = false, className = "", titu
                 type="button"
                 disabled={enviando}
                 onClick={() => void enviar(q.pergunta)}
-                className={juntar(toqueCompacto, "m-0.5 inline-flex h-7 items-center rounded-md border border-border px-2 text-[12px] text-foreground hover:bg-muted disabled:opacity-50")}
+                className={juntar(toqueCompacto, "m-0.5 inline-flex h-8 items-center rounded-full border border-border bg-card px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50")}
               >
                 {q.rotulo}
               </button>
@@ -206,7 +206,7 @@ export default function ConversaDoCFO({ semMoldura = false, className = "", titu
               data-campo-do-cfo=""
             />
             <Ditado valor={texto} onChange={setTexto} disabled={enviando} className="mr-2" />
-            <button type="submit" disabled={enviando || !texto.trim()} className={juntar(botao.primario, "h-10")} aria-label="Enviar ao CFO">
+            <button type="submit" disabled={enviando || !texto.trim()} className={juntar(botao.primario, "h-11 w-11 px-0")} aria-label="Enviar ao CFO">
               {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             </button>
           </form>
@@ -216,7 +216,7 @@ export default function ConversaDoCFO({ semMoldura = false, className = "", titu
         </>
       }
     >
-      <div className="min-w-0 space-y-3 px-3.5 py-3" data-conversa-do-cfo="">
+      <div className="min-w-0 space-y-4 px-4 py-4 sm:px-5" data-conversa-do-cfo="">
         {buscando && (
           <div className="min-w-0">
             <input

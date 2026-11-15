@@ -228,7 +228,7 @@ export function CartaoDaMudanca({ mensagemId, mudanca }: { mensagemId: string; m
   };
 
   return (
-    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-3.5")} data-mudanca={estado}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-4")} data-mudanca={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <Wand2 className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Mudança sugerida na proposta{mudanca.periodo ? ` de ${periodoCurto(mudanca.periodo.inicio, mudanca.periodo.fim)}` : ""}
@@ -473,7 +473,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao, semMoldura = false }: {
   };
 
   return (
-    <section className={semMoldura ? "min-w-0" : juntar(superficie.painel, "mr-6 min-w-0 border-destructive/30 p-3.5")} data-acao-agenda={estado}>
+    <section className={semMoldura ? "min-w-0" : juntar(superficie.painel, "mr-6 min-w-0 border-destructive/30 p-4")} data-acao-agenda={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-destructive" />
         Mudança na agenda gravada · {total + trocar.length} {total + trocar.length === 1 ? "item" : "itens"}
@@ -717,7 +717,7 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
   };
 
   return (
-    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-3.5")} data-criacao={estado}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-4")} data-criacao={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Criar conteúdos · {criacao.itens.length}
@@ -831,7 +831,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
   };
 
   return (
-    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-3.5")} data-geracao={estado}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-4")} data-geracao={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Gerar os conteúdos · {atual.meses.length} {atual.meses.length === 1 ? "mês" : "meses"}

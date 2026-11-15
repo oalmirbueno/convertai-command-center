@@ -257,7 +257,7 @@ export default function Moodboard() {
             </div>
           )}
           {(aberto === "acervo" || aberto === "web") && (
-            <div className="grid min-w-0 grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-6">
+            <div className="grid min-w-0 grid-cols-3 gap-3 sm:gap-4 sm:grid-cols-4 xl:grid-cols-6">
               {(aberto === "acervo" ? doAcervo : (achados || []).map((a, i) => ({ id: `w-${a.id || i}`, titulo: a.titulo, nota: "", origem: "web" as const, url: a.miniatura_url || a.imagem_url, fonte_url: a.fonte_url, fonte_nome: a.fonte_nome, licenca: a.licenca_rotulo, autor: a.autor }))).map((it) => (
                 <button key={it.id} type="button" className="min-w-0 text-left" onClick={() => acrescentar([{ ...it, id: novoId() }])} aria-label={`Trazer ${it.titulo} ao moodboard`}>
                   <Quadro item={it} />

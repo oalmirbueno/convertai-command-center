@@ -342,7 +342,7 @@ function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f
             onClick={() => setFiltro(f.valor)}
             aria-pressed={filtroReal === f.valor}
             className={`mb-1.5 mr-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
-              filtroReal === f.valor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+              filtroReal === f.valor ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-card text-muted-foreground hover:text-foreground"
             }`}
           >
             {f.rotulo} {fotos.data ? contagem(f.valor) : ""}
@@ -361,7 +361,7 @@ function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f
           </p>
         )}
         {fotos.data && lista.length > 0 && !visiveis.length && <p className="text-[12px] text-muted-foreground">Nenhuma foto neste filtro.</p>}
-        <ul className="grid grid-cols-3 gap-2">
+        <ul className="grid grid-cols-3 gap-2 sm:gap-3">
           {visiveis.map((f) => {
             const usada = usadas.indexOf(f.storage_path) >= 0;
             return (
@@ -963,7 +963,7 @@ export default function EstudioFotos({
             <p className="min-w-0 flex-1 text-[12px] font-medium">Fotos que vieram da Mesa Foto</p>
             <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground" onClick={dispensarMesaFoto}>Dispensar</button>
           </div>
-          <ul className="grid grid-cols-3 gap-2">
+          <ul className="grid grid-cols-3 gap-2 sm:gap-3">
             {vindasDaMesaFoto.map((imagem) => (
               <li key={imagem.id} className="min-w-0">
                 <FotoDoAcervo imagem={imagem} />

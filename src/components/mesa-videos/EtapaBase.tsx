@@ -39,7 +39,7 @@ import {
 type ParteDaBase = "cenas" | "roteiros" | "pessoas" | "produtos";
 const PARTES: ParteDaBase[] = ["cenas", "roteiros", "pessoas", "produtos"];
 const MAX_FOTOS_NA_GRADE = 60;
-const GRADE = "grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5 desk:grid-cols-7";
+const GRADE = "grid grid-cols-3 gap-3 sm:gap-4 sm:grid-cols-4 lg:grid-cols-5 desk:grid-cols-7";
 
 function GradeDeFotos({ fotos, vazio, onde }: { fotos: FotoDoAcervo[]; vazio: string; onde: string }) {
   if (!fotos.length) return <EstadoVazio compacto titulo="Nada aqui ainda." descricao={vazio} />;

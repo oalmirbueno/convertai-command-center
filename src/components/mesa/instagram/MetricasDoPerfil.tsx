@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
-import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import { DeltaChip, Sparkline } from "@/components/ds";
+import { NumerosAbertos } from "../ousado";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
@@ -27,15 +28,15 @@ import { useMarcaDaMesa } from "../MesaContexto";
  * do /metricas e do MCP de métricas. Nada novo é coletado aqui.
  */
 
+/** Variação da semana em pílula com seta (uma casa decimal). */
 function Variacao({ pct }: { pct: number | null }) {
   if (pct === null || !isFinite(pct)) return null;
-  const alta = pct >= 0;
-  return (
-    <span className={juntar("text-[12px] tabular-nums", alta ? "text-success" : "text-destructive")}>
-      {alta ? "+" : ""}
-      {pct.toFixed(1).replace(".", ",")}%
-    </span>
-  );
+  return <DeltaChip value={Math.round(pct * 10) / 10} />;
+}
+
+/** Série das últimas 12 semanas de um campo, da mais antiga para a mais nova (para o minigráfico). */
+function serieDe(linhas: SocialMetricsWeek[], campo: "followers" | "reach" | "total_interactions" | "profile_views"): number[] {
+  return linhas.slice(0, 12).reverse().map((l) => l[campo]).filter((x): x is number => typeof x === "number" && isFinite(x));
 }
 
 /** Pontos da linha (0 a 1) de uma série; vazio quando há menos de 2 valores. */
@@ -53,14 +54,14 @@ function Linha({ rotulo, linhas, campo }: { rotulo: string; linhas: SocialMetric
   const pontos = pontosDaLinha(serie, 200, 40);
   const ultimo = serie.length ? serie[serie.length - 1] : null;
   return (
-    <div className="min-w-0 rounded-md bg-muted/40 px-3 py-2">
+    <div className="min-w-0 rounded-md bg-muted/60 px-4 py-4">
       <div className="flex items-center justify-between">
         <span className={texto.rotulo}>{rotulo}</span>
-        <span className="text-[12px] tabular-nums text-foreground">{formatMetricNumber(ultimo)}</span>
+        <span className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{formatMetricNumber(ultimo)}</span>
       </div>
       {pontos ? (
-        <svg viewBox="0 0 200 44" preserveAspectRatio="none" className="mt-1 h-10 w-full" role="img" aria-label={`${rotulo} nas últimas semanas`}>
-          <polyline points={pontos} fill="none" stroke="currentColor" strokeWidth="2" className="text-primary" vectorEffect="non-scaling-stroke" />
+        <svg viewBox="0 0 200 44" preserveAspectRatio="none" className="mt-3 h-14 w-full" role="img" aria-label={`${rotulo} nas últimas semanas`}>
+          <polyline points={pontos} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary" vectorEffect="non-scaling-stroke" />
         </svg>
       ) : (
         <p className={juntar(texto.auxiliar, "mt-1")}>Poucas semanas para a linha.</p>
@@ -119,23 +120,24 @@ export default function MetricasDoPerfil({ clientId, contaId }: { clientId: stri
   }
 
   return (
-    <div className="min-w-0 space-y-3" data-metricas-do-perfil="">
-      <FaixaDeNumeros
+    <div className="min-w-0 space-y-6" data-metricas-do-perfil="">
+      {/* Rodada ousada (15/11/2026): número grande, variação em pílula e a linha das últimas semanas (a série que o robô já coletou). */}
+      <NumerosAbertos
         rotulo="Números da conta"
-        tamanho="compacto"
-        grade="grid-cols-2 xl:grid-cols-4"
+        colunas={4}
+        className="grid-cols-2 lg:grid-cols-2 xl:grid-cols-4"
         itens={[
-          { rotulo: "Seguidores", valor: formatMetricNumber(ultima.followers), aoLado: <Variacao pct={weekDeltaPct(linhas, "followers")} /> },
-          { rotulo: "Alcance", valor: formatMetricNumber(fechada ? fechada.reach : ultima.reach), aoLado: <Variacao pct={weekDeltaPct(linhas, "reach")} /> },
-          { rotulo: "Interações", valor: formatMetricNumber(fechada ? fechada.total_interactions : ultima.total_interactions), aoLado: <Variacao pct={weekDeltaPct(linhas, "total_interactions")} /> },
-          { rotulo: "Visitas", valor: formatMetricNumber(fechada ? fechada.profile_views : ultima.profile_views), aoLado: <Variacao pct={weekDeltaPct(linhas, "profile_views")} /> },
+          { rotulo: "Seguidores", valor: formatMetricNumber(ultima.followers), apoio: <Variacao pct={weekDeltaPct(linhas, "followers")} />, grafico: <Sparkline values={serieDe(linhas, "followers")} height={36} tone={1} label="Seguidores nas últimas semanas" /> },
+          { rotulo: "Alcance", valor: formatMetricNumber(fechada ? fechada.reach : ultima.reach), apoio: <Variacao pct={weekDeltaPct(linhas, "reach")} />, grafico: <Sparkline values={serieDe(linhas, "reach")} height={36} tone={2} label="Alcance nas últimas semanas" /> },
+          { rotulo: "Interações", valor: formatMetricNumber(fechada ? fechada.total_interactions : ultima.total_interactions), apoio: <Variacao pct={weekDeltaPct(linhas, "total_interactions")} />, grafico: <Sparkline values={serieDe(linhas, "total_interactions")} height={36} tone={1} label="Interações nas últimas semanas" /> },
+          { rotulo: "Visitas", valor: formatMetricNumber(fechada ? fechada.profile_views : ultima.profile_views), apoio: <Variacao pct={weekDeltaPct(linhas, "profile_views")} />, grafico: <Sparkline values={serieDe(linhas, "profile_views")} height={36} tone={2} label="Visitas ao perfil nas últimas semanas" /> },
         ]}
       />
 
       <div className="min-w-0">
         <TituloRecolhivel titulo="Últimas semanas" recolhido={linhaRecolhida} onAlternar={() => setLinhaRecolhida(!linhaRecolhida)} resumo={`${Math.min(12, linhas.length)} semanas`} />
         {!linhaRecolhida && (
-          <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
             <Linha rotulo="Seguidores" linhas={linhas} campo="followers" />
             <Linha rotulo="Alcance" linhas={linhas} campo="reach" />
           </div>
@@ -158,26 +160,26 @@ export default function MetricasDoPerfil({ clientId, contaId }: { clientId: stri
           )}
         </div>
         {!postsRecolhidos && (
-          <ul className="mt-2 min-w-0 space-y-1" aria-label="Posts e números">
+          <ul className="-mx-2 mt-2 min-w-0 divide-y divide-border/60" aria-label="Posts e números">
             {lista.map((p) => (
               <li key={p.id} className="min-w-0">
-                <a href={p.permalink || "#"} target="_blank" rel="noreferrer" className="flex min-w-0 items-center rounded-md px-1.5 py-1 hover:bg-muted">
-                  <span className="relative mr-2 block h-12 w-9 shrink-0 overflow-hidden rounded bg-muted">
+                <a href={p.permalink || "#"} target="_blank" rel="noreferrer" className="flex min-w-0 items-center rounded-md px-2 py-3 transition-colors hover:bg-muted/60">
+                  <span className="relative mr-3 block h-14 w-11 shrink-0 overflow-hidden rounded-md bg-muted">
                     {(p.thumbnail_url || p.media_url) && (
                       <img src={(p.media_type === "VIDEO" ? p.thumbnail_url : p.media_url || p.thumbnail_url) || ""} alt={p.caption ? p.caption.slice(0, 60) : "Post"} loading="lazy" referrerPolicy="no-referrer" className="absolute inset-0 h-full w-full object-cover" />
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] leading-4 text-foreground">{p.caption ? p.caption.slice(0, 90) : "(sem legenda)"}</span>
+                    <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{p.caption ? p.caption.slice(0, 90) : "(sem legenda)"}</span>
                     <span className="block text-[12px] leading-4 text-muted-foreground">
                       {p.posted_at ? p.posted_at.slice(0, 10).split("-").reverse().join("/") : ""} · {ROTULO_DO_TIPO[String(p.media_type || "")] || "Post"}
                     </span>
-                    <span className="mt-0.5 block h-1 w-full overflow-hidden rounded bg-muted" aria-hidden="true">
-                      <span className="block h-full rounded bg-primary/70" style={{ width: `${Math.max(3, Math.round((interacoes(p) / maior) * 100))}%` }} />
+                    <span className="mt-1.5 block h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                      <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(3, Math.round((interacoes(p) / maior) * 100))}%` }} />
                     </span>
                   </span>
-                  <span className="ml-2 w-[92px] shrink-0 text-right text-[12px] leading-4 tabular-nums text-muted-foreground">
-                    <span className="block text-foreground">{formatMetricNumber(interacoes(p))} inter.</span>
+                  <span className="ml-3 w-[96px] shrink-0 text-right text-[12px] leading-4 tabular-nums text-muted-foreground">
+                    <span className="block text-[13px] font-semibold leading-5 text-foreground">{formatMetricNumber(interacoes(p))} inter.</span>
                     {p.reach ? <span className="block">{formatMetricNumber(p.reach)} alcance</span> : null}
                     {p.saved ? <span className="block">{formatMetricNumber(p.saved)} salvos</span> : null}
                   </span>

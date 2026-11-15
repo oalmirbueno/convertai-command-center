@@ -104,7 +104,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
               Peças do mês
             </button>
             {pecasQ.isSuccess && (
-              <span className={juntar(etiqueta, "ml-2", aFazer ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")} data-pecas-a-fazer={aFazer}>
+              <span className={juntar(etiqueta, "ml-2", aFazer ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")} data-pecas-a-fazer={aFazer}>
                 {aFazer ? `${aFazer} para fazer` : semPecas ? "nenhuma" : "tudo feito"}
               </span>
             )}
@@ -140,7 +140,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
                         <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{rotuloDaData(p) || "sem data"}</span>
                         {!p.gravada && <span className={juntar(etiqueta, "ml-auto bg-warning/15 text-warning")}>não gravado</span>}
                         {feita && (
-                          <span className={juntar(etiqueta, "ml-auto bg-primary/10 text-primary")}>
+                          <span className={juntar(etiqueta, "ml-auto bg-accent-soft text-primary")}>
                             <Check className="mr-0.5 h-3 w-3" aria-hidden="true" /> feita
                           </span>
                         )}

@@ -452,7 +452,7 @@ function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["refer
             const f = todas.find((x) => x.id === r.imagem_id);
             return (
               <li key={r.imagem_id} className="flex min-w-0 items-center" data-referencia={r.imagem_id}>
-                <span className="mr-2 w-10 shrink-0">{f ? <MiniaturaDaFoto foto={f} selo={false} /> : <span className="block h-10 w-10 rounded-lg bg-muted" />}</span>
+                <span className="mr-2 w-10 shrink-0">{f ? <MiniaturaDaFoto foto={f} selo={false} /> : <span className="block h-10 w-10 rounded-full bg-muted" />}</span>
                 <Pilulas
                   rotulo="Usar a referência como"
                   className="min-w-0 flex-1"
@@ -987,7 +987,7 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
             </label>
             <button
               type="button"
-              className={juntar(botao.icone, "mb-1.5", lupa && "bg-primary/10 text-primary")}
+              className={juntar(botao.icone, "mb-1.5", lupa && "bg-accent-soft text-primary")}
               aria-pressed={!!lupa}
               onClick={() => setLupa(lupa ? null : { x: 50, y: 35 })}
               aria-label="Lupa"
@@ -996,7 +996,7 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
               <ZoomIn className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
-          <ul className="mt-1 grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Candidatas por motor">
+          <ul className="mt-1 grid min-w-0 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" aria-label="Candidatas por motor">
             {grupos.map((g, i) => (
               <ColunaDoMotor
                 key={g.motor_id}
@@ -1117,7 +1117,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
       <div className="mb-2 w-full sm:w-56">
         <SeletorDeQualidade valor={qualidade} onChange={setQualidade} disabled={semAncora} />
       </div>
-      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6" aria-label="Vistas da folha" data-faixa-da-folha="">
+      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-6" aria-label="Vistas da folha" data-faixa-da-folha="">
         {VISTAS_DA_FOLHA.map((v) => {
           const img = resumo.vistas[v.valor];
           const a = andamentos[chaveDoAndamento(persona.id, "vista", v.valor)];
@@ -1536,7 +1536,7 @@ export function PersonaAberta({ persona }: { persona: Persona }) {
     <div className="min-w-0 space-y-4" data-persona-aberta={persona.id}>
       {imagensQ.isError && <EstadoDeErro titulo="Não foi possível ler as imagens da persona." descricao={textoDoErro(imagensQ.error)} acao={<button type="button" className={botao.secundario} onClick={() => void imagensQ.refetch()}>Tentar de novo</button>} />}
       <div role="group" aria-label="Ferramentas do modelo" className="flex flex-wrap gap-1 border-b border-border pb-2">
-        {[['fotos','Fotos e versões'],['gerar','Criar opções'],['vistas','Vistas do modelo'],['detalhes','Detalhes em 4K']].map(([id, titulo]) => <button key={id} type="button" aria-pressed={aba === id} onClick={() => setAba(id)} className={juntar(botao.barra, aba === id && "bg-primary/10 text-primary")}>{titulo}</button>)}
+        {[['fotos','Fotos e versões'],['gerar','Criar opções'],['vistas','Vistas do modelo'],['detalhes','Detalhes em 4K']].map(([id, titulo]) => <button key={id} type="button" aria-pressed={aba === id} onClick={() => setAba(id)} className={juntar(botao.barra, aba === id && "bg-accent-soft text-primary")}>{titulo}</button>)}
       </div>
       <div hidden={aba !== "fotos"}><FotosDoModelo key={persona.id} persona={persona} imagens={imagens} /></div>
       <div hidden={aba !== "gerar"}><Rodada persona={persona} imagens={imagens} /></div>

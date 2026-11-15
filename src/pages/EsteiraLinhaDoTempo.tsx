@@ -7,6 +7,7 @@ import CaixaPrecisaDeVoce from "@/components/esteira-linha/CaixaPrecisaDeVoce";
 import GradeDaEsteira from "@/components/esteira-linha/GradeDaEsteira";
 import LegendaDasEtapas from "@/components/esteira-linha/LegendaDasEtapas";
 import SeletorDeClientes from "@/components/esteira-linha/SeletorDeClientes";
+import { ESTILO_DA_ETAPA } from "@/components/esteira-linha/estilosDaEtapa";
 import { useEsteiraLinha } from "@/hooks/useEsteiraLinha";
 import { usePrecisaDeVoceDaEsteira } from "@/hooks/usePrecisaDeVoceDaEsteira";
 import { dataEmSP } from "@/lib/diaPrioritario";
@@ -14,8 +15,8 @@ import {
   ajustarFiltroACarteira, aplicarFiltroDeClientes, diaDaSemanaEmSP, escolherModo, gravarFiltro, lerFiltroGuardado, type FiltroDeClientes,
 } from "@/lib/esteiraLinha/filtroDeClientes";
 import {
-  diasDaSemana, diasDoPeriodoValido, msAteProximaMeiaNoiteSP, rotuloDaSemana, segundaDaSemana, somarDias,
-  type CartaoDaEsteira, type DiasDoPeriodo,
+  ETAPAS_DA_ESTEIRA, diasDaSemana, diasDoPeriodoValido, msAteProximaMeiaNoiteSP, rotuloDaSemana, segundaDaSemana, somarDias,
+  type CartaoDaEsteira, type DiasDoPeriodo, type FaixaDaEsteira,
 } from "@/lib/esteiraLinha/esteiraLinha";
 import { armazenamentoDoAparelho, gravarPeriodo, lerPeriodoGuardado } from "@/lib/esteiraLinha/preferenciasDaEsteira";
 
@@ -189,7 +190,7 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
         <button type="button" className={botao.icone} onClick={() => andar(-1)} title={duas ? "Duas semanas antes" : "Semana anterior"} aria-label={duas ? "Duas semanas antes" : "Semana anterior"}>
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setSegunda(semanaAtual)} disabled={segunda === semanaAtual}>Semana atual</button>
+        <button type="button" className={juntar(botao.secundario, "mx-1 h-8")} onClick={() => setSegunda(semanaAtual)} disabled={segunda === semanaAtual}>Semana atual</button>
         <button type="button" className={botao.icone} onClick={() => andar(1)} title={duas ? "Próximas duas semanas" : "Próxima semana"} aria-label={duas ? "Próximas duas semanas" : "Próxima semana"}>
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -204,7 +205,7 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
     <div
       ref={ref}
       style={altura !== null ? { height: altura } : undefined}
-      className={juntar(larguraDaMesa, "flex flex-col gap-3 sm:gap-4")}
+      className={juntar(larguraDaMesa, "flex flex-col gap-4 sm:gap-5")}
       data-esteira-linha=""
       data-cabe-na-tela={altura !== null ? "sim" : undefined}
     >
@@ -221,6 +222,8 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
         {/* O cabeçalho esconde a linha de apoio no celular; o período visível precisa aparecer sempre. */}
         <p className="mt-1 text-[12px] font-medium text-muted-foreground sm:hidden" aria-hidden="true">{rotuloDoPeriodo}</p>
       </div>
+
+      {!carregando && !erro && !semClientes && visiveis.length > 0 && <ResumoDasEtapas faixas={visiveis} />}
 
       <CaixaPrecisaDeVoce pedidos={dono.pedidos} carregando={dono.carregando} incompleta={dono.incompleta} />
 
@@ -253,6 +256,47 @@ export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
           />
         </Suspense>
       )}
+    </div>
+  );
+}
+
+/**
+ * Resumo do período à vista (rodada ousada, 15/11/2026): quantas peças há na
+ * grade e como elas se dividem pelas etapas, numa barra só. Conta os mesmos
+ * cartões que a grade mostra; não lê nada novo. Some no celular e na tela
+ * baixa (a grade é o assunto) e quando não há peça.
+ */
+function ResumoDasEtapas({ faixas }: { faixas: FaixaDaEsteira[] }) {
+  const porEtapa = useMemo(() => {
+    const conta = new Map<string, number>();
+    for (const f of faixas) for (const c of f.celulas) for (const k of c.cartoes) conta.set(k.etapa, (conta.get(k.etapa) ?? 0) + 1);
+    return conta;
+  }, [faixas]);
+  const total = Array.from(porEtapa.values()).reduce((a, b) => a + b, 0);
+  if (total === 0) return null;
+  const partes = ETAPAS_DA_ESTEIRA.map((e) => ({ ...e, n: porEtapa.get(e.etapa) ?? 0 })).filter((e) => e.n > 0);
+  return (
+    <div className="hidden shrink-0 items-center lg:flex [@media(max-height:760px)]:hidden" data-resumo-das-etapas="" role="group" aria-label={`${total} ${total === 1 ? "peça" : "peças"} no período, por etapa`}>
+      <p className="mr-5 flex shrink-0 items-baseline">
+        <span className="text-[32px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{total}</span>
+        <span className="ml-2 text-[13px] text-muted-foreground">{total === 1 ? "peça" : "peças"}</span>
+      </p>
+      <div className="min-w-0 flex-1">
+        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+          {partes.map((e) => (
+            <span key={e.etapa} className={juntar("h-full border-r-2 border-background last:border-r-0", ESTILO_DA_ETAPA[e.etapa].ponto)} style={{ width: `${(e.n / total) * 100}%` }} />
+          ))}
+        </div>
+        <ul className="mt-2 flex min-w-0 flex-wrap items-center">
+          {partes.map((e) => (
+            <li key={e.etapa} className="mr-4 flex items-center text-[12px] leading-4 text-muted-foreground">
+              <span className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", ESTILO_DA_ETAPA[e.etapa].ponto)} aria-hidden="true" />
+              {e.rotulo}
+              <span className="ml-1.5 font-semibold tabular-nums text-foreground">{e.n}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

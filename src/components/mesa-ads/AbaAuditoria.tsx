@@ -114,7 +114,7 @@ export default function AbaAuditoria() {
                   <span>{c.rotulo}</span>
                   <span className="tabular-nums text-muted-foreground">{c.saude !== null ? `${c.saude}` : "sem dado"} · cobre {c.cobertura}%</span>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
                   <div className={juntar("h-full rounded-full", c.saude === null ? "bg-muted" : c.saude >= 80 ? "bg-success" : c.saude >= 50 ? "bg-warning" : "bg-destructive")} style={{ width: `${c.saude ?? 0}%` }} />
                 </div>
               </div>
@@ -123,7 +123,7 @@ export default function AbaAuditoria() {
 
           {atual.prioridades.length > 0 && (
             <section className="min-w-0">
-              <h3 className="mb-1 text-[13px] font-semibold">O que resolver primeiro</h3>
+              <h3 className="mb-1 text-[15px] font-semibold">O que resolver primeiro</h3>
               <ul className="min-w-0 divide-y divide-border border-y border-border">
                 {atual.prioridades.slice(0, 6).map((c) => <Controle key={c.id} c={c} />)}
               </ul>

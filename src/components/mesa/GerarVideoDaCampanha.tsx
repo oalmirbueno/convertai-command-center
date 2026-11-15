@@ -229,7 +229,7 @@ function PassoRoteiro({ campanha, propostaId, item, roteiro, roteiroId, aplicar 
               </button>
             </div>
             <textarea className={juntar(campoTexto, "mt-2 min-h-[56px]")} rows={2} value={c.descricao} onChange={(e) => mudarCena(k, { descricao: e.target.value })} placeholder="O que aparece" aria-label={`O que aparece na cena ${k + 1}`} />
-            <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
               <input className={campo} value={c.fala} onChange={(e) => mudarCena(k, { fala: e.target.value })} placeholder="Fala" aria-label={`Fala da cena ${k + 1}`} />
               <input className={campo} value={c.texto_na_tela} onChange={(e) => mudarCena(k, { texto_na_tela: e.target.value })} placeholder="Texto na tela" aria-label={`Texto na tela da cena ${k + 1}`} />
             </div>

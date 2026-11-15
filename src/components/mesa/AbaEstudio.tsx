@@ -338,7 +338,7 @@ function EtapasDaEsteira({ atual }: { atual: number }) {
         <li key={e.chave} className="flex items-start">
           <span
             className={`mr-2.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
-              i < atual ? "border-success bg-success/10 text-success" : i === atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
+              i < atual ? "border-success bg-success-soft text-success" : i === atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
             }`}
           >
             {i < atual ? <Check className="h-3.5 w-3.5" /> : i + 1}

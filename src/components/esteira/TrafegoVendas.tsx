@@ -68,10 +68,10 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
   };
 
   const bloco = (rotulo: string, valorGrande: string | number, apoio: string) => (
-    <div className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
+    <div className={juntar(superficie.poco, "min-w-0 px-4 py-4")}>
       <p className={texto.rotulo}>{rotulo}</p>
-      <p className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{valorGrande}</p>
-      <p className={juntar(texto.auxiliar, "truncate")}>{apoio}</p>
+      <p className="mt-1.5 text-[28px] font-semibold leading-8 tracking-[-0.03em] tabular-nums text-foreground">{valorGrande}</p>
+      <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{apoio}</p>
     </div>
   );
 
@@ -91,10 +91,10 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
         </button>
       ) : undefined}
     >
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {bloco("7 dias", r7.total, r7.receita > 0 ? fmtBrl(r7.receita) : r7.total > 0 ? "sem valor" : "nenhuma")}
         {bloco("30 dias", r30.total, r30.receita > 0 ? fmtBrl(r30.receita) : r30.total > 0 ? "sem valor" : "nenhuma")}
-        <div className={juntar(superficie.poco, "col-span-2 min-w-0 px-3 py-2 sm:col-span-1")}>
+        <div className={juntar(superficie.poco, "col-span-2 min-w-0 px-4 py-4 sm:col-span-1")}>
           <p className={texto.rotulo}>Por onde (30d)</p>
           {r30.porCanal.length === 0 ? (
             <p className="text-[12px] text-muted-foreground/80">–</p>
@@ -111,7 +111,7 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
       )}
 
       {aberto && (
-        <div className={juntar(superficie.poco, "mt-3 space-y-4 p-3")}>
+        <div className={juntar(superficie.poco, "mt-4 space-y-4 p-4")}>
           <GrupoDeCampos colunas={3}>
             <CampoDeFormulario rotulo="Dia">
               <input type="date" value={data} max={hojeBrt()} onChange={(e) => setData(e.target.value)} className={campo} />
@@ -146,9 +146,9 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
       )}
 
       {lista.length > 0 && (
-        <ul className="mt-3 divide-y divide-border border-t border-border">
+        <ul className="mt-4 divide-y divide-border/70">
           {lista.map((v) => (
-            <li key={v.id} className="flex min-w-0 items-center py-2">
+            <li key={v.id} className="flex min-w-0 items-center py-3">
               <span className="mr-2 w-10 shrink-0 text-[12px] tabular-nums text-muted-foreground">{fmtDia(v.data)}</span>
               <span className="mr-2 min-w-0 flex-1 truncate text-[13px] text-foreground">
                 <span className="font-semibold tabular-nums">{v.quantidade}</span> {v.quantidade === 1 ? "venda" : "vendas"}

@@ -10,10 +10,10 @@ import type { Proposta } from "./propostaApi";
 
 const TOM: Record<string, string> = {
   rascunho: "bg-muted text-muted-foreground",
-  enviada: "bg-primary/10 text-primary",
-  vista: "bg-primary/10 text-primary",
-  aceita: "bg-success/15 text-success",
-  recusada: "bg-destructive/10 text-destructive",
+  enviada: "bg-accent-soft text-primary",
+  vista: "bg-accent-soft text-primary",
+  aceita: "bg-success-soft text-success",
+  recusada: "bg-danger-soft text-destructive",
   expirada: "bg-warning/15 text-warning",
 };
 

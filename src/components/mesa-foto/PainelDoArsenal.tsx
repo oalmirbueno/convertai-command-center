@@ -122,7 +122,7 @@ export function SeletorDaArea({
             onClick={() => onEscolher(o.valor)}
             className={juntar(
               "toque-compacto mb-1 mr-1 inline-flex h-8 shrink-0 items-center rounded-md px-2.5 text-[12px] font-medium transition-colors",
-              ativo ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              ativo ? "bg-accent-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
             data-area={o.valor}
           >
@@ -285,7 +285,7 @@ export default function PainelDoArsenal({
                 onClick={() => setModelo(modelo === m.texto ? "" : m.texto)}
                 className={juntar(
                   "toque-compacto mb-1 mr-1 inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[12px]",
-                  modelo === m.texto ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
+                  modelo === m.texto ? "bg-accent-soft text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >
                 <User className="mr-1 h-3.5 w-3.5" aria-hidden="true" />

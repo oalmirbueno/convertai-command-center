@@ -471,8 +471,8 @@ export function Pilulas<T extends string | number>({
           aria-checked={valor === o.valor}
           title={o.dica}
           onClick={() => onEscolher(o.valor)}
-          className={`mb-1.5 mr-1.5 h-7 max-w-full truncate rounded-full border px-2.5 text-[12px] transition-colors ${
-            valor === o.valor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
+          className={`mb-1.5 mr-1.5 h-8 max-w-full truncate rounded-full border px-3.5 text-[12px] font-medium transition-colors ${
+            valor === o.valor ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-foreground hover:border-primary/50"
           }`}
         >
           {o.rotulo}

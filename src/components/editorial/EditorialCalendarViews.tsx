@@ -694,7 +694,7 @@ function PublicationPill({
       // Arrasta pelo cartão inteiro; o clique continua abrindo o conteúdo.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group relative min-h-11 w-full rounded-md border text-left transition-colors hover:border-primary/40",
+        "group relative min-h-11 w-full rounded-md border text-left transition-colors hover:border-foreground/30",
         stageClasses[stage] || stageClasses.draft,
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
@@ -1513,7 +1513,7 @@ function MonthView({
                 <div
                   key={day}
                   role="columnheader"
-                  className="px-3 py-2.5 text-center text-[11px] font-medium capitalize text-muted-foreground"
+                  className="px-3 py-3.5 text-center text-[12px] font-medium capitalize text-muted-foreground"
                 >
                   {day}
                 </div>
@@ -1550,26 +1550,27 @@ function MonthView({
                   dateKey={key}
                   canDrop={canCreate || canEdit || canPublish}
                   className={cn(
-                    "group min-h-[148px] border-b border-r border-border/70 p-2 [&:nth-child(7n)]:border-r-0",
-                    !isSameMonth(day, anchorDate) && "bg-muted/20",
+                    "group min-h-[164px] border-b border-r border-border/70 p-2.5 [&:nth-child(7n)]:border-r-0",
+                    !isSameMonth(day, anchorDate) && "bg-muted/30",
+                    key === todayKey && "bg-accent-soft",
                   )}
                 >
                   <div className="mb-2 flex items-center justify-between">
                     <span
                       className={cn(
-                        "inline-flex h-7 w-7 items-center justify-center rounded-full text-[12px] leading-4",
+                        "inline-flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-semibold leading-4 tabular-nums",
                         key === todayKey
-                          ? "bg-primary font-semibold text-primary-foreground"
+                          ? "bg-accent-solid text-on-accent"
                           : !isSameMonth(day, anchorDate)
-                            ? "text-muted-foreground/45"
-                            : "text-muted-foreground",
+                            ? "font-normal text-muted-foreground/45"
+                            : "text-foreground",
                       )}
                     >
                       {format(day, "d")}
                     </span>
                     <div className="flex items-center gap-1.5">
                       {dayCount > 0 && (
-                        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-foreground px-1.5 text-[11px] font-semibold tabular-nums text-background">
                           {dayCount}
                         </span>
                       )}
@@ -1760,19 +1761,19 @@ function WeekView({
               >
                 <header
                   className={cn(
-                    "border-b border-border/70 px-3 py-3 text-center",
+                    "border-b border-border/70 px-3 py-4 text-center",
                     key === todayKey && "bg-accent-soft",
                   )}
                 >
-                  <p className="text-[11px] font-medium capitalize text-muted-foreground">
+                  <p className="text-[12px] font-medium capitalize text-muted-foreground">
                     {format(day, "EEE", { locale: ptBR })}
                   </p>
                   <div className="mt-1 flex items-center justify-center gap-1">
                     <p
                       className={cn(
-                        "text-[20px] font-semibold leading-7 tabular-nums",
+                        "text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums",
                         key === todayKey
-                          ? "inline-flex min-w-[40px] items-center justify-center rounded-full bg-primary px-2 text-primary-foreground"
+                          ? "inline-flex min-w-[52px] items-center justify-center rounded-full bg-accent-solid px-2.5 text-on-accent"
                           : "text-foreground",
                       )}
                     >
@@ -1790,7 +1791,7 @@ function WeekView({
                     )}
                   </div>
                 </header>
-                <div className="space-y-2 p-2.5">
+                <div className="space-y-2 p-3">
                   {dayAnchored.map((bundle) => (
                     <AnchoredPostPill
                       key={bundle.post.id}
@@ -1888,7 +1889,7 @@ function BoardPostCard({
       // funcionando: o sensor só vira arrasto depois de mover alguns pixels.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        superficie.painel, "group rounded-md p-3 transition-[border-color,box-shadow] duration-150 hover:border-primary/35 motion-reduce:transition-none",
+        superficie.painel, "group rounded-md p-4 transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 motion-reduce:transition-none",
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -1912,14 +1913,14 @@ function BoardPostCard({
           className="min-w-0 flex-1 text-left"
         >
           <div className="mb-2 flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground">
               <Icon className="h-3.5 w-3.5" />
             </span>
             <span className="text-[11px] text-muted-foreground">
               {contentTypeLabel(post.post.content_type)}
             </span>
           </div>
-          <h3 className="line-clamp-2 text-[13px] font-medium leading-5 text-foreground">
+          <h3 className="line-clamp-2 text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
             {post.post.title}
           </h3>
           <p className="mt-1 truncate text-[11px] text-muted-foreground">
@@ -1941,14 +1942,14 @@ function BoardPostCard({
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Badge
           variant="outline"
-          className="h-5 rounded-md px-1.5 text-[11px] font-normal"
+          className="h-[22px] rounded-full px-2 text-[11px] font-medium"
         >
           {approvalLabels[approval] || approval}
         </Badge>
         {post.internal?.task_id && (
           <Badge
             variant="secondary"
-            className="h-5 rounded-md px-1.5 text-[11px] font-normal"
+            className="h-[22px] rounded-full px-2 text-[11px] font-medium"
           >
             <Link2 className="mr-1 h-2.5 w-2.5" />
             Kanban
@@ -2029,7 +2030,7 @@ function BoardTaskCard({
       // Arrasta pelo cartão inteiro; clique nos botões continua normal.
       {...(draggable ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group rounded-md border border-dashed border-primary/30 bg-card p-3 shadow-card transition-[border-color,box-shadow] duration-150 hover:border-primary/45 motion-reduce:transition-none",
+        "group rounded-md border border-dashed border-primary/40 bg-card p-4 shadow-card transition-[border-color,box-shadow] duration-150 hover:border-primary/60 motion-reduce:transition-none",
         draggable && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -2042,14 +2043,14 @@ function BoardTaskCard({
           className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
         >
           <div className="mb-2 flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary">
               <Palette className="h-3.5 w-3.5" />
             </span>
             <span className="text-[11px] font-medium text-primary">
               {taskDeliveryTypeLabel(task)} · Kanban
             </span>
           </div>
-          <h3 className="line-clamp-2 text-[13px] font-medium leading-5 text-foreground">
+          <h3 className="line-clamp-2 text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
             {task.title}
           </h3>
           <p className="mt-1 truncate text-[11px] text-muted-foreground">
@@ -2081,7 +2082,7 @@ function BoardTaskCard({
         {task.status === "blocked" && (
           <Badge
             variant="outline"
-            className="h-5 shrink-0 border-warning/30 bg-warning/10 px-1.5 text-[11px] text-warning"
+            className="h-[22px] shrink-0 rounded-full border-transparent bg-warning-soft px-2 text-[11px] text-warning"
           >
             Bloqueada
           </Badge>
@@ -2148,8 +2149,8 @@ function AbaDaEtapa({
       onClick={onEscolher}
       aria-pressed={escolhida}
       className={cn(
-        "inline-flex h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-        escolhida ? "bg-muted text-foreground" : "text-muted-foreground active:bg-muted/60",
+        "inline-flex h-11 shrink-0 items-center whitespace-nowrap rounded-full px-4 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+        escolhida ? "bg-foreground text-background" : "bg-muted/70 text-muted-foreground active:bg-muted",
         isOver && acceptsActive && "ring-2 ring-primary/60",
       )}
     >
@@ -2209,7 +2210,7 @@ function BoardColumn({
         // 28/09: sem altura fixa. De 1280 px para cima a coluna ocupa a altura
         // da área (AreaDeTrabalho) e rola sozinha; abaixo disso a grade tem duas
         // colunas e quem rola é o quadro inteiro (uma rolagem por região).
-        "flex min-h-[160px] min-w-0 flex-col rounded-lg bg-muted/50 p-2 transition-colors max-sm:bg-transparent max-sm:p-0 xl:h-full xl:min-h-0",
+        "flex min-h-[160px] min-w-0 flex-col rounded-lg bg-muted/70 p-2.5 transition-colors max-sm:bg-transparent max-sm:p-0 xl:h-full xl:min-h-0",
         isOver &&
           acceptsActive &&
           "bg-primary/[0.06] ring-1 ring-primary/40",
@@ -2217,22 +2218,22 @@ function BoardColumn({
     >
       {/* 16/10/2026: no celular o nome e a contagem já estão na aba. */}
       {!celular && (
-      <header className="mb-2 flex h-7 items-center px-1.5" title={column.description}>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", column.dot)} />
-          <h2 className="min-w-0 truncate text-[12px] font-medium text-foreground">
+      <header className={cn("mb-2.5 rounded-md px-4 py-3", column.id === "production" ? "ds-ink" : column.id === "delivery" ? "ds-accent" : "bg-card shadow-card")} title={column.description}>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn("h-2 w-2 shrink-0 rounded-full", column.id === "production" || column.id === "delivery" ? "bg-foreground" : column.dot)} />
+          <h2 className="min-w-0 flex-1 truncate text-[13px] font-medium text-muted-foreground">
             {column.label}
           </h2>
-          <Badge
-            variant="secondary"
-            className="h-5 min-w-[20px] justify-center rounded-full border-transparent bg-card px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground"
-          >
-            {posts.length + tasks.length}
-          </Badge>
         </div>
+        <Badge
+          variant="secondary"
+          className="mt-1 h-auto justify-start rounded-none border-transparent bg-transparent p-0 text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums text-foreground hover:bg-transparent"
+        >
+          {posts.length + tasks.length}
+        </Badge>
       </header>
       )}
-      <div className="space-y-2 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:[scrollbar-gutter:stable]">
+      <div className="space-y-2.5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:[scrollbar-gutter:stable]">
         {tasks.map((task) => (
           <BoardTaskCard
             key={task.id}
@@ -2591,7 +2592,7 @@ function ListView({
                   key={`task:${task.id}`}
                   type="button"
                   onClick={() => onCreateFromTask(task, dateKey)}
-                  className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-violet-500/[0.06] sm:flex-row sm:items-center"
+                  className="flex w-full flex-col gap-3 rounded-lg px-3 py-4 text-left transition-colors hover:bg-violet-500/[0.06] sm:flex-row sm:items-center sm:gap-4"
                 >
                   <div className="flex min-w-[92px] items-center gap-2 sm:block">
                     <p className="text-[13px] font-semibold text-foreground">
@@ -2662,11 +2663,11 @@ function ListView({
                   type="button"
                   onClick={() => onSelectPost(post)}
                   aria-label={`Abrir o conteúdo "${post.post.title}". Etapa: ${nomeEtapa}. Dia herdado do prazo da tarefa; ainda sem agendamento de publicação.`}
-                  className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40 sm:flex-row sm:items-center"
+                  className="flex w-full flex-col gap-3 rounded-lg px-3 py-4 text-left transition-colors hover:bg-muted/60 sm:flex-row sm:items-center sm:gap-4"
                 >
                   <EditorialFileThumbnail post={post} className="h-14 w-14" />
                   <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-[13px] font-semibold text-foreground">{dia}</p>
+                    <p className="text-[15px] font-semibold tabular-nums text-foreground">{dia}</p>
                     <p className="text-[12px] text-muted-foreground">Prazo da tarefa</p>
                   </div>
                   <span className={cn("h-9 w-1 shrink-0 rounded-full", corDaEtapa(etapa).ponto)} />
@@ -2730,7 +2731,7 @@ function ListView({
             return (
               <article
                 key={`publication:${publication.id}`}
-                className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40 sm:flex-row sm:items-center"
+                className="flex w-full flex-col gap-3 rounded-lg px-3 py-4 text-left transition-colors hover:bg-muted/60 sm:flex-row sm:items-center sm:gap-4"
               >
                 <button
                   type="button"
@@ -2898,7 +2899,7 @@ function ListView({
               })}
             </div>
           ) : (
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {undatedTasks.map((task) => {
               const arte = artesDoEstudio[task.id] && artesDoEstudio[task.id].capa ? artesDoEstudio[task.id] : null;
               return (
@@ -2907,7 +2908,7 @@ function ListView({
                 type="button"
                 onClick={() => onCreateFromTask(task)}
                 aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. Contexto: ${taskContentContext(task) || "não informado"}. ${taskDeliveryTypeLabel(task)}.${descricaoDaArteDoEstudio(arte)}`}
-                className="flex items-start gap-2.5 rounded-lg border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
+                className="flex items-start gap-3 rounded-md border border-violet-500/20 bg-violet-500/[0.06] p-4 text-left transition-colors hover:border-violet-500/45"
               >
                 {arte && (
                   <MiniaturaDaArteDoEstudio
@@ -2952,7 +2953,7 @@ function ListView({
                 type="button"
                 onClick={() => onSelectPost(post)}
                 className={cn(
-                  "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors hover:border-primary/45",
+                  "flex items-start gap-3 rounded-md border p-4 text-left transition-colors hover:border-foreground/25",
                   cor.borda,
                   cor.fundo,
                 )}

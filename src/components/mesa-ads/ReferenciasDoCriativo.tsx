@@ -225,7 +225,7 @@ export default function ReferenciasDoCriativo({
             </div>
             {referencias.isLoading && <p className="px-1 text-[12px] text-muted-foreground">Carregando o banco…</p>}
             {!referencias.isLoading && !banco.length && <p className="px-1 text-[12px] text-muted-foreground">Nada aqui ainda. Traga referências na etapa Referências ou cole um link acima.</p>}
-            <ul className="grid grid-cols-2 gap-2 lg:max-h-[360px] lg:overflow-y-auto lg:overscroll-contain">
+            <ul className="grid grid-cols-2 gap-2 sm:gap-3 lg:max-h-[360px] lg:overflow-y-auto lg:overscroll-contain">
               {banco.map((r) => {
                 const capa = capaDaReferencia(r);
                 const estilo = estiloDaReferencia(r);

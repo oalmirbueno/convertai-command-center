@@ -33,19 +33,19 @@ export default function CartaoDaPeca({ cartao, aoAbrir }: { cartao: CartaoDaEste
         aria-label={`${cartao.titulo}. ${cartao.formato}. ${cartao.rotuloDaEtapa}. Ver detalhes`}
         aria-haspopup="dialog"
         className={juntar(
-          "block w-full rounded-md border border-transparent bg-muted/60 py-2 pl-2.5 pr-7 text-left transition-colors hover:border-border hover:bg-muted [[data-prioritario=sim]_&]:bg-card [[data-prioritario=sim]_&]:shadow-card",
+          "block w-full rounded-md border border-transparent bg-muted py-2.5 pl-3 pr-7 text-left transition-colors hover:border-foreground/15 [[data-prioritario=sim]_&]:bg-card [[data-prioritario=sim]_&]:shadow-card",
           foco,
         )}
         data-abrir-peca=""
       >
-        <span className="line-clamp-2 break-words text-[12px] font-medium leading-4 text-foreground">{cartao.titulo}</span>
-        <span className="mt-1 flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground">
-          <span className={juntar("mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full", estilo.ponto)} aria-hidden="true" />
+        <span className="line-clamp-2 break-words text-[12px] font-semibold leading-4 text-foreground">{cartao.titulo}</span>
+        <span className="mt-1.5 flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground">
+          <span className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", estilo.ponto)} aria-hidden="true" />
           <span className="truncate">{cartao.rotuloDaEtapa}</span>
         </span>
       </button>
       <div
-        className="absolute right-0.5 top-0.5"
+        className="absolute right-1 top-1"
         onClick={pararClique}
         onPointerDown={pararClique}
         onKeyDown={pararClique}

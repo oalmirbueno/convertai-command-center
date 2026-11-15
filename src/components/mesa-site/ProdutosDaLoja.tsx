@@ -103,7 +103,7 @@ export default function ProdutosDaLoja({ site, produtosDoCliente }: { site: Linh
       }
       data-produtos-da-loja=""
     >
-      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Checkout da loja" data-checkout-da-loja="">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2" role="radiogroup" aria-label="Checkout da loja" data-checkout-da-loja="">
         {CHECKOUTS_DA_LOJA.map((c) => (
           <button key={c.id} type="button" role="radio" aria-checked={checkout === c.id} className={opcaoDaGrade(checkout === c.id)} title={c.descricao} onClick={() => setCheckout(c.id)} data-checkout={c.id}>
             <span className="min-w-0 flex-1">

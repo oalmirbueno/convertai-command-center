@@ -328,7 +328,7 @@ function DialogoDeFotosDaGeracao({
           <DialogTitle>{titulo}</DialogTitle>
           <DialogDescription>Escolha quais fotos de origem vão nesta geração. As outras ficam de fora só desta vez.</DialogDescription>
         </DialogHeader>
-        <ul className="grid min-w-0 grid-cols-4 gap-2" aria-label="Fotos de origem desta geração" data-fotos-da-geracao="">
+        <ul className="grid min-w-0 grid-cols-4 gap-2 sm:gap-3" aria-label="Fotos de origem desta geração" data-fotos-da-geracao="">
           {reais.map((r) => {
             const marcada = marcadas.indexOf(r.id) >= 0;
             return (
@@ -445,7 +445,7 @@ function FaixaDeClones({
                   aria-label={`Abrir ${c.nome}`}
                   className={juntar("flex w-full min-w-0 items-center rounded-md px-1.5 py-1 text-left transition-colors", ativo ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-muted", foco)}
                 >
-                  <span className="relative mr-2 block h-10 w-10 shrink-0 overflow-hidden rounded-md bg-muted" data-clone={c.id}>
+                  <span className="relative mr-2 block h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted" data-clone={c.id}>
                     {c.capa_url ? (
                       <img src={c.capa_url} alt={c.nome} className="h-full w-full object-cover" loading="lazy" />
                     ) : (
@@ -960,7 +960,7 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
       <div className="mb-3 w-full sm:w-56">
         <SeletorDeQualidade valor={qualidade} onChange={setQualidade} disabled={bloqueado} />
       </div>
-      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Vistas da folha do clone">
+      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3" aria-label="Vistas da folha do clone">
         {VISTAS_DO_CLONE.map((v, k) => {
           const img = naTela[k];
           const a = andamentos[chaveDoAndamento(c.id, "clone-vista", v.valor)];
@@ -1054,7 +1054,7 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
       {aberto.arquivadas.length > 0 && (
         <details className="mt-4 min-w-0 border-t border-border pt-3" data-vistas-apagadas="">
           <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Apagadas ({aberto.arquivadas.length})</summary>
-          <ul className="mt-2 grid min-w-0 grid-cols-4 gap-2 pb-1 sm:grid-cols-6">
+          <ul className="mt-2 grid min-w-0 grid-cols-4 gap-2 sm:gap-3 pb-1 sm:grid-cols-6">
             {aberto.arquivadas.map((img) => {
               const rotulo = rotuloDaVista(img.vista);
               return (

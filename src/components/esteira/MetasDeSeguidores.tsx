@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Target } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { botao, campo, juntar, Secao, superficie, texto } from "@/components/sistema";
+import { botao, campo, juntar, Secao, texto } from "@/components/sistema";
+import { ProgressBar, StatusPill } from "@/components/ds";
 import type { MetricaSemanaFato } from "@/lib/esteira/esteiraTipos";
 import { situacaoDasMetas, type MetaDeSeguidores } from "../../../supabase/functions/_shared/metas-de-seguidores";
 
@@ -106,9 +107,15 @@ export default function MetasDeSeguidores({ clientId, metricas, canWrite }: { cl
       {isLoading && <p className={texto.auxiliar}>Carregando as metas…</p>}
       {data?.erro && <p className="text-[12px] text-destructive">Não foi possível ler as metas: {data.erro}</p>}
       {situacao.proxima && (
-        <div className={juntar(superficie.poco, "mb-2 px-3 py-2")}>
-          <p className="flex items-center text-[13px] font-medium text-foreground"><Target className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />Próxima: {milhar(situacao.proxima.meta)} seguidores</p>
-          <p className={texto.auxiliar}>
+        <div className="ds-accent mb-3 rounded-md px-4 py-4 sm:px-5">
+          <p className={juntar(texto.rotulo, "flex items-center")}><Target className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Próxima meta</p>
+          <p className="mt-1.5 flex items-baseline text-foreground">
+            <span className="text-[28px] font-semibold leading-8 tracking-[-0.03em] tabular-nums">{milhar(situacao.proxima.meta)}</span>
+            <span className="ml-2 text-[13px]">seguidores</span>
+            <span className="ml-auto text-[15px] font-semibold tabular-nums">{situacao.proxima.progresso}%</span>
+          </p>
+          <ProgressBar value={situacao.proxima.progresso} max={100} tone="current" className="mt-3" label={`${situacao.proxima.progresso}% do caminho até ${milhar(situacao.proxima.meta)} seguidores`} />
+          <p className={juntar(texto.auxiliar, "mt-3 leading-5")}>
             Faltam {milhar(situacao.proxima.faltam)} ({situacao.proxima.progresso}% do caminho)
             {situacao.proxima.ritmoSemanal !== null ? `, ritmo de ${situacao.proxima.ritmoSemanal > 0 ? "+" : ""}${situacao.proxima.ritmoSemanal} por semana` : ""}
             {situacao.proxima.previsao ? `, perto de ${dm(situacao.proxima.previsao)}` : ""}
@@ -117,13 +124,13 @@ export default function MetasDeSeguidores({ clientId, metricas, canWrite }: { cl
         </div>
       )}
       {(data?.metas ?? []).length > 0 && (
-        <ul className="divide-y divide-border">
+        <ul className="divide-y divide-border/70">
           {(data?.metas ?? []).map((m) => (
-            <li key={m.id} className="flex min-w-0 items-center py-1.5">
+            <li key={m.id} className="flex min-w-0 items-center py-2.5">
               <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">
                 {milhar(Number(m.meta))} seguidores{m.prazo ? ` até ${dm(m.prazo)}` : ""}
               </span>
-              <span className={juntar("mr-2 shrink-0 text-[12px]", batidas.has(m.id) ? "text-primary" : "text-muted-foreground")}>{batidas.has(m.id) ? "batida" : "aberta"}</span>
+              <StatusPill tone={batidas.has(m.id) ? "success" : "neutral"} className="mr-2">{batidas.has(m.id) ? "batida" : "aberta"}</StatusPill>
               {canWrite && (
                 <button type="button" onClick={() => void arquivar(m)} className={botao.icone} aria-label={`Arquivar a meta de ${milhar(Number(m.meta))}`} title={`Arquivar a meta de ${milhar(Number(m.meta))}`}>
                   <Archive className="h-4 w-4" />
@@ -134,7 +141,7 @@ export default function MetasDeSeguidores({ clientId, metricas, canWrite }: { cl
         </ul>
       )}
       {canWrite && (
-        <div className="mt-2 grid min-w-0 grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_10rem_auto]">
+        <div className="mt-3 grid min-w-0 grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_10rem_auto]">
           <input value={meta} onChange={(e) => setMeta(e.target.value)} inputMode="numeric" placeholder="Nova meta (ex.: 1500)" aria-label="Nova meta de seguidores" className={campo} />
           <input value={prazo} onChange={(e) => setPrazo(e.target.value)} type="date" aria-label="Prazo da meta (opcional)" className={juntar(campo, "hidden sm:block")} />
           <button type="button" onClick={() => void adicionar()} disabled={salvando || !meta.trim()} className={botao.secundario}>Adicionar</button>

@@ -7,14 +7,13 @@ import {
   Eye, MousePointerClick, Users, Zap, DollarSign, Target, MessageCircle,
   ChevronRight,
 } from "lucide-react";
-import { CabecalhoDePagina, CabecalhoDeSecao, Carregando, EstadoDeErro, EstadoVazio, botao, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { CabecalhoDeSecao, Carregando, EstadoDeErro, EstadoVazio, botao, espaco, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { PageHeader, Sparkline, StatusPill, type Tone } from "@/components/ds";
+import { Bolha } from "@/components/client/pecasOusadas";
 import ClientLiveCampaigns from "@/components/reports/ClientLiveCampaigns";
 import { useNavigate } from "react-router-dom";
 import { getPeriodModel, PERIOD_ORDER } from "@/lib/reportGrouping";
 import { semTextoInterno } from "@/lib/textoInterno";
-import {
-  AreaChart, Area, ResponsiveContainer,
-} from "recharts";
 
 const metricConfig: Record<string, { label: string; format: (v: number) => string; icon: any; color: string }> = {
   reach:            { label: "Alcance",      format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(v), icon: Eye,               color: "hsl(200, 100%, 50%)" },
@@ -59,11 +58,11 @@ export default function ClientReports() {
   });
 
   return (
-    <div className="min-w-0 space-y-6">
-      <CabecalhoDePagina
-        titulo="Relatórios"
-        descricao={reports && reports.length ? `${reports.length} ${reports.length === 1 ? "publicado" : "publicados"}` : undefined}
-        ajuda="Os resultados dos seus projetos, fechados pela equipe a cada período. Toque num relatório para ver os números e a leitura completa. Você recebe um aviso quando sai um novo."
+    <div className={espaco.pagina}>
+      <PageHeader
+        title="Relatórios"
+        subtitle={reports && reports.length ? `${reports.length} ${reports.length === 1 ? "publicado" : "publicados"}` : undefined}
+        help="Os resultados dos seus projetos, fechados pela equipe a cada período. Toque num relatório para ver os números e a leitura completa. Você recebe um aviso quando sai um novo."
       />
 
       {/* As campanhas ao vivo entram ANTES dos relatórios publicados, e não no
@@ -94,14 +93,14 @@ export default function ClientReports() {
 
 // Tres tipos convivem aqui fora dos rituais: anuncios (numeros de midia),
 // entrega (prints e comprovacoes) e resumo geral.
-const reportKind = (r: any): { label: string; cls: string } => {
+const reportKind = (r: any): { label: string; tone: Tone } => {
   const m = (r.metrics || {}) as Record<string, unknown>;
   const hasAdsNumbers = ["ad_spend", "cpc", "cpm", "roas", "impressions", "reach", "clicks", "results"]
     .some((key) => Number(m[key]) > 0);
-  if (hasAdsNumbers) return { label: "Anúncios", cls: "bg-accent-soft text-primary border-transparent" };
+  if (hasAdsNumbers) return { label: "Anúncios", tone: "accent" };
   const images = Array.isArray(r.images) ? r.images : [];
-  if (r.file_url || images.length > 0) return { label: "Entrega", cls: "bg-success-soft text-success border-transparent" };
-  return { label: "Resumo", cls: "bg-secondary text-muted-foreground border-border" };
+  if (r.file_url || images.length > 0) return { label: "Entrega", tone: "info" };
+  return { label: "Resumo", tone: "neutral" };
 };
 
 function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate: any }) {
@@ -118,7 +117,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
   const toggle = (k: string) => setFechados(s => (s.indexOf(k) >= 0 ? s.filter((x) => x !== k) : s.concat(k)));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {modelKeys.map((model, gi) => (
         // Um controle só de recolher (antes a Secao já trazia a setinha dela e
         // ainda havia um botão à direita). A memória continua a mesma:
@@ -129,7 +128,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
           data-recolhido={open[model] ? "nao" : "sim"}
         >
           <CabecalhoDeSecao
-            className={open[model] ? "mb-3" : ""}
+            className={open[model] ? "mb-4 sm:mb-5" : ""}
             titulo={model}
             descricao={`${groups[model].length} ${groups[model].length === 1 ? "relatório" : "relatórios"}`}
             recolher={{
@@ -140,8 +139,8 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
             }}
           />
           {open[model] && (
-            <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-2 py-1.5 sm:px-3")}>
-              {groups[model].map((r: any) => {
+            <ul className={juntar(espaco.grade, "grid-cols-1 lg:grid-cols-2")}>
+              {groups[model].map((r: any, indice: number) => {
                 const m = (r.metrics || {}) as Record<string, any>;
                 const visibleMetrics = Object.entries(m)
                   .filter(([k]) => k !== "custom" && metricConfig[k] && m[k] !== undefined && m[k] !== 0)
@@ -152,70 +151,70 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                   ? Object.keys(chartData[0]).filter(k => k !== "label")
                   : [];
 
-                // Mini sparkline data
+                // Série do minigráfico: a primeira coluna do gráfico que o relatório já traz.
                 const sparklineData = chartData.length > 0 && chartColumns.length > 0
-                  ? chartData.map(row => ({ v: Number(row[chartColumns[0]]) || 0 }))
+                  ? chartData.map(row => Number(row[chartColumns[0]]) || 0)
                   : null;
                 const kind = reportKind(r);
+                // O mais recente do primeiro grupo é o cartão de tinta da tela.
+                const destaque = gi === 0 && indice === 0;
 
                 return (
                   <li key={r.id} className="min-w-0">
                     <button
                       type="button"
-                      className={juntar("group flex w-full min-w-0 items-start rounded-md px-2 py-3.5 text-left transition-colors hover:bg-muted/40", foco)}
+                      className={juntar(superficie.painel, destaque && superficie.tinta, "group flex h-full w-full min-w-0 flex-col p-5 text-left transition-transform duration-200 hover:-translate-y-1 sm:p-6", foco)}
                       onClick={() => navigate(`/relatorios/${r.id}`)}
                       aria-label={`Abrir o relatório ${r.title}`}
                     >
-                      <TrendingUp className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                      <span className="block min-w-0 flex-1">
-                        <span className="flex min-w-0 items-center">
-                          <span className="mr-2 min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{r.title}</span>
-                          <span className={juntar(etiqueta, "border", kind.cls)}>{kind.label}</span>
-                        </span>
-                        <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center")}>
-                          <span className="truncate">{(r as any).project?.name}</span>
-                          {r.period_start && r.period_end && (
-                            <>
-                              <span className="mx-1.5 shrink-0" aria-hidden="true">·</span>
-                              <Calendar className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
-                              <span className="shrink-0">{formatDateShort(r.period_start)} a {formatDateShort(r.period_end)}</span>
-                            </>
-                          )}
-                        </span>
-                        {/* Celular (16/10/2026): lista de app, título e uma linha de apoio; os
-                            números e o resumo ficam no relatório aberto. */}
-                        {visibleMetrics.length > 0 && (
-                          <span className="mt-2 hidden grid-cols-2 gap-x-4 gap-y-1.5 sm:grid sm:grid-cols-4">
-                            {visibleMetrics.slice(0, 8).map(metric => {
-                              const Icon = metric.icon;
-                              return (
-                                <span key={metric.key} className="flex min-w-0 items-center">
-                                  <Icon className="mr-1.5 h-3.5 w-3.5 shrink-0" style={{ color: metric.color }} aria-hidden="true" />
-                                  <span className="mr-1 text-[13px] font-semibold tabular-nums text-foreground">{metric.format(metric.value)}</span>
-                                  <span className="truncate text-[12px] text-muted-foreground">{metric.label}</span>
-                                </span>
-                              );
-                            })}
+                      <span className="flex w-full min-w-0 items-start">
+                        <Bolha tom={destaque ? "solido" : "marca"} tamanho="lg" className="mr-4 max-sm:h-10 max-sm:w-10">
+                          <TrendingUp className="h-5 w-5" />
+                        </Bolha>
+                        <span className="block min-w-0 flex-1">
+                          <span className="block truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground max-sm:text-[15px] max-sm:leading-5">{r.title}</span>
+                          <span className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-center")}>
+                            <span className="truncate">{(r as any).project?.name}</span>
+                            {r.period_start && r.period_end && (
+                              <>
+                                <span className="mx-1.5 shrink-0" aria-hidden="true">·</span>
+                                <Calendar className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                                <span className="shrink-0">{formatDateShort(r.period_start)} a {formatDateShort(r.period_end)}</span>
+                              </>
+                            )}
                           </span>
-                        )}
-                        {r.summary && <span className={juntar(texto.auxiliar, "mt-2 line-clamp-2 hidden leading-5 sm:block")}>{r.summary}</span>}
+                        </span>
+                        <span className="ml-3 flex shrink-0 items-center">
+                          <StatusPill tone={kind.tone}>{kind.label}</StatusPill>
+                          <span aria-hidden="true" className="ml-2 hidden h-9 w-9 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:inline-flex">
+                            <ChevronRight className="h-4 w-4" />
+                          </span>
+                        </span>
                       </span>
-                      {sparklineData && (
-                        <span className="ml-3 hidden h-8 w-20 shrink-0 sm:block" aria-hidden="true">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={sparklineData}>
-                              <defs>
-                                <linearGradient id={`spark-${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.3} />
-                                  <stop offset="95%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0} />
-                                </linearGradient>
-                              </defs>
-                              <Area type="monotone" dataKey="v" stroke="hsl(145, 100%, 50%)" fill={`url(#spark-${r.id})`} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                            </AreaChart>
-                          </ResponsiveContainer>
+                      {/* Celular (16/10/2026): lista de app, título e uma linha de apoio; os
+                          números e o resumo ficam no relatório aberto. */}
+                      {visibleMetrics.length > 0 && (
+                        <span className="mt-6 hidden w-full min-w-0 grid-cols-2 gap-x-6 gap-y-5 sm:grid sm:grid-cols-4">
+                          {visibleMetrics.slice(0, 8).map(metric => {
+                            const Icon = metric.icon;
+                            return (
+                              <span key={metric.key} className="block min-w-0">
+                                <span className="flex min-w-0 items-center text-[12px] leading-4 text-muted-foreground">
+                                  <Icon className="mr-1.5 h-3.5 w-3.5 shrink-0" style={{ color: metric.color }} aria-hidden="true" />
+                                  <span className="truncate">{metric.label}</span>
+                                </span>
+                                <span className="mt-1 block truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{metric.format(metric.value)}</span>
+                              </span>
+                            );
+                          })}
                         </span>
                       )}
-                      <ChevronRight className="ml-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                      {r.summary && <span className={juntar(texto.auxiliar, "mt-4 line-clamp-2 hidden leading-5 sm:block")}>{r.summary}</span>}
+                      {sparklineData && (
+                        <span className="mt-auto hidden w-full min-w-0 pt-5 sm:block">
+                          <Sparkline values={sparklineData} tone={1} height={48} />
+                        </span>
+                      )}
                     </button>
                   </li>
                 );

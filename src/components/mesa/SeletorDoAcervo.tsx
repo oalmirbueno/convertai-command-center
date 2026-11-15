@@ -189,7 +189,7 @@ export default function SeletorDoAcervo({
               type="button"
               onClick={() => setCategoria(c)}
               className={`mb-1.5 mr-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                categoria === c ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                categoria === c ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-card text-muted-foreground hover:text-foreground"
               }`}
             >
               {c === "todas" ? "Todas" : ROTULO_DA_CATEGORIA[c] || c}
@@ -209,7 +209,7 @@ export default function SeletorDoAcervo({
           alturaMax="420px"
           carregando={arvore.isLoading}
           vazio="Nenhuma foto nesta pasta."
-          renderizarItens={(itens) => <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">{itens.map(cartao)}</ul>}
+          renderizarItens={(itens) => <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">{itens.map(cartao)}</ul>}
         />
       )}
       <div className={`space-y-4 pr-1 sm:overflow-y-auto ${buscando || lista.length === 0 ? "sm:max-h-[420px]" : "hidden"}`}>
@@ -231,7 +231,7 @@ export default function SeletorDoAcervo({
             {g.pastas.map((p) => (
               <div key={p.pasta} className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{p.pasta}</p>
-                <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">{p.imagens.map(cartao)}</ul>
+                <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">{p.imagens.map(cartao)}</ul>
               </div>
             ))}
           </section>

@@ -7,8 +7,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
 import {
-  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, Secao, botao, espaco, etiqueta, foco, juntar, larguraDaMesa, superficie, texto,
+  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, espaco, foco, juntar, larguraDaMesa, superficie, texto,
 } from "@/components/sistema";
+import { ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 import {
   destinoDaCampanha, destinoDoFeito, destinoDoPedido, destinoDoRisco, normalizarResumo, resumoEstaVazio, rpcAusente,
   type ClienteEmRisco, type NivelDoDia, type ResumoDoDia, type TipoDoPedido,
@@ -42,15 +43,11 @@ const CARA_DO_PEDIDO: Record<TipoDoPedido, { icone: ReactNode; rotulo: string }>
   outro: { icone: <ArrowRight className="h-4 w-4" aria-hidden="true" />, rotulo: "Pedido" },
 };
 
-const TOM_DO_NIVEL: Record<NivelDoDia, string> = {
-  critico: "bg-destructive/10 text-destructive",
-  atencao: "bg-warning/10 text-warning",
-  info: "bg-muted text-muted-foreground",
-};
+const TOM_DO_NIVEL: Record<NivelDoDia, Tone> = { critico: "danger", atencao: "warning", info: "neutral" };
 const NOME_DO_NIVEL: Record<NivelDoDia, string> = { critico: "Urgente", atencao: "Atenção", info: "Info" };
 
 /** Cartão-link da grade: a coisa inteira é a ação (1 por cartão). */
-const cartaoLink = juntar(superficie.painel, "group flex h-full min-w-0 flex-col p-4 transition-colors hover:border-primary/40", foco);
+const cartaoLink = juntar(superficie.painel, "group flex h-full min-w-0 flex-col p-5 transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 sm:p-6", foco);
 const grade4 = juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-4");
 
 type Leitura = { resumo: ResumoDoDia; ausente: boolean };
@@ -85,7 +82,7 @@ function Grade<T>({ itens, rotulo, classe = grade4, cartao }: { itens: T[]; rotu
     <>
       <ul className={classe} aria-label={rotulo}>{visiveis.map(cartao)}</ul>
       {itens.length > POR_SECAO && (
-        <button type="button" onClick={() => setTodas(!todas)} className={juntar(botao.discreto, "relative -left-3 mt-2 h-8 text-[12px]")}>
+        <button type="button" onClick={() => setTodas(!todas)} className={juntar(botao.secundario, "mt-4 h-9")}>
           {todas ? "Mostrar menos" : `Mais ${itens.length - POR_SECAO}`}
         </button>
       )}
@@ -95,18 +92,20 @@ function Grade<T>({ itens, rotulo, classe = grade4, cartao }: { itens: T[]; rotu
 
 /** O cartão é um link interno ou externo (prova); sem destino, só o cartão. */
 function CartaoQueLeva({ para, externo, rotulo, compacto = false, children }: { para?: string | null; externo?: string | null; rotulo: string; compacto?: boolean; children: ReactNode }) {
-  const classe = juntar(cartaoLink, compacto && "p-3");
+  const classe = juntar(cartaoLink, compacto && "p-4 sm:p-5");
   if (externo) return <a href={externo} target="_blank" rel="noopener noreferrer" className={classe} title={rotulo} aria-label={rotulo}>{children}</a>;
   if (para) return <Link to={para} className={classe} title={rotulo} aria-label={rotulo}>{children}</Link>;
-  return <div className={juntar(superficie.painel, "flex h-full min-w-0 flex-col", compacto ? "p-3" : "p-4")}>{children}</div>;
+  return <div className={juntar(superficie.painel, "flex h-full min-w-0 flex-col", compacto ? "p-4 sm:p-5" : "p-5 sm:p-6")}>{children}</div>;
 }
 
 /** O pé do cartão: o nome da ação e a seta (o cartão inteiro é o clique). */
 function PeDaAcao({ rotulo, externo = false }: { rotulo: string; externo?: boolean }) {
   return (
-    <span className={juntar(texto.auxiliar, "mt-auto flex min-w-0 items-center pt-3 font-medium text-primary")}>
-      <span className="min-w-0 truncate">{rotulo}</span>
-      {externo ? <ExternalLink className="ml-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ArrowRight className="ml-1.5 h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />}
+    <span className="mt-auto flex min-w-0 items-center pt-5 text-[13px] font-medium leading-5 text-foreground">
+      <span className="min-w-0 flex-1 truncate">{rotulo}</span>
+      <span className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted transition-colors group-hover:bg-foreground group-hover:text-background">
+        {externo ? <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /> : <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />}
+      </span>
     </span>
   );
 }
@@ -116,18 +115,18 @@ function BarraDoMes({ pct }: { pct: number | null }) {
   const agora = new Date();
   const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
   const hoje = Math.round((agora.getDate() / diasNoMes) * 100);
-  if (pct === null) return <p className={juntar(texto.auxiliar, "mt-3")}>Mês sem leitura do calendário</p>;
+  if (pct === null) return <p className={juntar(texto.auxiliar, "mt-5")}>Mês sem leitura do calendário</p>;
   const p = Math.max(0, Math.min(100, Math.round(pct)));
   const cor = p >= hoje ? "bg-success" : p >= hoje - 20 ? "bg-warning" : "bg-destructive";
   return (
-    <div className="mt-3 min-w-0" data-barra-do-mes={p}>
+    <div className="mt-5 min-w-0" data-barra-do-mes={p}>
       <p className={juntar(texto.auxiliar, "flex items-baseline")}>
         <span>Mês</span>
         <span className="ml-auto tabular-nums"><span className="font-medium text-foreground">{p}%</span> pronto</span>
       </p>
-      <div className="relative mt-1 h-1.5 w-full rounded-full bg-muted" role="img" aria-label={`Calendário do mês ${p}% pronto; hoje é ${hoje}% do mês`} title={`${p}% do mês pronto · hoje = ${hoje}% do mês`}>
+      <div className="relative mt-2 h-2 w-full rounded-full bg-muted" role="img" aria-label={`Calendário do mês ${p}% pronto; hoje é ${hoje}% do mês`} title={`${p}% do mês pronto · hoje = ${hoje}% do mês`}>
         <div className={juntar("h-full rounded-full", cor)} style={{ width: `${p}%` }} />
-        <span className="absolute -top-0.5 h-2.5 w-0.5 rounded-full bg-foreground/60" style={{ left: `calc(${hoje}% - 1px)` }} aria-hidden="true" />
+        <span className="absolute -top-1 h-4 w-0.5 rounded-full bg-foreground" style={{ left: `calc(${hoje}% - 1px)` }} aria-hidden="true" />
       </div>
     </div>
   );
@@ -139,18 +138,18 @@ function CartaoDeRisco({ c, logo }: { c: ClienteEmRisco; logo: string | null }) 
     <li className="min-w-0" data-risco={c.clientId}>
       <CartaoQueLeva para={destinoDoRisco(c)} rotulo={`Abrir a pauta na Mesa: ${c.nome}`}>
         <span className="flex min-w-0 items-start">
-          <LogoDoCliente url={logo} clienteId={c.clientId} nome={c.nome} tamanho={36} className="mr-3" />
+          <LogoDoCliente url={logo} clienteId={c.clientId} nome={c.nome} tamanho={44} className="mr-3" />
           <span className="min-w-0 flex-1">
-            <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.nome}</span>
-            <span className={juntar(texto.auxiliar, "block truncate")}>{c.falta || c.situacao}</span>
+            <span className="block truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{c.nome}</span>
+            <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>{c.falta || c.situacao}</span>
           </span>
           <span className="ml-3 shrink-0 text-right">
-            <span className={juntar(texto.numero, "block", grave ? "text-destructive" : c.diasSemPost === null ? "text-muted-foreground" : "text-warning")}>{c.diasSemPost === null ? "–" : c.diasSemPost}</span>
+            <span className={juntar(texto.numero, "block text-[32px] leading-9 tracking-[-0.035em]", grave ? "text-destructive" : c.diasSemPost === null ? "text-muted-foreground" : "text-warning")}>{c.diasSemPost === null ? "–" : c.diasSemPost}</span>
             <span className={juntar(texto.etiqueta, "block text-muted-foreground")}>{c.diasSemPost === null ? c.situacao : c.diasSemPost === 1 ? "dia sem post" : "dias sem post"}</span>
           </span>
         </span>
         <BarraDoMes pct={c.pctMes} />
-        {c.sugestao && <span className={juntar(texto.auxiliar, "mt-2 flex min-w-0 items-center")}><Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 truncate">{c.sugestao}</span></span>}
+        {c.sugestao && <span className={juntar(texto.auxiliar, "mt-3 flex min-w-0 items-center")}><Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 truncate">{c.sugestao}</span></span>}
         <PeDaAcao rotulo="Abrir a pauta" />
       </CartaoQueLeva>
     </li>
@@ -188,17 +187,45 @@ export default function Hoje() {
           : consulta.data?.ausente ? <EstadoVazio titulo="O resumo do dia ainda não chega a este painel." descricao="Falta ligar o resumo no servidor. Enquanto isso, a Execução mostra o que espera você." acao={<Link to="/execucao" className={botao.secundario}>Abrir a Execução</Link>} />
             : !r || (resumoEstaVazio(r) && !pedidosDasMensagens.length) ? <EstadoVazio icone={<CheckCircle2 className="h-5 w-5" />} titulo="Nada para hoje." descricao="Nenhuma decisão pendente, nenhum cliente sem post e nada mudou nos anúncios." />
               : <>
-                <FaixaDeNumeros
-                  rotulo="O dia em números"
-                  colunas={4}
-                  data-numeros-do-dia=""
-                  itens={[
-                    { rotulo: "Precisa de você", valor: String(pedidos.length), ponto: pedidos.length ? "alerta" : "verde", corDoValor: pedidos.length ? "text-warning" : undefined, apoio: pedidos.length ? (pedidos.length === 1 ? "decisão sua" : "decisões suas") : "nada esperando", aoClicar: irPara("hoje-precisa"), dica: "Ir para Precisa de você" },
-                    { rotulo: "Clientes sem post", valor: String(r.clientesEmRisco.length), ponto: r.clientesEmRisco.length ? "perigo" : "verde", apoio: r.clientesEmRisco.length ? `o pior: ${r.clientesEmRisco[0].diasSemPost ?? "-"} dias` : "calendário em dia", aoClicar: irPara("hoje-calendario"), dica: "Ir para Clientes sem post" },
-                    { rotulo: "Anúncios", valor: String(r.alertas.length + r.mudancas.length), ponto: urgentes ? "perigo" : atencao ? "alerta" : "neutro", apoio: `${urgentes} urgente${urgentes === 1 ? "" : "s"} · ${r.mudancas.length} ${r.mudancas.length === 1 ? "mudança" : "mudanças"}`, para: "/anuncios/hoje", dica: "Abrir Anúncios hoje" },
-                    { rotulo: "Feito ontem", valor: String(r.feitoOntem.length), ponto: r.feitoOntem.length ? "verde" : "neutro", apoio: "com prova", aoClicar: irPara("hoje-feito"), dica: "Ir para Feito ontem" },
-                  ]}
-                />
+                <div data-numeros-do-dia="" role="group" aria-label="O dia em números">
+                  <StatGrid cols={4}>
+                    <StatCard
+                      variant="ink"
+                      size="xl"
+                      label="Precisa de você"
+                      value={String(pedidos.length)}
+                      icon={<ShieldCheck className="h-4 w-4" />}
+                      hint={pedidos.length ? (pedidos.length === 1 ? "decisão sua" : "decisões suas") : "nada esperando"}
+                      onClick={irPara("hoje-precisa")}
+                    />
+                    <StatCard
+                      size="xl"
+                      label="Clientes sem post"
+                      value={String(r.clientesEmRisco.length)}
+                      icon={<Flame className="h-4 w-4" />}
+                      hint={r.clientesEmRisco.length ? `o pior: ${r.clientesEmRisco[0].diasSemPost ?? "-"} dias` : "calendário em dia"}
+                      onClick={irPara("hoje-calendario")}
+                    />
+                    <StatCard
+                      size="xl"
+                      label="Anúncios"
+                      value={String(r.alertas.length + r.mudancas.length)}
+                      icon={<Megaphone className="h-4 w-4" />}
+                      hint={`${urgentes} urgente${urgentes === 1 ? "" : "s"} · ${r.mudancas.length} ${r.mudancas.length === 1 ? "mudança" : "mudanças"}`}
+                      chart={r.alertas.length > 0 ? <ProgressBar value={urgentes + atencao} max={r.alertas.length} tone={urgentes ? 4 : 1} striped label={`${urgentes + atencao} de ${r.alertas.length} alertas pedem ação`} /> : undefined}
+                      to="/anuncios/hoje"
+                    />
+                    <StatCard
+                      variant="accent"
+                      size="xl"
+                      label="Feito ontem"
+                      value={String(r.feitoOntem.length)}
+                      icon={<CheckCircle2 className="h-4 w-4" />}
+                      hint="com prova"
+                      onClick={irPara("hoje-feito")}
+                    />
+                  </StatGrid>
+                </div>
 
                 <Secao id="hoje-precisa" titulo="Precisa de você" descricao={pedidos.length ? `${pedidos.length} ${pedidos.length === 1 ? "decisão" : "decisões"}` : "Nada esperando você"} recolher="hoje:precisa">
                   {pedidos.length === 0 ? <EstadoVazio compacto titulo="Nada esperando você." descricao="Os agentes seguem sozinhos." /> : (
@@ -210,11 +237,11 @@ export default function Hoje() {
                         <li key={p.chave} className="min-w-0" data-pedido-do-dia={p.tipo}>
                           <CartaoQueLeva para={d.rota} rotulo={`${d.rotulo}: ${p.nome}`}>
                             <span className="flex min-w-0 items-center">
-                              <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-warning/10 text-warning">{cara.icone}</span>
-                              <span className={juntar(texto.etiqueta, "min-w-0 truncate text-muted-foreground")}>{cara.rotulo}</span>
+                              <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning">{cara.icone}</span>
+                              <span className={juntar(texto.rotulo, "min-w-0 truncate")}>{cara.rotulo}</span>
                             </span>
-                            {origem && <span className={juntar(texto.auxiliar, "mt-3 block truncate")}>{origem}</span>}
-                            <span className={juntar(texto.corpo, "mt-0.5 line-clamp-2 font-medium [overflow-wrap:anywhere]", !origem && "mt-3")}>{assunto}</span>
+                            {origem && <span className={juntar(texto.auxiliar, "mt-5 block truncate")}>{origem}</span>}
+                            <span className={juntar("mt-1 line-clamp-2 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground [overflow-wrap:anywhere]", !origem && "mt-5")}>{assunto}</span>
                             {p.motivo && <span className={juntar(texto.auxiliar, "mt-1 block truncate")} title={p.motivo}>{p.motivo}</span>}
                             <PeDaAcao rotulo={d.rotulo} />
                           </CartaoQueLeva>
@@ -234,13 +261,13 @@ export default function Hoje() {
                   <Secao titulo="Dá para fazer campanha" descricao={`${r.campanhas.length}`} recolher="hoje:campanhas">
                     <Grade itens={r.campanhas} rotulo="Dá para fazer campanha" cartao={(c) => (
                       <li key={c.clientId} className="min-w-0" data-campanha-do-dia={c.clientId}>
-                        <Link to={destinoDaCampanha(c)} className={juntar(cartaoLink, "flex-row items-center p-3")} title="Abrir Campanhas" aria-label={`Abrir Campanhas: ${c.nome} · ${c.tema}`}>
-                          <LogoDoCliente url={logoDe(c.clientId)} clienteId={c.clientId} nome={c.nome} tamanho={32} className="mr-3" />
+                        <Link to={destinoDaCampanha(c)} className={juntar(cartaoLink, "flex-row items-center p-4 sm:p-5")} title="Abrir Campanhas" aria-label={`Abrir Campanhas: ${c.nome} · ${c.tema}`}>
+                          <LogoDoCliente url={logoDe(c.clientId)} clienteId={c.clientId} nome={c.nome} tamanho={40} className="mr-3" />
                           <span className="min-w-0 flex-1">
                             <span className={juntar(texto.corpo, "flex min-w-0 items-center font-medium")}><Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 truncate">{c.tema}</span></span>
                             <span className={juntar(texto.auxiliar, "block truncate")} title={c.porQue || undefined}>{c.nome}{c.porQue ? ` · ${c.porQue}` : ""}</span>
                           </span>
-                          <ArrowRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                          <span className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted transition-colors group-hover:bg-foreground group-hover:text-background"><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
                         </Link>
                       </li>
                     )} />
@@ -256,11 +283,11 @@ export default function Hoje() {
                   >
                     <div className={juntar(espaco.grade, "lg:grid-cols-2")}>
                       {r.alertas.length > 0 && (
-                        <ul className="min-w-0 space-y-2" aria-label="Alertas dos anúncios">
+                        <ul className="min-w-0 space-y-3" aria-label="Alertas dos anúncios">
                           {r.alertas.slice(0, 4).map((a) => (
                             <li key={a.chave} className="min-w-0" data-alerta-do-dia={a.nivel}>
-                              <Link to="/anuncios/hoje" className={juntar(cartaoLink, "flex-row items-center p-3")} title="Abrir Anúncios hoje">
-                                <span className={juntar(etiqueta, "mr-2.5 w-16 justify-center", TOM_DO_NIVEL[a.nivel])}>{NOME_DO_NIVEL[a.nivel]}</span>
+                              <Link to="/anuncios/hoje" className={juntar(cartaoLink, "flex-row items-center p-4 sm:p-5")} title="Abrir Anúncios hoje">
+                                <StatusPill tone={TOM_DO_NIVEL[a.nivel]} className="mr-3">{NOME_DO_NIVEL[a.nivel]}</StatusPill>
                                 <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{a.cliente ? <span className="font-medium">{a.cliente} </span> : null}<span className="text-muted-foreground">{a.texto}</span></span>
                               </Link>
                             </li>
@@ -269,7 +296,7 @@ export default function Hoje() {
                         </ul>
                       )}
                       {r.mudancas.length > 0 && (
-                        <ul className="min-w-0 space-y-2" aria-label="Mudanças nos anúncios">
+                        <ul className="min-w-0 space-y-3" aria-label="Mudanças nos anúncios">
                           {r.mudancas.slice(0, 4).map((m) => {
                             const prova = m.provaUrl && /^https?:\/\//i.test(m.provaUrl) ? m.provaUrl : null;
                             return (
@@ -294,18 +321,18 @@ export default function Hoje() {
 
                 <Secao id="hoje-feito" titulo="Feito ontem com prova" descricao={r.feitoOntem.length ? `${r.feitoOntem.length}` : "Nada entregue com prova ontem"} recolher="hoje:feito">
                   {r.feitoOntem.length === 0 ? <EstadoVazio compacto titulo="Nenhuma entrega com prova ontem." /> : (
-                    <Grade itens={r.feitoOntem} rotulo="Feito ontem com prova" classe={juntar(espaco.grade, "gap-2 sm:grid-cols-2 xl:grid-cols-4")} cartao={(f) => {
+                    <Grade itens={r.feitoOntem} rotulo="Feito ontem com prova" classe={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-4")} cartao={(f) => {
                       const d = destinoDoFeito(f);
                       const { origem, assunto } = partesDoNome(f.nome);
                       return (
                         <li key={f.chave} className="min-w-0" data-feito="">
                           <CartaoQueLeva compacto externo={d.externo} para={d.rota} rotulo={`${d.externo ? "Ver a prova" : "Abrir o diário"}: ${f.nome}`}>
                             <span className="flex min-w-0 items-center">
-                              <CheckCircle2 className="mr-2 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-                              <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{assunto}</span>
+                              <span className="mr-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success-soft text-success"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /></span>
+                              <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-semibold")}>{assunto}</span>
                               {d.externo && <ExternalLink className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
                             </span>
-                            <span className={juntar(texto.auxiliar, "mt-0.5 block truncate pl-6")}>{[origem, f.agente, quando(f.quando)].filter(Boolean).join(" · ")}</span>
+                            <span className={juntar(texto.auxiliar, "mt-2 block truncate")}>{[origem, f.agente, quando(f.quando)].filter(Boolean).join(" · ")}</span>
                           </CartaoQueLeva>
                         </li>
                       );

@@ -146,14 +146,14 @@ export default function MetricsAudit({ metrics }: Props) {
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
-          className={juntar("flex min-w-0 flex-1 items-center px-4 py-3 text-left transition-colors hover:bg-muted/30", foco)}
+          className={juntar("flex min-w-0 flex-1 items-center px-5 py-4 text-left transition-colors hover:bg-muted/40 sm:px-6", foco)}
         >
           {allOk
             ? <ShieldCheck className="mr-3 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             : <ShieldAlert className="mr-3 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />}
           <span className="mr-3 flex min-w-0 flex-1 items-center">
             <span className={juntar(texto.tituloSecao, "min-w-0 truncate")}>Auditoria das métricas</span>
-            <span className={juntar(etiqueta, "ml-2", allOk ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive")}>
+            <span className={juntar(etiqueta, "ml-2", allOk ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")}>
               {allOk ? "Tudo confere" : `${failures.length} divergência${failures.length > 1 ? "s" : ""}`}
             </span>
           </span>
@@ -173,9 +173,9 @@ export default function MetricsAudit({ metrics }: Props) {
             <div className="overflow-hidden border-t border-border">
               <div className="-ml-px -mt-px grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
                 {base_.map((x) => (
-                  <div key={x.l} className="min-w-0 border-l border-t border-border px-4 py-2.5">
+                  <div key={x.l} className="min-w-0 border-l border-t border-border px-5 py-4">
                     <p className={texto.rotulo}>{x.l}</p>
-                    <p className="mt-0.5 truncate text-[15px] font-semibold tabular-nums text-foreground">{x.v}</p>
+                    <p className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{x.v}</p>
                   </div>
                 ))}
               </div>
@@ -185,7 +185,7 @@ export default function MetricsAudit({ metrics }: Props) {
           {/* Cada conta: fórmula, entradas, calculado × armazenado */}
           <ul className="divide-y divide-border border-t border-border">
             {status.map(({ c, ok, diff }) => (
-              <li key={c.key} className={juntar("flex min-w-0 flex-wrap items-start px-4 py-3", !ok && "bg-destructive/5")}>
+              <li key={c.key} className={juntar("flex min-w-0 flex-wrap items-start px-5 py-4 sm:px-6", !ok && "bg-danger-soft")}>
                 <div className="mb-2 mr-4 min-w-0 flex-1 basis-[220px] sm:mb-0">
                   <p className="flex min-w-0 items-center">
                     <Calculator className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -197,15 +197,15 @@ export default function MetricsAudit({ metrics }: Props) {
                 <div className="flex shrink-0 items-center [&>*+*]:ml-4">
                   <div className="text-right">
                     <p className={texto.auxiliar}>Calculado</p>
-                    <p className="text-[13px] font-semibold tabular-nums text-primary">{c.format(c.computed)}</p>
+                    <p className="text-[15px] font-semibold tabular-nums text-primary">{c.format(c.computed)}</p>
                   </div>
                   <div className="text-right">
                     <p className={texto.auxiliar}>Armazenado</p>
-                    <p className={juntar("text-[13px] font-semibold tabular-nums", c.stored == null ? "text-muted-foreground" : ok ? "text-foreground" : "text-destructive line-through")}>
+                    <p className={juntar("text-[15px] font-semibold tabular-nums", c.stored == null ? "text-muted-foreground" : ok ? "text-foreground" : "text-destructive line-through")}>
                       {c.stored == null ? "-" : c.format(Number(c.stored))}
                     </p>
                   </div>
-                  <span className={juntar(etiqueta, ok ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive")}>
+                  <span className={juntar(etiqueta, ok ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")}>
                     {ok ? "OK" : `Δ ${(diff * 100).toFixed(1)}%`}
                   </span>
                 </div>

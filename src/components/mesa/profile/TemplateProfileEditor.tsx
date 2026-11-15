@@ -635,7 +635,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
         {!ajustes.ocultar_tempo && <label className={juntar("block min-w-0", texto.rotulo)}>Tempo<Input aria-label="Tempo do post" value={ajustes.tempo || ""} maxLength={24} disabled={travado} placeholder={TEMPO_PADRAO[ajustes.estilo]} onChange={(e) => mudar("tempo", e.target.value || undefined)} className="mt-1" /></label>}
         {ehInstagram && <label className={juntar("block min-w-0", texto.rotulo)}>Local<Input aria-label="Local do post" value={ajustes.local || ""} maxLength={60} disabled={travado} placeholder="Opcional" onChange={(e) => mudar("local", e.target.value || undefined)} className="mt-1" /></label>}
       </div>
-      {ehX && !ajustes.ocultar_numeros && <div className="grid min-w-0 grid-cols-2 gap-3">
+      {ehX && !ajustes.ocultar_numeros && <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4">
         <NumeroOpcional rotulo="Respostas" valor={numeros.respostas} onMudar={(v) => mudarNumero("respostas", v)} desativado={travado} />
         <NumeroOpcional rotulo="Reposts" valor={numeros.reposts} onMudar={(v) => mudarNumero("reposts", v)} desativado={travado} />
         <NumeroOpcional rotulo="Curtidas" valor={numeros.curtidas} onMudar={(v) => mudarNumero("curtidas", v)} desativado={travado} />

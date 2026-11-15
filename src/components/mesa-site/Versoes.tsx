@@ -176,7 +176,7 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
                 {doRascunho ? (
                   <span className={juntar(etiqueta, "mr-1 bg-warning-soft text-warning")}>rascunho</span>
                 ) : n === 0 || (salva && salvas[0] && salvas[0].trabalho_id === t.id) ? (
-                  <span className={juntar(etiqueta, "mr-1 bg-primary/10 text-primary")}>{salva ? "salva" : "atual"}</span>
+                  <span className={juntar(etiqueta, "mr-1 bg-accent-soft text-primary")}>{salva ? "salva" : "atual"}</span>
                 ) : null}
                 {naNuvem && (
                   <a className={botao.icone} href={naNuvem.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir a prévia na nuvem desta versão" title={`Abrir prévia (${naNuvem.ramo === "rascunho" ? "rascunho, " : ""}${dataEHora(naNuvem.em)})`} data-abrir-previa-nuvem={naNuvem.commit.slice(0, 8)}>

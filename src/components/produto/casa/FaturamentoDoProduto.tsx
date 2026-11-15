@@ -1,3 +1,4 @@
+import NumerosOusados from "@/components/admin/NumerosOusados";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -8,7 +9,6 @@ import {
   Carregando,
   EstadoDeErro,
   EstadoVazio,
-  FaixaDeNumeros,
   GrupoDeCampos,
   JanelaCentral,
   Secao,
@@ -93,7 +93,8 @@ export default function FaturamentoDoProduto({ compacto = false }: { compacto?: 
         ajuda="Receita recorrente é a soma das mensalidades das empresas ativas e em atraso. Recebido é o que o Asaas confirmou no mês. O custo soma as taxas do Asaas, o imposto estimado, o custo fixo, o e-mail e o que foi lançado."
         acao={seletorDeMes}
       >
-        <FaixaDeNumeros
+        <NumerosOusados
+          solido={1}
           rotulo="Faturamento do produto"
           itens={[
             { rotulo: "Receita recorrente", valor: reais(f.mrr), apoio: "por mês" },

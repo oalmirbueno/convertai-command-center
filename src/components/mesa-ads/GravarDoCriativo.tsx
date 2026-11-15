@@ -142,7 +142,7 @@ export default function GravarDoCriativo({ criativo, plano, angulo }: { criativo
   };
 
   const opcoes = (
-    <div className={juntar(superficie.painel, "min-w-0 space-y-4 p-3")} data-gravar-opcoes="">
+    <div className={juntar(superficie.painel, "min-w-0 space-y-4 p-4")} data-gravar-opcoes="">
       <div className="space-y-1.5">
         <span className="block text-[12px] leading-4 text-muted-foreground">O que gravar</span>
         <SeletorCompacto rotulo="O que gravar" opcoes={OPCOES_DO_MODO} valor={o.modo} onEscolher={(v) => mudar({ modo: v as ModoDoAnuncio })} larguraTotal />

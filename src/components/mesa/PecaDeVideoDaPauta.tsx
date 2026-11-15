@@ -78,7 +78,7 @@ export function SeloDoEstadoDoVideo({ pronto, className = "" }: { pronto: boolea
   const Icone = pronto ? CheckCircle2 : CircleDashed;
   return (
     <span
-      className={juntar("inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-[12px] font-medium", pronto ? "bg-success/15 text-success" : "bg-muted text-muted-foreground", className)}
+      className={juntar("inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-[12px] font-medium", pronto ? "bg-success-soft text-success" : "bg-muted text-muted-foreground", className)}
       data-estado-do-video={pronto ? "pronto" : "a_fazer"}
       title={pronto ? "Pronto: a peça tem o vídeo final" : "A fazer: falta o vídeo final da peça"}
     >

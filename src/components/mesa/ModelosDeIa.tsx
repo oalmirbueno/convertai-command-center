@@ -441,7 +441,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(POR_PAGINA); }} placeholder="Buscar por nome" className="h-9 pl-8" />
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-3">
             <Select value={tipo} onValueChange={(v: any) => { setTipo(v); setLimite(POR_PAGINA); }}>
               <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
               <SelectContent>

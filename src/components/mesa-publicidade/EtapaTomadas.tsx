@@ -53,7 +53,7 @@ function PlanoEditavel({ lista, mudar }: { lista: TomadaDePublicidade[]; mudar: 
             <p className="mr-2 min-w-0 truncate text-[13px] font-semibold">{rotuloDaFuncao(t.funcao)}</p>
             <span className={juntar(texto.auxiliar, "ml-auto shrink-0")}>{t.com_pessoa ? "com a pessoa" : "sem pessoa"}</span>
           </div>
-          <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
             <input value={t.descricao} onChange={(e) => mudar(i, { descricao: e.target.value })} maxLength={400} placeholder="Descrição" className={campo} aria-label={`Descrição da tomada ${t.ordem}`} />
             <input value={t.enquadramento} onChange={(e) => mudar(i, { enquadramento: e.target.value })} maxLength={200} placeholder="Enquadramento" className={campo} aria-label={`Enquadramento da tomada ${t.ordem}`} />
             <input value={t.ambiente} onChange={(e) => mudar(i, { ambiente: e.target.value })} maxLength={300} placeholder="Ambiente" className={campo} aria-label={`Ambiente da tomada ${t.ordem}`} />

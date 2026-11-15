@@ -7,10 +7,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   KeyRound, Link2, Server, Plus, Eye, EyeOff, Copy, ExternalLink,
-  Pencil, Trash2, Loader2, Globe, Bot,
+  Pencil, Trash2, Loader2, Globe, Bot, ShieldCheck,
 } from "lucide-react";
 import { agentesPodemUsar } from "@/hooks/usePedidosDeAcesso";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { OverflowMenu, StatCard, StatGrid } from "@/components/ds";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   CampoDeFormulario,
@@ -22,6 +23,7 @@ import {
   botao,
   campo,
   campoTexto,
+  espaco,
   juntar,
   superficie,
   texto,
@@ -46,8 +48,8 @@ interface VaultItem {
 
 const CATEGORY_META: Record<Category, { label: string; plural: string; icon: any; color: string }> = {
   password: { label: "Senha", plural: "Senhas", icon: KeyRound, color: "text-primary" },
-  link: { label: "Link útil", plural: "Links úteis", icon: Link2, color: "text-sky-400" },
-  system: { label: "Sistema", plural: "Sistemas", icon: Server, color: "text-amber-400" },
+  link: { label: "Link útil", plural: "Links úteis", icon: Link2, color: "text-info" },
+  system: { label: "Sistema", plural: "Sistemas", icon: Server, color: "text-warning" },
 };
 
 function faviconFor(url: string | null) {
@@ -78,8 +80,8 @@ function GrupoDoCofre({ clientId, categoria, total, children }: { clientId: stri
     <section className="min-w-0" aria-label={Meta.plural}>
       <CabecalhoDeSecao
         nivel={3}
-        className="mb-2"
-        icone={<Meta.icon className={`h-3.5 w-3.5 ${Meta.color}`} />}
+        className="mb-4"
+        icone={<Meta.icon className={`h-4 w-4 ${Meta.color}`} />}
         titulo={
           <>
             {Meta.plural}
@@ -103,14 +105,19 @@ interface Props {
    * página já mostra). Sem ele (gaveta do cliente), fica a linha de contagem.
    */
   titulo?: ReactNode;
+  /**
+   * Página larga (/cofre): mostra os números do cofre em cartões e os itens em
+   * duas colunas. Sem ele (gaveta do cliente, Central), uma coluna só.
+   */
+  amplo?: boolean;
 }
 
 /**
- * Cofre de acessos de um cliente: lista com divisória (sem cartão por item),
- * agrupada por categoria. Usado na página /cofre e dentro da gaveta do
+ * Cofre de acessos de um cliente: um cartão por acesso (rodada ousada,
+ * 15/11/2026), agrupado por categoria. Usado na página /cofre e dentro da gaveta do
  * cliente (EditClientDrawer): tem de caber numa coluna estreita.
  */
-export default function ClientVault({ clientId, canManage, titulo }: Props) {
+export default function ClientVault({ clientId, canManage, titulo, amplo = false }: Props) {
   const { user, profile } = useAuth();
   const qc = useQueryClient();
   // O selo dos agentes é decisão de quem gere a operação (admin e gestor).
@@ -218,7 +225,7 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
   return (
     <div className="min-w-0">
       {titulo ? (
-        <div className="mb-3 flex min-w-0 items-center">
+        <div className="mb-5 flex min-w-0 items-center">
           <h2 className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>{titulo}</h2>
           {total > 0 && novoItem ? <div className="ml-3 shrink-0">{novoItem}</div> : null}
         </div>
@@ -246,28 +253,38 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
               {novoItem}
             </div>
           )}
-          <div className="space-y-5">
+          {/* Quantos acessos há em cada grupo: os mesmos números dos títulos dos grupos, grandes. */}
+          {amplo && (
+          <StatGrid cols={4} className="mb-6 sm:mb-8" label="Resumo do cofre">
+            <StatCard variant="ink" label="Itens guardados" value={total} icon={<ShieldCheck className="h-4 w-4" />} />
+            {(Object.keys(CATEGORY_META) as Category[]).map((cat, i) => {
+              const M = CATEGORY_META[cat];
+              return <StatCard key={cat} variant={i === 0 ? "accent" : "default"} label={M.plural} value={(grouped[cat] || []).length} icon={<M.icon className="h-4 w-4" />} />;
+            })}
+          </StatGrid>
+          )}
+          <div className="space-y-6 sm:space-y-8">
             {(Object.keys(CATEGORY_META) as Category[]).map((cat) => {
               const list = grouped[cat];
               if (!list || list.length === 0) return null;
               return (
                 <GrupoDoCofre key={cat} clientId={clientId} categoria={cat} total={list.length}>
-                  <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/60 px-4 sm:px-5")}>
+                  <ul className={juntar(espaco.grade, "grid-cols-1", amplo && "xl:grid-cols-2")}>
                     {list.map((it) => {
                       const fav = it.icon_url || faviconFor(it.url);
                       const isRevealed = !!revealed[it.id];
                       return (
-                        <li key={it.id} className="min-w-0 py-3.5">
-                          <div className="flex min-w-0 items-start">
-                            <div className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                        <li key={it.id} className={juntar(superficie.painel, "min-w-0 p-5")}>
+                          <div className="flex min-w-0 items-center">
+                            <div className="mr-3 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                               {fav ? (
-                                <img src={fav} alt="" className="h-5 w-5 object-contain" onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
+                                <img src={fav} alt="" className="h-6 w-6 object-contain" onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
                               ) : (
-                                <Globe className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                                <Globe className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className={juntar(texto.corpo, "flex min-w-0 items-center font-medium")}>
+                              <p className="flex min-w-0 items-center text-[15px] font-semibold leading-5 text-foreground">
                                 <span className="min-w-0 truncate">{it.title}</span>
                                 {it.agentes_podem_usar ? (
                                   <span className="ml-1.5 shrink-0 text-primary" title="Os agentes podem usar este acesso" aria-label="Os agentes podem usar este acesso" role="img">
@@ -280,7 +297,7 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
                                   href={normalizeUrl(it.url)}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex max-w-full items-center text-[12px] text-muted-foreground transition-colors hover:text-primary"
+                                  className="mt-0.5 inline-flex max-w-full items-center text-[12px] text-muted-foreground transition-colors hover:text-primary"
                                 >
                                   <span className="truncate">{it.url}</span>
                                   <ExternalLink className="ml-1 h-3 w-3 shrink-0" aria-hidden="true" />
@@ -294,7 +311,7 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
                                     type="button"
                                     onClick={() => void alternarAgentes(it)}
                                     disabled={alternandoAgentes === it.id}
-                                    className={juntar(botao.icone, it.agentes_podem_usar && "text-primary")}
+                                    className={juntar(botao.icone, it.agentes_podem_usar && "bg-accent-soft text-primary")}
                                     aria-pressed={!!it.agentes_podem_usar}
                                     aria-label={`Agentes podem usar ${it.title}`}
                                     title={it.agentes_podem_usar
@@ -304,26 +321,21 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
                                     <Bot className="h-3.5 w-3.5" aria-hidden="true" />
                                   </button>
                                 )}
-                                <button type="button" onClick={() => setEditing(it)} className={botao.icone} aria-label={`Editar ${it.title}`} title="Editar">
-                                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmDelete(it.id)}
-                                  className={juntar(botao.icone, "hover:text-destructive")}
-                                  aria-label={`Remover ${it.title}`}
-                                  title="Remover"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                                </button>
+                                <OverflowMenu
+                                  label={`Mais ações de ${it.title}`}
+                                  items={[
+                                    { label: "Editar", icon: <Pencil className="h-3.5 w-3.5" />, onSelect: () => setEditing(it) },
+                                    { label: "Remover", icon: <Trash2 className="h-3.5 w-3.5" />, onSelect: () => setConfirmDelete(it.id), danger: true },
+                                  ]}
+                                />
                               </div>
                             )}
                           </div>
 
                           {(it.username || it.password) && (
-                            <dl className="mt-2 space-y-1 pl-11">
+                            <dl className="mt-4 space-y-2">
                               {it.username && (
-                                <div className="flex min-w-0 items-center">
+                                <div className="flex min-w-0 items-center rounded-md bg-muted/60 py-1.5 pl-3.5 pr-1.5">
                                   <dt className={juntar(texto.rotulo, "w-16 shrink-0")}>Usuário</dt>
                                   <dd className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground">{it.username}</dd>
                                   <button type="button" onClick={() => copy(it.username, "Usuário")} className={botao.icone} aria-label="Copiar usuário" title="Copiar">
@@ -332,7 +344,7 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
                                 </div>
                               )}
                               {it.password && (
-                                <div className="flex min-w-0 items-center">
+                                <div className="flex min-w-0 items-center rounded-md bg-muted/60 py-1.5 pl-3.5 pr-1.5">
                                   <dt className={juntar(texto.rotulo, "w-16 shrink-0")}>Senha</dt>
                                   <dd className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground">
                                     {isRevealed ? it.password : "•".repeat(Math.min(12, it.password.length))}
@@ -355,7 +367,7 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
                           )}
 
                           {it.notes && (
-                            <p className={juntar(texto.auxiliar, "mt-2 whitespace-pre-wrap pl-11 leading-5 [overflow-wrap:anywhere]")}>{it.notes}</p>
+                            <p className={juntar(texto.auxiliar, "mt-3 whitespace-pre-wrap leading-5 [overflow-wrap:anywhere]")}>{it.notes}</p>
                           )}
                         </li>
                       );

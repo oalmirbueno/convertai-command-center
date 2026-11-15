@@ -225,7 +225,7 @@ export default function PainelEditarComIA({
         <div className="space-y-2">
           <div className="flex flex-wrap" role="group" aria-label="Receitas prontas">
             {RECEITAS.map((r) => (
-              <button key={r.id} type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-7 px-2 text-[12px]", plano && plano.receita === r.id && "bg-primary/10 text-primary")} onClick={() => setInstrucao(r.instrucao)} title={r.instrucao}>
+              <button key={r.id} type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-7 px-2 text-[12px]", plano && plano.receita === r.id && "bg-accent-soft text-primary")} onClick={() => setInstrucao(r.instrucao)} title={r.instrucao}>
                 {r.rotulo}
               </button>
             ))}

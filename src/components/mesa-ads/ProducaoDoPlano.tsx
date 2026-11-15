@@ -296,7 +296,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
       </div>
 
       {trocando && !andamento && (
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 border-t border-border pt-3 md:grid-cols-2" aria-label="Trocar a produção">
+        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 border-t border-border pt-3 md:grid-cols-2" aria-label="Trocar a produção">
           <div className="min-w-0">
             <p className="mb-1 text-[12px] font-medium text-muted-foreground">Formatos</p>
             <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Formatos">
@@ -306,7 +306,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
                 onClick={() => setFormatosEscolhidos(null)}
                 className={juntar(
                   "mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors",
-                  !formatosEscolhidos ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground",
+                  !formatosEscolhidos ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground",
                   foco,
                 )}
               >
@@ -323,7 +323,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
                     onClick={() => alternarFormato(f.valor)}
                     className={juntar(
                       "mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors",
-                      ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground",
+                      ativo ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground",
                       foco,
                     )}
                   >

@@ -184,7 +184,7 @@ function TaskCard({
           <dd className="mt-1">
             <Badge
               variant="secondary"
-              className="h-6 max-w-full rounded-md px-2 text-[11px] font-medium"
+              className="h-6 max-w-full rounded-full px-2.5 text-[11px] font-medium"
             >
               <span className="truncate">
                 {statusLabels[task.status] || task.status}
@@ -309,7 +309,7 @@ export default function EditorialTaskInbox({
         )}
       >
         <div className="flex items-start gap-3">
-          <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-solid text-on-accent">
             <Palette className="h-5 w-5" aria-hidden="true" />
           </span>
 
@@ -323,7 +323,7 @@ export default function EditorialTaskInbox({
               </h2>
               <Badge
                 variant="secondary"
-                className="h-6 rounded-md px-2 text-[11px] tabular-nums"
+                className="h-6 rounded-full px-2.5 text-[11px] font-semibold tabular-nums"
                 aria-label={`${totalTasks} tarefas no escopo atual`}
               >
                 {totalTasks}

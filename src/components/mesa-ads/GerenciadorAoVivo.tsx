@@ -765,8 +765,8 @@ export function BotaoAtualizarAgora({ atualizando, onAtualizar }: { atualizando:
 function Fato({ rotulo, children, className = "" }: { rotulo: string; children: ReactNode; className?: string }) {
   return (
     <div className={juntar("min-w-0", className)}>
-      <dt className="truncate text-[11px] leading-4 text-muted-foreground">{rotulo}</dt>
-      <dd className="mt-0.5 min-w-0 truncate text-[13px] font-medium leading-5">{children}</dd>
+      <dt className="truncate text-[12px] leading-4 text-muted-foreground">{rotulo}</dt>
+      <dd className="mt-1 min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em]">{children}</dd>
     </div>
   );
 }
@@ -775,8 +775,8 @@ function Fato({ rotulo, children, className = "" }: { rotulo: string; children: 
 function LinhaDaConta({ c, gestao }: { c: ContaNaTela; gestao: LeituraDoGerenciador["gestao"] }) {
   const travada = c.situacao.travada;
   return (
-    <div className="min-w-0 px-3 py-2.5" data-conta={c.id} data-travada={travada ? "sim" : "nao"}>
-      <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))]">
+    <div className="min-w-0 px-5 py-4 sm:px-6 sm:py-5" data-conta={c.id} data-travada={travada ? "sim" : "nao"}>
+      <dl className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))]">
         <Fato rotulo="Conta" className="col-span-2 sm:col-span-1">
           <span className="flex min-w-0 items-center">
             <span className={juntar("mr-2 inline-block h-2 w-2 shrink-0 rounded-full", travada ? "bg-destructive" : c.situacao.codigo === 1 ? "bg-success" : "bg-warning")} aria-hidden="true" />
@@ -836,7 +836,7 @@ export function SituacaoDaConta({ leitura, carregando, erro }: { leitura: Leitur
     <section className={juntar(superficie.painel, "min-w-0 divide-y divide-border")} aria-label="Situação da conta">
       {leitura.contas.map((c) => <LinhaDaConta key={c.id} c={c} gestao={g} />)}
       {((g && !g.disponivel && !algumaTravada) || semMeta.length > 0) && (
-        <p className="flex min-w-0 flex-wrap items-center px-3 py-1.5 text-[12px] leading-snug text-muted-foreground">
+        <p className="flex min-w-0 flex-wrap items-center px-5 py-3 text-[12px] leading-snug text-muted-foreground sm:px-6">
           {g && !g.disponivel && !algumaTravada && <span className="mr-3 min-w-0 [overflow-wrap:anywhere]">Só leitura agora: {g.motivo || "sem permissão de gestão."}</span>}
           {semMeta.length > 0 && <span className="min-w-0">{semMeta.map((p) => `${p.nome}: ${p.conectada ? "ligado, leitura ainda não feita" : "não conectado"}`).join(" · ")}</span>}
         </p>

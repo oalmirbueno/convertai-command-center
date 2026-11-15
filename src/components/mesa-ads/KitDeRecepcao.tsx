@@ -43,8 +43,8 @@ async function copiar(texto: string, rotulo: string) {
 
 function Nota({ rotulo, nota }: { rotulo: string; nota: number | null }) {
   if (nota === null) return null;
-  const tom = nota >= 7 ? "bg-success/10 text-success" : nota >= 5 ? "bg-warning/15 text-warning" : "bg-destructive/10 text-destructive";
-  return <span className={`mb-1 mr-1.5 rounded-full px-2 py-0.5 text-[11px] ${tom}`}>{rotulo} {nota.toFixed(1).replace(".", ",")}</span>;
+  const tom = nota >= 7 ? "bg-success-soft text-success" : nota >= 5 ? "bg-warning/15 text-warning" : "bg-danger-soft text-destructive";
+  return <span className={`mb-1 mr-1.5 rounded-full px-2.5 py-1 text-[11px] ${tom}`}>{rotulo} {nota.toFixed(1).replace(".", ",")}</span>;
 }
 
 function Bloco({ titulo, icone, children, acao }: { titulo: string; icone: ReactNode; children: ReactNode; acao?: ReactNode }) {

@@ -165,7 +165,7 @@ export default function PecasDaMarca() {
         acao={
           <span className="m-1 inline-flex overflow-hidden rounded-md border border-border" role="tablist" aria-label="Grupo de peças">
             {(["redes", "papelaria"] as const).map((g) => (
-              <button key={g} type="button" role="tab" aria-selected={grupo === g} onClick={() => setGrupo(g)} className={juntar("h-8 px-3 text-[12px]", grupo === g ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted", foco)}>
+              <button key={g} type="button" role="tab" aria-selected={grupo === g} onClick={() => setGrupo(g)} className={juntar("h-8 px-3 text-[12px]", grupo === g ? "bg-accent-soft text-primary" : "text-muted-foreground hover:bg-muted", foco)}>
                 {g === "redes" ? "Redes sociais" : "Papelaria"}
               </button>
             ))}
@@ -211,7 +211,7 @@ export default function PecasDaMarca() {
         }
       >
         <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
             {CAMPOS_DA_ASSINATURA.map((c) => (
               <CampoDeFormulario key={c.chave} rotulo={c.rotulo}>
                 <input className={campo} value={ass[c.chave]} maxLength={c.chave === "logo_url" ? 600 : 120} onChange={(e) => pAss.mudar({ ...ass, [c.chave]: e.target.value })} onBlur={() => void pAss.salvarAgora().catch(() => undefined)} />

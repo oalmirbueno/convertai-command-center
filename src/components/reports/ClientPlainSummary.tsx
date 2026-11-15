@@ -253,16 +253,18 @@ export default function ClientPlainSummary({
       <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-8">
         {/* Jornada das pessoas: os números são o assunto, então ficam num painel */}
         <Painel semEspaco titulo="O caminho que as pessoas fizeram" className="self-start">
-          <ol className="divide-y divide-border">
+          <ol className="divide-y divide-border/70">
             {journey.map((step) => (
-              <li key={step.label} className="flex min-w-0 items-start px-4 py-3">
-                <step.icon className="mr-3 mt-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <li key={step.label} className="flex min-w-0 items-start px-5 py-5 sm:px-6">
+                <span aria-hidden="true" className="mr-4 mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+                  <step.icon className="h-4 w-4" />
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className="-mb-1 flex min-w-0 flex-wrap items-baseline [&>*]:mb-1 [&>*]:mr-2">
-                    <span className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{step.value}</span>
+                    <span className="text-[32px] font-semibold leading-10 tracking-[-0.03em] tabular-nums text-foreground max-sm:text-[28px] max-sm:leading-9">{step.value}</span>
                     <span className="text-[13px] font-medium text-foreground">{step.label}</span>
                     {step.growth !== null && Math.abs(step.growth) >= 5 && (
-                      <span className={juntar(etiqueta, step.growth > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                      <span className={juntar(etiqueta, "h-[22px]", step.growth > 0 ? "bg-success-soft text-success" : "bg-muted text-muted-foreground")}>
                         {step.growth > 0 ? "+" : ""}
                         {Math.round(step.growth)}% vs. período anterior
                       </span>
@@ -276,7 +278,7 @@ export default function ClientPlainSummary({
         </Painel>
 
         {/* Leituras em texto corrido, separadas por divisória (sem caixa) */}
-        <div className="min-w-0 divide-y divide-border">
+        <div className="min-w-0 space-y-3">
           {investmentReading.length > 0 && (
             <Leitura icone={Wallet} titulo="O investimento na prática">
               {investmentReading.map((line) => (
@@ -333,12 +335,12 @@ function Leitura({
   children: ReactNode;
 }) {
   return (
-    <div className="min-w-0 py-3 first:pt-0 last:pb-0">
-      <h3 className="flex items-center text-[13px] font-semibold leading-5 text-foreground">
-        <Icone className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0", destaque ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+    <div className={juntar("min-w-0 rounded-md p-4 sm:p-5", destaque ? "bg-accent-soft" : "bg-muted/60")}>
+      <h3 className="flex items-center text-[15px] font-semibold leading-5 text-foreground">
+        <Icone className={juntar("mr-2 h-4 w-4 shrink-0", destaque ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
         {titulo}
       </h3>
-      <div className={juntar(texto.corpo, "mt-1.5 space-y-1.5")}>{children}</div>
+      <div className={juntar(texto.corpo, "mt-2 space-y-1.5")}>{children}</div>
     </div>
   );
 }

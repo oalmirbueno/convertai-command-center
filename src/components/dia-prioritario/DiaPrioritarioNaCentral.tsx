@@ -85,9 +85,9 @@ export function tomDaNota(nota: number): "bom" | "atencao" | "perigo" {
 }
 
 const COR_DA_NOTA = {
-  bom: "bg-success/15 text-success",
-  atencao: "bg-warning/15 text-warning",
-  perigo: "bg-destructive/10 text-destructive",
+  bom: "bg-success-soft text-success",
+  atencao: "bg-warning-soft text-warning",
+  perigo: "bg-danger-soft text-destructive",
 } as const;
 
 /** Nota pequena (0 a 100) com a cor da faixa; o rótulo inteiro fica no title e no leitor de tela. */
@@ -95,7 +95,7 @@ function NotaDeSaude({ nota, rotulo, className = "" }: { nota: number; rotulo: s
   const n = Math.max(0, Math.min(100, Math.round(nota)));
   return (
     <span
-      className={juntar("inline-flex h-4 shrink-0 items-center rounded px-1 text-[11px] font-semibold tabular-nums leading-4", COR_DA_NOTA[tomDaNota(n)], className)}
+      className={juntar("inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums leading-4", COR_DA_NOTA[tomDaNota(n)], className)}
       title={`${rotulo}: ${n} de 100`}
       data-nota-de-saude={n}
       data-tom={tomDaNota(n)}
@@ -111,15 +111,15 @@ const AJUDA =
 
 const TOM = {
   neutro: "bg-muted text-muted-foreground",
-  bom: "bg-primary/10 text-primary",
-  atencao: "bg-warning/15 text-warning",
-  perigo: "bg-destructive/10 text-destructive",
+  bom: "bg-accent-soft text-primary",
+  atencao: "bg-warning-soft text-warning",
+  perigo: "bg-danger-soft text-destructive",
 } as const;
 
 /** Número pequeno com ícone; a frase inteira fica no title e no leitor de tela. */
 function Indicador({ icone, valor, rotulo, tom = "neutro" }: { icone: ReactNode; valor: ReactNode; rotulo: string; tom?: keyof typeof TOM }) {
   return (
-    <span className={juntar("inline-flex h-6 shrink-0 items-center rounded-md px-1.5 text-[12px] font-medium tabular-nums", TOM[tom])} title={rotulo}>
+    <span className={juntar("inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[12px] font-medium tabular-nums", TOM[tom])} title={rotulo}>
       <span className="inline-flex items-center" aria-hidden="true">
         {icone}
         <span className="ml-1">{valor}</span>
@@ -250,7 +250,7 @@ export default function DiaPrioritarioNaCentral({
     <Moldura semCabecalho={semCabecalho}>
       <div className="min-w-0" data-dia-prioritario-central="">
         {/* A semana: 5 colunas iguais na largura toda. No celular, só o dia e a contagem (os clientes aparecem no zoom). */}
-        <div className="grid min-w-0 grid-cols-5 gap-1 rounded-xl bg-muted/60 p-1 md:gap-3 md:rounded-none md:bg-transparent md:p-0" role="group" aria-label="Dias da semana">
+        <div className="grid min-w-0 grid-cols-5 gap-1 rounded-full bg-muted/70 p-1 md:gap-4 md:rounded-none md:bg-transparent md:p-0" role="group" aria-label="Dias da semana">
           {DIAS_UTEIS.map((d) => {
             const lista = porDia.get(d.dia) || [];
             const ativo = d.dia === dia;
@@ -261,10 +261,9 @@ export default function DiaPrioritarioNaCentral({
               <div
                 key={d.dia}
                 className={juntar(
-                  "min-w-0 rounded-lg transition-colors md:p-2",
-                  ehHoje && "md:bg-primary/[0.07]",
-                  ativo ? "bg-background shadow-sm md:shadow-none md:ring-1 md:ring-primary/50" : "",
-                  ativo && !ehHoje && "md:bg-transparent",
+                  // Rodada ousada (15/11/2026): o dia escolhido é o cartão de tinta; hoje, sem estar escolhido, fica no verde suave.
+                  "min-w-0 rounded-full transition-colors md:rounded-lg md:p-3",
+                  ativo ? "ds-ink" : ehHoje ? "md:bg-accent-soft" : "md:bg-muted/60",
                 )}
                 data-dia-da-semana={d.dia}
                 data-hoje={ehHoje ? "sim" : undefined}
@@ -275,19 +274,19 @@ export default function DiaPrioritarioNaCentral({
                   aria-label={`${maiuscula(d.nome)}${ehHoje ? " (hoje)" : ""}: ${lista.length} ${lista.length === 1 ? "cliente" : "clientes"}`}
                   onClick={() => setDia(d.dia)}
                   title={lista.map((c) => c.nome).join(", ") || "Nenhum cliente"}
-                  className={juntar("toque-compacto flex h-11 w-full min-w-0 flex-col items-center justify-center rounded-md px-1 transition-colors hover:bg-muted/60 md:h-9 md:flex-row md:justify-between md:px-1.5", foco)}
+                  className={juntar("toque-compacto flex h-11 w-full min-w-0 flex-col items-center justify-center rounded-full px-1 transition-colors hover:bg-muted/60 md:h-10 md:flex-row md:justify-between md:rounded-md md:px-2", foco)}
                 >
                   <span className="flex min-w-0 items-center">
-                    <span className={juntar("text-[13px] font-semibold leading-4", ehHoje ? "text-primary" : ativo ? "text-foreground" : "text-muted-foreground")}>{d.curto}</span>
-                    {ehHoje && <span className={juntar(etiqueta, "ml-1.5 hidden bg-primary/15 text-primary lg:inline-flex")}>Hoje</span>}
+                    <span className={juntar("text-[13px] font-semibold leading-4 md:text-[15px]", ativo ? "text-foreground" : ehHoje ? "text-primary" : "text-muted-foreground")}>{d.curto}</span>
+                    {ehHoje && <span className={juntar(etiqueta, "ml-1.5 hidden bg-accent-solid text-on-accent lg:inline-flex")}>Hoje</span>}
                   </span>
                   <span className="flex items-center leading-4">
                     {atrasadosNoDia > 0 && <span className="mr-1 hidden h-1.5 w-1.5 rounded-full bg-destructive md:inline-block" aria-hidden="true" />}
                     {media !== null && <NotaDeSaude nota={media} rotulo="Saúde média do dia" className="mr-1.5 hidden opacity-80 md:inline-flex" />}
-                    <span className={juntar("text-[12px] tabular-nums", ativo || ehHoje ? "text-foreground" : "text-muted-foreground")}>{lista.length}</span>
+                    <span className={juntar("text-[12px] font-semibold tabular-nums md:text-[20px] md:leading-6 md:tracking-[-0.02em]", ativo || ehHoje ? "text-foreground" : "text-muted-foreground")}>{lista.length}</span>
                   </span>
                 </button>
-                <ul className="mt-1 hidden min-w-0 md:block" aria-label={`Clientes de ${d.nome}`}>
+                <ul className="mt-2 hidden min-w-0 space-y-0.5 md:block" aria-label={`Clientes de ${d.nome}`}>
                   {lista.map((c) => {
                     const atrasadas = resumir(c.id, d.dia).atrasadas.length;
                     const nota = notaDe(c.id);
@@ -297,7 +296,7 @@ export default function DiaPrioritarioNaCentral({
                           type="button"
                           onClick={() => onAbrirPerfil(c.id)}
                           title={`${c.nome}${c.provisorio ? " (provisório)" : ""}`}
-                          className={juntar("toque-compacto flex w-full min-w-0 items-center rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted/60", foco)}
+                          className={juntar("toque-compacto flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted", foco)}
                         >
                           <RostoDoCliente cliente={c} tamanho="sm" />
                           <span className="ml-2 min-w-0 flex-1 truncate text-[13px] text-foreground">{nomeCurto(c.nome)}</span>
@@ -324,11 +323,11 @@ export default function DiaPrioritarioNaCentral({
         </div>
 
         {/* O zoom do dia escolhido: um cartão por cliente, com as contagens em números pequenos. */}
-        <div className="mt-5 min-w-0" data-zoom-do-dia={dia}>
-          <div className="mb-3 flex min-w-0 items-center">
-            <CalendarHeart className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-            <h3 className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">{rotuloDoDia}</h3>
-            <span className="ml-2 text-[12px] tabular-nums text-muted-foreground">{doDia.length}</span>
+        <div className="mt-6 min-w-0 sm:mt-8" data-zoom-do-dia={dia}>
+          <div className="mb-4 flex min-w-0 items-center">
+            <span className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-solid text-on-accent"><CalendarHeart className="h-4 w-4" aria-hidden="true" /></span>
+            <h3 className="min-w-0 truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">{rotuloDoDia}</h3>
+            <span className="ml-2.5 inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-muted px-2 text-[12px] font-semibold tabular-nums text-foreground">{doDia.length}</span>
             {semCabecalho && (
               <AjudaRecolhida className="ml-auto" rotulo="O que é o Dia Prioritário?" lado="left">
                 {AJUDA}
@@ -336,12 +335,12 @@ export default function DiaPrioritarioNaCentral({
             )}
           </div>
           {doDia.length ? (
-            <ul className={juntar("grid min-w-0 gap-3", colunasDoZoom)} aria-label={`Clientes de ${nomeDoDia(dia)} em detalhe`}>
+            <ul className={juntar("grid min-w-0 gap-3 sm:gap-5", colunasDoZoom)} aria-label={`Clientes de ${nomeDoDia(dia)} em detalhe`}>
               {doDia.map((c) => {
                 const r = resumir(c.id, dia);
                 const nota = notaDe(c.id);
                 return (
-                  <li key={c.id} className={juntar(superficie.painel, "min-w-0 p-4 md:p-3")} data-cliente-do-dia={c.id}>
+                  <li key={c.id} className={juntar(superficie.painel, "min-w-0 p-4 sm:p-5")} data-cliente-do-dia={c.id}>
                     <div className="flex min-w-0 items-center">
                       <button
                         type="button"
@@ -354,7 +353,7 @@ export default function DiaPrioritarioNaCentral({
                           <span className="flex min-w-0 items-center">
                             <span className="min-w-0 truncate text-[15px] font-semibold leading-5 text-foreground">{c.nome}</span>
                             {nota !== null && <NotaDeSaude nota={nota} rotulo="Saúde" className="ml-2" />}
-                            {c.provisorio && <span className={juntar(etiqueta, "ml-2 bg-warning/15 text-warning")}>Provisório</span>}
+                            {c.provisorio && <span className={juntar(etiqueta, "ml-2 bg-warning-soft text-warning")}>Provisório</span>}
                           </span>
                           <span
                             className="mt-0.5 flex min-w-0 items-center text-[12px] leading-4 text-muted-foreground"
@@ -376,7 +375,7 @@ export default function DiaPrioritarioNaCentral({
                       </span>
                     </div>
 
-                    <div className="-m-0.5 mt-2.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
+                    <div className="-m-0.5 mt-4 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
                       <Indicador
                         icone={<ListTodo className="h-3.5 w-3.5" />}
                         valor={r.abertas.length}

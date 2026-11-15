@@ -205,7 +205,7 @@ export default function GeracoesDaPauta({ pedidos, compacta = false, titulo = "G
                 </p>
                 <p className={juntar(texto.auxiliar, "[overflow-wrap:anywhere]")} title={enviosDoPedido(p).map((e) => e.erro).filter(Boolean).join(" ") || undefined}>{l.detalhe}{motor ? ` · ${motor.rotulo}` : ""}</p>
                 {l.progresso !== null && (
-                  <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                  <span className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
                     <span className={juntar("block h-full rounded-full", l.atrasado ? "bg-warning" : "bg-primary")} style={{ width: `${Math.round(l.progresso * 100)}%` }} />
                   </span>
                 )}

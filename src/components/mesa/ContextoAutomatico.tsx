@@ -314,7 +314,7 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
   const [verFontes, setVerFontes] = useState(false);
   if (carregando && !kit) {
     return (
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className={juntar(superficie.poco, "p-2.5")}>
             <Esqueleto linhas={2} />
@@ -330,7 +330,7 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
         <p className="text-[13px] text-muted-foreground">Ainda não há contexto montado.</p>
       ) : (
         // Sem rolagem própria (28/09): quem rola é a área de trabalho; cada campo já vem em duas linhas.
-        <div className="grid min-w-0 grid-cols-1 items-start gap-2 sm:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-2 sm:gap-3 sm:grid-cols-2">
           {cheios.map((campo) => (
             <CampoRecolhido key={campo.chave} campo={campo} onEditar={onEditar} />
           ))}
@@ -351,7 +351,7 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
       {verFontes && (
         <ul className="flex min-w-0 flex-wrap">
           {fontesLidas.map((f) => (
-            <li key={f} className="mb-1 mr-1 min-w-0 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground" title={f}>
+            <li key={f} className="mb-1 mr-1 min-w-0 max-w-full truncate rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground" title={f}>
               {f}
             </li>
           ))}
@@ -519,7 +519,7 @@ function BarraDeCompletude({ itens }: { itens: ItemDoChecklist[] }) {
   return (
     <div className="flex min-w-0 flex-1 items-center" title={`Completude do contexto: ${feitos} de ${itens.length} itens completos`}>
       <div
-        className="h-1.5 min-w-[32px] max-w-[160px] flex-1 overflow-hidden rounded-full bg-muted"
+        className="h-2 min-w-[32px] max-w-[160px] flex-1 overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}

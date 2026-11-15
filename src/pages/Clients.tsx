@@ -48,7 +48,7 @@ import {
   useEstadoDaTela,
   useReservaFlutuante,
 } from "@/components/sistema";
-import { StatCard, StatGrid, StatusDot } from "@/components/ds";
+import { CardSurface, Chip, ProgressBar, StatCard, StatusDot, StatusPill } from "@/components/ds";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
@@ -99,6 +99,13 @@ const statusDot: Record<string, string> = {
   onboarding: "bg-warning",
   standby: "bg-accent",
   inactive: "bg-muted-foreground",
+};
+
+const tomDoStatus: Record<string, "success" | "warning" | "info" | "neutral"> = {
+  active: "success",
+  onboarding: "warning",
+  standby: "info",
+  inactive: "neutral",
 };
 
 const statusLabel: Record<string, string> = {
@@ -970,6 +977,11 @@ export default function Clients() {
     },
   ];
 
+  // Razões que a tela já tem, para as barras dos cartões: ativos sobre a carteira (sem empresas do grupo) e
+  // recebido sobre o previsto do mês (recebido + a receber).
+  const carteiraTotal = clientRows.filter((client) => !isInternalClient(client)).length;
+  const previstoNoMes = receivedThisMonth + receivableTotal;
+
   const filtrosAtivos = serviceFilter !== "all" || typeFilter !== "all" || tab !== "all" || filtroCobranca !== "todas";
   const abrirMenuNoBotao = (e: { currentTarget: HTMLElement }, cliente: any) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -1105,6 +1117,7 @@ export default function Clients() {
           : financial
             ? { label: "Sem cobrança este mês", className: "border-border bg-secondary/60 text-muted-foreground" }
             : { label: "Sem cobrança criada", className: "border-border bg-secondary/60 text-muted-foreground" };
+    const tomDaCobranca = internal ? "info" as const : billingRead ? (billingRead.tone === "late" ? "danger" as const : billingRead.tone === "due" ? "warning" as const : "success" as const) : "neutral" as const;
     // O selo conta de ONDE o valor veio, na ordem real dos degraus.
     const priceSource =
       financialRecord && recordValue > 0
@@ -1180,7 +1193,7 @@ export default function Clients() {
     return (
       <li
         key={c.id}
-        className={juntar("min-w-0 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-5 sm:py-3.5", extra?.apagado && "opacity-80")}
+        className={juntar("min-w-0 px-4 py-3.5 transition-colors hover:bg-muted/50 sm:px-6 sm:py-5", extra?.apagado && "opacity-80")}
         onContextMenu={(e) => {
           e.preventDefault();
           setMenuCliente({ x: e.clientX, y: e.clientY, cliente: c });
@@ -1195,23 +1208,23 @@ export default function Clients() {
             aria-describedby={financeiroNaLinha ? `client-finance-${c.id}` : undefined}
             className={juntar("flex min-w-0 flex-1 items-center rounded-md bg-transparent text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isMobile && "min-h-[44px]")}
           >
-            <FotoDoCliente nome={nome || ""} fotos={fotosDe({ id: String(c.id), nome, avatar_url: c.avatar_url })} tamanho="md" />
-            <span className="ml-3 block min-w-0 flex-1">
+            <FotoDoCliente nome={nome || ""} fotos={fotosDe({ id: String(c.id), nome, avatar_url: c.avatar_url })} tamanho={isMobile ? "md" : "lg"} />
+            <span className="ml-3 block min-w-0 flex-1 sm:ml-4">
               <span className="flex min-w-0 items-center">
-                <span className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">{nome}</span>
+                <span className="min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{nome}</span>
                 {(searching || tab === "all") && (
-                  <span className={juntar(etiqueta, "ml-1.5 hidden bg-muted text-muted-foreground sm:inline-flex")}>
+                  <StatusPill tone={tomDoStatus[c.plan_status || "active"] || "neutral"} className="ml-2 hidden sm:inline-flex">
                     {statusLabel[c.plan_status || "active"] || "Sem status"}
-                  </span>
+                  </StatusPill>
                 )}
-                {tipo && !isMobile && <span className={juntar(etiqueta, "ml-1.5", tipo.cls)}>{tipo.label}</span>}
+                {tipo && !isMobile && <span className={juntar(etiqueta, "ml-1.5 h-6 px-2.5", tipo.cls)}>{tipo.label}</span>}
                 {c.brand && (
-                  <span className={juntar(etiqueta, "ml-1.5 hidden bg-muted text-muted-foreground md:inline-flex")}>
+                  <span className={juntar(etiqueta, "ml-1.5 hidden h-6 bg-muted px-2.5 text-muted-foreground md:inline-flex")}>
                     {c.brand === "aceleriq" ? "AcelerIQ" : "SiteBolt"}
                   </span>
                 )}
               </span>
-              <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+              <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>
                 {isMobile ? (
                   apoioNoCelular
                 ) : (
@@ -1230,8 +1243,8 @@ export default function Clients() {
                 <TooltipTrigger asChild>
                   <span
                     className={juntar(
-                      "ml-3 hidden h-6 shrink-0 items-center rounded-full px-2.5 text-[12px] tabular-nums md:inline-flex",
-                      renovacaoEmAlerta ? juntar(status?.color, "bg-danger-soft") : "text-muted-foreground",
+                      "ml-4 hidden h-7 shrink-0 items-center rounded-full px-3 text-[12px] font-medium tabular-nums md:inline-flex",
+                      renovacaoEmAlerta ? juntar(status?.color, "bg-danger-soft") : "bg-muted/60 text-muted-foreground",
                     )}
                     aria-label={`Renovação ${formatBRDate(c.plan_renewal_date)}${renovacaoEmAlerta && status?.label ? `. ${status.label}` : ""}`}
                   >
@@ -1246,18 +1259,18 @@ export default function Clients() {
             </TooltipProvider>
           )}
           {resumoNaLinha && !financeiroNaLinha && (
-            <span className="ml-3 hidden shrink-0 items-center md:inline-flex" data-resumo-da-cobranca={c.id}>
-              <span className="text-[13px] font-medium tabular-nums text-foreground">{formatCurrency(financial?.finalAmount ?? null)}</span>
-              <span className={juntar(etiqueta, "ml-2 border", statusMeta.className)}>{statusMeta.label}</span>
+            <span className="ml-4 hidden shrink-0 items-center md:inline-flex" data-resumo-da-cobranca={c.id}>
+              <StatusPill tone={tomDaCobranca}>{statusMeta.label}</StatusPill>
+              <span className="ml-4 min-w-[92px] text-right text-[15px] font-semibold tabular-nums tracking-[-0.01em] text-foreground">{formatCurrency(financial?.finalAmount ?? null)}</span>
             </span>
           )}
-          <span className="ml-3 hidden w-16 shrink-0 text-right text-[12px] tabular-nums text-muted-foreground lg:inline" title="Projetos">
+          <span className="ml-4 hidden w-[72px] shrink-0 text-right text-[12px] tabular-nums text-muted-foreground lg:inline" title="Projetos">
             {c.projectCount ?? 0} {Number(c.projectCount) === 1 ? "projeto" : "projetos"}
           </span>
           <span
             role="img"
             aria-label={`Status: ${statusLabel[c.plan_status || "active"] || "sem status"}`}
-            className={`ml-3 h-2 w-2 shrink-0 rounded-full ${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`}
+            className={`ml-3 h-2 w-2 shrink-0 rounded-full ${(searching || tab === "all") ? "sm:hidden " : ""}${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`}
           />
           {/* No celular, Concluir/Retomar ficam no "..." da linha (o menu já tem as duas). */}
           {extra?.acao && !isMobile && <span className="ml-2 shrink-0">{extra.acao}</span>}
@@ -1283,7 +1296,7 @@ export default function Clients() {
         {financeiroNaLinha && (
           <dl
             id={`client-finance-${c.id}`}
-            className="mt-2.5 grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 sm:ml-[52px] sm:grid-cols-3 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))_minmax(0,1.7fr)]"
+            className="mt-4 grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 rounded-md bg-muted/60 p-4 sm:ml-16 sm:grid-cols-3 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))_minmax(0,1.7fr)]"
           >
             <div className="col-span-2 min-w-0 sm:col-span-1">
               <dt className="flex h-5 min-w-0 items-center text-[11px] text-muted-foreground">
@@ -1314,11 +1327,11 @@ export default function Clients() {
             </div>
             <div className="min-w-0">
               <dt className="flex h-5 items-center text-[11px] text-muted-foreground">Operacional</dt>
-              <dd className="mt-0.5 text-[13px] font-medium tabular-nums text-foreground">{formatCurrency(financial?.operationalAmount ?? null)}</dd>
+              <dd className="mt-0.5 text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(financial?.operationalAmount ?? null)}</dd>
             </div>
             <div className="min-w-0">
               <dt className="flex h-5 items-center text-[11px] text-muted-foreground">Final</dt>
-              <dd className="mt-0.5 text-[13px] font-medium tabular-nums text-foreground">{formatCurrency(financial?.finalAmount ?? null)}</dd>
+              <dd className="mt-0.5 text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(financial?.finalAmount ?? null)}</dd>
             </div>
             <div className="min-w-0">
               <dt className="flex h-5 items-center text-[11px] text-muted-foreground">
@@ -1329,13 +1342,13 @@ export default function Clients() {
                   </span>
                 )}
               </dt>
-              <dd className="mt-0.5 text-[13px] font-medium tabular-nums text-foreground">{formatCurrency(displayCost)}</dd>
+              <dd className="mt-0.5 text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(displayCost)}</dd>
             </div>
             <div className="min-w-0">
               <dt className="flex h-5 items-center text-[11px] text-muted-foreground">Margem</dt>
               <dd
                 className={juntar(
-                  "mt-0.5 text-[13px] font-semibold tabular-nums",
+                  "mt-0.5 text-[15px] font-semibold tabular-nums",
                   displayMargin == null ? "text-muted-foreground" : displayMargin < 0 ? "text-destructive" : "text-success",
                 )}
               >
@@ -1346,7 +1359,7 @@ export default function Clients() {
               <dt className="flex h-5 items-center text-[11px] text-muted-foreground">Cobrança do mês</dt>
               <dd className="mt-0.5 flex min-w-0 items-center">
                 <span className="min-w-0 truncate text-[13px] tabular-nums text-foreground">{billingRead?.detail || financial?.dueLabel || "-"}</span>
-                <span className={juntar(etiqueta, "ml-1.5 border", statusMeta.className)}>{statusMeta.label}</span>
+                <StatusPill tone={tomDaCobranca} className="ml-2">{statusMeta.label}</StatusPill>
               </dd>
             </div>
           </dl>
@@ -1476,7 +1489,7 @@ export default function Clients() {
   ) : null;
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-6">
       <CabecalhoDePagina
         titulo="Clientes"
         descricao={isMobile ? undefined : cabecalhoDescricao}
@@ -1518,25 +1531,87 @@ export default function Clients() {
         {/* Resumo financeiro rola junto com a lista: o cabeçalho e os filtros ficam parados.
             No celular a faixa de números sai (16/10/2026): os números moram no Financeiro. */}
         {isAdmin && !isMobile && (
-          <section aria-label="Resumo financeiro dos clientes" className="mb-5">
-            <StatGrid cols={5} label="Números dos clientes">
-              {kpiCards.map((card, i) => (
-                <StatCard
-                  key={card.label}
-                  tone={i === 0 ? "accent" : "default"}
-                  label={
-                    i === 0 ? card.label : (
-                      <>
-                        <StatusDot tone={card.tone.indexOf("destructive") >= 0 ? "danger" : card.tone.indexOf("warning") >= 0 ? "warning" : "success"} className="mr-1.5 align-middle" />
-                        {card.label}
-                      </>
-                    )
-                  }
-                  value={card.loading ? <span className="block h-7 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${card.label}`} /> : card.value}
-                  hint={card.helper}
-                />
-              ))}
-            </StatGrid>
+          <section aria-label="Resumo financeiro dos clientes" className="mb-8">
+            {/* Rodada ousada (15/11/2026): um cartão sólido (carteira), um de tinta (MRR) e o mês num cartão largo
+                com a barra do recebido sobre o previsto. Os cinco números são os mesmos de antes. */}
+            <div role="group" aria-label="Números dos clientes" className="grid min-w-0 grid-cols-2 gap-5 xl:grid-cols-12">
+              <StatCard
+                className="xl:col-span-3"
+                variant="accent"
+                size="xl"
+                icon={<Users className="h-5 w-5" />}
+                label={kpiCards[0].label}
+                value={isLoading ? <span className="block h-10 w-20 animate-pulse rounded-md bg-muted" aria-label={`Carregando ${kpiCards[0].label}`} /> : kpiCards[0].value}
+                hint={kpiCards[0].helper}
+                chart={
+                  carteiraTotal > 0 ? (
+                    <span className="block min-w-0">
+                      <ProgressBar value={activeClientCount} max={carteiraTotal} height={10} tone="current" label={`${activeClientCount} ativos de ${carteiraTotal} na carteira`} />
+                      <span className="mt-2 flex min-w-0 items-center justify-between text-[12px] leading-4 text-muted-foreground">
+                        <span className="truncate">Ativos na carteira</span>
+                        <span className="ml-2 shrink-0 font-medium tabular-nums text-foreground">{activeClientCount} de {carteiraTotal}</span>
+                      </span>
+                    </span>
+                  ) : undefined
+                }
+              />
+              <StatCard
+                className="xl:col-span-3"
+                variant="ink"
+                size="xl"
+                icon={<Repeat className="h-5 w-5" />}
+                label={kpiCards[1].label}
+                value={isLoading ? <span className="block h-10 w-28 animate-pulse rounded-md bg-muted" aria-label={`Carregando ${kpiCards[1].label}`} /> : kpiCards[1].value}
+                hint={kpiCards[1].helper}
+                chart={
+                  activeClientCount > 0 ? (
+                    <span className="block min-w-0">
+                      <ProgressBar value={payingClients.length} max={activeClientCount} height={10} tone={1} striped label={`${payingClients.length} mensalistas de ${activeClientCount} ativos`} />
+                      <span className="mt-2 flex min-w-0 items-center justify-between text-[12px] leading-4 text-muted-foreground">
+                        <span className="truncate">Ativos com mensalidade</span>
+                        <span className="ml-2 shrink-0 font-medium tabular-nums text-foreground">{payingClients.length} de {activeClientCount}</span>
+                      </span>
+                    </span>
+                  ) : undefined
+                }
+              />
+              <CardSurface padded className="col-span-2 flex min-w-0 flex-col xl:col-span-6" data-cobranca-do-mes="">
+                <div className="flex min-w-0 items-start">
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center text-[13px] font-medium leading-5 text-muted-foreground">
+                      <StatusDot tone="success" className="mr-2" />
+                      {kpiCards[2].label}
+                    </p>
+                    <p className={juntar(texto.numeroGrande, "mt-3 truncate xl:text-[48px] xl:leading-[52px]")}>
+                      {isLoading ? <span className="block h-10 w-40 animate-pulse rounded-md bg-muted" aria-label={`Carregando ${kpiCards[2].label}`} /> : kpiCards[2].value}
+                    </p>
+                  </div>
+                  {previstoNoMes > 0 && (
+                    <Chip tone="success" size="md" className="ml-3 mt-0.5" title="Recebido sobre o previsto do mês (recebido + a receber)">
+                      {Math.round((receivedThisMonth / previstoNoMes) * 100)}% do previsto
+                    </Chip>
+                  )}
+                </div>
+                {previstoNoMes > 0 && (
+                  <ProgressBar className="mt-5" value={receivedThisMonth} max={previstoNoMes} height={12} tone={1} striped label={`Recebido ${formatCurrency(receivedThisMonth)} de ${formatCurrency(previstoNoMes)} previstos no mês`} />
+                )}
+                <p className="mt-2 truncate text-[12px] leading-4 text-muted-foreground">{kpiCards[2].helper}</p>
+                <dl className="mt-auto grid min-w-0 grid-cols-2 gap-4 pt-5">
+                  {[kpiCards[3], kpiCards[4]].map((card, i) => (
+                    <div key={card.label} className="min-w-0 rounded-md bg-muted/60 p-4">
+                      <dt className="flex min-w-0 items-center text-[12px] font-medium leading-4 text-muted-foreground">
+                        <StatusDot tone={i === 0 ? "warning" : overdueTotal > 0 ? "danger" : "neutral"} className="mr-2" />
+                        <span className="truncate">{card.label}</span>
+                      </dt>
+                      <dd className={juntar("mt-2 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums", i === 1 && overdueTotal > 0 ? "text-destructive" : "text-foreground")}>
+                        {isLoading ? <span className="block h-7 w-24 animate-pulse rounded-md bg-muted" aria-label={`Carregando ${card.label}`} /> : card.value}
+                      </dd>
+                      <dd className="mt-1 truncate text-[12px] leading-4 text-muted-foreground" title={card.helper}>{card.helper}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardSurface>
+            </div>
             {financialError && (
               <p className={juntar(texto.auxiliar, "mt-1.5 flex items-center text-warning")} role="status">
                 <AlertTriangle className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -1547,7 +1622,7 @@ export default function Clients() {
         )}
         {/* PRO3 (30/09, pedido do dono): as propostas moram em Clientes, não no seletor de mesas. */}
         {podeProposta && (
-          <div className="mb-6">
+          <div className="mb-8">
             <AreaDePropostas
               clientes={clientRows.filter((c) => !isInternalClient(c)).map((c) => ({ id: String(c.id), nome: String(c.company_name || c.full_name || "Cliente") }))}
               nomeDoCliente={(id) => {
@@ -1592,9 +1667,9 @@ export default function Clients() {
             }
           />
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-8">
             {isAdmin && (
-              <div className="flex min-w-0 flex-wrap items-center gap-2" data-filtro-da-cobranca="">
+              <div className="flex min-w-0 flex-wrap items-center" data-filtro-da-cobranca="">
                 <SeletorCompacto
                   rotulo="Situação da cobrança"
                   modo="segmentado"
@@ -1608,7 +1683,7 @@ export default function Clients() {
             <section aria-label={typeFilter === "inactive" ? "Clientes inativos" : "Clientes recorrentes e híbridos"}>
               {principaisVisiveis.length > 0 ? (
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border">{principaisVisiveis.map((c) => renderClientRow(c, typeFilter === "inactive" ? { apagado: true } : undefined))}</ul>
+                  <ul className="divide-y divide-border/60">{principaisVisiveis.map((c) => renderClientRow(c, typeFilter === "inactive" ? { apagado: true } : undefined))}</ul>
                 </Painel>
               ) : (
                 <EstadoVazio compacto titulo={typeFilter === "inactive" ? "Nenhum cliente inativo nestes filtros." : "Nenhum recorrente ou híbrido nestes filtros."} />
@@ -1621,7 +1696,7 @@ export default function Clients() {
                 descricao={isMobile ? `${avulsosVisiveis.length} em andamento` : `${avulsosVisiveis.length} em andamento · ${principaisVisiveis.length + avulsosVisiveis.length} clientes no total`}
               >
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border">
+                  <ul className="divide-y divide-border/60">
                     {avulsosVisiveis.map((c) =>
                       renderClientRow(c, {
                         acao: (
@@ -1651,7 +1726,7 @@ export default function Clients() {
                 recolhidaDeInicio
               >
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border">
+                  <ul className="divide-y divide-border/60">
                     {avulsosDone.map((c) =>
                       renderClientRow(c, {
                         apagado: true,
@@ -1674,7 +1749,7 @@ export default function Clients() {
                 ajuda="Organização interna. Fica fora da contagem, das cobranças e dos alertas."
               >
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border">{internasList.map((c) => renderClientRow(c))}</ul>
+                  <ul className="divide-y divide-border/60">{internasList.map((c) => renderClientRow(c))}</ul>
                 </Painel>
               </Secao>
             )}

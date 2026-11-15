@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock, ExternalLink,
+  Activity, AlertTriangle, Bot, Building2, CheckCircle2, ChevronRight, ClipboardCopy, Clock, ExternalLink,
   FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import type { MovimentoDoOrganograma, NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
@@ -52,7 +52,7 @@ import { lazyDiscreto, quandoOcioso } from "@/lib/lazyComPreCarga";
 import {
   AjudaRecolhida, AreaDeTrabalho, BarraDeControles, CabecalhoDePagina, CampoDeBusca, Carregando,
   EstadoDeErro, EstadoVazio, Etapas, Painel, RegiaoRolavel, Secao, SeletorCompacto, botao, etiqueta,
-  juntar, superficie, texto, useAreaDeTrabalho, useEstadoDaTela,
+  foco, juntar, superficie, texto, useAreaDeTrabalho, useEstadoDaTela,
 } from "@/components/sistema";
 
 /**
@@ -1327,7 +1327,7 @@ export default function AdminExecucao() {
         }}
         onContextMenu={(e) => { e.preventDefault(); setMenuCartao({ x: e.clientX, y: e.clientY, v }); }}
         className={juntar(
-          superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col p-3 transition-colors hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col p-5 transition-colors hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           destacado && "ring-2 ring-primary/50",
         )}
       >
@@ -1681,28 +1681,34 @@ export default function AdminExecucao() {
       ) : linhasDeAtencao.length === 0 ? (
         <EstadoVazio compacto titulo="Nada esperando você agora." />
       ) : (
-        <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+        <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden p-1.5")}>
           {linhasDeAtencao.map((l) => (
             <li key={l.chave}>
               <button
                 type="button"
                 onClick={() => irParaVisao(l.visao)}
-                className="flex w-full min-w-0 items-center px-3.5 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                className="group flex w-full min-w-0 items-center rounded-lg px-3 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
-                <span className={juntar("mr-2.5 h-1.5 w-1.5 shrink-0 rounded-full", l.ponto)} aria-hidden="true" />
-                <span className={juntar("min-w-0 flex-1 text-[13px] font-medium", l.tom)}>{l.texto}</span>
+                <span className={juntar("mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full", l.ponto === "bg-destructive" ? "bg-danger-soft" : "bg-warning-soft")} aria-hidden="true">
+                  <span className={juntar("h-2 w-2 rounded-full", l.ponto)} />
+                </span>
+                <span className={juntar("min-w-0 flex-1 text-[13px] font-medium leading-5", l.tom)}>{l.texto}</span>
+                <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
               </button>
             </li>
           ))}
         </ul>
       )}
       {(numeros.andamento > 0 || numeros.feitas > 0) && (
-        <p className={juntar(texto.auxiliar, "mt-2 flex flex-wrap items-center")} data-estados-da-execucao="">
-          <button type="button" onClick={() => irParaVisao("in_progress")} className="mr-3 inline-flex items-center hover:text-foreground" title="Ver o que está andando">
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-info" aria-hidden="true" />{numeros.andamento} andando
+        /* Rodada ousada (15/11/2026): os dois estados que não pedem nada viram os cartões de destaque (tinta e sólido), com o número grande. */
+        <p className="mt-3 grid min-w-0 grid-cols-2 gap-3" data-estados-da-execucao="">
+          <button type="button" onClick={() => irParaVisao("in_progress")} className={juntar(superficie.painel, superficie.tinta, "flex min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)} title="Ver o que está andando">
+            <span className="block truncate text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums text-foreground">{numeros.andamento}</span>{" "}
+            <span className="mt-1 block truncate text-[12px] font-medium leading-4 text-muted-foreground">andando</span>
           </button>
-          <button type="button" onClick={() => irParaVisao("done")} className="inline-flex items-center hover:text-foreground" title="Ver o que foi feito com prova">
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />{numeros.feitas} feito com prova
+          <button type="button" onClick={() => irParaVisao("done")} className={juntar(superficie.painel, superficie.destaque, "flex min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)} title="Ver o que foi feito com prova">
+            <span className="block truncate text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums text-foreground">{numeros.feitas}</span>{" "}
+            <span className="mt-1 block truncate text-[12px] font-medium leading-4 text-muted-foreground">feito com prova</span>
           </button>
         </p>
       )}

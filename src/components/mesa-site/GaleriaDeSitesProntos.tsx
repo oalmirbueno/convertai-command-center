@@ -67,7 +67,7 @@ export default function GaleriaDeSitesProntos({
             <span className="mt-2 flex min-w-0 items-center">
               <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{m.nome}</span>
               {recomendado === m.id && (
-                <span className={juntar(etiqueta, "ml-1 shrink-0 bg-primary/10 text-primary")} title="Recomendado pelo Jev para este cliente" data-recomendado="">
+                <span className={juntar(etiqueta, "ml-1 shrink-0 bg-accent-soft text-primary")} title="Recomendado pelo Jev para este cliente" data-recomendado="">
                   <Star className="mr-0.5 inline h-3 w-3" aria-hidden="true" />
                   Jev
                 </span>

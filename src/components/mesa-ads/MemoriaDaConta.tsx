@@ -122,7 +122,7 @@ export default function MemoriaDaConta() {
 
       {editando ? (
         <div className="min-w-0 space-y-5 border-t border-border pt-4">
-          <fieldset className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <fieldset className="grid min-w-0 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <legend className="mb-2 text-[13px] font-semibold">C01 Finanças</legend>
             <Campo rotulo="Ticket médio (R$)"><input className={campo} inputMode="decimal" value={textoDoNumero(rascunho.financas.ticket_medio_brl)} onChange={(e) => muda("financas", "ticket_medio_brl", numeroDoCampo(e.target.value))} /></Campo>
             <Campo rotulo="Margem de contribuição (%)"><input className={campo} inputMode="decimal" value={textoDoNumero(rascunho.financas.margem_pct)} onChange={(e) => muda("financas", "margem_pct", numeroDoCampo(e.target.value))} /></Campo>
@@ -139,7 +139,7 @@ export default function MemoriaDaConta() {
             <Campo rotulo="Observação" className="sm:col-span-2 lg:col-span-3"><input className={campo} value={rascunho.financas.observacoes} onChange={(e) => muda("financas", "observacoes", e.target.value)} /></Campo>
           </fieldset>
 
-          <fieldset className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <fieldset className="grid min-w-0 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <legend className="mb-2 text-[13px] font-semibold">C03 Confiabilidade dos dados</legend>
             <Campo rotulo="Pixel">
               <select className={campo} value={rascunho.confiabilidade.pixel} onChange={(e) => muda("confiabilidade", "pixel", e.target.value)}>
@@ -156,14 +156,14 @@ export default function MemoriaDaConta() {
             <Campo rotulo="Armadilhas conhecidas" className="sm:col-span-2"><textarea className={juntar(campo, "h-auto min-h-16 py-2")} placeholder="Ex.: a Meta conta resposta como conversa; evento duplicado no site" value={rascunho.confiabilidade.armadilhas} onChange={(e) => muda("confiabilidade", "armadilhas", e.target.value)} /></Campo>
           </fieldset>
 
-          <fieldset className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <fieldset className="grid min-w-0 gap-3 sm:gap-4 sm:grid-cols-2">
             <legend className="mb-2 text-[13px] font-semibold">C06 Mercado e calendário</legend>
             <Campo rotulo="Sazonalidade"><textarea className={juntar(campo, "h-auto min-h-16 py-2")} value={rascunho.mercado.sazonalidade} onChange={(e) => muda("mercado", "sazonalidade", e.target.value)} /></Campo>
             <Campo rotulo="Datas do nicho (uma por linha: AAAA-MM-DD Nome)"><textarea className={juntar(campo, "h-auto min-h-16 py-2")} placeholder={"2026-11-27 Black Friday\n12-24 Véspera de Natal"} value={datas} onChange={(e) => setDatas(e.target.value)} /></Campo>
             <Campo rotulo="Dias entre o primeiro contato e a compra"><input className={campo} inputMode="numeric" value={textoDoNumero(rascunho.mercado.ciclo_de_compra_dias)} onChange={(e) => muda("mercado", "ciclo_de_compra_dias", numeroDoCampo(e.target.value))} /></Campo>
           </fieldset>
 
-          <fieldset className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <fieldset className="grid min-w-0 gap-3 sm:gap-4 sm:grid-cols-2">
             <legend className="mb-2 text-[13px] font-semibold">C00 Comportamento e C07 Fonte que prevalece</legend>
             <Campo rotulo="Como o dono quer que o agente se comporte"><textarea className={juntar(campo, "h-auto min-h-16 py-2")} value={rascunho.comportamento.observacoes} onChange={(e) => muda("comportamento", "observacoes", e.target.value)} /></Campo>
             <Campo rotulo="Quando a Meta e outra fonte discordam, vale">

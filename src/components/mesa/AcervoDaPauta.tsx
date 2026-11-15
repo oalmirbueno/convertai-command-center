@@ -47,12 +47,12 @@ export default function AcervoDaPauta({ taskId, noPost, onUsar, referencias, onR
   };
   return <section aria-label="Acervo do cliente" className="min-w-0 space-y-3" data-acervo-da-pauta="">
     <div className="relative"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><input aria-label="Buscar no acervo" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(24); }} placeholder="Nome, pasta, etiqueta" className={juntar(campo, "pl-8")} /></div>
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3">
       <select aria-label="Filtrar o acervo" value={filtro} onChange={(e) => setFiltro(e.target.value as FiltroDoAcervoDaPauta)} className={campo}>{FILTROS_DO_ACERVO_DA_PAUTA.map((f) => <option key={f.valor} value={f.valor}>{f.rotulo}</option>)}</select>
       <select aria-label="Ordenar o acervo" value={ordem} onChange={(e) => setOrdem(e.target.value as OrdemDoAcervoDaPauta)} className={campo}>{ORDENS_DO_ACERVO_DA_PAUTA.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}</select>
     </div>
     <p role="status" className="text-[12px] text-muted-foreground">{fotos.isLoading ? "Lendo o acervo…" : `${lista.length} ${lista.length === 1 ? "foto" : "fotos"}`}</p>
-    <ul className="grid grid-cols-2 gap-2" aria-label="Fotos do acervo">
+    <ul className="grid grid-cols-2 gap-2 sm:gap-3" aria-label="Fotos do acervo">
       {lista.slice(0, limite).map((f) => { const noPostJa = noPost.indexOf(f.id) >= 0; const uso = usoDaFoto(f); return <li key={f.id} className="min-w-0" data-foto-do-acervo={f.id}>
         <div className="relative">
           <button type="button" aria-label={`Abrir ${f.nome}`} aria-pressed={aberta === f.id} onClick={() => setAberta(aberta === f.id ? null : f.id)} className={juntar("block w-full overflow-hidden rounded-md border-2", foco, aberta === f.id ? "border-primary" : "border-transparent")}><MiniaturaDaFoto foto={f} /></button>

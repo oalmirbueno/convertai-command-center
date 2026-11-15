@@ -51,7 +51,7 @@ export default function ProdutoEModeloDaPauta({ taskId, titulo, onFotos, onAbrir
     {faltaPessoa && <p role="status" className="text-[12px]">Escolha um modelo com retrato base ou um clone autorizado.</p>}
     <label className="block min-w-0 text-[12px] text-muted-foreground">Cenário<select aria-label="Cenário da combinação" className={juntar(campo, "mt-1")} value={r.cenario} onChange={(e) => mudar({ cenario: e.target.value })}>{CENARIOS_PARA_COMBINAR.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
     <label className="block min-w-0 text-[12px] text-muted-foreground">O que acontece na foto<textarea aria-label="Pedido da combinação" className={juntar(campoTexto, "mt-1")} value={r.pedido} onChange={(e) => mudar({ pedido: e.target.value })} placeholder="Ex.: a modelo segura o produto no balcão da loja, fim de tarde" /></label>
-    <div className="grid min-w-0 grid-cols-2 gap-2">
+    <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
       <label className="min-w-0 text-[12px] text-muted-foreground">Formato<select aria-label="Formato da combinação" className={juntar(campo, "mt-1")} value={r.formato} onChange={(e) => mudar({ formato: e.target.value })}>{["4:5", "1:1", "9:16", "16:9"].map((f) => <option key={f}>{f}</option>)}</select></label>
       <label className="min-w-0 text-[12px] text-muted-foreground">Fotos<select aria-label="Quantidade de combinações" className={juntar(campo, "mt-1")} value={r.quantidade} onChange={(e) => mudar({ quantidade: Number(e.target.value) })}>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
     </div>
@@ -72,7 +72,7 @@ export default function ProdutoEModeloDaPauta({ taskId, titulo, onFotos, onAbrir
         } finally { setProgresso(""); atualizarCusto(); void cache.invalidateQueries({ queryKey: chaveDosCanvases(clientId) }); }
       }} />
     {!kit && <p className="text-[12px] text-muted-foreground">Escolha o produto para combinar.</p>}
-    {geradas.length > 0 && <div className="min-w-0"><p className="mb-2 text-[12px] font-medium text-muted-foreground">Combinações desta pauta</p><ul className="grid grid-cols-3 gap-2">{geradas.map((f) => <li key={f.id}><button type="button" aria-label={`Usar ${f.nome} no post`} title="Usar no post" onClick={() => onFotos([f.id])} className="block w-full overflow-hidden rounded-md"><MiniaturaDaFoto foto={f} /></button></li>)}</ul></div>}
+    {geradas.length > 0 && <div className="min-w-0"><p className="mb-2 text-[12px] font-medium text-muted-foreground">Combinações desta pauta</p><ul className="grid grid-cols-3 gap-2 sm:gap-3">{geradas.map((f) => <li key={f.id}><button type="button" aria-label={`Usar ${f.nome} no post`} title="Usar no post" onClick={() => onFotos([f.id])} className="block w-full overflow-hidden rounded-md"><MiniaturaDaFoto foto={f} /></button></li>)}</ul></div>}
     {onAbrirCompleto && <button type="button" className="text-[12px] text-primary" onClick={onAbrirCompleto}>Abrir Combinar completo (ambiente do Workspace, tratamento do produto)</button>}
   </section>;
 }

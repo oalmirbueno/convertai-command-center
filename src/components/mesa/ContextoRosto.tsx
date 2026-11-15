@@ -114,7 +114,7 @@ export default function ContextoRosto() {
         ajuda="O gerador só usa o rosto de uma pessoa real com autorização registrada. Guarde o termo ou a mensagem de autorização fora daqui e informe quem autorizou e quando."
         corpoClassName="space-y-3"
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
           <Campo rotulo="Foto">
             <Input ref={entrada} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setArquivo(e.target.files?.[0] || null)} className="h-9 text-[12px]" />
           </Campo>
@@ -148,9 +148,9 @@ export default function ContextoRosto() {
       >
         {rostos.isError && <AvisoDeErro erro={rostos.error} />}
         {rostos.data && rostos.data.length === 0 && <p className="text-[13px] text-muted-foreground">Nenhum rosto registrado.</p>}
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(rostos.data || []).map((r) => (
-            <li key={r.id} className={`flex min-w-0 p-2.5 ${superficie.painel} ${r.ativa ? "" : "opacity-60"}`}>
+            <li key={r.id} className={`flex min-w-0 p-4 ${superficie.painel} ${r.ativa ? "" : "opacity-60"}`}>
               <ImagemDaMesa caminho={r.storage_path} alt={r.pessoa} className="mr-3 h-20 w-16 shrink-0 rounded-lg" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-medium">{r.pessoa}</p>

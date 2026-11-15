@@ -54,9 +54,9 @@ export default function CampanhasDaMeta({
           {selecionadas.map((id) => {
             const c = porId[id];
             return (
-              <li key={id} className="inline-flex min-w-0 max-w-full items-center rounded-md bg-muted px-2 py-1 text-[12px]">
+              <li key={id} className="inline-flex h-7 min-w-0 max-w-full items-center rounded-full bg-foreground px-3 text-[12px] font-medium text-background">
                 <span className="min-w-0 truncate">{c ? c.nome : id}</span>
-                <button type="button" onClick={() => trocar(id)} className="ml-1 shrink-0 rounded text-muted-foreground hover:text-foreground" aria-label={`Tirar ${c ? c.nome : id}`}>
+                <button type="button" onClick={() => trocar(id)} className="ml-1.5 shrink-0 rounded-full opacity-70 hover:opacity-100" aria-label={`Tirar ${c ? c.nome : id}`}>
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </li>
@@ -77,11 +77,11 @@ export default function CampanhasDaMeta({
       ) : lista.length === 0 ? (
         <p className={texto.auxiliar}>Nenhuma campanha da Meta sincronizada ainda.</p>
       ) : (
-        <ul className="min-w-0 divide-y divide-border" aria-label="Campanhas da Meta para ligar">
+        <ul className="min-w-0 divide-y divide-border/60" aria-label="Campanhas da Meta para ligar">
           {achadas.slice(0, MOSTRAR).map((c) => (
-            <li key={c.campaign_id} className="flex min-w-0 items-center py-1.5">
+            <li key={c.campaign_id} className="flex min-w-0 items-center py-2.5">
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px]">{c.nome}</span>
+                <span className="block truncate text-[13px] font-medium">{c.nome}</span>
                 <span className="block truncate text-[11px] text-muted-foreground">
                   {[rotuloDoStatusDaMeta(c.status), c.cliente].filter(Boolean).join(" · ")}
                 </span>

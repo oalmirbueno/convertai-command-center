@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertCircle, GitCommit, Inbox, RefreshCw } from "lucide-react";
-import { Card, Chip } from "@/components/ds";
+import { Card, StatusPill } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -72,8 +72,8 @@ export default function SecondBrainPulseWidget() {
     staleTime: 10_000,
   });
 
-  const poco = "min-w-0 rounded-md bg-muted/60 p-3.5";
-  const rotulo = "mb-2 flex items-center text-[12px] font-medium text-muted-foreground";
+  const poco = "min-w-0 rounded-md bg-muted/60 p-4 sm:p-5";
+  const rotulo = "mb-3 flex items-center text-[12px] font-medium text-muted-foreground";
 
   return (
     <Card
@@ -82,13 +82,13 @@ export default function SecondBrainPulseWidget() {
       subtitle={
         data ? (
           <span className="inline-flex items-center">
-            {data.configured && <Chip tone="success" dot className="mr-2">ao vivo</Chip>}
+            {data.configured && <StatusPill tone="success" pulse className="mr-2">ao vivo</StatusPill>}
             Atualizado {relTime(data.fetched_at)}
           </span>
         ) : undefined
       }
       action={
-        <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching} className="h-8 px-3 text-[12px]">
+        <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching} className="h-9 rounded-full px-3.5 text-[12px]">
           <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
           Atualizar
         </Button>
@@ -119,14 +119,14 @@ export default function SecondBrainPulseWidget() {
       )}
 
       {data?.configured && data.pulse && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
           {/* HEAD */}
           <div className={poco}>
             <p className={rotulo}>HEAD</p>
             {data.pulse.head ? (
               <>
-                <p className="font-mono text-[13px] text-foreground">{data.pulse.head.short}</p>
-                <p className="mt-1 line-clamp-2 text-[12px] text-muted-foreground">{data.pulse.head.message}</p>
+                <p className="font-mono text-[24px] font-semibold leading-8 tracking-[-0.02em] text-foreground">{data.pulse.head.short}</p>
+                <p className="mt-1.5 line-clamp-2 text-[13px] leading-5 text-foreground">{data.pulse.head.message}</p>
                 <p className="mt-2 text-[11px] text-muted-foreground">
                   {data.pulse.head.author ?? "-"} · {relTime(data.pulse.head.committed_at)}
                 </p>
@@ -152,7 +152,7 @@ export default function SecondBrainPulseWidget() {
                   href={c.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block rounded-sm px-1.5 py-1 text-[12px] transition-colors hover:bg-card"
+                  className="block rounded-sm px-2 py-1.5 text-[12px] leading-[18px] transition-colors hover:bg-card"
                 >
                   <span className="font-mono text-primary">{c.short}</span>{" "}
                   <span className="text-foreground line-clamp-1">{c.message}</span>
@@ -168,8 +168,8 @@ export default function SecondBrainPulseWidget() {
           <div className={poco}>
             <p className={rotulo}>
               <Inbox className="mr-1.5 h-3 w-3" /> Inbox pendente
-              <Chip className="ml-auto">{data.pulse.inbox_pending}</Chip>
             </p>
+            <p className="mb-2 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{data.pulse.inbox_pending}</p>
             <div className="space-y-1 pr-1 lg:max-h-40 lg:overflow-auto">
               {data.inbox.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhuma proposta aguardando.</p>}
               {data.inbox.map((i) => (

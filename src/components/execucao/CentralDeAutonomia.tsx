@@ -1,3 +1,4 @@
+import NumerosOusados from "@/components/admin/NumerosOusados";
 import { limparTecnico } from "@/lib/cadernoExecucao";
 import { nomeDaTarefa } from "@/lib/nomeDaTarefa";
 import { fraseDoAgente, tipoDaEntrega } from "@/lib/execucaoHumana";
@@ -21,7 +22,7 @@ import type { ObjetoAberto } from "@/lib/centralObjetos";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, JanelaCentral, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela, useLargo,
+  Carregando, EstadoDeErro, EstadoVazio, JanelaCentral, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela, useLargo,
 } from "@/components/sistema";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import GestorConversa, { type ContextoDaConversa, type PedidoAoHermes } from "@/components/execucao/GestorConversa";
@@ -233,7 +234,7 @@ function Indicadores({ q, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { q: Re
       <p className="px-1 text-[12px] text-muted-foreground">{d.periodo.rotulo} · comparado a {d.periodo.anterior.rotulo}</p>
       <div>
         <p className={juntar(texto.rotulo, "mb-1.5 px-1")}>Tarefas (Kanban)</p>
-        <FaixaDeNumeros semMoldura tamanho="compacto" colunas={2} itens={[
+        <NumerosOusados tamanho="compacto" colunas={2} tinta={-1} itens={[
           { rotulo: "Abertas", valor: ind.tarefasAbertas.total, apoio: `${ind.tarefasAbertas.doing} em andamento · ${ind.tarefasAbertas.todo} a fazer · ${ind.tarefasAbertas.backlog} backlog` },
           { rotulo: "Concluídas no período", valor: ind.tarefasConcluidas.periodo, apoio: variacao(ind.tarefasConcluidas.periodo, ind.tarefasConcluidas.anterior), dica: "Tarefas em done cuja última mudança caiu no período." },
           { rotulo: "Entregas em revisão", valor: ind.entregasEmRevisao, ponto: ind.entregasEmRevisao ? "info" : "neutro", apoio: "Esperam revisão humana; não contam como feitas" },
@@ -242,7 +243,7 @@ function Indicadores({ q, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { q: Re
       </div>
       <div>
         <p className={juntar(texto.rotulo, "mb-1.5 px-1")}>Execuções dos agentes</p>
-        <FaixaDeNumeros semMoldura tamanho="compacto" colunas={2} itens={[
+        <NumerosOusados tamanho="compacto" colunas={2} tinta={-1} itens={[
           { rotulo: "No período", valor: ind.execucoes.periodo, apoio: variacao(ind.execucoes.periodo, ind.execucoes.anterior) },
           { rotulo: "Concluídas", valor: ind.execucoes.concluidas, apoio: variacao(ind.execucoes.concluidas, ind.execucoes.concluidasAnterior), dica: "Execução concluída não é tarefa concluída: veja o resultado verificado no histórico." },
           { rotulo: "Em andamento agora", valor: ind.execucoes.emAndamento },
@@ -598,7 +599,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
       className="h-full min-h-0"
     />
   ) : (
-    <section className={juntar(superficie.painel, "p-4")}><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="O resumo, o histórico e as decisões ao lado continuam abertos para a equipe." /></section>
+    <section className={juntar(superficie.painel, "p-5")}><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="O resumo, o histórico e as decisões ao lado continuam abertos para a equipe." /></section>
   );
 
   const chatDoHermes = ehAdmin ? (
@@ -793,7 +794,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
           ))}
         </div>
       )}
-      {ehAdmin && conversasNoCelular && <div className={juntar(superficie.painel, "p-3")}>{listaDeConversas}</div>}
+      {ehAdmin && conversasNoCelular && <div className={juntar(superficie.painel, "p-4 sm:p-5")}>{listaDeConversas}</div>}
       <div ref={refDoCelular} style={{ height: alturaNoCelular }}>
         {ferramentaGrande ? (
           <div className={juntar(superficie.painel, "h-full overflow-hidden")}><FerramentaEmbutida ferramenta={ferramentaGrande} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} conteudo={conteudoDa(ferramentaGrande)} aoRecarregar={() => recarregarFerramenta(ferramentaGrande.caminho)} /></div>

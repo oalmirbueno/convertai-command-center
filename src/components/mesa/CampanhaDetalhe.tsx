@@ -63,8 +63,8 @@ import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_share
 export const ROTULO_DO_ESTADO: Record<string, string> = { planejada: "planejada", gravada: "gravada", encerrada: "encerrada" };
 
 export function SeloDoEstado({ estado }: { estado: string }) {
-  const cor = estado === "gravada" ? "bg-success/15 text-success" : estado === "encerrada" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary";
-  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${cor}`}>{ROTULO_DO_ESTADO[estado] || estado}</span>;
+  const cor = estado === "gravada" ? "bg-success-soft text-success" : estado === "encerrada" ? "bg-muted text-muted-foreground" : "bg-accent-soft text-primary";
+  return <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${cor}`}>{ROTULO_DO_ESTADO[estado] || estado}</span>;
 }
 
 // ------------------------------------------------------------------ seções
@@ -332,7 +332,7 @@ export default function CampanhaDetalhe({
             {/* Título numa linha (28/09); inteiro no title. */}
             <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate")} title={campanha.nome}>{campanha.nome}</h2>
             {tipoDaCampanha(campanha.identidade) && (
-              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
+              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
                 {rotuloDoTipo(tipoDaCampanha(campanha.identidade))}
               </span>
             )}

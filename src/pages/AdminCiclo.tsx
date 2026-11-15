@@ -1278,15 +1278,15 @@ export default function AdminCiclo() {
         key={client.id}
         ref={(node) => { cardRefs.current[client.id] = node; }}
         // Cartão do cliente (redesenho de 14/11/2026); semana fechada ganha a borda verde.
-        className={juntar(superficie.painel, "min-w-0 px-4 py-3 transition-colors", complete && "border-success/40", highlighted === client.id && "ring-2 ring-primary")}
+        className={juntar(superficie.painel, "min-w-0 p-5 transition-colors sm:p-5", complete && "border-success/40", highlighted === client.id && "ring-2 ring-primary")}
       >
         {/* Linha de identidade: altura fixa, contador com largura reservada */}
         <button
           type="button"
           onClick={() => setDetailId(client.id)}
-          className="flex h-8 w-full items-center gap-2 text-left"
+          className="flex h-9 w-full items-center gap-2 text-left"
         >
-          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">
+          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-6 text-foreground">
             {client.company_name || client.full_name}
           </span>
           {avulso ? (
@@ -1311,7 +1311,7 @@ export default function AdminCiclo() {
               {PHASE_LABELS[phaseOf(client)]}
             </span>
           )}
-          <span className="w-11 shrink-0 text-right text-[12px] font-bold tabular-nums text-muted-foreground">
+          <span className={juntar("inline-flex h-6 min-w-[44px] shrink-0 items-center justify-center rounded-full px-2 text-[12px] font-semibold tabular-nums", complete ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground")}>
             {doneCount}/{clientTotal}
           </span>
           <Caret className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1789,26 +1789,28 @@ export default function AdminCiclo() {
             <button
               type="button"
               onClick={jumpToNext}
-              className="flex w-full items-center gap-2.5 rounded-lg bg-accent-soft p-3 text-left transition-colors hover:bg-primary/[0.14]"
+              className={juntar(superficie.painel, superficie.destaque, "flex w-full items-center gap-3 p-4 text-left transition-transform duration-200 hover:-translate-y-0.5 sm:p-5")}
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[13px] font-bold tabular-nums text-primary">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-foreground text-[18px] font-semibold tabular-nums text-background">
                 {nextUp.step}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[11px] font-medium text-primary">
+                <span className="block text-[12px] font-medium leading-4 text-muted-foreground">
                   Continuar de onde parou
                 </span>
-                <span className="block truncate text-[13px] font-semibold text-foreground">
+                <span className="block truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
                   {nextUp.client.company_name || nextUp.client.full_name}
                 </span>
-                <span className="block truncate text-[11px] text-muted-foreground">{nextUp.label}</span>
+                <span className="block truncate text-[12px] leading-4 text-muted-foreground">{nextUp.label}</span>
               </span>
-              <ArrowDown className="h-4 w-4 shrink-0 text-primary" />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-foreground" aria-hidden="true">
+                <ArrowDown className="h-4 w-4" />
+              </span>
             </button>
           )}
 
           {coach?.coach && (
-            <div className={juntar(superficie.poco, "p-3")}>
+            <div className={juntar(superficie.painel, superficie.tinta, "p-4 sm:p-5")}>
               <div className="flex items-center justify-between gap-2">
                 <p className="flex items-center gap-1.5 text-[12px] font-medium text-primary">
                   <Sparkles className="h-3 w-3" /> Coach da semana
@@ -1926,7 +1928,7 @@ export default function AdminCiclo() {
           {carregandoClientes ? (
             <Carregando rotulo="Carregando os clientes" linhas={4} />
           ) : (
-            <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">{openClients.map(renderClientCard)}</div>
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2 lg:gap-5">{openClients.map(renderClientCard)}</div>
           )}
 
           {!carregandoClientes && activeClients.length === 0 && (
@@ -1970,7 +1972,7 @@ export default function AdminCiclo() {
                   {showClosed ? "esconder" : "ver"}
                 </span>
               </button>
-              {showClosed && <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">{closedClients.map(renderClientCard)}</div>}
+              {showClosed && <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2 lg:gap-5">{closedClients.map(renderClientCard)}</div>}
             </div>
           )}
 

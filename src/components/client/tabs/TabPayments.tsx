@@ -7,7 +7,8 @@ import { todayBR, toBRDateKey } from "@/lib/dateBR";
 import { cobrancaAtrasada, dataDoPortal } from "@/lib/clientes/cobrancaDoPortal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, juntar, lista, superficie, texto } from "@/components/sistema";
+import { Carregando, EstadoVazio, botao, juntar, superficie, texto } from "@/components/sistema";
+import { Card, List, ListRow, ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,11 +21,11 @@ import {
 } from "@/components/ui/select";
 import { DollarSign, CheckCircle2, Clock, AlertCircle, Plus, Pencil } from "lucide-react";
 
-const statusConfig: Record<string, { icon: any; className: string; label: string }> = {
-  paid: { icon: CheckCircle2, className: "text-success bg-success/10", label: "Pago" },
-  partial: { icon: Clock, className: "text-primary bg-primary/10", label: "Parcial" },
-  pending: { icon: Clock, className: "text-warning bg-warning/10", label: "Pendente" },
-  overdue: { icon: AlertCircle, className: "text-destructive bg-destructive/10", label: "Atrasado" },
+const statusConfig: Record<string, { icon: any; className: string; label: string; tone: Tone }> = {
+  paid: { icon: CheckCircle2, className: "text-success bg-success-soft", label: "Pago", tone: "success" },
+  partial: { icon: Clock, className: "text-primary bg-accent-soft", label: "Parcial", tone: "accent" },
+  pending: { icon: Clock, className: "text-warning bg-warning-soft", label: "Pendente", tone: "warning" },
+  overdue: { icon: AlertCircle, className: "text-destructive bg-danger-soft", label: "Atrasado", tone: "danger" },
 };
 
 interface TabPaymentsProps {
@@ -321,52 +322,51 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   const progressPct = payment.total_value > 0 ? Math.round((paidTotal / payment.total_value) * 100) : 0;
 
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="min-w-0 space-y-6 sm:space-y-8">
       {/* Resumo do plano: o valor é o assunto da aba, então fica em destaque */}
-      <Painel
-        titulo={`Plano de pagamento · ${projectName}`}
-        acao={isAdmin && (
-          <button type="button" className={botao.secundario} onClick={openEditDialog} aria-label="Editar plano">
-            <Pencil className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Editar</span>
-          </button>
-        )}
-      >
-        <div className="grid grid-cols-2 gap-4">
-          <div className="min-w-0">
-            <p className={texto.rotulo}>Valor total</p>
-            <p className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{formatCurrency(payment.total_value)}</p>
-          </div>
-          <div className="min-w-0 text-right">
-            <p className={texto.rotulo}>Pago</p>
-            <p className="text-[20px] font-semibold leading-7 tabular-nums text-success">{formatCurrency(paidTotal)}</p>
-          </div>
+      <section aria-label={`Plano de pagamento · ${projectName}`} className="min-w-0">
+        <div className="mb-4 flex min-w-0 items-center justify-between sm:mb-5">
+          <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{`Plano de pagamento · ${projectName}`}</h3>
+          {isAdmin && (
+            <button type="button" className={juntar(botao.secundario, "ml-3")} onClick={openEditDialog} aria-label="Editar plano">
+              <Pencil className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Editar</span>
+            </button>
+          )}
         </div>
-        <div className="mt-4">
-          <div className={juntar(texto.auxiliar, "mb-1.5 flex items-center justify-between")}>
-            <span>Progresso</span>
-            <span className="tabular-nums">{progressPct}%</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100} aria-label="Pago do total">
-            <div className="h-full rounded-full bg-success" style={{ width: `${progressPct}%` }} />
-          </div>
-        </div>
-        <p className={juntar(texto.auxiliar, "mt-3 leading-5")}>
-          Entrada: {payment.entry_percentage}% ({formatCurrency(payment.entry_amount)})
-          <span className="mx-1.5" aria-hidden="true">·</span>
-          {payment.installments_count}x restante
-          <span className="mx-1.5" aria-hidden="true">·</span>
-          <span className="font-medium text-foreground">Falta: {formatCurrency(payment.total_value - paidTotal)}</span>
-        </p>
-        {payment.notes && <p className={juntar(texto.auxiliar, "mt-1 italic leading-5")}>{payment.notes}</p>}
-      </Painel>
+        <StatGrid cols={3}>
+          <StatCard
+            variant="ink"
+            size="xl"
+            label="Valor total"
+            value={formatCurrency(payment.total_value)}
+            hint={`Entrada: ${payment.entry_percentage}% (${formatCurrency(payment.entry_amount)}) · ${payment.installments_count}x restante`}
+          />
+          <StatCard
+            variant="accent"
+            size="xl"
+            label="Pago"
+            value={formatCurrency(paidTotal)}
+            deltaLabel={`${progressPct}% do total`}
+            chart={<ProgressBar value={paidTotal} max={Number(payment.total_value)} height={10} label={`Pago do total: ${progressPct}%`} />}
+          />
+          <StatCard
+            size="xl"
+            className="max-lg:col-span-2"
+            label="Falta"
+            value={formatCurrency(payment.total_value - paidTotal)}
+            hint={payment.notes ? <span className="italic">{payment.notes}</span> : undefined}
+            chart={<ProgressBar value={Math.max(0, payment.total_value - paidTotal)} max={Number(payment.total_value)} tone="muted" striped height={10} label="Parte que falta do total" />}
+          />
+        </StatGrid>
+      </section>
 
-      {/* Parcelas: lista com divisória, valor e situação à direita */}
-      <Secao titulo="Parcelas" descricao={installments && installments.length ? `${installments.length} no total` : undefined}>
+      {/* Parcelas: linha limpa com ícone, vencimento, situação em pílula e valor à direita */}
+      <Card title="Parcelas" subtitle={installments && installments.length ? `${installments.length} no total` : undefined}>
         {loadingInstallments ? (
           <Carregando linhas={2} rotulo="Carregando parcelas" />
         ) : (
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <List label="Parcelas">
           {(installments || []).map((inst: any) => {
             const status = getInstallmentStatus(inst);
             const config = statusConfig[status];
@@ -374,37 +374,37 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
             const paidAmt = Number(inst.paid_amount || 0);
             const isPartial = inst.status === "partial" || (paidAmt > 0 && paidAmt < inst.amount);
             return (
-              <li key={inst.id} className="flex min-w-0 items-center px-2 py-3">
-                <span className={`mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${config.className}`}>
-                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-medium leading-5 text-foreground">{inst.description}</p>
-                  <p className={juntar(texto.auxiliar, "truncate")}>
+              <ListRow
+                key={inst.id}
+                highlight={status === "overdue"}
+                leading={
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${config.className}`}>
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                }
+                title={inst.description}
+                subtitle={
+                  <>
                     Vencimento: {formatDate(inst.due_date)}
                     {inst.paid_date && ` · Pago em ${formatDate(inst.paid_date)}`}
-                  </p>
-                  {isPartial && paidAmt > 0 && (
-                    <p className="text-[12px] text-primary">
-                      Pago parcial: {formatCurrency(paidAmt)} de {formatCurrency(inst.amount)}
-                    </p>
-                  )}
-                </div>
-                <div className="ml-3 shrink-0 text-right">
-                  <p className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(inst.amount)}</p>
-                  <span className={juntar(etiqueta, "mt-0.5", config.className)}>{config.label}</span>
-                </div>
-                {isAdmin && (
-                  <button type="button" className={juntar(botao.icone, "ml-2")} onClick={() => openEditInstallment(inst)} aria-label={`Editar ${inst.description}`}>
+                    {isPartial && paidAmt > 0 && (
+                      <span className="text-primary">{` · Pago parcial: ${formatCurrency(paidAmt)} de ${formatCurrency(inst.amount)}`}</span>
+                    )}
+                  </>
+                }
+                value={<span className="whitespace-nowrap">{formatCurrency(inst.amount)}</span>}
+                valueHint={<span className="mt-1 inline-flex"><StatusPill tone={config.tone}>{config.label}</StatusPill></span>}
+                action={isAdmin ? (
+                  <button type="button" className={botao.icone} onClick={() => openEditInstallment(inst)} aria-label={`Editar ${inst.description}`}>
                     <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
-                )}
-              </li>
+                ) : undefined}
+              />
             );
           })}
-          </ul>
+          </List>
         )}
-      </Secao>
+      </Card>
 
       {/* Edit installment dialog */}
       <Dialog open={isAdmin && editInstOpen} onOpenChange={setEditInstOpen}>

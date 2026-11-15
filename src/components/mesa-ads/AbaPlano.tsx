@@ -128,7 +128,7 @@ function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
 /** Nota geral do ângulo: cor pela régua (7 ou mais é forte). */
 function SeloDaPontuacao({ nota }: { nota: number | null }) {
   if (nota === null) return null;
-  const tom = nota >= 7.5 ? "border-success/40 bg-success/10 text-success" : nota >= 6 ? "border-warning/40 bg-warning/10 text-warning" : "border-destructive/30 bg-destructive/10 text-destructive";
+  const tom = nota >= 7.5 ? "border-success/40 bg-success-soft text-success" : nota >= 6 ? "border-warning/40 bg-warning/10 text-warning" : "border-destructive/30 bg-danger-soft text-destructive";
   return (
     <span className={`ml-2 inline-flex shrink-0 flex-col items-center rounded-lg border px-2 py-1 leading-none ${tom}`} aria-label={`Pontuação ${nota.toLocaleString("pt-BR")} de 10`}>
       <span className="text-[15px] font-semibold tabular-nums">{nota.toLocaleString("pt-BR")}</span>
@@ -187,21 +187,21 @@ function CartaoDoAngulo({
           <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
             {temQualidade && (
               <span
-                className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium ${aprovado ? "bg-success/10 text-success" : "bg-warning/15 text-warning"}`}
+                className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium ${aprovado ? "bg-success-soft text-success" : "bg-warning/15 text-warning"}`}
                 data-aprovado={aprovado ? "sim" : "nao"}
               >
                 {aprovado ? <ShieldCheck className="mr-1 h-3 w-3" /> : <AlertTriangle className="mr-1 h-3 w-3" />}
                 {aprovado ? "Aprovado na conferência" : "Abaixo da régua"}
               </span>
             )}
-            {angulo.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]">{humanizar(angulo.estilo_visual)}</span>}
-            {angulo.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(angulo.objetivo)}</span>}
+            {angulo.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[11px]">{humanizar(angulo.estilo_visual)}</span>}
+            {angulo.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(angulo.objetivo)}</span>}
             {typeof angulo.ordem_teste === "number" && (
-              <span className="mb-1 mr-1.5 rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">Testar {angulo.ordem_teste}º</span>
+              <span className="mb-1 mr-1.5 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground">Testar {angulo.ordem_teste}º</span>
             )}
-            {angulo.tom && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]">Tom {rotuloDoTom(angulo.tom).toLowerCase()}</span>}
+            {angulo.tom && <span className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[11px]">Tom {rotuloDoTom(angulo.tom).toLowerCase()}</span>}
             {angulo.generico && (
-              <span className="mb-1 mr-1.5 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning" title="Pela conferência do Jev: diferenciação ou relevância baixa, serviria para qualquer marca da categoria.">
+              <span className="mb-1 mr-1.5 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning" title="Pela conferência do Jev: diferenciação ou relevância baixa, serviria para qualquer marca da categoria.">
                 Genérico
               </span>
             )}
@@ -231,7 +231,7 @@ function CartaoDoAngulo({
         </p>
       )}
 
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
         <Linha rotulo="Situação">{angulo.situacao}</Linha>
         <Linha rotulo="Mecanismo">{angulo.mecanismo}</Linha>
         <Linha rotulo="Gancho visual">{angulo.gancho_visual}</Linha>
@@ -247,7 +247,7 @@ function CartaoDoAngulo({
       )}
 
       {(angulo.porque_testar_primeiro || angulo.corte) && (
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
           <Linha rotulo="Por que testar">{angulo.porque_testar_primeiro || ""}</Linha>
           <Linha rotulo="Regra de corte">{angulo.corte ? angulo.corte.texto : ""}</Linha>
         </div>
@@ -268,7 +268,7 @@ function CartaoDoAngulo({
 
       <div className="mt-3 flex min-w-0 flex-wrap items-center">
         {formatos.map((f) => (
-          <span key={f.valor} className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+          <span key={f.valor} className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
             {f.rotulo}
           </span>
         ))}
@@ -623,11 +623,11 @@ export default function AbaPlano({
                   Conferência do Jev
                   {qualidade.rodadas !== null ? `: ${qualidade.rodadas} rodada${qualidade.rodadas === 1 ? "" : "s"} de qualidade` : ""}
                 </span>
-                {qualidade.aprovados !== null && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success">{qualidade.aprovados} aprovados</span>}
+                {qualidade.aprovados !== null && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-success/10 px-2.5 py-1 text-[11px] text-success">{qualidade.aprovados} aprovados</span>}
                 {qualidade.descartados.length > 0 && (
-                  <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{qualidade.descartados.length} descartados</span>
+                  <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">{qualidade.descartados.length} descartados</span>
                 )}
-                {qualidade.objetivo && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(qualidade.objetivo)}</span>}
+                {qualidade.objetivo && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(qualidade.objetivo)}</span>}
                 {ofertaDoPlano && <span className="mb-0.5 mt-0.5 min-w-0 truncate text-[12px] text-muted-foreground">Oferta: {ofertaDoPlano.nome}</span>}
               </div>
             )}
@@ -652,7 +652,7 @@ export default function AbaPlano({
               </button>
             )}
 
-            <div className="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 2xl:grid-cols-2">
               {angulosOrdenados.map((a, i) => (
                 <div key={a.id} className="min-w-0 space-y-2">
                   <CartaoDoAngulo angulo={a} indice={i} marcado={marcados.indexOf(a.id) >= 0} onMarcar={() => setMarcados((m) => alternar(m, a.id))} referencias={referencias.data || []} />

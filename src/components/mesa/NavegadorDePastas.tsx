@@ -102,7 +102,7 @@ function CartaoDeImagem({
 }
 
 function Grade({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">{children}</div>;
+  return <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4">{children}</div>;
 }
 
 function LinhaDePasta({ nome, detalhe, onClick }: { nome: string; detalhe?: string; onClick: () => void }) {

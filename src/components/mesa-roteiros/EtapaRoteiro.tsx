@@ -389,7 +389,7 @@ function FormularioDeGeracao({
               {modoDoTipo(tipo).cuidados}
             </AjudaRecolhida>
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="radiogroup" aria-label="Tipo de roteiro">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" role="radiogroup" aria-label="Tipo de roteiro">
             {MODOS_DE_ROTEIRO.map((m) => (
               <button
                 key={m.valor}
@@ -700,7 +700,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
         resumo={rascunho.ganchos.length ? `${rascunho.ganchos.length} ganchos · usando o ${rascunho.gancho_escolhido + 1}` : undefined}
         data-ganchos=""
       >
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-3" role="radiogroup" aria-label="Ganchos">
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-3" role="radiogroup" aria-label="Ganchos">
           {rascunho.ganchos.map((g, i) => (
             <div key={i} className={juntar("min-w-0 rounded-md border p-2.5", rascunho.gancho_escolhido === i ? "border-primary bg-primary/5" : "border-border")}>
               <label className="flex items-start text-[13px]">

@@ -466,7 +466,7 @@ export default function LogosDaMarca({
 
   return (
     <div className="min-w-0 space-y-2">
-      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 min-[400px]:grid-cols-2">
         {tiles.map((t) => {
           const indice = t.imagem ? ampliaveis.findIndex((a) => a.caminho === t.imagem!.caminho) : -1;
           return (

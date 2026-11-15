@@ -528,7 +528,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
             placeholder="Ex.: menos genérico, letra da marca, sem dourado"
             className="min-h-[56px] text-[13px]"
           />
-          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
             <div className="flex min-w-0 items-center">
               <Link2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <Input value={linkDeMelhora} onChange={(e) => setLinkDeMelhora(e.target.value)} placeholder="Link de uma imagem de referência (opcional)" aria-label="Link da referência do Melhorar" className="h-8 text-[13px]" />
@@ -668,7 +668,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
 
               {gradeAberta && (
                 <div className="min-w-0 space-y-3" data-selo="ajustes">
-                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <Campo rotulo="Estilo">
                       <Select value={estilo} onValueChange={(v) => mudarAjustes({ estilo: v as EscolhaDeEstilo })}>
                         <SelectTrigger className="h-9 min-w-0 text-[13px]" aria-label="Estilo do selo"><SelectValue /></SelectTrigger>
@@ -689,7 +689,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                     <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloId} onChange={(id) => mudarAjustes({ modelo: id })} rotulo="Modelo de imagem" qualidade={qualidade} />
                     <SeletorDeQualidade valor={qualidade} onChange={(q) => mudarAjustes({ qualidade: q })} />
                   </div>
-                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                     <Campo rotulo="Texto do selo">
                       <Input
                         value={textoDigitado !== null ? textoDigitado : textoDoServidor || ""}
@@ -829,7 +829,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
       {opcoes.length > 0 && (
         <div className="min-w-0 border-t border-border pt-3" data-selo="opcoes">
           <p className={texto.rotulo}>Opções geradas</p>
-          <ul className="mt-2 grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Opções de selo">
+          <ul className="mt-2 grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4" aria-label="Opções de selo">
             {opcoes.map((o) => (
               <li key={o.versao.id} className="min-w-0">
                 <button type="button" className="block w-full cursor-zoom-in" onClick={() => setAmpliar(o.versao.caminho)} aria-label="Ver a opção grande" title="Ver a opção grande">

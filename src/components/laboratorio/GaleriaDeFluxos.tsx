@@ -161,7 +161,7 @@ function CartaoDoFluxo({ f, usando, onUsar }: { f: FluxoDaGaleria; usando: strin
   const Icone = ICONES_DO_TEMPLATE[f.icone] || Workflow;
   const nos = f.canvas.nos.length;
   return (
-    <article className={juntar(superficie.painel, "flex min-w-0 flex-col p-3")} data-template={f.id} data-categoria={f.categoria}>
+    <article className={juntar(superficie.painel, "flex min-w-0 flex-col p-4 sm:p-5")} data-template={f.id} data-categoria={f.categoria}>
       <MiniaturaDoFluxo canvas={f.canvas} />
       <div className="mt-3 flex min-w-0 items-center">
         <Icone className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />

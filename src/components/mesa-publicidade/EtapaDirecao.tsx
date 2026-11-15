@@ -166,7 +166,7 @@ export default function EtapaDirecao() {
       )}
 
       {campanha.territorios.length > 0 ? (
-        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-territorios="">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3" data-territorios="">
           {campanha.territorios.map((t) => (
             <CartaoDoTerritorio key={t.id} t={t} podeAprovar={!travado} aprovando={aprovando === t.id} onAprovar={() => void aprovar(t)} />
           ))}

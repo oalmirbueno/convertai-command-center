@@ -138,9 +138,9 @@ function Cartao({ proposta: p, contato, virouProjeto, onAbrir, onTransformar, on
           {(nome.trim().charAt(0) || "?").toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium leading-5 text-foreground max-sm:text-[14px]">{p.titulo}</p>
+          <p className="truncate text-[13px] font-semibold leading-5 text-foreground max-sm:text-[14px]">{p.titulo}</p>
           <p className={juntar(texto.auxiliar, "truncate")}>{nome}</p>
-          <p className="mt-1 truncate text-[12px] font-medium tabular-nums text-primary">{fmtMoeda(p.valor, p.moeda)}</p>
+          <p className="mt-2 truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{fmtMoeda(p.valor, p.moeda)}</p>
           {p.validade_ate && p.status !== "aceita" && p.status !== "perdida" && (
             <p className="mt-0.5 truncate text-[11px] tabular-nums leading-4 text-muted-foreground">válida até {dataBR(p.validade_ate)}</p>
           )}
@@ -156,7 +156,7 @@ function Cartao({ proposta: p, contato, virouProjeto, onAbrir, onTransformar, on
       </div>
 
       {p.status === "aceita" && (
-        <div {...soOBotao} className="mt-2 space-y-1.5">
+        <div {...soOBotao} className="mt-3 space-y-2">
           {convertida ? (
             <Link to="/clientes" className={juntar(etiqueta, "inline-flex bg-success-soft text-success")}>Virou cliente</Link>
           ) : (
@@ -179,7 +179,7 @@ function Cartao({ proposta: p, contato, virouProjeto, onAbrir, onTransformar, on
       )}
 
       {p.status === "perdida" && (
-        <div {...soOBotao} className="mt-2 space-y-1.5">
+        <div {...soOBotao} className="mt-3 space-y-2">
           {p.motivo_perda && <p className="line-clamp-3 text-[11px] leading-4 text-muted-foreground">{p.motivo_perda}</p>}
           {p.follow_up_em && (
             <p className={juntar("flex items-center text-[11px] leading-4", retomarVenceu ? "font-medium text-warning" : "text-muted-foreground")}>

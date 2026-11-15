@@ -544,7 +544,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav. data-casca: o modo foco (src/lib/modoFoco.ts + index.css) esconde a barra, o que flutua e tira o recuo do conteúdo. */}
       {/* Só de 768 px para cima (16/10/2026): o celular tem o topo enxuto logo abaixo. */}
-      {!celular && <nav data-casca="topo" className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-full flex items-center pl-4 pr-2 gap-2 lg:gap-4 border border-border bg-card/90 text-foreground shadow-card backdrop-blur-xl"
+      {!celular && <nav data-casca="topo" className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-full flex items-center pl-4 pr-2 gap-2 lg:gap-4 border border-border bg-card/95 text-foreground shadow-card backdrop-blur-xl"
         style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
       >
         {/* Clip the square bitmap's transparent padding to the navbar so it
@@ -564,9 +564,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 to={item.url}
                 data-tour={tourId}
                 className={({ isActive }) => cn(
-                  "relative inline-flex h-8 items-center whitespace-nowrap px-3 lg:px-3.5 text-[13px] rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "relative inline-flex h-9 items-center whitespace-nowrap px-3 lg:px-3.5 text-[13px] rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   indice >= LINKS_NO_TOPO_ESTREITO && "hidden lg:inline-flex",
-                  isActive ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  isActive ? "bg-foreground font-medium text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
                 {({ isActive }) => (

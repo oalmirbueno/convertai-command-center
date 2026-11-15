@@ -238,7 +238,7 @@ export default function JanelaDeTratamento({ arquivo, acao, aberta, onFechar }: 
               {achando ? "Procurando a legenda nos quadros" : achou || "Faixa da legenda"}
             </p>
             <Faixa vista={vista} regiao={regiao} carregando={achando || url.isLoading} />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <label className={texto.rotulo}>
                 Topo da faixa ({pct(regiao.y)}%)
                 <input type="range" min={0} max={95} value={pct(regiao.y)} onChange={(e) => setRegiao((r) => ({ ...r, y: Math.min(0.97 - r.h, Number(e.target.value) / 100) }))} className="w-full" aria-label="Topo da faixa da legenda" />

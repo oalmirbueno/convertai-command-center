@@ -85,7 +85,7 @@ export function HistoriaDoCanvas({
   return (
     <section ref={roda} aria-label="História do canvas" className={caixa} data-historia={lugar}>
       <div className="flex min-w-0 shrink-0 flex-wrap items-center border-b border-white/10 px-3 py-2">
-        <h3 className="mr-2 flex shrink-0 items-center text-[13px] font-semibold">
+        <h3 className="mr-2 flex shrink-0 items-center text-[15px] font-semibold">
           <Clapperboard className="mr-1.5 h-3.5 w-3.5 text-emerald-300" /> História
         </h3>
         <span className="mr-2 text-[11px] text-zinc-400">

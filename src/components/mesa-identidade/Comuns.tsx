@@ -414,7 +414,7 @@ export function ImagemInteira({ caminho, alt, className = "", fundo }: { caminho
 
 /** Pastilha pequena de estado. */
 export function Pastilha({ tom = "neutro", children }: { tom?: "neutro" | "bom" | "alerta" | "ruim"; children: ReactNode }) {
-  const cor = tom === "bom" ? "bg-primary/10 text-primary" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "ruim" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground";
+  const cor = tom === "bom" ? "bg-accent-soft text-primary" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "ruim" ? "bg-danger-soft text-destructive" : "bg-muted text-muted-foreground";
   return <span className={juntar(etiqueta, cor)}>{children}</span>;
 }
 

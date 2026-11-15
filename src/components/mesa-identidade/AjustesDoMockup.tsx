@@ -184,7 +184,7 @@ export default function AjustesDoMockup({
                   </button>
                 </div>
                 {variacoes ? (
-                  <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
                     {variacoes.map((v) => {
                       const atual = v.fundo === rascunho.fundo && v.segunda === rascunho.segunda;
                       return (

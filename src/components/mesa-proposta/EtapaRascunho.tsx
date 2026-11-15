@@ -588,7 +588,7 @@ function ModeloVisual({ visual, mudou, onVisual }: { visual: VisualDaProposta; m
       descricao={`${(TEMAS_DA_PROPOSTA.find((t) => t.id === visual.tema) || TEMAS_DA_PROPOSTA[0]).nome}${mudou ? " · não salvo" : ""}`}
       ajuda="Escolha como a proposta aparece para o cliente e veja na prévia ao lado. Cores do cliente usa a paleta da marca aberta na capa e nos destaques; a logo do cliente entra na capa pelo código. O Salvar fica na barra do pé da etapa, junto com os blocos."
     >
-      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Modelos visuais">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4" role="radiogroup" aria-label="Modelos visuais">
         {TEMAS_DA_PROPOSTA.map((t) => {
           const semCor = t.id === "cliente" && !visual.cores.length;
           return (

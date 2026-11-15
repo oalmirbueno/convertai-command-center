@@ -162,11 +162,11 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
   const lucroAlloc = restante;
   const uncovered = fixedCostsValue + proLaboreProp - (fixosAlloc + plAlloc);
   const segs = [
-    { label: "Reserva tributária", value: taxReserve, cls: "bg-info" },
-    { label: "Custos fixos", value: fixosAlloc, cls: "bg-warning" },
-    { label: "Pró-labore", value: plAlloc, cls: "bg-primary" },
-    { label: "Reserva clientes/invest.", value: reservaAlloc, cls: "bg-info/60" },
-    { label: "Lucro", value: lucroAlloc, cls: "bg-success" },
+    { label: "Reserva tributária", value: taxReserve, cls: "bg-chart-5" },
+    { label: "Custos fixos", value: fixosAlloc, cls: "bg-chart-4" },
+    { label: "Pró-labore", value: plAlloc, cls: "bg-chart-2" },
+    { label: "Reserva clientes/invest.", value: reservaAlloc, cls: "bg-chart-3" },
+    { label: "Lucro", value: lucroAlloc, cls: "bg-chart-1" },
   ].filter((s) => s.value > 0.005);
   const totalDaBarra = grossReceived > 0 ? grossReceived : 1;
 
@@ -198,48 +198,46 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
         <Painel semEspaco>
           <div className="grid min-w-0 grid-cols-1 md:grid-cols-2">
             {/* Coluna 1: divisão do que entrou */}
-            <div className="min-w-0 p-4 sm:p-5">
+            <div className="min-w-0 p-5 sm:p-6">
               <ul className="min-w-0">
-                <Linha icone={<Wallet className="h-3.5 w-3.5 text-foreground" />} rotulo="Recebido no mês (bruto)" forte valor={fmt(grossReceived)} />
-                <Linha icone={<Landmark className="h-3.5 w-3.5 text-info" />} rotulo="Reserva tributária" valor={`− ${fmt(taxReserve)}`} />
-                <Linha icone={<TrendingUp className="h-3.5 w-3.5 text-success" />} rotulo="Receita operacional" forte valor={fmt(operationalReceived)} corDoValor="text-success" separada />
+                <Linha icone={<Wallet className="h-4 w-4 text-foreground" />} rotulo="Recebido no mês (bruto)" forte valor={fmt(grossReceived)} />
+                <Linha icone={<Landmark className="h-4 w-4 text-foreground" />} rotulo="Reserva tributária" valor={`− ${fmt(taxReserve)}`} />
+                <Linha icone={<TrendingUp className="h-4 w-4 text-foreground" />} rotulo="Receita operacional" forte valor={fmt(operationalReceived)} separada />
                 <Linha
-                  icone={<Scale className="h-3.5 w-3.5 text-warning" />}
+                  icone={<Scale className="h-4 w-4 text-foreground" />}
                   rotulo={fixedCostsSource === "real" ? "Custos fixos do mês" : "Custos fixos (referência: ferramentas)"}
                   valor={`− ${fmt(fixedCostsValue)}`}
                 />
                 <Linha
-                  icone={<PiggyBank className="h-3.5 w-3.5 text-primary" />}
+                  icone={<PiggyBank className="h-4 w-4 text-foreground" />}
                   rotulo={<>Pró-labore proporcional <span className={juntar(etiqueta, "ml-1 bg-accent-soft text-primary")}>escada</span></>}
                   valor={`− ${fmt(proLaboreProp)}`}
-                  corDoValor="text-primary"
                 />
                 <Linha
-                  icone={<Scale className="h-3.5 w-3.5 text-info" />}
+                  icone={<Scale className="h-4 w-4 text-foreground" />}
                   rotulo="Reserva de clientes e investimento"
                   apoio={<span className={reservaCompleta ? "text-success" : clientReserve > 0 ? "text-warning" : undefined}>{estadoDaReserva}</span>}
                   ajuda="É o que sobrou e foi guardado antes do lucro. Não é falta: sem sobra fica R$ 0,00 e o alvo espera o próximo dinheiro que entrar."
                   valor={clientReserve > 0 ? `− ${fmt(clientReserve)}` : fmt(0)}
-                  corDoValor="text-info"
                 />
               </ul>
-              <div className="mt-2 flex min-w-0 items-center border-t border-border/60 pt-3">
+              <div className={juntar("mt-4 flex min-w-0 items-center rounded-md px-4 py-4 sm:px-5", result >= 0 ? "ds-accent" : "bg-danger-soft")}>
                 <span className={juntar(texto.corpo, "min-w-0 flex-1 font-medium")}>Lucro do mês</span>
-                <span className={juntar("shrink-0 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums", result >= 0 ? "text-success" : "text-destructive")}>{fmt(result)}</span>
+                <span className={juntar("shrink-0 text-[28px] font-semibold leading-9 tracking-[-0.035em] tabular-nums sm:text-[32px] sm:leading-10", result >= 0 ? "text-foreground" : "text-destructive")}>{fmt(result)}</span>
               </div>
 
               {grossReceived > 0 ? (
-                <div className="mt-4 min-w-0">
-                  <p className={juntar(texto.rotulo, "mb-1.5")}>Como o dinheiro que entrou se divide</p>
-                  <div className="flex h-2 overflow-hidden rounded-full bg-muted [&>*+*]:ml-0.5">
+                <div className="mt-6 min-w-0">
+                  <p className={juntar(texto.rotulo, "mb-2.5")}>Como o dinheiro que entrou se divide</p>
+                  <div className="flex h-3 [&>*+*]:ml-1 [&>*]:rounded-full">
                     {segs.map((s) => (
                       <div key={s.label} className={s.cls} style={{ width: `${(s.value / totalDaBarra) * 100}%` }} title={`${s.label}: ${fmt(s.value)}`} />
                     ))}
                   </div>
-                  <div className="-mx-1.5 mt-1.5 flex min-w-0 flex-wrap">
+                  <div className="-mx-2 mt-3 flex min-w-0 flex-wrap">
                     {segs.map((s) => (
-                      <span key={s.label} className="mx-1.5 my-0.5 inline-flex items-center text-[11px] tabular-nums text-muted-foreground">
-                        <span className={juntar("mr-1 h-2 w-2 shrink-0 rounded-full", s.cls)} aria-hidden="true" />
+                      <span key={s.label} className="mx-2 my-1 inline-flex items-center text-[12px] tabular-nums text-muted-foreground">
+                        <span className={juntar("mr-1.5 h-2 w-2 shrink-0 rounded-full", s.cls)} aria-hidden="true" />
                         {s.label} {fmt(s.value)} ({Math.round((s.value / totalDaBarra) * 100)}%)
                       </span>
                     ))}
@@ -268,9 +266,9 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
 
             {/* Coluna 2: meta, ponto de equilíbrio e pró-labore pela escada */}
             <div className="min-w-0 divide-y divide-border/60 border-t border-border/60 md:border-l md:border-t-0">
-              <div className="min-w-0 p-4 sm:p-5">
+              <div className="min-w-0 p-5 sm:p-6">
                 <div className="flex min-w-0 items-center">
-                  <Target className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                  <span aria-hidden="true" className="mr-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><Target className="h-4 w-4" /></span>
                   <span className={juntar(texto.rotulo, "min-w-0 flex-1 truncate")}>Meta mensal (receita operacional)</span>
                   <button
                     type="button"
@@ -282,14 +280,14 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                 </div>
                 {monthlyGoal && monthlyGoal > 0 ? (
                   <>
-                    <div className="mt-1 flex min-w-0 items-baseline">
-                      <span className="text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(operationalReceived)}</span>
+                    <div className="mt-3 flex min-w-0 items-baseline">
+                      <span className="text-[28px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{fmt(operationalReceived)}</span>
                       <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>de {fmt(monthlyGoal)}</span>
-                      <span className={juntar("ml-auto shrink-0 pl-2 text-[12px] tabular-nums", goalProgress! >= 1 ? "text-success" : "text-muted-foreground")}>
+                      <span className={juntar(etiqueta, "ml-auto h-6 px-2.5 text-[12px]", goalProgress! >= 1 ? "bg-success-soft text-success" : "bg-muted text-foreground")}>
                         {Math.round(goalProgress! * 100)}%
                       </span>
                     </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                       <div
                         className={juntar("h-full rounded-full", goalProgress! >= 1 ? "bg-success" : "bg-primary")}
                         style={{ width: `${Math.round(goalProgress! * 100)}%` }}
@@ -301,13 +299,13 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                 )}
               </div>
 
-              <div className="min-w-0 p-4 sm:p-5">
+              <div className="min-w-0 p-5 sm:p-6">
                 <div className="flex min-w-0 items-center">
-                  <Scale className="mr-1.5 h-3.5 w-3.5 shrink-0 text-info" aria-hidden="true" />
+                  <span aria-hidden="true" className="mr-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><Scale className="h-4 w-4" /></span>
                   <span className={juntar(texto.rotulo, "min-w-0 truncate")}>Ponto de equilíbrio</span>
                 </div>
-                <div className="mt-1 flex min-w-0 items-baseline">
-                  <span className="shrink-0 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(breakEvenOperational)}</span>
+                <div className="mt-3 flex min-w-0 items-baseline">
+                  <span className="shrink-0 text-[28px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{fmt(breakEvenOperational)}</span>
                   <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>por mês · {fmt(breakEvenGross)} brutos</span>
                 </div>
                 <p className={juntar("mt-1 text-[12px] leading-4", operationalReceived >= breakEvenOperational ? "text-success" : "text-warning")}>
@@ -317,16 +315,16 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                 </p>
               </div>
 
-              <div className="min-w-0 p-4 sm:p-5">
+              <div className="min-w-0 p-5 sm:p-6">
                 <div className="flex min-w-0 items-center">
-                  <PiggyBank className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                  <span aria-hidden="true" className="mr-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><PiggyBank className="h-4 w-4" /></span>
                   <span className={juntar(texto.rotulo, "min-w-0 truncate")}>Pró-labore pela escada</span>
                   <AjudaRecolhida className="ml-1" rotulo="Sobre o pró-labore">
                     Proporcional ao que entrou no mês, pela escada do Plano Diretor. Nada muda sozinho: a retirada oficial você confirma em Custos fixos.
                   </AjudaRecolhida>
                 </div>
-                <div className="mt-1 flex min-w-0 flex-wrap items-center">
-                  <span className="mr-2 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(proLaboreProp)}</span>
+                <div className="mt-3 flex min-w-0 flex-wrap items-center">
+                  <span className="mr-3 text-[28px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{fmt(proLaboreProp)}</span>
                   <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Oficial {fmt(proLabore)}</span>
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
@@ -377,16 +375,16 @@ function Linha({ icone, rotulo, apoio, ajuda, valor, corDoValor = "text-muted-fo
   separada?: boolean;
 }) {
   return (
-    <li className={juntar("flex min-w-0 items-start py-1.5", separada && "mb-1.5 border-b border-border/60 pb-3")}>
-      <span className="mr-2.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted" aria-hidden="true">{icone}</span>
+    <li className={juntar("flex min-w-0 items-center py-2", separada && "mb-2 border-b border-border/60 pb-4")}>
+      <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted" aria-hidden="true">{icone}</span>
       <div className="mr-3 min-w-0 flex-1">
         <div className="flex min-w-0 items-center">
-          <span className={juntar("min-w-0 text-[13px] leading-6", forte ? "font-medium text-foreground" : "text-muted-foreground")}>{rotulo}</span>
+          <span className={juntar("min-w-0 text-[13px] leading-5", forte ? "font-medium text-foreground" : "text-muted-foreground")}>{rotulo}</span>
           {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
         </div>
         {apoio && <p className="truncate text-[12px] leading-4 text-muted-foreground">{apoio}</p>}
       </div>
-      <span className={juntar("shrink-0 text-[13px] leading-6 tabular-nums", forte && "font-medium", forte && !corDoValor.includes("success") ? "text-foreground" : corDoValor)}>{valor}</span>
+      <span className={juntar("shrink-0 tabular-nums", forte ? "text-[15px] font-semibold leading-5" : "text-[13px] leading-5", forte && !corDoValor.includes("success") ? "text-foreground" : corDoValor)}>{valor}</span>
     </li>
   );
 }

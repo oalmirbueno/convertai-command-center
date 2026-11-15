@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import DadosDaAgencia from "@/components/agencia/DadosDaAgencia";
 import VideoDoDiaPrioritarioAdmin from "@/components/dia-prioritario/VideoDoDiaPrioritarioAdmin";
-import { CabecalhoDePagina, Carregando, SeletorCompacto, espaco, foco, juntar, texto } from "@/components/sistema";
+import { CabecalhoDePagina, Carregando, SeletorCompacto, espaco, foco, juntar, superficie, texto } from "@/components/sistema";
 
 // Frente SPP (30/09): a seção dos superpoderes só carrega quando a pessoa abre a linha.
 const SuperpoderesDasMesas = lazy(() => import("@/components/config/SuperpoderesDasMesas"));
@@ -30,7 +30,7 @@ const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
 
 function IconeDaLinha({ children }: { children: ReactNode }) {
   return (
-    <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground" aria-hidden="true">
+    <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground" aria-hidden="true">
       {children}
     </span>
   );
@@ -38,9 +38,9 @@ function IconeDaLinha({ children }: { children: ReactNode }) {
 
 function Grupo({ titulo, children, ...resto }: { titulo: string; children: ReactNode } & Record<`data-${string}`, string | undefined>) {
   return (
-    <section className="min-w-0" aria-label={titulo} {...resto}>
-      <h2 className={juntar(texto.rotulo, "mb-1")}>{titulo}</h2>
-      <ul className="min-w-0 divide-y divide-border border-y border-border">{children}</ul>
+    <section className={juntar(superficie.painel, "min-w-0 p-5 sm:p-6")} aria-label={titulo} {...resto}>
+      <h2 className={juntar(texto.tituloSecao, "mb-2")}>{titulo}</h2>
+      <ul className="-mx-3 min-w-0 divide-y divide-border/60 [&>li]:px-3">{children}</ul>
     </section>
   );
 }
@@ -49,12 +49,15 @@ function Grupo({ titulo, children, ...resto }: { titulo: string; children: React
 function LinhaDeAcao({ icone, rotulo, apoio, onClick }: { icone: ReactNode; rotulo: string; apoio: string; onClick: () => void }) {
   return (
     <li className="min-w-0">
-      <button type="button" onClick={onClick} className={juntar("flex w-full min-w-0 items-center rounded-md py-3 text-left transition-colors hover:bg-muted/50", foco)}>
+      <button type="button" onClick={onClick} className={juntar("group -mx-3 flex w-[calc(100%+24px)] min-w-0 items-center rounded-lg px-3 py-3.5 text-left transition-colors hover:bg-muted/60", foco)}>
         <IconeDaLinha>{icone}</IconeDaLinha>
-        <span className={juntar(texto.corpo, "mr-3 min-w-0 truncate font-medium")}>{rotulo}</span>
-        <span className={juntar(texto.auxiliar, "mr-2 hidden min-w-0 flex-1 truncate text-right sm:block")}>{apoio}</span>
-        <span className="min-w-0 flex-1 sm:hidden" aria-hidden="true" />
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="mr-3 flex min-w-0 flex-1 flex-col">
+          <span className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{rotulo}</span>
+          <span className={juntar(texto.auxiliar, "mt-0.5 min-w-0 truncate")}>{apoio}</span>
+        </span>
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors group-hover:bg-foreground group-hover:text-background" aria-hidden="true">
+          <ChevronRight className="h-4 w-4" />
+        </span>
       </button>
     </li>
   );
@@ -89,14 +92,17 @@ function LinhaQueAbre({
         onClick={onAlternar}
         aria-expanded={aberta}
         aria-controls={corpo}
-        className={juntar("flex w-full min-w-0 items-center rounded-md py-3 text-left transition-colors hover:bg-muted/50", foco)}
+        className={juntar("group -mx-3 flex w-[calc(100%+24px)] min-w-0 items-center rounded-lg px-3 py-3.5 text-left transition-colors hover:bg-muted/60", foco)}
         {...resto}
       >
         <IconeDaLinha>{icone}</IconeDaLinha>
-        <span className={juntar(texto.corpo, "mr-3 min-w-0 truncate font-medium")}>{rotulo}</span>
-        <span className={juntar(texto.auxiliar, "mr-2 hidden min-w-0 flex-1 truncate text-right sm:block")}>{apoio}</span>
-        <span className="min-w-0 flex-1 sm:hidden" aria-hidden="true" />
-        <ChevronRight className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", aberta && "rotate-90")} aria-hidden="true" />
+        <span className="mr-3 flex min-w-0 flex-1 flex-col">
+          <span className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{rotulo}</span>
+          <span className={juntar(texto.auxiliar, "mt-0.5 min-w-0 truncate")}>{apoio}</span>
+        </span>
+        <span className={juntar("inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors", aberta ? "bg-foreground text-background" : "text-muted-foreground group-hover:bg-muted")} aria-hidden="true">
+          <ChevronRight className={juntar("h-4 w-4 transition-transform", aberta && "rotate-90")} />
+        </span>
       </button>
       {aberta && (
         <div id={corpo} className="min-w-0 pb-5 pt-1">
@@ -149,9 +155,9 @@ export default function SettingsPage() {
         ajuda="Tema e conta, a equipe, os modelos de IA, as chaves dos provedores com o custo do mês, o estado dos motores, o método dos agentes (superpoderes) e os dados da agência."
       />
 
-      <div className={juntar(espaco.colunas, "lg:grid-cols-2")}>
+      <div className="grid min-w-0 grid-cols-1 items-start gap-5 lg:grid-cols-2 lg:gap-6">
         <Grupo titulo="Conta" data-grupo-conta="">
-          <li className="flex min-w-0 items-center py-3">
+          <li className="flex min-w-0 items-center py-3.5">
             <IconeDaLinha>
               <Palette className="h-4 w-4" />
             </IconeDaLinha>

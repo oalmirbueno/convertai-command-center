@@ -557,7 +557,7 @@ export default function EditorialAccountSetup({
 
   return (
     <>
-      <div className={embutido ? "min-w-0" : "rounded-lg border border-dashed border-border bg-muted/20 p-4"} data-contas-embutidas={embutido ? "" : undefined}>
+      <div className={embutido ? "min-w-0" : "rounded-md border border-dashed border-border bg-muted/20 p-4"} data-contas-embutidas={embutido ? "" : undefined}>
         <div className={embutido ? "flex min-w-0 justify-end empty:hidden" : "flex flex-wrap items-start justify-between gap-3"}>
           {!embutido && (
           <div className="flex min-w-0 items-center">
@@ -601,7 +601,7 @@ export default function EditorialAccountSetup({
 
         {!canManage && (
           <div
-            className="mt-3 flex items-start first:mt-0 gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-3 text-[12px] leading-4 text-amber-700 dark:text-amber-300"
+            className="mt-3 flex items-start first:mt-0 gap-2 rounded-md bg-warning-soft p-3 text-[12px] leading-4 text-amber-700 dark:text-amber-300"
             role="alert"
           >
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -652,7 +652,7 @@ export default function EditorialAccountSetup({
         )}
 
         {canManage && (
-          <div className="mt-4 rounded-lg border border-primary/25 bg-primary/[0.04] p-4">
+          <div className="mt-4 rounded-md bg-accent-soft p-4">
             {/* Dentro do agendamento o espaço é estreito: sem min-w-0 no texto
                 e shrink-0 no botão, o botão era espremido e saía do lugar. */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -854,7 +854,7 @@ export default function EditorialAccountSetup({
               pertence ao cliente abaixo. Isso não ativa publicação automática.
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-3">
+          <div className="rounded-md bg-accent-soft p-3">
             <p className="text-[11px] font-semibold text-muted-foreground">
               Destino obrigatório do vínculo
             </p>

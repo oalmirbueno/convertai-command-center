@@ -71,13 +71,13 @@ export default function SeletorDeModelo({ clientId, valor, onEscolher, incluir =
         </label>
       )}
       {carregando ? (
-        <div className="grid grid-cols-3 gap-2" aria-busy="true">
+        <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3" aria-busy="true">
           {[0, 1, 2].map((i) => (
             <div key={i} className="aspect-[3/4] animate-pulse rounded-md bg-muted" />
           ))}
         </div>
       ) : (
-        <ul className="grid min-w-0 grid-cols-3 gap-2" aria-label="Modelos e clones">
+        <ul className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3" aria-label="Modelos e clones">
           {!semNenhum && (
             <li className="min-w-0">
               <button

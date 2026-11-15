@@ -43,7 +43,7 @@ export default function QuemEstaTrabalhando({ aberto, aoFechar, pessoas, aoConve
           {pessoas.length === 0 ? <p className="p-6 text-center text-[13px] text-muted-foreground">Nenhum agente com trabalho aberto agora.</p> : (
             <ul className="grid gap-3 sm:grid-cols-2">
               {pessoas.map((p) => (
-                <li key={p.operatorId} className={juntar(superficie.painel, "flex min-w-0 flex-col p-4")}>
+                <li key={p.operatorId} className={juntar(superficie.painel, "flex min-w-0 flex-col p-5")}>
                   <div className="flex items-center gap-3">
                     <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[15px] font-semibold text-primary" aria-hidden="true">
                       {p.agente.trim()[0]?.toUpperCase()}

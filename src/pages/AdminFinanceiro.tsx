@@ -17,16 +17,16 @@ import {
   Sparkles, ArrowLeftRight, Repeat, Receipt, Tag, Landmark, Wallet, Inbox, Brain,
 } from "lucide-react";
 import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from "@/lib/brandHelpers";
-import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
-  AjudaRecolhida, CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, GrupoDeCampos, Painel,
+  AjudaRecolhida, CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel,
   RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela, botao, campo, campoTexto, etiqueta, foco, juntar, superficie, texto,
   type OpcaoCompacta,
 } from "@/components/sistema";
-import { StatCard, StatGrid } from "@/components/ds";
+import { Avatar, ChartLegend, Donut, OverflowMenu, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
+import { IconeDaLinha, Numeros, grafico } from "@/components/finance/pecasDoFinanceiro";
 import CashFlow from "@/components/finance/CashFlow";
 import InvestorCapital from "@/components/finance/InvestorCapital";
 import FixedCosts from "@/components/finance/FixedCosts";
@@ -44,13 +44,16 @@ import FaturamentoDoProduto from "@/components/produto/casa/FaturamentoDoProduto
 import { DinheiroDoMesLido } from "@/components/comercial/DinheiroDoMes";
 import { Boxes } from "lucide-react";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 import { createBilling } from "@/lib/createBilling";
 import { saldoDaCobranca } from "@/lib/clientes/situacaoDaCobranca";
 import { fmtMoeda, moedaDe } from "@/lib/freela/freelaLib";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+
+/** Tons da rosca de proporção por marca (os mesmos do tema: marca, tinta/lima e violeta). */
+const TONS_DA_PROPORCAO = [1, 3, 2] as const;
 
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -88,14 +91,14 @@ const statusBadge = (status: string, dueDate?: string) => {
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const due = parseAppDate(dueDate);
   const isOverdue = due && due < todayStart && status === "pending";
-  if (status === "paid") return <span className={juntar(etiqueta, "bg-success-soft text-success")}>Pago</span>;
-  if (status === "partial") return <span className={juntar(etiqueta, "bg-info-soft text-info")}>Parcial</span>;
-  if (status === "completed") return <span className={juntar(etiqueta, "bg-success-soft text-success")}>Concluída</span>;
-  if (status === "approved") return <span className={juntar(etiqueta, "bg-info-soft text-info")}>Aprovada pelo cliente</span>;
-  if (isOverdue) return <span className={juntar(etiqueta, "bg-danger-soft text-destructive")}>Atrasado</span>;
-  if (status === "pending") return <span className={juntar(etiqueta, "bg-warning-soft text-warning")}>Pendente</span>;
-  if (status === "rejected") return <span className={juntar(etiqueta, "bg-danger-soft text-destructive")}>Recusada</span>;
-  return <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{status}</span>;
+  if (status === "paid") return <StatusPill tone="success">Pago</StatusPill>;
+  if (status === "partial") return <StatusPill tone="info">Parcial</StatusPill>;
+  if (status === "completed") return <StatusPill tone="success">Concluída</StatusPill>;
+  if (status === "approved") return <StatusPill tone="info">Aprovada pelo cliente</StatusPill>;
+  if (isOverdue) return <StatusPill tone="danger">Atrasado</StatusPill>;
+  if (status === "pending") return <StatusPill tone="warning">Pendente</StatusPill>;
+  if (status === "rejected") return <StatusPill tone="danger">Recusada</StatusPill>;
+  return <StatusPill>{status}</StatusPill>;
 };
 
 /* ------------------------------------------------------------------ */
@@ -134,20 +137,26 @@ const rascunhoDeCobrancaValido = (v: unknown) =>
   !!v && typeof v === "object" && ["client_id", "type", "amount", "due_date", "description"].every((k) => typeof (v as Record<string, unknown>)[k] === "string");
 
 /** Ação discreta de uma linha de lista (32 px). */
-const acaoDaLinha = `inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 ${foco}`;
+const acaoDaLinha = `inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-border bg-card px-4 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 ${foco}`;
+
+/** A ação que resolve a linha (Pagar, Marcar como pago): pílula de tinta. */
+const acaoPrincipalDaLinha = `inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-foreground px-4 text-[12px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:pointer-events-none disabled:opacity-50 ${foco}`;
+
+/** Linha das listas do Financeiro: mais ar, fundo suave ao passar o mouse. */
+const linhaDaLista = "flex min-w-0 items-center px-4 py-3.5 transition-colors hover:bg-muted/40 sm:px-6";
+/** Cabeçalho de grupo dentro de uma lista (plano, situação). */
+const grupoDaLista = "bg-muted/50 px-4 py-2.5 sm:px-6";
 
 /** Rodapé de diálogo: ações à direita, o primário por último. */
 const rodapeDoDialogo = "flex min-w-0 flex-wrap items-center justify-end border-t border-border pt-4 [&>*+*]:ml-2";
 
-/** Número do cartão de indicador: seis cartões na fileira, então 24 px (20 no celular) para o valor caber inteiro. */
 /** No celular o cartão tem meia tela: o ícone sai para o rótulo caber inteiro. */
 const semIconeNoCelular = "max-sm:[&>span:first-child>span[aria-hidden]]:hidden";
-const numeroDoCartao = "block truncate text-[20px] leading-7 sm:text-[24px] sm:leading-8";
 
 /** Resumo de uma seção: os números numa faixa só (mesmo cartão das outras áreas do Financeiro). */
 function Resumo({ itens }: { itens: { rotulo: string; valor: string; cor?: string }[] }) {
   return (
-    <FaixaDeNumeros
+    <Numeros
       rotulo="Resumo"
       colunas={Math.min(4, Math.max(2, itens.length)) as 2 | 3 | 4}
       itens={itens.map((s) => ({ rotulo: s.rotulo, valor: s.valor, corDoValor: s.cor }))}
@@ -160,7 +169,7 @@ function ListaDoFinanceiro({ memoria, rotulo, alta = false, children }: { memori
   return (
     <div className={juntar(superficie.painel, "overflow-hidden")}>
       <RegiaoRolavel memoria={memoria} rotulo={rotulo} sobre="cartao" className={alta ? "lg:max-h-[70vh]" : "lg:max-h-[56vh]"}>
-        <ul className="divide-y divide-border">{children}</ul>
+        <ul className="divide-y divide-border/60">{children}</ul>
       </RegiaoRolavel>
     </div>
   );
@@ -173,7 +182,7 @@ function SeletorDeMes({ mes, ano, noMesAtual, onMudar, onHoje }: { mes: number; 
       <button type="button" onClick={() => onMudar(-1)} className={botao.icone} aria-label="Mês anterior">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       </button>
-      <span className="mx-0.5 min-w-[72px] text-center text-[13px] font-medium tabular-nums text-foreground sm:min-w-[118px]" aria-live="polite">
+      <span className="mx-0.5 min-w-[72px] text-center text-[13px] font-semibold tabular-nums text-foreground sm:min-w-[118px]" aria-live="polite">
         <span className="sm:hidden">{MONTHS_SHORT[mes]} {ano}</span>
         <span className="hidden sm:inline">{MONTHS_FULL[mes]} {ano}</span>
       </span>
@@ -1062,8 +1071,8 @@ function LegacyFinanceiro() {
   const allPending: any[] = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
     .sort((a, b) => (parseAppDate(a.due)?.getTime() || 0) - (parseAppDate(b.due)?.getTime() || 0));
   const linhaAReceber = (item: any) => (
-                        <li key={item.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
-                          <span className={juntar("mr-3 h-2 w-2 shrink-0 rounded-full", item.isOverdue ? "bg-destructive" : "bg-warning")} aria-hidden="true" />
+                        <li key={item.id} className={linhaDaLista}>
+                          <Avatar name={item.client} className="mr-3 hidden sm:inline-flex" />
                           <div className="mr-3 min-w-0 flex-1">
                             <p className={juntar(texto.corpo, "truncate")}>{item.label}</p>
                             <p className={juntar(texto.auxiliar, "truncate")}>
@@ -1073,17 +1082,19 @@ function LegacyFinanceiro() {
                             </p>
                           </div>
                           <div className="mr-3 flex shrink-0 flex-col items-end">
-                            <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(item.amount)}</span>
-                            <span className={juntar("text-[11px] tabular-nums", item.isOverdue ? "text-destructive" : "text-muted-foreground")}>
-                              {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
-                            </span>
+                            <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(item.amount)}</span>
+                            {item.isOverdue ? (
+                              <StatusPill tone="danger" className="mt-1">Atrasado</StatusPill>
+                            ) : (
+                              <span className="mt-0.5 text-[12px] tabular-nums text-muted-foreground">{formatAppDate(item.due)}</span>
+                            )}
                            </div>
                           {item.freela ? (
                             <Link to="/freela/caixa" className={juntar(acaoDaLinha, "text-primary")}>
                               Ver no Freela
                             </Link>
                           ) : (
-                            <button type="button" onClick={() => void abrirPagamento(item)} className={juntar(acaoDaLinha, "text-success")}>
+                            <button type="button" onClick={() => void abrirPagamento(item)} className={acaoPrincipalDaLinha}>
                               Pagar
                             </button>
                           )}
@@ -1254,7 +1265,7 @@ function LegacyFinanceiro() {
   const abrirNovaCobranca = () => setNewBillingOpen(true);
 
   return (
-    <div className="min-w-0 space-y-5 pb-4">
+    <div className="min-w-0 space-y-6 pb-4 sm:space-y-8">
       <CabecalhoDePagina
         titulo="Financeiro"
         ajuda="Cobranças, recebimentos, mensalidades, wallets de anúncios e histórico de pagamentos. A visão geral segue o mês e a marca escolhidos."
@@ -1342,7 +1353,7 @@ function LegacyFinanceiro() {
 
       <Tabs value={aba} onValueChange={setAba} className="min-w-0">
         {(isAdmin || isManager) && (
-          <TabsContent value="cashflow" className="mt-0 space-y-6">
+          <TabsContent value="cashflow" className="mt-0 space-y-6 sm:space-y-8">
             <CashFlow
               billing={billingBRL}
               projectPayments={projectPayments || []}
@@ -1352,13 +1363,13 @@ function LegacyFinanceiro() {
         )}
 
         {(isAdmin || isManager) && (
-          <TabsContent value="capital" className="mt-0 space-y-6">
+          <TabsContent value="capital" className="mt-0 space-y-6 sm:space-y-8">
             <InvestorCapital billing={billingBRL} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
         {isAdmin && aba === "cfo" && (
-          <TabsContent value="cfo" className="mt-0 space-y-6">
+          <TabsContent value="cfo" className="mt-0 space-y-6 sm:space-y-8">
             <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo o CFO" />}>
               <AreaDoCFO />
             </Suspense>
@@ -1366,32 +1377,32 @@ function LegacyFinanceiro() {
         )}
 
         {isAdmin && (
-          <TabsContent value="assistant" className="mt-0 space-y-6">
+          <TabsContent value="assistant" className="mt-0 space-y-6 sm:space-y-8">
             <CFOAssistant billing={billingBRL} projectPayments={projectPayments || []} clients={clients || []} />
           </TabsContent>
         )}
 
         {isAdmin && (
-          <TabsContent value="fixedcosts" className="mt-0 space-y-6">
+          <TabsContent value="fixedcosts" className="mt-0 space-y-6 sm:space-y-8">
             <FixedCosts monthlyOperationalRevenue={ladderRevenue} grossReceivedThisMonth={monthGrossReceived} aba={abaDosCustos} onAba={setAbaDosCustos} />
           </TabsContent>
         )}
 
         {isAdmin && (
-          <TabsContent value="plans" className="mt-0 space-y-6">
+          <TabsContent value="plans" className="mt-0 space-y-6 sm:space-y-8">
             <PlansPricing billing={billingBRL} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
         {isAdmin && aba === "produto" && (
-          <TabsContent value="produto" className="mt-0 space-y-6">
+          <TabsContent value="produto" className="mt-0 space-y-6 sm:space-y-8">
             <FaturamentoDoProduto />
           </TabsContent>
         )}
 
         {/* Visão geral (só admin, como antes) */}
         {isAdmin && (
-          <TabsContent value="overview" className="mt-0 space-y-6">
+          <TabsContent value="overview" className="mt-0 space-y-6 sm:space-y-8">
             {erroAoLer && (
               <EstadoDeErro
                 titulo="Não foi possível carregar o financeiro."
@@ -1400,25 +1411,42 @@ function LegacyFinanceiro() {
               />
             )}
 
-            {/* Os números numa faixa só (antes, um cartão por número); o último leva à projeção. */}
-            <StatGrid cols={totalDeNumeros >= 6 ? 6 : totalDeNumeros === 5 ? 5 : 4} label="Números do financeiro">
-              {numeros.map((n) => (
-                <StatCard
-                  key={n.rotulo}
-                  label={n.rotulo}
-                  value={billingLoading ? <span className="block h-6 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${n.rotulo}`} /> : <span className={numeroDoCartao}>{n.valor}</span>}
-                  hint={billingLoading ? undefined : n.sub}
-                  icon={<span className={n.cor}>{n.icone}</span>}
-                  help={n.ajuda}
-                  className={semIconeNoCelular}
-                />
-              ))}
+            {/* Rodada ousada (15/11/2026): três por fileira, número grande; o saldo é o cartão de tinta e o recebido o sólido da marca. */}
+            <StatGrid cols={3} label="Números do financeiro">
+              {numeros.map((n, i) => {
+                const previsto = receivedVal + pendingVal;
+                return (
+                  <StatCard
+                    key={n.rotulo}
+                    label={n.rotulo}
+                    value={billingLoading ? <span className="block h-9 w-32 animate-pulse rounded-full bg-muted" aria-label={`Carregando ${n.rotulo}`} /> : n.valor}
+                    hint={billingLoading ? undefined : n.sub}
+                    icon={n.icone}
+                    help={n.ajuda}
+                    size={i === 0 ? "xl" : "lg"}
+                    variant={i === 0 ? "ink" : i === 1 ? "accent" : "default"}
+                    className={juntar(semIconeNoCelular, i === 0 && "max-sm:col-span-2", i === 3 && overdueVal > 0 && "[&_.ds-stat-valor]:text-destructive")}
+                    chart={
+                      billingLoading ? undefined : i === 0 && reservedInBoxes > 0 && cashBalance > 0 ? (
+                        <ProgressBar value={cashBalance - reservedInBoxes} max={cashBalance} striped label={`Livre ${fmt(cashBalance - reservedInBoxes)} de ${fmt(cashBalance)} em caixa`} />
+                      ) : i === 1 && previsto > 0 ? (
+                        <ProgressBar value={receivedVal} max={previsto} striped label={`Recebido ${fmt(receivedVal)} de ${fmt(previsto)} (recebido mais a receber)`} />
+                      ) : i === 2 && previsto > 0 ? (
+                        <ProgressBar value={pendingVal} max={previsto} tone={4} label={`A receber ${fmt(pendingVal)} de ${fmt(previsto)} (recebido mais a receber)`} />
+                      ) : i === 3 && pendingVal > 0 ? (
+                        <ProgressBar value={overdueVal} max={pendingVal} tone={4} label={`Atrasado ${fmt(overdueVal)} de ${fmt(pendingVal)} a receber`} />
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
               {mostraProjecao && (
                 <StatCard
                   label="Próximo mês"
-                  value={<span className={numeroDoCartao}>{fmt(nextMonthTotal)}</span>}
+                  value={fmt(nextMonthTotal)}
                   hint={`${nextMonthFull} ${nextYear}: ${nextMonthSub}`}
-                  icon={<ChevronRight className="h-3.5 w-3.5" />}
+                  icon={<ChevronRight className="h-4 w-4" />}
+                  corner={<span aria-hidden="true" className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground"><ChevronRight className="h-4 w-4" /></span>}
                   to="/financeiro/projecao"
                   className={semIconeNoCelular}
                 />
@@ -1431,8 +1459,10 @@ function LegacyFinanceiro() {
             {/* 09/11/2026 (dono: "mais clean"): quatro zeros do Freela eram só ruído. Aparece o que tem valor; sem
                 movimento, uma linha leva ao caixa do Freela. */}
             {billingLoading || cardsDoFreela.length > 0 ? (
-              <FaixaDeNumeros
+              <Numeros
                 rotulo="Freela"
+                destaques={false}
+                tamanho="md"
                 colunas={billingLoading ? 4 : (Math.max(2, cardsDoFreela.length) as 2 | 3 | 4)}
                 itens={billingLoading ? todosOsCardsDoFreela : cardsDoFreela}
               />
@@ -1501,15 +1531,15 @@ function LegacyFinanceiro() {
                         const due = parseAppDate(b.due_date);
                         const isOverdue = due ? due < todayStart : false;
                         return (
-                          <li key={b.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
-                            <span className={juntar(etiqueta, "mr-3 hidden bg-muted text-muted-foreground sm:inline-flex")}>{typeIcon(b.type)}</span>
+                          <li key={b.id} className={linhaDaLista}>
+                            <IconeDaLinha className="hidden sm:inline-flex">{typeIcon(b.type)}</IconeDaLinha>
                             <div className="mr-3 min-w-0 flex-1">
                               <p className={juntar(texto.corpo, "truncate font-medium")}>{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : b.type === "freela" ? "Parcela freela" : "Serviço Extra")}</p>
                               <p className={juntar(texto.auxiliar, "truncate", isOverdue && "text-destructive")}>{b.client?.company_name || b.client?.full_name || (ehCobrancaFreela(b) ? "Freela" : "Sem cliente")} · vence {formatAppDate(b.due_date)}</p>
                             </div>
                             <div className="mr-2 flex shrink-0 flex-col items-end">
-                              <span className="text-[13px] font-medium tabular-nums text-foreground">{fmtMoeda(Number(b.amount), moedaDe(b))}</span>
-                              <span className="mt-0.5">{statusBadge(b.status, b.due_date)}</span>
+                              <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmtMoeda(Number(b.amount), moedaDe(b))}</span>
+                              <span className="mt-1">{statusBadge(b.status, b.due_date)}</span>
                             </div>
                             {/* Freela: a baixa é na mesa /freela (o front nunca escreve no billing do freela). */}
                             {ehCobrancaFreela(b) ? (
@@ -1519,7 +1549,7 @@ function LegacyFinanceiro() {
                               </Link>
                             ) : (
                               <>
-                                <button type="button" onClick={() => handleMarkPaid(b.id)} className={juntar(acaoDaLinha, "text-success")} aria-label="Marcar como pago">
+                                <button type="button" onClick={() => handleMarkPaid(b.id)} className={acaoPrincipalDaLinha} aria-label="Marcar como pago">
                                   <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
                                   <span className="hidden sm:inline">Marcar como pago</span>
                                 </button>
@@ -1565,8 +1595,8 @@ function LegacyFinanceiro() {
                       ) : (
                         <ListaDoFinanceiro memoria="financeiro:recebidos" rotulo="Já recebido">
                           {receivedFiltered.map((it) => (
-                            <li key={it.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
-                              <span className={juntar(etiqueta, "mr-3 hidden bg-muted text-muted-foreground sm:inline-flex")}>{it.icon}</span>
+                            <li key={it.id} className={linhaDaLista}>
+                              <IconeDaLinha tom="sucesso" className="hidden sm:inline-flex">{it.icon}</IconeDaLinha>
                               <div className="mr-3 min-w-0 flex-1">
                                 <p className={juntar(texto.corpo, "truncate font-medium")}>{it.label}</p>
                                 <p className={juntar(texto.auxiliar, "truncate")}>
@@ -1574,7 +1604,7 @@ function LegacyFinanceiro() {
                                   {it.isPartial && <> · recebido {fmt(it.amount)} de {fmt(it.totalAmount)}</>}
                                 </p>
                               </div>
-                              <span className="shrink-0 text-[13px] font-medium tabular-nums text-success">{fmt(it.amount)}</span>
+                              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">+ {fmt(it.amount)}</span>
                             </li>
                           ))}
                         </ListaDoFinanceiro>
@@ -1610,20 +1640,21 @@ function LegacyFinanceiro() {
                             { chave: "quitado", rotulo: "Quitados", cor: "text-success", itens: quitados },
                           ] as const).filter((g) => g.itens.length > 0).map((g) => (
                             <li key={g.chave} className="min-w-0">
-                              <p className={juntar("bg-muted/40 px-3 py-1.5 text-[12px] font-medium sm:px-4", g.cor)}>{g.rotulo} ({g.itens.length})</p>
-                              <ul className="divide-y divide-border border-t border-border">
+                              <p className={juntar(grupoDaLista, "text-[12px] font-medium", g.cor)}>{g.rotulo} ({g.itens.length})</p>
+                              <ul className="divide-y divide-border/60">
                                 {g.itens.map((pp: any) => (
-                                  <li key={pp.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                                  <li key={pp.id} className={linhaDaLista}>
+                                    <Avatar name={pp.client?.company_name || pp.client?.full_name || pp.project?.name} className="mr-3 hidden sm:inline-flex" />
                                     <div className="mr-3 min-w-0 flex-1">
                                       <p className={juntar(texto.corpo, "truncate font-medium")}>{pp.project?.name || "Projeto"}</p>
                                       <p className={juntar(texto.auxiliar, "truncate")}>{pp.client?.company_name || pp.client?.full_name} · {getProjectBrand(pp.project?.project_type)}</p>
                                     </div>
-                                    <div className="mr-3 hidden w-20 shrink-0 sm:block">
-                                      <Progress value={pp._pct} className="h-1.5" />
-                                      <p className="mt-0.5 text-right text-[11px] tabular-nums text-muted-foreground">{pp._pct}%</p>
+                                    <div className="mr-4 hidden w-28 shrink-0 sm:block">
+                                      <p className="mb-1 text-right text-[11px] font-medium tabular-nums text-muted-foreground">{pp._pct}%</p>
+                                      <ProgressBar value={pp._pct} max={100} height={6} tone={pp._hasOverdue ? 4 : 1} label={`${pp._pct}% recebido`} />
                                     </div>
                                     <div className="flex shrink-0 flex-col items-end">
-                                      <span className="text-[13px] tabular-nums text-success">{fmt(pp._paid)}</span>
+                                      <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(pp._paid)}</span>
                                       <span className="text-[11px] tabular-nums text-muted-foreground">de {fmt(Number(pp.total_value))}</span>
                                     </div>
                                     {pp._remaining > 0.01 && (
@@ -1648,55 +1679,41 @@ function LegacyFinanceiro() {
             {/* Receita: mês a mês e proporção por marca */}
             {(chartData.length > 0 || pieTotal > 0) && (
               <Secao titulo="Receita" descricao={`${currentYear}${brandFilter !== "all" ? ` · ${brandFilter === "aceleriq" ? "AcelerIQ" : "SiteBolt"}` : ""}`} divisoria>
-                <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
                   {chartData.length > 0 && (
-                    <Painel titulo="Mês a mês" descricao="Recebido e pendente">
-                      <div className="h-[220px] min-w-0">
+                    <Painel titulo="Mês a mês" descricao="Recebido e pendente" className={pieTotal > 0 ? "lg:col-span-2" : "lg:col-span-3"}>
+                      <ChartLegend
+                        className="mb-3 flex divide-y-0 [&>li]:mr-5 [&>li]:py-0"
+                        items={[{ label: "Recebido", tone: 1 }, { label: "Pendente", tone: 3 }]}
+                      />
+                      <div className="h-[260px] min-w-0">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={chartData} barGap={2}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1000).toFixed(v >= 1000 ? 1 : 0)}${v >= 1000 ? 'k' : ''}`} />
+                          <BarChart data={chartData} barGap={4} barCategoryGap="28%">
+                            <CartesianGrid {...grafico.grade} />
+                            <XAxis dataKey="name" {...grafico.eixo} />
+                            <YAxis {...grafico.eixo} width={48} tickFormatter={(v) => `R$${(v / 1000).toFixed(v >= 1000 ? 1 : 0)}${v >= 1000 ? 'k' : ''}`} />
                             <Tooltip
-                              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                              {...grafico.dica}
                               formatter={(value: number, name: string) => [fmt(value), name === "recebido" ? "Recebido" : "Pendente"]}
                             />
-                            <Legend formatter={(value) => value === "recebido" ? "Recebido" : "Pendente"} wrapperStyle={{ fontSize: 11 }} />
-                            <Bar dataKey="recebido" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                            <Bar dataKey="pendente" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                            <Bar dataKey="recebido" fill={grafico.cor(1)} radius={grafico.raio} maxBarSize={22} isAnimationActive={false} />
+                            <Bar dataKey="pendente" fill={grafico.cor(3)} radius={grafico.raio} maxBarSize={22} isAnimationActive={false} />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
                     </Painel>
                   )}
                   {pieTotal > 0 && (
-                    <Painel titulo="Proporção por marca" descricao={`Tudo que já entrou · ${fmt(pieTotal)}`}>
-                      <div className="flex min-w-0 flex-col items-center sm:flex-row">
-                        <div className="h-[180px] w-[180px] shrink-0">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={78} paddingAngle={3} dataKey="value" strokeWidth={0} isAnimationActive={false}>
-                                {pieData.map((entry, index) => (
-                                  <Cell key={index} fill={entry.color} />
-                                ))}
-                              </Pie>
-                              <Tooltip
-                                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
-                                formatter={(value: number) => [fmt(value), ""]}
-                              />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </div>
-                        <ul className="mt-3 w-full min-w-0 flex-1 divide-y divide-border sm:ml-5 sm:mt-0">
-                          {pieData.map((d) => (
-                            <li key={d.name} className="flex min-w-0 items-center py-2">
-                              <span className="mr-2.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: d.color }} aria-hidden="true" />
-                              <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{d.name}</span>
-                              <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">{Math.round((d.value / pieTotal) * 100)}%</span>
-                              <span className="ml-3 shrink-0 text-[13px] tabular-nums text-foreground">{fmt(d.value)}</span>
-                            </li>
-                          ))}
-                        </ul>
+                    <Painel titulo="Proporção por marca" descricao="Tudo que já entrou" className={chartData.length > 0 ? "" : "lg:col-span-3"}>
+                      <div className="flex min-w-0 flex-col items-center">
+                        <Donut size={176} thickness={20} segments={pieData.map((d, i) => ({ value: d.value, label: d.name, tone: TONS_DA_PROPORCAO[i % TONS_DA_PROPORCAO.length] }))}>
+                          <span className="text-[11px] leading-4 text-muted-foreground">Total</span>
+                          <span className="max-w-full truncate text-[15px] font-semibold leading-5 tabular-nums">{fmt(pieTotal)}</span>
+                        </Donut>
+                        <ChartLegend
+                          className="mt-4 w-full"
+                          items={pieData.map((d, i) => ({ label: `${d.name} · ${Math.round((d.value / pieTotal) * 100)}%`, value: fmt(d.value), tone: TONS_DA_PROPORCAO[i % TONS_DA_PROPORCAO.length] }))}
+                        />
                       </div>
                     </Painel>
                   )}
@@ -1707,13 +1724,13 @@ function LegacyFinanceiro() {
         )}
 
         {/* Ads Wallet: investimento da Aceleriq, wallets dos clientes e recargas */}
-        <TabsContent value="ads" className="mt-0 space-y-6">
+        <TabsContent value="ads" className="mt-0 space-y-6 sm:space-y-8">
           {!isAdmin && (
-            <FaixaDeNumeros
+            <Numeros
               rotulo="Investimento em anúncios"
               colunas={1}
-              className="max-w-xs"
-              itens={[{ rotulo: "Investimento Ads total", valor: fmt(totalAds), ponto: "info" }]}
+              className="max-w-sm"
+              itens={[{ rotulo: "Investimento Ads total", valor: fmt(totalAds), variante: "accent", icone: <Wallet className="h-4 w-4" /> }]}
             />
           )}
 
@@ -1761,15 +1778,18 @@ function LegacyFinanceiro() {
                       clientWallets[0]?.last_recharge_date ? `Última recarga ${new Date(clientWallets[0].last_recharge_date).toLocaleDateString("pt-BR")}` : "",
                     ].filter(Boolean).join(" · ");
                     return (
-                      <li key={clientId} className="min-w-0 px-3 py-3 sm:px-4">
+                      <li key={clientId} className="min-w-0 px-4 py-4 sm:px-6">
                         <div className="flex min-w-0 items-center">
-                          <p className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{clientWallets[0]?.client?.company_name || clientWallets[0]?.client?.full_name}</p>
-                          <span className="ml-3 shrink-0 text-[13px] font-medium tabular-nums text-info">{fmt(clientTotal)}</span>
+                          <Avatar name={clientWallets[0]?.client?.company_name || clientWallets[0]?.client?.full_name} className="mr-3" />
+                          <div className="min-w-0 flex-1">
+                            <p className={juntar(texto.corpo, "truncate font-medium")}>{clientWallets[0]?.client?.company_name || clientWallets[0]?.client?.full_name}</p>
+                            {detalhes && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{detalhes}</p>}
+                          </div>
+                          <span className="ml-3 shrink-0 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(clientTotal)}</span>
                         </div>
-                        {detalhes && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{detalhes}</p>}
-                        <ul className={juntar(superficie.poco, "mt-2 divide-y divide-border/60")}>
+                        <ul className={juntar(superficie.poco, "mt-3 divide-y divide-border/60")}>
                           {clientWallets.map((w: any) => (
-                            <li key={w.id} className="flex min-w-0 items-center px-2.5 py-1.5">
+                            <li key={w.id} className="flex min-w-0 items-center px-4 py-2.5">
                               <span className={juntar(texto.auxiliar, "w-24 shrink-0 truncate capitalize")}>{w.platform} Ads</span>
                               <span className={juntar("min-w-0 flex-1 truncate text-[13px] font-medium tabular-nums", Number(w.balance) < 100 ? "text-warning" : "text-foreground")}>{fmt(Number(w.balance))}</span>
                               <button type="button" onClick={() => setRechargeModal({ clientId, platform: w.platform })} className={juntar(acaoDaLinha, "ml-2 text-info")} aria-label={`Solicitar recarga ${w.platform}`}>
@@ -1791,17 +1811,17 @@ function LegacyFinanceiro() {
             <Secao titulo="Solicitações de recarga" descricao={`${(recharges || []).length} ${(recharges || []).length === 1 ? "solicitação" : "solicitações"}`} divisoria>
               <ListaDoFinanceiro memoria="financeiro:recargas" rotulo="Solicitações de recarga">
                 {(recharges || []).map((r: any) => (
-                  <li key={r.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
-                    <Zap className="mr-3 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                  <li key={r.id} className={linhaDaLista}>
+                    <IconeDaLinha tom="aviso"><Zap className="h-4 w-4" /></IconeDaLinha>
                     <div className="mr-3 min-w-0 flex-1">
-                      <p className={juntar(texto.corpo, "truncate")}><span className="tabular-nums">{fmt(Number(r.amount))}</span> · {r.platform}</p>
+                      <p className={juntar(texto.corpo, "truncate font-medium")}><span className="tabular-nums">{fmt(Number(r.amount))}</span> · {r.platform}</p>
                       <p className={juntar(texto.auxiliar, "truncate")}>
                         {r.reason ? `${r.reason} · ` : ""}por {r.requester?.full_name} · {new Date(r.created_at).toLocaleDateString("pt-BR")}
                       </p>
                     </div>
                     <span className="mr-2 shrink-0">{statusBadge(r.status)}</span>
                     {r.status === "approved" && (
-                      <button type="button" onClick={() => handleCompleteRecharge(r)} className={juntar(acaoDaLinha, "text-success")} aria-label="Concluir recarga">
+                      <button type="button" onClick={() => handleCompleteRecharge(r)} className={acaoPrincipalDaLinha} aria-label="Concluir recarga">
                         <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
                         <span className="hidden sm:inline">Concluir recarga</span>
                       </button>
@@ -1815,7 +1835,7 @@ function LegacyFinanceiro() {
 
         {/* Mensalidades: mensalistas e avulsos (só admin, como antes) */}
         {isAdmin && (
-          <TabsContent value="renewals" className="mt-0 space-y-6">
+          <TabsContent value="renewals" className="mt-0 space-y-6 sm:space-y-8">
 
             {renewalsView === "mensalistas" && (() => {
               const mensalistas = (clients || []).filter((c: any) => c.plan_value && Number(c.plan_value) > 0 && !isInternalClient(c));
@@ -1861,13 +1881,13 @@ function LegacyFinanceiro() {
                       const planMRR = planClients.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0);
                       return (
                         <li key={planName} className="min-w-0">
-                          <div className="flex min-w-0 items-center bg-muted/40 px-3 py-1.5 sm:px-4">
-                            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-primary">
+                          <div className={juntar(grupoDaLista, "flex min-w-0 items-center")}>
+                            <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground">
                               {planName} <span className="font-normal text-muted-foreground">({planClients.length} {planClients.length === 1 ? "cliente" : "clientes"})</span>
                             </span>
-                            <span className="ml-3 shrink-0 text-[12px] tabular-nums text-success">{fmt(planMRR)}/mês</span>
+                            <span className="ml-3 shrink-0 text-[12px] font-semibold tabular-nums text-foreground">{fmt(planMRR)}/mês</span>
                           </div>
-                          <ul className="divide-y divide-border border-t border-border">
+                          <ul className="divide-y divide-border/60">
                             {planClients.map((c: any) => {
                               const renewalDate = parseAppDate(c.plan_renewal_date);
                               const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - todayStart.getTime()) / 86400000) : null;
@@ -1876,14 +1896,15 @@ function LegacyFinanceiro() {
                               const reminderCount = clientBilling?.reminder_count || 0;
                               const nome = c.company_name || c.full_name;
                               return (
-                                <li key={c.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                                <li key={c.id} className={linhaDaLista}>
+                                  <Avatar name={nome} className="mr-3 hidden sm:inline-flex" />
                                   <div className="mr-3 min-w-0 flex-1">
                                     <div className="flex min-w-0 items-center">
                                       <p className={juntar(texto.corpo, "mr-2 min-w-0 truncate font-medium")}>{nome}</p>
-                                      {planStatus === "active" && <span className={juntar(etiqueta, "bg-success-soft text-success")}>Ativo</span>}
-                                      {planStatus === "soon" && <span className={juntar(etiqueta, "bg-warning-soft text-warning")}>Renova em breve</span>}
-                                      {planStatus === "overdue" && <span className={juntar(etiqueta, "bg-danger-soft text-destructive")}>Pendente</span>}
-                                      {planStatus === "unknown" && <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Sem data</span>}
+                                      {planStatus === "active" && <StatusPill tone="success">Ativo</StatusPill>}
+                                      {planStatus === "soon" && <StatusPill tone="warning">Renova em breve</StatusPill>}
+                                      {planStatus === "overdue" && <StatusPill tone="danger">Pendente</StatusPill>}
+                                      {planStatus === "unknown" && <StatusPill>Sem data</StatusPill>}
                                     </div>
                                     <p className={juntar(texto.auxiliar, "truncate")}>
                                       <span className="tabular-nums">{fmt(Number(c.plan_value))}</span>/mês
@@ -1891,24 +1912,22 @@ function LegacyFinanceiro() {
                                     </p>
                                   </div>
                                   <div className="flex shrink-0 items-center [&>*+*]:ml-1">
-                                    <button type="button" onClick={() => handleSendReminder(c, "notification")} className={botao.barra} aria-label={reminderCount > 0 ? `Lembrete para ${nome} (${reminderCount}x)` : `Notificar ${nome}`}>
-                                      <Bell className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                                      <span className="hidden sm:inline">{reminderCount > 0 ? `Lembrete (${reminderCount}x)` : "Notificar"}</span>
-                                      {reminderCount > 0 && <span className="ml-0.5 text-[11px] tabular-nums sm:hidden">{reminderCount}</span>}
-                                    </button>
-                                    <button type="button" onClick={() => handleSendReminder(c, "whatsapp")} className={botao.barra} aria-label={`WhatsApp para ${nome}`}>
-                                      <MessageCircle className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                                      <span className="hidden sm:inline">WhatsApp</span>
-                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => { setEditPlanModal(c); setPlanForm({ amount: clientBilling ? String(clientBilling.amount) : String(c.plan_value || ""), renewal_date: c.plan_renewal_date || "", description: clientBilling?.description || c.plan_name || "" }); }}
-                                      className={botao.barra}
+                                      className={juntar(acaoDaLinha, "max-sm:w-9 max-sm:px-0")}
                                       aria-label={`Editar plano de ${nome}`}
                                     >
-                                      <Edit3 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                                      <Edit3 className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
                                       <span className="hidden sm:inline">Editar plano</span>
                                     </button>
+                                    <OverflowMenu
+                                      label={`Mais ações de ${nome}`}
+                                      items={[
+                                        { label: reminderCount > 0 ? `Lembrete (${reminderCount}x)` : "Notificar", icon: <Bell className="h-3.5 w-3.5" />, onSelect: () => handleSendReminder(c, "notification") },
+                                        { label: "WhatsApp", icon: <MessageCircle className="h-3.5 w-3.5" />, onSelect: () => handleSendReminder(c, "whatsapp") },
+                                      ]}
+                                    />
                                   </div>
                                 </li>
                               );
@@ -2000,19 +2019,23 @@ function LegacyFinanceiro() {
                       const aberto = Math.max(totalFaturado - totalPago, 0);
                       const lineCount = clientProjects.length + clientBills.length;
                       return (
-                        <li key={c.id} className="min-w-0 px-3 py-3 sm:px-4">
+                        <li key={c.id} className="min-w-0 px-4 py-4 sm:px-6">
                           <div className="flex min-w-0 items-center">
-                            <p className={juntar(texto.corpo, "mr-2 min-w-0 flex-1 truncate font-medium")}>{c.company_name || c.full_name}</p>
-                            <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
+                            <Avatar name={c.company_name || c.full_name} className="mr-3" />
+                            <div className="mr-2 min-w-0 flex-1">
+                              <p className={juntar(texto.corpo, "truncate font-medium")}>{c.company_name || c.full_name}</p>
+                              <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+                                Faturado <span className="tabular-nums text-foreground">{fmt(totalFaturado)}</span>
+                                {" · "}Pago <span className="tabular-nums text-success">{fmt(totalPago)}</span>
+                                {aberto > 0.01 && <>{" · "}Aberto <span className="tabular-nums text-warning">{fmt(aberto)}</span></>}
+                              </p>
+                            </div>
+                            <StatusPill className="max-sm:hidden">
                               {lineCount} {lineCount === 1 ? "lançamento" : "lançamentos"}
-                            </span>
+                            </StatusPill>
                           </div>
-                          <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
-                            Faturado <span className="tabular-nums text-foreground">{fmt(totalFaturado)}</span>
-                            {" · "}Pago <span className="tabular-nums text-success">{fmt(totalPago)}</span>
-                            {aberto > 0.01 && <>{" · "}Aberto <span className="tabular-nums text-warning">{fmt(aberto)}</span></>}
-                          </p>
-                          <ul className={juntar(superficie.poco, "mt-2 divide-y divide-border/60")}>
+                          {totalFaturado > 0 && <ProgressBar className="mt-3" value={totalPago} max={totalFaturado} height={6} label={`Pago ${fmt(totalPago)} de ${fmt(totalFaturado)}`} />}
+                          <ul className={juntar(superficie.poco, "mt-3 divide-y divide-border/60")}>
                             {clientProjects.map((pp: any) => {
                               const paid = sumInstallmentsPaid([pp]);
                               const total = Number(pp.total_value) || 0;
@@ -2021,7 +2044,7 @@ function LegacyFinanceiro() {
                               const isFull = paid >= total && total > 0;
                               const cor = isFull ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground";
                               return (
-                                <li key={pp.id} className="flex min-w-0 items-center px-2.5 py-1.5 text-[12px] text-muted-foreground">
+                                <li key={pp.id} className="flex min-w-0 items-center px-4 py-2.5 text-[12px] text-muted-foreground">
                                   <span className="min-w-0 flex-1 truncate">{pp.project?.name || "Projeto"}</span>
                                   <span className={juntar("ml-3 shrink-0 text-[11px] tabular-nums", cor)}>{pct}%</span>
                                   <span className="ml-3 shrink-0 tabular-nums">
@@ -2039,7 +2062,7 @@ function LegacyFinanceiro() {
                               const isPaid = b.status === "paid" && paid >= total;
                               const cor = isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground";
                               return (
-                                <li key={b.id} className="flex min-w-0 items-center px-2.5 py-1.5 text-[12px] text-muted-foreground">
+                                <li key={b.id} className="flex min-w-0 items-center px-4 py-2.5 text-[12px] text-muted-foreground">
                                   <span className="min-w-0 flex-1 truncate">{b.description || "Cobrança avulsa"}</span>
                                   <span className={juntar("ml-3 shrink-0 text-[11px] tabular-nums", cor)}>{pct}%</span>
                                   <span className="ml-3 shrink-0 tabular-nums">
@@ -2062,7 +2085,7 @@ function LegacyFinanceiro() {
 
         {/* Histórico de alterações de pagamento */}
         {isAdmin && (
-          <TabsContent value="audit" className="mt-0 space-y-6">
+          <TabsContent value="audit" className="mt-0 space-y-6 sm:space-y-8">
             <Secao titulo="Histórico de alterações" descricao="Últimos 50 registros">
               {auditQuery.isError && !auditLogs ? (
                 <EstadoDeErro
@@ -2077,10 +2100,10 @@ function LegacyFinanceiro() {
                 <ListaDoFinanceiro memoria="financeiro:historico" rotulo="Histórico de alterações" alta>
                   {(auditLogs || []).map((log: any) => {
                     const actionLabels: Record<string, { label: string; color: string }> = {
-                      paid_full: { label: "Pago total", color: "text-success bg-success/10" },
-                      paid_partial: { label: "Pago parcial", color: "text-warning bg-warning/10" },
-                      status_change: { label: "Status alterado", color: "text-info bg-info/10" },
-                      amount_change: { label: "Valor alterado", color: "text-primary bg-primary/10" },
+                      paid_full: { label: "Pago total", color: "text-success bg-success-soft" },
+                      paid_partial: { label: "Pago parcial", color: "text-warning bg-warning-soft" },
+                      status_change: { label: "Status alterado", color: "text-info bg-info-soft" },
+                      amount_change: { label: "Valor alterado", color: "text-primary bg-accent-soft" },
                     };
                     const actionInfo = actionLabels[log.action] || { label: log.action, color: "text-muted-foreground bg-muted" };
                     const typeLabel = log.entity_type === "billing" ? "Fatura" : "Parcela";
@@ -2090,7 +2113,8 @@ function LegacyFinanceiro() {
                       log.old_status && log.new_status && log.old_status !== log.new_status ? `${log.old_status} para ${log.new_status}` : "",
                     ].filter(Boolean).join(" · ");
                     return (
-                      <li key={log.id} className="flex min-w-0 items-start px-3 py-2.5 sm:px-4">
+                      <li key={log.id} className={juntar(linhaDaLista, "items-start")}>
+                        <IconeDaLinha className="hidden sm:inline-flex"><History className="h-4 w-4" /></IconeDaLinha>
                         <div className="mr-3 min-w-0 flex-1">
                           <div className="flex min-w-0 flex-wrap items-center [&>*+*]:ml-1.5">
                             <span className={juntar(etiqueta, actionInfo.color)}>{actionInfo.label}</span>

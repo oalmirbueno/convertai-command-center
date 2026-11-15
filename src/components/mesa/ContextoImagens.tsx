@@ -380,7 +380,7 @@ export default function ContextoImagens() {
             vazio="Nenhuma foto nesta pasta."
             alturaMax="min(70vh, 720px)"
             renderizarItens={(lista) => (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
                 {lista.map((i, n) => (
                   <CartaoDoAcervo key={i.id} imagem={i} onAbrir={() => setEditando(i)} onAmpliar={() => setAmpliada({ lista, indice: n })} />
                 ))}
@@ -404,7 +404,7 @@ export default function ContextoImagens() {
             acao={<span className="text-[11px] text-muted-foreground">{imagens.length}</span>}
             corpoClassName="space-y-2"
           >
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
               {visiveis.map((i, n) => (
                 <CartaoDoAcervo key={i.id} imagem={i} onAbrir={() => setEditando(i)} onAmpliar={() => setAmpliada({ lista: imagens, indice: n })} />
               ))}

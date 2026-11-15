@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CheckCheck, ClipboardCheck, Eye, EyeOff, History, ListPlus, ListTodo, Minus, PackageCheck, ScanSearch, Sparkles, TrendingDown, TrendingUp, UserMinus } from "lucide-react";
 import { toast } from "sonner";
+import { DeltaChip, ProgressBar, StatusPill } from "@/components/ds";
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -56,20 +57,21 @@ function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) 
       titulo={titulo}
       descricao={leitura.periodo}
     >
-      <div className={`grid gap-2 ${colunas}`}>
-        {leitura.numeros.map((n) => (
-          <div key={n.rotulo} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
+      <div className={`grid gap-3 ${colunas}`}>
+        {leitura.numeros.map((n, i) => (
+          <div key={n.rotulo} className={juntar("min-w-0 rounded-md px-4 py-4", i === 0 ? "ds-accent" : i === 1 ? "ds-ink" : "bg-muted/60")}>
             <p className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</p>
             {/* 16/10/2026: no celular o número encolhe um pouco e quebra em vez de vazar. */}
-            <p className="break-words text-[15px] font-semibold leading-7 tabular-nums text-foreground sm:text-[20px]">{fmtNumero(n)}</p>
-            <p className={`flex items-center text-[12px] tabular-nums ${cor(n.tendencia)}`}>
-              <span className="mr-1 inline-flex"><IconeTendencia t={n.tendencia} /></span>
-              {n.variacao !== null ? `${n.variacao > 0 ? "+" : ""}${n.variacao}%` : n.anterior !== null ? "igual" : "sem base"}
+            <p className="mt-2 break-words text-[20px] font-semibold leading-7 tracking-[-0.03em] tabular-nums text-foreground sm:text-[28px] sm:leading-8">{fmtNumero(n)}</p>
+            <p className="mt-2 flex items-center">
+              {n.variacao !== null
+                ? <DeltaChip value={n.variacao} />
+                : <span className={`text-[12px] ${cor(n.tendencia)}`}>{n.anterior !== null ? "igual" : "sem base"}</span>}
             </p>
           </div>
         ))}
       </div>
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
           { t: "Subiu", lista: leitura.subiu, cls: "text-primary" },
           { t: "Parado", lista: leitura.parado, cls: "text-muted-foreground" },
@@ -82,8 +84,8 @@ function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) 
         ))}
       </div>
       {leitura.fazer.length > 0 && (
-        <div className={juntar(superficie.poco, "mt-3 px-3 py-2")}>
-          <p className="text-[12px] font-medium text-primary">O que fazer por causa disso</p>
+        <div className={juntar(superficie.poco, "mt-5 px-4 py-4")}>
+          <p className="text-[13px] font-semibold text-foreground">O que fazer por causa disso</p>
           <ul className="mt-1 space-y-1">
             {leitura.fazer.map((x, i) => <li key={i} className="text-[13px] leading-5 text-foreground">• {x}</li>)}
           </ul>
@@ -284,7 +286,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
         </>
       ) : undefined}
     >
-        <div className="flex min-w-0 shrink-0 items-center border-b border-border px-3 py-1 sm:px-4">
+        <div className="flex min-w-0 shrink-0 items-center border-b border-border/70 px-4 py-2 sm:px-6">
           <Etapas
             soIcone
             rotulo="Partes da folha do cliente"
@@ -299,15 +301,21 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
             </button>
           )}
         </div>
-        <RegiaoRolavel modo="sempre" sobre="cartao" memoria={`ciclo:folha:${cliente.id}:${frente}:${aba}`} className="px-4 pb-5 pt-4 sm:px-5">
-          <div className="space-y-5">
+        <RegiaoRolavel modo="sempre" sobre="cartao" memoria={`ciclo:folha:${cliente.id}:${frente}:${aba}`} className="px-4 pb-6 pt-5 sm:px-6">
+          <div className="space-y-6">
             {aba === "semana" && (
               <>
                 <div className="min-w-0">
-                  <p className={juntar(texto.rotulo, "mb-1")}>Rituais da semana · {ritualFeitos} de {e.rituais.length}</p>
-                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
+                  <div className="mb-3 flex min-w-0 items-end">
+                    <p className="mr-4 shrink-0">
+                      <span className={juntar(texto.rotulo, "block")}>Rituais da semana</span>
+                      <span className="mt-1 block text-[28px] font-semibold leading-8 tracking-[-0.03em] tabular-nums text-foreground">{ritualFeitos}<span className="text-muted-foreground">/{e.rituais.length}</span></span>
+                    </p>
+                    <ProgressBar value={ritualFeitos} max={e.rituais.length} striped className="mb-2 flex-1" label={`Rituais ${ritualFeitos} de ${e.rituais.length}`} />
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     {e.rituais.map((r) => (
-                      <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-2 py-2 text-[13px] hover:bg-muted/60 max-sm:min-h-[44px]", r.feito ? "text-foreground" : "text-muted-foreground")}>
+                      <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-3.5 py-3 text-[13px] transition-colors max-sm:min-h-[44px]", r.feito ? "bg-accent-soft font-medium text-foreground" : "bg-muted/60 text-muted-foreground hover:bg-muted")}>
                         <Checkbox checked={r.feito} onCheckedChange={(v) => void alternarRitual(r.key, v === true)} disabled={!canWrite} className="mr-2 min-h-0 shrink-0" />
                         <span className="min-w-0 leading-tight">{r.rotulo}{r.fonte === "central" ? " · Central" : ""}</span>
                       </label>
@@ -345,8 +353,13 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                 {descricaoDoDossie && <p className={juntar(texto.auxiliar, "mb-2")}>{descricaoDoDossie}</p>}
                 {lendoPlano && !plano && <Carregando linhas={2} rotulo="Lendo o dossiê" />}
                 {plano && (
-                  <div className="space-y-3">
-                    {plano.foco && <p className="text-[13px] font-medium leading-5 text-foreground">{plano.foco}</p>}
+                  <div className="space-y-5">
+                    {plano.foco && (
+                      <div className="ds-ink rounded-md px-4 py-4 sm:px-5">
+                        <p className={texto.rotulo}>Foco da semana</p>
+                        <p className="mt-1.5 text-[15px] font-medium leading-6 text-foreground">{plano.foco}</p>
+                      </div>
+                    )}
                     {plano.feito.length > 0 && (
                       <div>
                         <p className={texto.rotulo}>Feito nesta semana</p>
@@ -395,9 +408,9 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                 {frente === "social" && <MetasDeSeguidores clientId={cliente.id} metricas={cliente.fatos.metricas} canWrite={canWrite} />}
 
                 {insights.length > 0 && (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {insights.map((i) => (
-                      <div key={i.key} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
+                      <div key={i.key} className={juntar(superficie.poco, "min-w-0 px-4 py-3.5")}>
                         <p className={juntar(texto.rotulo, "flex items-center")}><span className="mr-1.5 inline-flex"><IconeTendencia t={i.tendencia} /></span>{i.titulo}</p>
                         <p className="text-[13px] leading-5 text-foreground">{i.texto}</p>
                       </div>
@@ -437,9 +450,12 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
               ) : (
                 <ul className="divide-y divide-border">
                   {historiaVisivel.map((h: MemoryEntry) => (
-                    <li key={h.id} className="min-w-0 py-2">
-                      <p className={texto.auxiliar}>{new Date(h.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} · {MEMORY_LABELS[h.kind] || h.kind}</p>
-                      <p className="text-[13px] font-medium leading-5 text-foreground">{h.title || ""}</p>
+                    <li key={h.id} className="min-w-0 py-3.5">
+                      <p className="flex min-w-0 items-center">
+                        <StatusPill tone="neutral" className="mr-2">{MEMORY_LABELS[h.kind] || h.kind}</StatusPill>
+                        <span className={juntar(texto.auxiliar, "tabular-nums")}>{new Date(h.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</span>
+                      </p>
+                      <p className="mt-1.5 text-[13px] font-medium leading-5 text-foreground">{h.title || ""}</p>
                       <p className="text-[12px] leading-5 text-muted-foreground line-clamp-3">{h.content}</p>
                     </li>
                   ))}
@@ -449,12 +465,15 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
 
             {aba === "ja-tem" && (
               <div className="min-w-0">
-                <p className={juntar(texto.rotulo, "mb-1")}>{passosDeEntrada.filter((p) => temPasso(p)).length} de {passosDeEntrada.length}</p>
+                <div className="mb-3 flex min-w-0 items-end">
+                  <p className="mr-4 shrink-0 text-[28px] font-semibold leading-8 tracking-[-0.03em] tabular-nums text-foreground">{passosDeEntrada.filter((p) => temPasso(p)).length}<span className="text-muted-foreground">/{passosDeEntrada.length}</span></p>
+                  <ProgressBar value={passosDeEntrada.filter((p) => temPasso(p)).length} max={passosDeEntrada.length} className="mb-2 flex-1" />
+                </div>
                 <ul className="divide-y divide-border">
                   {passosDeEntrada.map((p) => {
                     const tem = temPasso(p);
                     return (
-                      <li key={p.key} className="flex min-w-0 items-center justify-between py-2">
+                      <li key={p.key} className="flex min-w-0 items-center justify-between py-3">
                         <span className="mr-3 min-w-0 text-[13px] text-foreground">{p.rotulo}{p.auto ? <span className="ml-1 text-[12px] text-muted-foreground">(detectado)</span> : null}</span>
                         <Switch checked={Boolean(tem)} disabled={!canWrite} aria-label={p.rotulo} className="min-h-0 shrink-0" onCheckedChange={async (v) => { const ok = await marcarJaTem(cliente.id, p.key, v); if (ok) { onMudou(); void queryClient.invalidateQueries({ queryKey: ["esteira-historia", cliente.id] }); } else toast.error("Não foi possível gravar."); }} />
                       </li>

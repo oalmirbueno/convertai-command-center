@@ -468,7 +468,7 @@ function LinhaDaIdeia({
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 flex-wrap items-center text-[14px] font-semibold leading-5 [overflow-wrap:anywhere]">
             <span className="mr-2 min-w-0">{ideia.tema}</span>
-            {maisForte && <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>Mais forte</span>}
+            {maisForte && <span className={juntar(etiqueta, "bg-accent-soft text-primary")}>Mais forte</span>}
           </p>
           <p className="mt-1 text-[13px] italic leading-5 text-foreground/90 [overflow-wrap:anywhere]">"{ideia.pergunta_do_cliente}"</p>
           <p className="mt-1 text-[13px] leading-5 [overflow-wrap:anywhere]">

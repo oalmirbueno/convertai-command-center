@@ -16,7 +16,7 @@ export default function RaioXDoMes({ itens }: { itens: ItemParaORaioX[] }) {
   const linha = (rotulo: string, n: number) => (
     <li key={rotulo} className="flex items-center gap-2">
       <span className="min-w-0 flex-1 truncate" title={rotulo}>{rotulo}</span>
-      <span className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary" style={{ width: `${Math.round((n / r.total) * 100)}%` }} /></span>
+      <span className="h-2 w-16 shrink-0 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary" style={{ width: `${Math.round((n / r.total) * 100)}%` }} /></span>
       <span className="w-6 shrink-0 text-right tabular-nums">{n}</span>
     </li>
   );

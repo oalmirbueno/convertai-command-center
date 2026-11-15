@@ -2516,8 +2516,8 @@ export default function Workspace() {
                   onDrop={(e) => onDropFolder(e, null)}
                   aria-current={!parent ? "page" : undefined}
                   className={juntar(
-                    "shrink-0 rounded px-1.5 py-1 text-[13px] transition-colors",
-                    !parent ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                    "toque-compacto inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[13px] font-medium transition-colors",
+                    !parent ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     dragOverId === "root" && "bg-primary/10 text-primary ring-1 ring-primary/40",
                     foco,
                   )}
@@ -2533,8 +2533,8 @@ export default function Workspace() {
                         type="button"
                         aria-current={ultima ? "page" : undefined}
                         className={juntar(
-                          "max-w-[180px] truncate rounded px-1.5 py-1 text-[13px] transition-colors",
-                          ultima ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                          "toque-compacto h-8 max-w-[180px] truncate rounded-full px-3 text-[13px] font-medium transition-colors",
+                          ultima ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                           foco,
                         )}
                         onClick={() => nav.jumpTo(i)}
@@ -2714,7 +2714,7 @@ export default function Workspace() {
                 descricao="Arraste arquivos, cole uma imagem (Ctrl+V), envie ou crie uma subpasta."
               />
             ) : view === "grid" ? (
-              <ul className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6">
+              <ul className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 sm:gap-x-5 lg:grid-cols-4 desk:grid-cols-5">
                 {filtered.map(n => {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";
@@ -2753,9 +2753,12 @@ export default function Workspace() {
                           />
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <Icon className={juntar("h-10 w-10", isFolder ? "text-primary" : KIND_META[k].color)} aria-hidden="true" />
+                            {/* Rodada ousada (15/11/2026): o ícone num círculo grande; a pasta no círculo de tinta. */}
+                            <span className={juntar("flex h-16 w-16 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-105 max-sm:h-14 max-sm:w-14", isFolder ? "bg-foreground text-background" : "bg-muted")}>
+                              <Icon className={juntar("h-7 w-7", isFolder ? "" : KIND_META[k].color)} aria-hidden="true" />
+                            </span>
                             {!isFolder && extOf(n.name) && (
-                              <span className={juntar(etiqueta, "mt-2 bg-background", KIND_META[k].accent)}>{extOf(n.name)}</span>
+                              <span className={juntar(etiqueta, "mt-3 rounded-full bg-muted px-2", KIND_META[k].accent)}>{extOf(n.name)}</span>
                             )}
                           </div>
                         )}
@@ -2780,8 +2783,8 @@ export default function Workspace() {
                           </span>
                         )}
                       </div>
-                      <div className="mt-1.5 min-w-0 pr-1">
-                        <p className="truncate text-[13px] font-medium leading-5 text-foreground">{n.name}</p>
+                      <div className="mt-2.5 min-w-0 px-1">
+                        <p className="truncate text-[13px] font-semibold leading-5 text-foreground">{n.name}</p>
                         <p className={juntar(texto.auxiliar, "truncate tabular-nums")}>
                           {isFolder
                             ? (n.__virtual ? "Seção" : total === 0 ? "Vazia" : `${total} ${total === 1 ? "item" : "itens"}`)
@@ -2805,7 +2808,7 @@ export default function Workspace() {
               </ul>
 
             ) : (
-              <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden px-2 py-1 sm:px-3")}>
+              <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden p-2 sm:p-3")}>
                 {filtered.map(n => {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";
@@ -2821,7 +2824,7 @@ export default function Workspace() {
                       onDragLeave={() => isFolder && setDragOverId(null)}
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
                       className={juntar(
-                        "relative flex min-w-0 cursor-pointer items-center px-2 py-2 transition-colors hover:bg-muted/40",
+                        "relative flex min-w-0 cursor-pointer items-center rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/60",
                         dragActive && "bg-primary/10 ring-1 ring-primary/40",
                       )}
                     >
@@ -2831,8 +2834,10 @@ export default function Workspace() {
                         onClick={() => isFolder ? nav.push(n) : setSelected(n)}
                         className={juntar("absolute inset-0 z-[1]", foco)}
                       />
-                      <Icon className={juntar("mr-3 h-4 w-4 shrink-0", isFolder ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate text-[13px]">{n.name}</span>
+                      <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full", isFolder ? "bg-foreground text-background" : "bg-muted text-muted-foreground")} aria-hidden="true">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{n.name}</span>
                       {isInboxQuarantined(n) && <span className={juntar(etiqueta, "ml-2 bg-amber-500/15 text-amber-500")}>Quarentena</span>}
                       {isWorkspaceFileLinked(n) && <span className={juntar(etiqueta, "ml-2 bg-success/15 text-success")}>Em Arquivos</span>}
                       {!isFolder && n.size_bytes ? (

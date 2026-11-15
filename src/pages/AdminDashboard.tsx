@@ -1,12 +1,11 @@
 import type { ReactNode } from "react";
-import { Card, CardSurface, Chip, EmptyState, PageHeader, PillTabs, StatCard, StatGrid, StatusDot } from "@/components/ds";
+import { Avatar, Card, CardSurface, ChartLegend, Chip, Donut, EmptyState, List, ListRow, MiniBars, PageHeader, PillTabs, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRecentActivity } from "@/hooks/useRecentActivity";
 import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign, Wallet, Briefcase, Users, ClipboardList } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { Progress } from "@/components/ui/progress";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,12 +61,12 @@ const parseAppDate = (value?: string | null) => {
   return new Date(value);
 };
 
-/** Título de um bloco do Dashboard: ícone pequeno num círculo suave, título curto e, à direita, o controle do bloco. */
+/** Título de um bloco do Dashboard: ícone num círculo, título de 18 px e, à direita, o controle do bloco. */
 function TituloDoBloco({ icone, acao, children }: { icone?: ReactNode; acao?: ReactNode; children: ReactNode }) {
   return (
-    <div className="mb-3 flex min-w-0 items-center justify-between">
-      <h2 className="flex min-w-0 items-center text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground">
-        {icone && <span aria-hidden="true" className="mr-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">{icone}</span>}
+    <div className="mb-4 flex min-w-0 items-center justify-between sm:mb-5">
+      <h2 className="flex min-w-0 items-center text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
+        {icone && <span aria-hidden="true" className="mr-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card text-foreground shadow-card">{icone}</span>}
         <span className="truncate">{children}</span>
       </h2>
       {acao && <div className="ml-3 shrink-0">{acao}</div>}
@@ -334,23 +333,68 @@ export default function AdminDashboard() {
 
   const iconesDosNumeros = [Briefcase, Users, ClipboardList, CheckCircle2];
   const iconesDoFinanceiro = [
-    <TrendingUp key="r" className="h-4 w-4 text-success" />,
-    <Clock key="p" className="h-4 w-4 text-warning" />,
-    <CreditCard key="v" className="h-4 w-4 text-muted-foreground" />,
-    <AlertTriangle key="a" className="h-4 w-4 text-destructive" />,
+    <TrendingUp key="r" className="h-4 w-4" />,
+    <Clock key="p" className="h-4 w-4" />,
+    <CreditCard key="v" className="h-4 w-4" />,
+    <AlertTriangle key="a" className="h-4 w-4" />,
   ];
-  const linha = "flex min-w-0 items-center gap-3 rounded-md px-2 py-2.5 transition-colors";
+
+  // Saudação do topo: a hora do aparelho e o primeiro nome de quem entrou.
+  const hora = now.getHours();
+  const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+  const primeiroNome = String(profile?.full_name || "").trim().split(/\s+/)[0] || "";
+  const hojePorExtenso = now.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+
+  // Minigráficos: só razões e contagens que a tela já tem (nada inventado).
+  const statusDosAtivos = STATUS_OPTIONS.filter((s) => s.value !== "done");
+  const projetosPorStatus = statusDosAtivos.map((s) => activeProjects.filter((p: any) => p.status === s.value).length);
+  const recorrentes = (clients || []).filter((c: any) => (c.client_type || "recurring") !== "one_off" && !isInternalClient(c));
+  const recorrentesAtivos = recorrentes.filter((c: any) => c.plan_status === "active").length;
+  const totalDeTarefas = (allTasks || []).length;
+  const tarefasFeitas = (allTasks || []).filter((t: any) => t.status === "done").length;
+  const emRevisao = projects?.filter((p: any) => p.status === "review").length || 0;
+  const graficosDosNumeros: Array<{ chart?: ReactNode; hint?: ReactNode }> = [
+    {
+      chart: activeProjects.length > 0 ? <MiniBars values={projetosPorStatus} labels={statusDosAtivos.map((s) => s.label)} highlightIndex={statusDosAtivos.findIndex((s) => s.value === "active")} height={48} /> : undefined,
+      hint: activeProjects.length > 0 ? `${projetosPorStatus[statusDosAtivos.findIndex((s) => s.value === "active")] || 0} em andamento` : undefined,
+    },
+    {
+      chart: recorrentes.length > 0 ? <ProgressBar value={recorrentesAtivos} max={recorrentes.length} striped /> : undefined,
+      hint: recorrentes.length > 0 ? `de ${recorrentes.length} recorrentes` : undefined,
+    },
+    {
+      chart: totalDeTarefas > 0 ? <ProgressBar value={tarefasFeitas} max={totalDeTarefas} striped tone={2} label={`${tarefasFeitas} feitas de ${totalDeTarefas}`} /> : undefined,
+      hint: totalDeTarefas > 0 ? `${tarefasFeitas} feitas de ${totalDeTarefas}` : undefined,
+    },
+    {
+      chart: activeProjects.length > 0 ? <ProgressBar value={emRevisao} max={activeProjects.length} striped tone={4} /> : undefined,
+      hint: activeProjects.length > 0 ? `de ${activeProjects.length} ativos` : undefined,
+    },
+  ];
+  const previstoNoMes = totalReceivedThisMonth + totalPendingThisMonth;
+  const individualEmDia = Math.max(individualPending - individualOverdue, 0);
 
   return (
-    <div className="min-w-0 space-y-6 animate-fade-in sm:space-y-7">
-      <PageHeader title="Dashboard" />
+    <div className="min-w-0 space-y-8 animate-fade-in sm:space-y-10">
+      <PageHeader title={primeiroNome ? `${saudacao},` : "Dashboard"} greeting={primeiroNome || undefined} subtitle={<span className="first-letter:uppercase">{hojePorExtenso}</span>} />
 
       {/* Stats */}
       <div data-tour="dash-stats">
         <StatGrid cols={4} label="Resumo da operação">
           {stats.map((s, i) => {
             const Icone = iconesDosNumeros[i] || Briefcase;
-            return <StatCard key={s.label} label={s.label} value={s.value} tone={i === 0 ? "accent" : "default"} icon={<Icone className="h-4 w-4" />} />;
+            return (
+              <StatCard
+                key={s.label}
+                label={s.label}
+                value={s.value}
+                size="xl"
+                variant={i === 0 ? "accent" : i === 3 ? "ink" : "default"}
+                icon={<Icone className="h-4 w-4" />}
+                hint={graficosDosNumeros[i]?.hint}
+                chart={graficosDosNumeros[i]?.chart}
+              />
+            );
           })}
         </StatGrid>
       </div>
@@ -358,10 +402,26 @@ export default function AdminDashboard() {
       {/* Finance Stats - admin only */}
       {isAdmin && (
       <section className="min-w-0">
-        <TituloDoBloco icone={<DollarSign className="h-3.5 w-3.5" />}>Financeiro</TituloDoBloco>
+        <TituloDoBloco icone={<DollarSign className="h-4 w-4" />}>Financeiro</TituloDoBloco>
         <StatGrid cols={4} label="Financeiro do mês">
           {financeStats.map((s, i) => (
-            <StatCard key={s.label} label={s.label} value={s.value} hint={(s as any).sub} icon={iconesDoFinanceiro[i]} onClick={() => navigate("/financeiro")} />
+            <StatCard
+              key={s.label}
+              label={s.label}
+              value={s.value}
+              hint={(s as any).sub}
+              icon={iconesDoFinanceiro[i]}
+              variant={i === 0 ? "ink" : "default"}
+              className={i === 3 && overdueTotal + individualOverdue > 0 ? "[&_.ds-stat-valor]:text-destructive" : ""}
+              chart={
+                i === 0 && previstoNoMes > 0 ? (
+                  <ProgressBar value={totalReceivedThisMonth} max={previstoNoMes} label={`Recebido ${fmt(totalReceivedThisMonth)} de ${fmt(previstoNoMes)} previstos no mês`} />
+                ) : i === 1 && previstoNoMes > 0 ? (
+                  <ProgressBar value={totalPendingThisMonth} max={previstoNoMes} striped tone={4} label={`Pendente ${fmt(totalPendingThisMonth)} de ${fmt(previstoNoMes)} previstos no mês`} />
+                ) : undefined
+              }
+              onClick={() => navigate("/financeiro")}
+            />
           ))}
         </StatGrid>
       </section>
@@ -373,52 +433,76 @@ export default function AdminDashboard() {
       {/* Individual Project Payments - admin only */}
       {isAdmin && (projectPayments || []).length > 0 && (
         <section className="min-w-0">
-          <TituloDoBloco icone={<Briefcase className="h-3.5 w-3.5" />}>Projetos individuais</TituloDoBloco>
-          <StatGrid cols={4} label="Projetos individuais" className="mb-4">
-            <StatCard label="Total contratado" value={fmt(individualTotal)} />
-            <StatCard label="Recebido" value={fmt(individualPaid)} icon={<TrendingUp className="h-4 w-4 text-success" />} />
-            <StatCard label="Pendente" value={fmt(individualPending)} icon={<Clock className="h-4 w-4 text-warning" />} />
-            <StatCard label="Atrasado" value={fmt(individualOverdue)} icon={<AlertTriangle className="h-4 w-4 text-destructive" />} />
-          </StatGrid>
-          <CardSurface className="divide-y divide-border/60 px-3 py-1 sm:px-4">
-            {(projectPayments || []).map((pp: any) => {
-              const paid = (pp.installments || [])
-                .filter((i: any) => i.status === "paid" || i.status === "partial")
-                .reduce((s: number, i: any) => s + receivedOf(i), 0);
-              const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
-              const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
-              return (
-                <div key={pp.id} className="flex min-w-0 items-center gap-4 px-1 py-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-[13px] font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
-                    <p className="truncate text-[12px] text-muted-foreground">{pp.client?.company_name || pp.client?.full_name}</p>
-                  </div>
-                  <div className="w-24 hidden sm:block">
-                    <Progress value={pct} className="h-1.5" />
-                    <p className="mt-1 text-right text-[11px] tabular-nums text-muted-foreground">{pct}%</p>
-                  </div>
-                  <div className="text-right hidden md:block">
-                    <p className="text-[13px] font-medium tabular-nums text-success">{fmt(paid)}</p>
-                    <p className="text-[11px] tabular-nums text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
-                  </div>
-                  {hasOverdue && <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />}
-                </div>
-              );
-            })}
-          </CardSurface>
+          <TituloDoBloco icone={<Briefcase className="h-4 w-4" />}>Projetos individuais</TituloDoBloco>
+          <div className="grid min-w-0 gap-4 sm:gap-5 lg:grid-cols-3">
+            <CardSurface padded variant="ink" className="flex min-w-0 flex-col">
+              <p className="text-[13px] font-medium leading-5 text-muted-foreground">Total contratado</p>
+              <p className="mt-3 truncate text-[32px] font-semibold leading-10 tracking-[-0.035em] tabular-nums text-foreground sm:text-[40px] sm:leading-[44px]">{fmt(individualTotal)}</p>
+              <div className="mt-6 flex min-w-0 items-center">
+                <Donut
+                  size={112}
+                  thickness={14}
+                  segments={[
+                    { value: individualPaid, label: "Recebido", tone: 1 },
+                    { value: individualEmDia, label: "Pendente", tone: "muted" },
+                    { value: individualOverdue, label: "Atrasado", tone: 4 },
+                  ]}
+                >
+                  <span className="text-[18px] font-semibold leading-6 tabular-nums">{individualTotal > 0 ? Math.round((individualPaid / individualTotal) * 100) : 0}%</span>
+                </Donut>
+                <ChartLegend
+                  className="ml-5 flex-1"
+                  items={[
+                    { label: "Recebido", value: fmt(individualPaid), tone: 1 },
+                    { label: "Pendente", value: fmt(individualPending), tone: "muted" },
+                    { label: "Atrasado", value: fmt(individualOverdue), tone: 4 },
+                  ]}
+                />
+              </div>
+            </CardSurface>
+            <Card title="Parcelas por projeto" subtitle={`${(projectPayments || []).length} ${(projectPayments || []).length === 1 ? "projeto" : "projetos"}`} collapsible={false} className="lg:col-span-2">
+              <List label="Projetos individuais">
+                {(projectPayments || []).map((pp: any) => {
+                  const paid = (pp.installments || [])
+                    .filter((i: any) => i.status === "paid" || i.status === "partial")
+                    .reduce((s: number, i: any) => s + receivedOf(i), 0);
+                  const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+                  const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+                  const cliente = pp.client?.company_name || pp.client?.full_name;
+                  return (
+                    <ListRow
+                      key={pp.id}
+                      avatar={cliente || pp.project?.name || "Projeto"}
+                      title={pp.project?.name || "Projeto"}
+                      subtitle={cliente}
+                      status={
+                        <span className="flex min-w-0 items-center">
+                          <span className="mr-3 hidden w-24 md:block"><ProgressBar value={pct} max={100} tone={hasOverdue ? 4 : 1} label={`${pct}% recebido`} /></span>
+                          <StatusPill tone={hasOverdue ? "danger" : pct >= 100 ? "success" : "neutral"}>{hasOverdue ? "Atrasado" : `${pct}%`}</StatusPill>
+                        </span>
+                      }
+                      value={fmt(paid)}
+                      valueHint={`de ${fmt(Number(pp.total_value))}`}
+                    />
+                  );
+                })}
+              </List>
+            </Card>
+          </div>
         </section>
       )}
 
       {(isAdmin || isTeam) && (wallets || []).length > 0 && (
         <section className="min-w-0">
-          <TituloDoBloco icone={<Wallet className="h-3.5 w-3.5" />}>Ads Wallet</TituloDoBloco>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+          <TituloDoBloco icone={<Wallet className="h-4 w-4" />}>Ads Wallet</TituloDoBloco>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
             {(wallets || []).map((w: any) => (
               <StatCard
                 key={w.id}
                 label={w.client?.company_name || w.client?.full_name}
                 value={fmt(Number(w.balance))}
-                hint={<Chip tone={Number(w.balance) < 100 ? "warning" : "neutral"} dot={Number(w.balance) < 100}>{w.platform}</Chip>}
+                icon={<Wallet className="h-4 w-4" />}
+                hint={<StatusPill tone={Number(w.balance) < 100 ? "warning" : "neutral"}>{w.platform}</StatusPill>}
                 onClick={() => navigate("/financeiro")}
               />
             ))}
@@ -427,83 +511,87 @@ export default function AdminDashboard() {
       )}
 
       {/* Quick Actions */}
-      <div className="-m-1 flex flex-wrap" data-tour="dash-quick-actions">
+      <div className="-m-1.5 flex flex-wrap" data-tour="dash-quick-actions">
         {quickActions.map((a, i) => (
           <button
             key={a.label}
             onClick={a.action}
-            className={`m-1 inline-flex h-9 cursor-pointer items-center rounded-full px-4 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              i === 0 && isAdmin ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border bg-card text-foreground hover:bg-muted"
+            className={`m-1.5 inline-flex h-11 cursor-pointer items-center rounded-full pl-1.5 pr-5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              i === 0 && isAdmin ? "bg-foreground text-background hover:bg-foreground/90" : "border border-border bg-card text-foreground shadow-card hover:bg-muted"
             }`}
           >
-            <a.icon className="mr-2 h-3.5 w-3.5" />
+            <span aria-hidden="true" className={`mr-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${i === 0 && isAdmin ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`}>
+              <a.icon className="h-4 w-4" />
+            </span>
             {a.label}
           </button>
         ))}
       </div>
 
-      <section className="min-w-0">
-        <TituloDoBloco
-          acao={
-            <PillTabs
-              label="Filtrar por marca"
-              variant="soft"
-              size="sm"
-              value={brandFilter}
-              onChange={(v) => setBrandFilter(v as BrandFilter)}
-              tabs={BRAND_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
-            />
-          }
-        >
-          Projetos ativos
-        </TituloDoBloco>
+      <Card
+        as="section"
+        title="Projetos ativos"
+        subtitle={`${filteredProjects.length} ${filteredProjects.length === 1 ? "projeto" : "projetos"}`}
+        collapsible={false}
+      >
+        <PillTabs
+          label="Filtrar por marca"
+          variant="soft"
+          size="sm"
+          value={brandFilter}
+          onChange={(v) => setBrandFilter(v as BrandFilter)}
+          tabs={BRAND_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
+          className="mb-4"
+        />
         {loadingProjects ? (
           <div className="py-8 text-center text-[13px] text-muted-foreground">Carregando...</div>
         ) : filteredProjects.length === 0 ? (
           <EmptyState icon={<Briefcase className="h-5 w-5" />} title="Nenhum projeto encontrado." />
         ) : (
-          <CardSurface className="divide-y divide-border/60 px-2 py-1 sm:px-3">
+          <div className="-mx-3 min-w-0 divide-y divide-border/60">
             {filteredProjects.map((p: any) => {
               const isHovered = hoveredProject === p.id;
               const showMenu = menuProject === p.id;
               const projectTeam = teamByProject[p.id] || [];
+              const cliente = p.client?.company_name || p.client?.full_name;
               return (
                 <div
                   key={p.id}
-                  className={`relative cursor-pointer rounded-md px-2 py-3.5 transition-colors hover:bg-muted/40 sm:px-3 ${showMenu ? "z-50" : ""}`}
+                  className={`relative cursor-pointer rounded-lg px-3 py-4 transition-colors hover:bg-muted/60 ${showMenu ? "z-50" : ""}`}
                   onClick={() => setDrawerProject(p)}
                   onMouseEnter={() => setHoveredProject(p.id)}
                   onMouseLeave={() => { setHoveredProject(null); setMenuProject(null); }}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[13px] font-medium text-foreground">{p.name}</span>
-                        <Chip>{p.project_type?.replace("_", " ")}</Chip>
+                  <div className="flex min-w-0 items-center">
+                    <span className="relative mr-3 shrink-0">
+                      <Avatar name={cliente || p.name} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
+                    </span>
+                    <div className="mr-3 min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center">
+                        <span className="mr-2 min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{p.name}</span>
+                        <Chip className="mr-1.5 max-sm:hidden">{p.project_type?.replace("_", " ")}</Chip>
                         <Chip tone="accent">{getProjectBrand(p.project_type)}</Chip>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-[12px] text-muted-foreground">{p.client?.company_name || p.client?.full_name}</p>
+                      <div className="mt-0.5 flex min-w-0 items-center">
+                        <p className="min-w-0 truncate text-[12px] leading-4 text-muted-foreground">{cliente}</p>
                         {projectTeam.length > 0 && (
-                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <Users className="w-3 h-3" />
-                            {projectTeam.map(m => m.name.split(" ")[0]).join(", ")}
+                          <span className="ml-2 hidden min-w-0 items-center text-[11px] text-muted-foreground sm:flex">
+                            <Users className="mr-1 h-3 w-3 shrink-0" />
+                            <span className="truncate">{projectTeam.map(m => m.name.split(" ")[0]).join(", ")}</span>
                           </span>
                         )}
                       </div>
                     </div>
-                    <div className="w-32 hidden md:block">
-                      <div className="h-1 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${p.progress}%` }} />
-                      </div>
-                      <div className="flex items-center justify-end gap-2 mt-1">
+                    <div className="mr-4 hidden w-36 shrink-0 md:block">
+                      <div className="mb-1.5 flex items-center justify-between">
                         <PipelineBar pipeline={p.pipeline} />
-                        <p className="text-[12px] tabular-nums text-muted-foreground">{p.progress}%</p>
+                        <p className="ml-2 text-[12px] font-medium tabular-nums text-foreground">{p.progress}%</p>
                       </div>
+                      <ProgressBar value={Number(p.progress) || 0} max={100} height={6} label={`${p.progress}% concluído`} />
                     </div>
-                    <div className="hidden sm:flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                      <Clock className="w-3 h-3" />
+                    <div className="mr-1 hidden shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-[12px] tabular-nums text-muted-foreground sm:flex">
+                      <Clock className="mr-1.5 h-3 w-3" />
                       {formatDate(p.deadline)}
                     </div>
                     {/* Editar, status, progresso e excluir mudam o projeto: só o admin pode (RLS). */}
@@ -511,7 +599,7 @@ export default function AdminDashboard() {
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuProject(showMenu ? null : p.id); }}
                       aria-label="Ações do projeto"
-                      className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
@@ -519,17 +607,17 @@ export default function AdminDashboard() {
                   </div>
 
                   {isAdmin && showMenu && (
-                    <div className="absolute right-4 top-full z-50 w-52 rounded-lg border border-border bg-popover p-2 shadow-pop animate-in fade-in zoom-in-95 duration-150">
+                    <div className="absolute right-4 top-full z-50 w-56 rounded-md border border-border bg-popover p-2 shadow-pop animate-in fade-in zoom-in-95 duration-150">
                       <button onClick={(e) => { e.stopPropagation(); setEditProject(p); setMenuProject(null); }}
-                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-[13px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer bg-transparent border-none text-left">
-                        <Edit3 className="w-3.5 h-3.5" /> Editar
+                        className="flex items-center w-full px-3 py-2 rounded-sm text-[13px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer bg-transparent border-none text-left">
+                        <Edit3 className="mr-2.5 w-3.5 h-3.5" /> Editar
                       </button>
                       <div className="px-3 py-2">
                         <p className="text-[11px] text-muted-foreground mb-1.5">Status</p>
-                        <div className="flex flex-wrap gap-1">
+                        <div className="-m-0.5 flex flex-wrap">
                           {STATUS_OPTIONS.map((s) => (
                             <button key={s.value} onClick={(e) => { e.stopPropagation(); handleStatusChange(p.id, s.value); }}
-                              className={`text-[11px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${p.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
+                              className={`m-0.5 text-[11px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${p.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
                               {s.label}
                             </button>
                           ))}
@@ -540,81 +628,80 @@ export default function AdminDashboard() {
                         <Slider defaultValue={[p.progress]} max={100} step={5} onValueCommit={(val) => handleProgressChange(p.id, val[0])} className="w-full" />
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteProject(p.id); }}
-                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none text-left">
-                        <Trash2 className="w-3.5 h-3.5" /> Excluir
+                        className="flex items-center w-full px-3 py-2 rounded-sm text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none text-left">
+                        <Trash2 className="mr-2.5 w-3.5 h-3.5" /> Excluir
                       </button>
                     </div>
                   )}
 
                   {isHovered && !showMenu && p.description && (
-                    <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between animate-fade-in">
-                      <p className="text-[12px] text-muted-foreground">{p.description}</p>
-                      <button className="text-[12px] font-medium text-primary hover:underline">Abrir</button>
+                    <div className="mt-3 flex items-center justify-between pl-[52px] animate-fade-in">
+                      <p className="mr-3 min-w-0 text-[12px] leading-[18px] text-muted-foreground">{p.description}</p>
+                      <button className="shrink-0 text-[12px] font-medium text-primary hover:underline">Abrir</button>
                     </div>
                   )}
                 </div>
               );
             })}
-          </CardSurface>
+          </div>
         )}
-      </section>
+      </Card>
 
       {/* Alerts Row: Clients renewal + Stalled Projects */}
       {isAdmin && (clientsRenewalAlert.length > 0 || stalledProjects.length > 0) && (
-        <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
+        <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
           {clientsRenewalAlert.length > 0 && (
-            <Card title="Clientes com vencimento próximo" collapsible={false}>
-              <div className="-mx-2">
+            <Card title="Clientes com vencimento próximo" subtitle={`${clientsRenewalAlert.length} ${clientsRenewalAlert.length === 1 ? "cliente" : "clientes"}`} collapsible={false}>
+              <List label="Clientes com vencimento próximo">
                 {clientsRenewalAlert.map((c: any) => {
                   const renewal = new Date(c.plan_renewal_date + "T00:00:00");
                   const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
                   const isExpired = diffDays < 0;
                   return (
-                    <div key={c.id} className={`${linha} cursor-pointer hover:bg-muted/40`} onClick={() => navigate("/clientes")}>
-                      <StatusDot tone={isExpired ? "danger" : "warning"} />
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-[13px] text-foreground">{c.company_name || c.full_name}</p>
-                        <p className="truncate text-[12px] text-muted-foreground">
-                          {c.plan_name && `${c.plan_name} · `}
-                          {c.plan_value && `${fmt(Number(c.plan_value))}`}
-                        </p>
-                      </div>
-                      <Chip tone={isExpired ? "danger" : "warning"}>
-                        {isExpired ? `Vencido há ${Math.abs(diffDays)}d` : diffDays === 0 ? "Vence hoje" : `Vence em ${diffDays}d`}
-                      </Chip>
-                    </div>
+                    <ListRow
+                      key={c.id}
+                      avatar={c.company_name || c.full_name}
+                      title={c.company_name || c.full_name}
+                      subtitle={c.plan_name || undefined}
+                      status={
+                        <StatusPill tone={isExpired ? "danger" : "warning"}>
+                          {isExpired ? `Vencido há ${Math.abs(diffDays)}d` : diffDays === 0 ? "Vence hoje" : `Vence em ${diffDays}d`}
+                        </StatusPill>
+                      }
+                      value={c.plan_value ? fmt(Number(c.plan_value)) : undefined}
+                      onClick={() => navigate("/clientes")}
+                    />
                   );
                 })}
-              </div>
+              </List>
             </Card>
           )}
 
           {stalledProjects.length > 0 && (
-            <Card title="Projetos sem progresso recente" collapsible={false}>
-              <div className="-mx-2">
+            <Card title="Projetos sem progresso recente" subtitle={`${stalledProjects.length} ${stalledProjects.length === 1 ? "projeto" : "projetos"}`} collapsible={false}>
+              <List label="Projetos sem progresso recente">
                 {stalledProjects.map((p: any) => {
                   const daysSince = Math.floor((now.getTime() - new Date(p.updated_at || p.created_at).getTime()) / 86400000);
                   return (
-                    <div key={p.id} className={`${linha} cursor-pointer hover:bg-muted/40`} onClick={() => setDrawerProject(p)}>
-                      <StatusDot />
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-[13px] text-foreground">{p.name}</p>
-                        <p className="truncate text-[12px] text-muted-foreground">
-                          {p.client?.company_name || p.client?.full_name} · {p.progress}%
-                        </p>
-                      </div>
-                      <Chip>Parado há {daysSince}d</Chip>
-                    </div>
+                    <ListRow
+                      key={p.id}
+                      avatar={p.client?.company_name || p.client?.full_name || p.name}
+                      title={p.name}
+                      subtitle={p.client?.company_name || p.client?.full_name}
+                      status={<StatusPill>Parado há {daysSince}d</StatusPill>}
+                      value={`${p.progress}%`}
+                      onClick={() => setDrawerProject(p)}
+                    />
                   );
                 })}
-              </div>
+              </List>
             </Card>
           )}
         </div>
       )}
 
       {/* Updates + Urgent Tasks */}
-      <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
         {/* O feed lê as DUAS fontes: os updates de projeto e a memória dos
             clientes (ritual, entrega, avulso, decisão, relatório). Antes só
             a primeira aparecia, e o painel mostrava menos movimento do que
@@ -625,13 +712,13 @@ export default function AdminDashboard() {
           ) : (activity || []).length === 0 ? (
             <EmptyState compact title="Nenhuma atualização." />
           ) : (
-            <div className="-mx-2">
+            <div className="-mx-3 divide-y divide-border/60">
               {(activity || []).map((entrada) => (
                 /* items-start + min-w-0 + quebra de palavra: no celular a linha
                    longa quebrava desalinhada do ponto colorido. */
                 <div
                   key={entrada.id}
-                  className="flex min-w-0 cursor-pointer items-start gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-muted/40"
+                  className="flex min-w-0 cursor-pointer items-start rounded-lg px-3 py-3.5 transition-colors hover:bg-muted/60"
                   onClick={() => {
                     if (entrada.origin === "entrega") navigate("/relatorios");
                     else if (entrada.origin === "avulso" || entrada.origin === "ciclo") navigate("/ciclo");
@@ -639,10 +726,10 @@ export default function AdminDashboard() {
                     else if (entrada.projectId) navigate("/projetos");
                   }}
                 >
-                  <div className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
+                  <div className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full mr-3 ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
                   <div className="min-w-0 flex-1">
-                    <p className="break-words text-[13px] leading-snug text-foreground">{entrada.message}</p>
-                    <p className="mt-1 flex items-center text-[12px] text-muted-foreground">
+                    <p className="break-words text-[13px] leading-5 text-foreground">{entrada.message}</p>
+                    <p className="mt-1.5 flex items-center text-[12px] text-muted-foreground">
                       <Chip className="mr-2">{entrada.originLabel}</Chip>
                       {new Date(entrada.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                     </p>
@@ -653,22 +740,26 @@ export default function AdminDashboard() {
           )}
         </Card>
 
-        <Card title="Tarefas urgentes" collapsible={false}>
+        <Card title="Tarefas urgentes" variant={urgentTasks.length > 0 ? "ink" : "default"} collapsible={false}>
           {urgentTasks.length === 0 ? (
             <EmptyState compact title="Nenhuma tarefa urgente." />
           ) : (
-            <div className="-mx-2">
+            <List label="Tarefas urgentes">
               {urgentTasks.map((t: any) => (
-                <div key={t.id} className={linha}>
-                  <StatusDot tone={t.priority === "urgent" ? "danger" : "warning"} />
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-[13px] text-foreground">{t.title}</p>
-                    <p className="truncate text-[12px] text-muted-foreground">{t.project?.name}</p>
-                  </div>
-                  <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">{t.due_date ? new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : ""}</span>
-                </div>
+                <ListRow
+                  key={t.id}
+                  leading={
+                    <span aria-hidden="true" className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground">
+                      <AlertTriangle className="h-4 w-4" />
+                    </span>
+                  }
+                  title={t.title}
+                  subtitle={t.project?.name}
+                  status={<StatusPill tone={t.priority === "urgent" ? "danger" : "warning"}>{t.priority === "urgent" ? "Urgente" : "Alta"}</StatusPill>}
+                  value={t.due_date ? new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : undefined}
+                />
               ))}
-            </div>
+            </List>
           )}
         </Card>
       </div>

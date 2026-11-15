@@ -53,10 +53,10 @@ import { dataLocal, fonteDoArquivo, PROXIMOS_DIAS, ultimasVersoes, type ArteNaAg
 
 const COR_DO_SELO: Record<TomDoSelo, string> = {
   neutro: "bg-secondary text-muted-foreground",
-  primario: "bg-primary/10 text-primary",
-  ok: "bg-success/10 text-success",
+  primario: "bg-accent-soft text-primary",
+  ok: "bg-success-soft text-success",
   alerta: "bg-warning/15 text-warning",
-  erro: "bg-destructive/10 text-destructive",
+  erro: "bg-danger-soft text-destructive",
 };
 
 const ICONE_DO_SELO: Record<TomDoSelo, typeof Circle> = {
@@ -279,7 +279,7 @@ function CartaoDoItem({
           {marcado && <Check className="h-3 w-3" />}
         </span>
       )}
-      {modoDaPauta(item, t) === "video" ? <span className="flex shrink-0 items-center justify-center rounded bg-primary/10 text-primary" style={capa}><Film className="h-4 w-4" aria-label="Vídeo rápido" /></span> : capaDoEstudio ? (
+      {modoDaPauta(item, t) === "video" ? <span className="flex shrink-0 items-center justify-center rounded bg-accent-soft text-primary" style={capa}><Film className="h-4 w-4" aria-label="Vídeo rápido" /></span> : capaDoEstudio ? (
         <span className="block shrink-0 overflow-hidden rounded" style={capa}>
           <ImagemDaMesa caminho={capaDoEstudio.storage_path} alt="" className="h-full w-full" />
         </span>

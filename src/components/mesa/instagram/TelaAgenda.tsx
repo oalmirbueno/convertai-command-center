@@ -228,13 +228,13 @@ export default function TelaAgenda({ plano, perfil, podePublicar, onAbrir }: { p
         </p>
       </div>
 
-      <aside className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:block 2xl:space-y-3">
-        <div className={juntar(superficie.painel, "px-3 py-3")}>
+      <aside className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 2xl:block 2xl:space-y-3">
+        <div className={juntar(superficie.painel, "px-4 py-3.5")}>
           <p className="mb-2 text-[13px] font-semibold">Datas e agendamento</p>
           <PainelDeMudancas plano={plano} podePublicar={podePublicar} compacto />
         </div>
         {semData.length > 0 && (
-          <div className={juntar(superficie.painel, "px-3 py-3")}>
+          <div className={juntar(superficie.painel, "px-4 py-3.5")}>
             <p className="text-[13px] font-semibold">Sem data ({semData.length})</p>
             <p className={juntar(texto.auxiliar, "mb-2")}>Arraste para um dia do calendário.</p>
             <ul className="space-y-1">

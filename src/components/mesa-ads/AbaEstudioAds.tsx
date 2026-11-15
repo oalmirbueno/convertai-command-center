@@ -751,7 +751,7 @@ export default function AbaEstudioAds({
                     aria-current={ativo ? "true" : undefined}
                     className={`flex w-full min-w-0 items-center rounded-lg border p-1.5 text-left transition-colors ${ativo ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
                   >
-                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded-md bg-muted">{midia === "video" ? <Clapperboard className={`mx-auto mt-3 h-6 w-6 ${videoResumo.quantidade ? "text-primary" : "text-muted-foreground"}`} /> : capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
+                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded-full bg-muted">{midia === "video" ? <Clapperboard className={`mx-auto mt-3 h-6 w-6 ${videoResumo.quantidade ? "text-primary" : "text-muted-foreground"}`} /> : capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center text-[12px] font-medium">
                         <span className="min-w-0 truncate">{midia === "video" ? nomeBaseVideo(c) : formatoDe(c.formato).rotulo}</span>

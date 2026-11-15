@@ -548,7 +548,7 @@ function EntradaDeFotos({ lado, onArquivos, andamento, onLink }: { lado: LadoDaF
         <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={!!andamento} onClick={() => void colar()} title="Ou aperte Ctrl+V em qualquer lugar da tela" aria-label="Colar">
           <ClipboardPaste className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50", (comLink) && "bg-primary/10 text-primary")} type="button" aria-expanded={comLink} onClick={() => setComLink(!comLink)} aria-label="Link" title="Link">
+        <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50", (comLink) && "bg-accent-soft text-primary")} type="button" aria-expanded={comLink} onClick={() => setComLink(!comLink)} aria-label="Link" title="Link">
           <Link2 className="h-4 w-4" aria-hidden="true" />
         </button>
         <AjudaRecolhida className="mb-1" rotulo="Como subir fotos">
@@ -929,7 +929,7 @@ export default function EtapaAcervo() {
               {filtradas.length === 0 ? (
                 <EstadoVazio compacto titulo={doLado.length ? "Nenhuma foto com esse filtro." : lado === "modelo" ? "Nenhuma foto de modelo ainda." : "Nenhuma foto de produto ainda."} />
               ) : (
-                <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6" data-grade-das-fotos="">
+                <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6" data-grade-das-fotos="">
                   {visiveis.map((f) => (
                     <CartaoDaFoto
                       key={f.id}

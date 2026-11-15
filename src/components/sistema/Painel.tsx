@@ -78,7 +78,7 @@ function CorpoDoPainel({
   return (
     <Tag className={juntar(superficie.painel, "min-w-0", className)} data-recolhido={recolhivel ? (fechado ? "sim" : "nao") : undefined} {...resto}>
       {temCabecalho && (
-        <div className={juntar("flex min-w-0 items-start justify-between", semEspaco || fechado ? "px-4 py-3.5" : "px-4 pt-4 sm:px-5 sm:pt-5", semEspaco && !fechado && "border-b border-border", fechado && "sm:px-5")}>
+        <div className={juntar("flex min-w-0 items-start justify-between", semEspaco || fechado ? "px-5 py-4" : "px-5 pt-5 sm:px-6 sm:pt-6", semEspaco && !fechado && "border-b border-border", fechado && "sm:px-6")}>
           <div className="mr-3 min-w-0 flex-1">
             {titulo && (
               <div className="flex min-w-0 items-center">
@@ -107,7 +107,7 @@ function CorpoDoPainel({
               </div>
             )}
             {linhaDeBaixo && (
-              <p className={juntar(texto.auxiliar, "mt-0.5", recolhivel && "pl-6", fechado && "truncate")} data-resumo-recolhido={fechado ? "" : undefined}>
+              <p className={juntar(texto.auxiliar, "mt-1", recolhivel && "pl-6", fechado && "truncate")} data-resumo-recolhido={fechado ? "" : undefined}>
                 {linhaDeBaixo}
               </p>
             )}
@@ -115,8 +115,8 @@ function CorpoDoPainel({
           {acao && !fechado && <div className="flex shrink-0 items-center [&>*+*]:ml-2">{acao}</div>}
         </div>
       )}
-      {!fechado && <div className={juntar("min-w-0", abriuAgora && "ds-abrir", semEspaco ? "" : temCabecalho ? "px-4 pb-4 pt-3 sm:px-5 sm:pb-5" : "p-4 sm:p-5")}>{children}</div>}
-      {rodape && !fechado && <div className="flex min-w-0 flex-wrap items-center justify-end border-t border-border px-4 py-3 sm:px-5 [&>*+*]:ml-2">{rodape}</div>}
+      {!fechado && <div className={juntar("min-w-0", abriuAgora && "ds-abrir", semEspaco ? "" : temCabecalho ? "px-5 pb-5 pt-4 sm:px-6 sm:pb-6" : "p-5 sm:p-6")}>{children}</div>}
+      {rodape && !fechado && <div className="flex min-w-0 flex-wrap items-center justify-end border-t border-border px-5 py-4 sm:px-6 [&>*+*]:ml-2">{rodape}</div>}
     </Tag>
   );
 }

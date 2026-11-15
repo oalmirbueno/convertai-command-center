@@ -82,7 +82,7 @@ function BuscaComFiltros({
           {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
           <button
             type="button"
-            className={juntar(botao.icone, "col-span-2 justify-self-start", filtro.duplicados && "bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary")}
+            className={juntar(botao.icone, "col-span-2 justify-self-start", filtro.duplicados && "bg-accent-soft text-primary hover:bg-primary/10 hover:text-primary")}
             onClick={() => mudar({ duplicados: !filtro.duplicados })}
             aria-pressed={filtro.duplicados}
             aria-label="Só repetidos"

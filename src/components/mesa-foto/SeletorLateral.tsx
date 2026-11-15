@@ -112,7 +112,7 @@ export default function SeletorLateral({
                     aria-label={`Abrir ${i.nome}`}
                     className={juntar("flex w-full min-w-0 items-center rounded-md px-1.5 py-1 text-left transition-colors", ativo ? "bg-primary/10" : "hover:bg-muted", foco)}
                   >
-                    <span className="relative mr-2 block h-8 w-8 shrink-0 overflow-hidden rounded-md bg-muted">{i.miniatura}</span>
+                    <span className="relative mr-2 block h-8 w-8 shrink-0 overflow-hidden rounded-full bg-muted">{i.miniatura}</span>
                     <span className="min-w-0 flex-1">
                       <span className={juntar("block truncate text-[13px]", ativo ? "font-semibold" : "font-medium")}>{i.nome}</span>
                       <span className="flex min-w-0 items-center text-[11px] text-muted-foreground">

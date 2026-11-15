@@ -185,7 +185,7 @@ export default function PresetsDeEstilo({ site, preset, onPreset, mudou = false,
       {aba === "base" ? (
         <EstilosDaBase destaque={destaque} nome={nome} produtoNo={base.produto ? base.produto.id : null} escolhido={base.estilo ? base.estilo.id : null} ocupado={ocupado === "estilo-base"} onEscolher={(id) => void escolherEstiloDaBase(id)} />
       ) : (
-        <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label="Presets de estilo" data-presets-de-estilo="">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label="Presets de estilo" data-presets-de-estilo="">
           {PRESETS_DE_ESTILO.map((p) => {
             const ligado = p.id === preset;
             return (

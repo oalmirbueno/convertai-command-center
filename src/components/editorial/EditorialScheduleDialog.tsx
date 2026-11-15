@@ -909,7 +909,7 @@ export default function EditorialScheduleDialog({
           </section>
 
           {!clientId || !projectId ? (
-            <div className="mt-4 rounded-lg border border-dashed border-border px-4 py-10 text-center">
+            <div className="mt-4 rounded-md border border-dashed border-border px-4 py-10 text-center">
               <Settings2 className="mx-auto h-6 w-6 text-muted-foreground" />
               <p className="mt-2 text-[13px] font-medium text-foreground">
                 Comece pelo cliente e projeto
@@ -926,7 +926,7 @@ export default function EditorialScheduleDialog({
           ) : optionsFailed || schedulingPosts.isError ? (
             <div
               role="alert"
-              className="mt-4 flex flex-col items-center rounded-lg border border-destructive/25 bg-destructive/5 px-5 py-10 text-center"
+              className="mt-4 flex flex-col items-center rounded-md bg-danger-soft px-5 py-10 text-center"
             >
               <AlertCircle className="h-6 w-6 text-destructive" />
               <p className="mt-2 text-[13px] font-medium text-foreground">
@@ -973,7 +973,7 @@ export default function EditorialScheduleDialog({
                   </Badge>
                 </div>
                 {selectedAsset && !showLibrary ? (
-                  <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-3">
+                  <div className="rounded-md bg-accent-soft p-3">
                     <div className="flex min-w-0 items-start gap-3">
                       {/* A ARTE, não um ícone genérico. O card é a confirmação
                           visual de que a peça certa foi escolhida — com um
@@ -1106,7 +1106,7 @@ export default function EditorialScheduleDialog({
                                 key={bundle.post.id}
                                 type="button"
                                 onClick={() => selectAsset(asset)}
-                                className="flex min-h-[60px] items-center gap-2.5 rounded-lg border border-primary/25 bg-primary/[0.04] p-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
+                                className="flex min-h-[60px] items-center gap-2.5 rounded-md bg-accent-soft p-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
                               >
                                 <EditorialFileThumbnail
                                   post={bundle}
@@ -1128,7 +1128,7 @@ export default function EditorialScheduleDialog({
                           <button
                             type="button"
                             onClick={() => setMostrarArquivos(true)}
-                            className="mt-2 w-full rounded-lg border border-dashed border-border px-3 py-2 text-center text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                            className="mt-2 w-full rounded-md border border-dashed border-border px-3 py-2 text-center text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
                           >
                             ou escolha direto dos arquivos
                           </button>
@@ -1254,13 +1254,13 @@ export default function EditorialScheduleDialog({
                         );
                       })}
                       {visibleAccounts.length === 0 && (
-                        <div className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-[12px] leading-4 text-muted-foreground">
+                        <div className="rounded-md border border-dashed border-border px-3 py-5 text-center text-[12px] leading-4 text-muted-foreground">
                           Nenhuma conta corresponde à busca.
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/20 p-4 text-center">
+                    <div className="mt-3 rounded-md border border-dashed border-border bg-muted/20 p-4 text-center">
                       <p className="text-[12px] leading-4 font-medium text-foreground">
                         Nenhuma conta vinculada a este projeto
                       </p>
@@ -1290,7 +1290,7 @@ export default function EditorialScheduleDialog({
                   {hasUnavailableSelection && (
                     <p
                       role="alert"
-                      className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] leading-4 text-destructive"
+                      className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-[11px] leading-4 text-destructive"
                     >
                       Uma conta deste plano precisa ser reconectada antes do
                       agendamento.
@@ -1299,7 +1299,7 @@ export default function EditorialScheduleDialog({
                   {hasMissingSelectedAccounts && (
                     <p
                       role="alert"
-                      className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] leading-4 text-destructive"
+                      className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-[11px] leading-4 text-destructive"
                     >
                       {missingSelectedAccountIds.length === 1
                         ? "Uma conta deste plano foi inativada ou removida do projeto."

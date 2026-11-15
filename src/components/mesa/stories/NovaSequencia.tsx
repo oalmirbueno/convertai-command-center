@@ -163,7 +163,7 @@ export default function NovaSequencia({
       recolher={`mesa:stories:nova:${clientId}`}
       ajuda="Escolha o modelo: cada tela tem um papel (gancho, problema ou desejo, prova, oferta e CTA com adesivo) e a imagem sai do gerador do Estúdio em 9:16, com o texto integrado. Com campanha, o briefing, a identidade, o selo e a fase entram no roteiro e nas imagens."
     >
-      <div className="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4" role="radiogroup" aria-label="Modelo da sequência" data-modelos-de-sequencia="">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4" role="radiogroup" aria-label="Modelo da sequência" data-modelos-de-sequencia="">
         {MODELOS_DE_SEQUENCIA.map((m) => ({ chave: m.chave, nome: m.nome, descricao: m.descricao }))
           .concat([{ chave: NOVELA, nome: "Novela do dia", descricao: "O capítulo do dia: gancho, interação e o gancho para amanhã." }])
           .map((m) => {

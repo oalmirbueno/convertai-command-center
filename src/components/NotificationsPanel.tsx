@@ -191,17 +191,20 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
         {/* Lista: a única rolagem da janela */}
         <div className="pb-2">
           {isError ? <button type="button" className="m-5 text-[13px] text-warning" onClick={() => void refetch()}>Não foi possível ler os avisos. Tentar novamente</button> : groups.length === 0 ? (
-            <p className="py-12 text-center text-[13px] text-muted-foreground">Nenhuma notificação.</p>
+            <div className="flex flex-col items-center px-5 py-14 text-center">
+              <span aria-hidden="true" className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><Bell className="h-5 w-5" /></span>
+              <p className="text-[13px] text-muted-foreground">Nenhuma notificação.</p>
+            </div>
           ) : (
             groups.map((group) => {
               const aberto = grupoAberto(group);
               return (
-              <section key={group.categoria} aria-label={group.nome} data-grupo-do-sino={group.categoria} className="border-b border-border/60 last:border-b-0">
-                <div className="flex min-w-0 items-center px-5 pb-1 pt-3">
+              <section key={group.categoria} aria-label={group.nome} data-grupo-do-sino={group.categoria} className="border-b border-border/60 pb-2 last:border-b-0">
+                <div className="flex min-w-0 items-center px-5 pb-2 pt-4">
                   <button type="button" aria-expanded={aberto} onClick={() => setAbertos((x) => ({ ...x, [group.categoria]: !aberto }))} className="flex min-w-0 flex-1 items-center text-left">
                     <ChevronDown className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200", !aberto && "-rotate-90")} aria-hidden="true" />
-                    <span className={juntar(texto.etiqueta, "min-w-0 truncate", group.pedeDecisao ? "text-primary" : "text-muted-foreground")}>{group.nome}</span>
-                    <span className={juntar(texto.etiqueta, "ml-1.5 shrink-0 tabular-nums text-muted-foreground")}>{group.naoLidos > 0 ? `${group.naoLidos} não ${group.naoLidos === 1 ? "lido" : "lidos"}` : group.itens.length}</span>
+                    <span className={juntar("min-w-0 truncate text-[13px] font-semibold leading-5", group.pedeDecisao ? "text-primary" : "text-foreground")}>{group.nome}</span>
+                    <span className={juntar(texto.etiqueta, "ml-2 inline-flex h-5 shrink-0 items-center rounded-full px-2 tabular-nums", group.naoLidos > 0 ? (group.pedeDecisao ? "bg-accent-solid text-on-accent" : "bg-foreground text-background") : "bg-muted text-muted-foreground")}>{group.naoLidos > 0 ? `${group.naoLidos} não ${group.naoLidos === 1 ? "lido" : "lidos"}` : group.itens.length}</span>
                   </button>
                   {group.naoLidos > 0 && (
                     <button type="button" onClick={() => void marcarGrupo(group)} className={juntar(botao.discreto, "ml-2 h-7 shrink-0 px-2 text-[12px]")} title={`Marcar todos de ${group.nome} como lidos`} aria-label={`Marcar todos de ${group.nome} como lidos`}>
@@ -218,12 +221,12 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                       key={n.id}
                       onClick={() => handleClick(n)}
                       data-pede-decisao={destaque ? "" : undefined}
-                      className={`px-5 py-3 cursor-pointer transition-colors ${
-                        destaque ? "bg-accent-soft/60 hover:bg-accent-soft" : "hover:bg-muted/40"
+                      className={`mx-2 mb-1 cursor-pointer rounded-md px-3 py-3 transition-colors ${
+                        destaque ? "bg-accent-soft hover:bg-accent-soft/80" : "hover:bg-muted/60"
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${bg}`} title={rotuloDoTipoDoAviso(n.notification_type) || undefined}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${n.read ? "bg-muted text-muted-foreground" : bg}`} title={rotuloDoTipoDoAviso(n.notification_type) || undefined}>
                           {icon}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -236,7 +239,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                             <p className="text-[12px] font-medium leading-4 text-primary mt-1">{getLinkLabel(n)}</p>
                           )}
                         </div>
-                        {!n.read && <div className={`w-2 h-2 rounded-full shrink-0 mt-2 ${destaque ? "bg-primary" : "bg-muted-foreground/40"}`} />}
+                        {!n.read && <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-2 ${destaque ? "bg-accent-solid ring-4 ring-primary/15" : "bg-foreground"}`} />}
                       </div>
                     </div>
                   );

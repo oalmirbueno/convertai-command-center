@@ -798,7 +798,7 @@ function StatusCard({
   icon: React.ReactNode; title: string; loading: boolean; ok: boolean; error: string | null; onRetry?: () => void; children?: React.ReactNode;
 }) {
   return (
-    <div className={juntar(superficie.painel, "min-w-0 p-4")}>
+    <div className={juntar(superficie.painel, "min-w-0 p-5")}>
       <div className="mb-2 flex min-w-0 items-center">
         <p className={juntar(texto.corpo, "mr-2 flex min-w-0 flex-1 items-center truncate font-semibold")}>
           <span className="mr-1.5 shrink-0 text-muted-foreground" aria-hidden="true">{icon}</span> {title}

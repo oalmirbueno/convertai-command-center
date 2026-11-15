@@ -155,8 +155,8 @@ export default function OrganizadorDeProdutos({ onEscolher }: { onEscolher?: (id
         </>}
       </div> : aba === "produtos" ? <>
         <aside className="produtos-pastas" aria-label="Pastas dos produtos">
-          <button className={juntar("produtos-pasta", pasta === null && "bg-primary/10 text-primary", foco)} onClick={() => { setPasta(null); setAberto(null); }}><Package className="h-4 w-4" />Todos <span className="ml-auto">{kits.length}</span></button>
-          {pastas.map((p) => <button key={p} className={juntar("produtos-pasta", pasta === p && "bg-primary/10 text-primary", foco)} title={p || "Sem pasta"} onClick={() => { setPasta(p); setAberto(null); }}><Folder className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{p || "Sem pasta"}</span><span className="ml-auto">{kits.filter((k) => pastaDoProduto(k) === p).length}</span></button>)}
+          <button className={juntar("produtos-pasta", pasta === null && "bg-accent-soft text-primary", foco)} onClick={() => { setPasta(null); setAberto(null); }}><Package className="h-4 w-4" />Todos <span className="ml-auto">{kits.length}</span></button>
+          {pastas.map((p) => <button key={p} className={juntar("produtos-pasta", pasta === p && "bg-accent-soft text-primary", foco)} title={p || "Sem pasta"} onClick={() => { setPasta(p); setAberto(null); }}><Folder className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{p || "Sem pasta"}</span><span className="ml-auto">{kits.filter((k) => pastaDoProduto(k) === p).length}</span></button>)}
         </aside>
         <div className="produtos-conteudo">
           {produto ? <>

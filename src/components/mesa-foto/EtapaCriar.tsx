@@ -80,7 +80,7 @@ export default function EtapaCriar() {
         dica="Escolha e a mesa segue para frente: com a foto ou o produto já em mãos, abre direto a ferramenta; senão, as Fotos pedem o que falta. A escolha fica guardada para este cliente."
       >
         {/* 02/10 (dono: "só ícone e nome; a explicação no ?"): cada opção é ícone + nome; o que faz e o que precisa ficam no "?". */}
-        <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-3" data-objetivos="">
+        <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-3" data-objetivos="">
           {OBJETIVOS.map((o) => {
             const Icone = ICONES_DOS_OBJETIVOS[o.valor];
             const escolhido = !!objetivo && objetivo.valor === o.valor;
@@ -128,7 +128,7 @@ export default function EtapaCriar() {
 
       {kit && (
         <div className="flex min-w-0 items-center" data-produto-aberto="">
-          <span className="mr-2.5 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-md bg-muted" />}</span>
+          <span className="mr-2.5 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-full bg-muted" />}</span>
           <div className="mr-2 min-w-0 flex-1">
             <div className="flex min-w-0 items-center">
               <p className="min-w-0 truncate text-[13px] font-semibold">
@@ -168,7 +168,7 @@ export default function EtapaCriar() {
         resumo="Book, pessoa real, pessoas da IA, quadro livre e ideias"
         dica="Ferramentas para quem já conhece a mesa. Também ficam no botão Mais, no alto."
       >
-        <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3" data-apoios-do-criar="">
+        <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2 xl:grid-cols-3" data-apoios-do-criar="">
           {AVANCADAS.map((a) => {
             const Icone = a.icone;
             return (

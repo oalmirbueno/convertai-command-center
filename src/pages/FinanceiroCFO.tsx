@@ -12,7 +12,7 @@ export default function FinanceiroCFO() {
   const { profile } = useAuth();
   if (profile && profile.role !== "admin") return <Navigate to="/financeiro" replace />;
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="min-w-0 space-y-6 sm:space-y-8">
       <CabecalhoDePagina
         titulo="CFO"
         voltar={{ para: "/financeiro", rotulo: "Financeiro" }}

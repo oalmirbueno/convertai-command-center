@@ -11,14 +11,15 @@ import {
   sanitizeClientText,
 } from "@/lib/projectPresentation";
 import { daysUntil, formatDateShort } from "../dashboardHelpers";
-import { Painel, Secao, etiqueta, juntar, texto } from "@/components/sistema";
+import { espaco, juntar, texto } from "@/components/sistema";
+import { Card, CardSurface, List, ListRow, ProgressBar, StatusPill, type Tone } from "@/components/ds";
 
-const statusBadge: Record<string, string> = {
-  active: "bg-success/10 text-success",
-  review: "bg-warning/10 text-warning",
-  planning: "bg-info/10 text-info",
-  done: "bg-success/10 text-success",
-  paused: "bg-muted text-muted-foreground",
+const statusTone: Record<string, Tone> = {
+  active: "success",
+  review: "warning",
+  planning: "info",
+  done: "success",
+  paused: "neutral",
 };
 
 // O status aparecia cru ("active"): o cliente lê o nome em português.
@@ -54,16 +55,16 @@ export default function TabOverview({ project }: { project: any }) {
   const cleanScope = sanitizeClientText(project.scope);
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-5">
-      <div className="min-w-0 space-y-6 lg:col-span-3">
-        <Secao titulo="Sobre o projeto">
-          <div className="space-y-4">
+    <div className={juntar(espaco.grade, "grid-cols-1 items-start lg:grid-cols-5")}>
+      <div className="min-w-0 space-y-4 sm:space-y-5 lg:col-span-3">
+        <Card title="Sobre o projeto">
+          <div className="space-y-5">
             {sections.length > 0 ? (
               sections.map((section, index) => (
                 <div key={`${section.title}-${index}`} className="min-w-0">
                   <p className={texto.rotulo}>{section.title}</p>
                   {section.body.map((line, lineIndex) => (
-                    <p key={lineIndex} className={juntar(texto.corpo, "mt-1 text-foreground/85 [overflow-wrap:anywhere]")}>
+                    <p key={lineIndex} className={juntar(texto.corpo, "mt-1.5 text-foreground/85 [overflow-wrap:anywhere]")}>
                       {line}
                     </p>
                   ))}
@@ -77,108 +78,99 @@ export default function TabOverview({ project }: { project: any }) {
             {cleanScope && !sections.some((section) => /escopo/i.test(section.title)) && (
               <div className="min-w-0">
                 <p className={texto.rotulo}>Escopo</p>
-                <p className={juntar(texto.corpo, "mt-1 text-foreground/75 [overflow-wrap:anywhere]")}>{cleanScope}</p>
+                <p className={juntar(texto.corpo, "mt-1.5 text-foreground/75 [overflow-wrap:anywhere]")}>{cleanScope}</p>
               </div>
             )}
           </div>
-        </Secao>
+        </Card>
 
         {objectives.length > 0 && (
-          <Secao titulo="Objetivos" divisoria>
-            <ul className="space-y-1.5">
+          <Card title="Objetivos">
+            <ul className="space-y-3">
               {objectives.map((objective: string, index: number) => (
-                <li key={index} className={juntar(texto.corpo, "flex items-start text-foreground/80")}>
-                  <span className="mr-2.5 mt-2 h-1 w-1 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                <li key={index} className={juntar(texto.corpo, "flex items-start text-foreground/85")}>
+                  <span className="mr-3 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary" aria-hidden="true">
+                    <Target className="h-3 w-3" />
+                  </span>
                   <span className="min-w-0">{objective}</span>
                 </li>
               ))}
             </ul>
-          </Secao>
-        )}
-
-        {activeMilestone && (
-          <Secao
-            titulo="Etapa atual"
-            divisoria
-            descricao={`${completedMilestones.length} de ${allMilestones.length} concluídas`}
-          >
-            <p className="flex min-w-0 items-center text-[15px] font-semibold leading-[22px] text-foreground">
-              <Target className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-              <span className="min-w-0 truncate">{activeMilestone.title}</span>
-            </p>
-            {activeMilestone.target_date && (
-              <p className={juntar(texto.auxiliar, "mt-1 flex items-center")}>
-                <Calendar className="mr-1.5 h-3 w-3" aria-hidden="true" />
-                Previsão {formatDateShort(activeMilestone.target_date)}
-                {daysUntil(activeMilestone.target_date) >= 0 && <span>&nbsp;· {daysUntil(activeMilestone.target_date)} dia(s)</span>}
-              </p>
-            )}
-          </Secao>
+          </Card>
         )}
 
         {allMilestones.length > 0 && (
-          <Secao titulo="Progresso das etapas" divisoria descricao={`${completedMilestones.length} de ${allMilestones.length} concluídas`}>
-            <ul className="divide-y divide-border">
+          <Card title="Progresso das etapas" subtitle={`${completedMilestones.length} de ${allMilestones.length} concluídas`}>
+            <div className="mb-3">
+              <ProgressBar value={completedMilestones.length} max={allMilestones.length} tone={1} striped height={10} />
+            </div>
+            <List label="Etapas do projeto">
               {allMilestones.slice(0, 8).map((milestone: any) => {
                 const isDone = milestone.status === "completed";
                 const isActive = milestone.status === "in_progress";
                 return (
-                  <li key={milestone.id} className="flex min-w-0 items-center py-2">
-                    <span className={`mr-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
-                      isDone
-                        ? "border-emerald-500/40 bg-emerald-500/15"
-                        : isActive
-                          ? "border-primary/40 bg-primary/15"
-                          : "border-border bg-muted"
-                    }`}>
-                      {isDone ? (
-                        <CheckCircle2 className="h-3 w-3 text-emerald-500" aria-label="Concluída" />
-                      ) : isActive ? (
-                        <CircleDot className="h-3 w-3 text-primary" aria-label="Em andamento" />
-                      ) : (
-                        <Circle className="h-3 w-3 text-muted-foreground/40" aria-label="A fazer" />
-                      )}
-                    </span>
-                    <p className={`min-w-0 flex-1 truncate text-[13px] ${
-                      isDone ? "text-emerald-500" : isActive ? "font-medium text-foreground" : "text-muted-foreground"
-                    }`}>
-                      {milestone.title}
-                    </p>
-                    <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>
-                      {formatDateShort(milestone.target_date)}
-                    </span>
-                  </li>
+                  <ListRow
+                    key={milestone.id}
+                    dense
+                    highlight={isActive}
+                    leading={
+                      <span className={juntar("flex h-8 w-8 shrink-0 items-center justify-center rounded-full", isDone ? "bg-foreground text-background" : isActive ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground")}>
+                        {isDone ? (
+                          <CheckCircle2 className="h-4 w-4" aria-label="Concluída" />
+                        ) : isActive ? (
+                          <CircleDot className="h-4 w-4" aria-label="Em andamento" />
+                        ) : (
+                          <Circle className="h-4 w-4 opacity-50" aria-label="A fazer" />
+                        )}
+                      </span>
+                    }
+                    title={<span className={isDone || isActive ? "" : "font-normal text-muted-foreground"}>{milestone.title}</span>}
+                    value={formatDateShort(milestone.target_date) || undefined}
+                  />
                 );
               })}
-            </ul>
-          </Secao>
+            </List>
+          </Card>
         )}
       </div>
 
-      <aside className="min-w-0 lg:col-span-2">
-        <Painel titulo="Informações" semEspaco>
-          <dl className="divide-y divide-border">
+      <aside className="min-w-0 space-y-4 sm:space-y-5 lg:col-span-2">
+        {activeMilestone && (
+          <CardSurface variant="ink" padded>
+            <p className="flex min-w-0 items-center text-[13px] font-medium leading-5 text-muted-foreground">
+              <Target className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              Etapa atual
+              <span className="ml-auto shrink-0 pl-3 tabular-nums">{`${completedMilestones.length} de ${allMilestones.length} concluídas`}</span>
+            </p>
+            <p className="mt-4 line-clamp-2 text-[24px] font-semibold leading-8 tracking-[-0.02em] text-foreground">{activeMilestone.title}</p>
+            {activeMilestone.target_date && (
+              <p className={juntar(texto.auxiliar, "mt-2 flex items-center")}>
+                <Calendar className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                Previsão {formatDateShort(activeMilestone.target_date)}
+                {daysUntil(activeMilestone.target_date) >= 0 && <span>&nbsp;· {daysUntil(activeMilestone.target_date)} dia(s)</span>}
+              </p>
+            )}
+          </CardSurface>
+        )}
+        <Card title="Informações">
+          <dl className="-my-1 divide-y divide-border/70">
             {[
               { rotulo: "Início", valor: formatDateShort(project.start_date) || "A definir" },
               { rotulo: "Previsão", valor: formatDateShort(project.deadline) || "A definir" },
               { rotulo: "Progresso", valor: <span className="tabular-nums">{project.progress || 0}%</span> },
               {
                 rotulo: "Status",
-                valor: (
-                  <span className={juntar(etiqueta, statusBadge[project.status] || statusBadge.paused)}>
-                    {statusLabels[project.status] || project.status}
-                  </span>
-                ),
+                valor: <StatusPill tone={statusTone[project.status] || "neutral"}>{statusLabels[project.status] || project.status}</StatusPill>,
               },
               { rotulo: "Tipo", valor: typeLabels[project.project_type] || "Projeto" },
             ].map((linha) => (
-              <div key={linha.rotulo} className="flex min-w-0 items-center justify-between px-4 py-2.5 text-[13px]">
+              <div key={linha.rotulo} className="flex min-w-0 items-center justify-between py-3 text-[13px]">
                 <dt className="text-muted-foreground">{linha.rotulo}</dt>
-                <dd className="ml-3 min-w-0 truncate text-right text-foreground">{linha.valor}</dd>
+                <dd className="ml-3 min-w-0 truncate text-right font-medium text-foreground">{linha.valor}</dd>
               </div>
             ))}
           </dl>
-        </Painel>
+        </Card>
       </aside>
     </div>
   );

@@ -11,20 +11,22 @@ import { extendTailwindMerge } from "tailwind-merge";
  */
 
 /**
- * Escala de fonte FECHADA (28/09; 28 px desde 14/11/2026): 11, 12, 13, 14, 15, 20, 24 e 28 px. Nada fora
+ * Escala de fonte FECHADA (28/09; rodada ousada de 15/11/2026): 11, 12, 13, 14, 15, 18, 20, 24, 28, 32,
+ * 36, 40 e 48 px. 18 px é o título de seção e de cartão; 32 px o título da página; 28 a 48 px são só
+ * número de destaque (o StatCard escolhe o maior que cabe numa linha). Nada fora
  * dela (nada de 10,5, 11,5, 12,5, 13,5, 16, 18 px nem text-xs/text-sm/text-lg).
  * 14 px é só a conversa com agente (`conversa`); 24 px é só número de destaque
  * (`texto.numero`). A tabela de troca está em docs/design/SISTEMA.md, seção 2,
  * e o teste src/test/padrao-visual-catraca.test.ts não deixa o total subir.
  */
-export const ESCALA_DE_FONTE = [11, 12, 13, 14, 15, 20, 24, 28] as const;
+export const ESCALA_DE_FONTE = [11, 12, 13, 14, 15, 18, 20, 24, 28, 32, 36, 40, 48] as const;
 
 /** Escala tipográfica: sete papéis, seis tamanhos (mais os 14 px da conversa). */
 export const texto = {
   /** Título da página ou da área (um por tela). */
-  tituloPagina: "text-[24px] font-semibold leading-8 tracking-[-0.02em] text-foreground max-sm:text-[20px] max-sm:leading-7",
+  tituloPagina: "text-[32px] font-semibold leading-10 tracking-[-0.03em] text-foreground max-sm:text-[24px] max-sm:leading-8",
   /** Título de seção. */
-  tituloSecao: "text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground",
+  tituloSecao: "text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground",
   /** Rótulo de campo, de coluna, de grupo. */
   rotulo: "text-[12px] font-medium leading-4 text-muted-foreground",
   /** Texto corrido e valores. */
@@ -35,8 +37,8 @@ export const texto = {
   etiqueta: "text-[11px] font-medium leading-4",
   /** Número de destaque (KPI, total): 24 px, algarismos da mesma largura. */
   numero: "text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground",
-  /** Número grande do cartão de indicador (ds/StatCard): 28 px. */
-  numeroGrande: "text-[28px] font-semibold leading-9 tracking-[-0.025em] tabular-nums text-foreground",
+  /** Número grande fora do StatCard (total de seção, herói): 40 px, 28 px no celular. */
+  numeroGrande: "text-[40px] font-semibold leading-[44px] tracking-[-0.035em] tabular-nums text-foreground max-sm:text-[28px] max-sm:leading-9",
 } as const;
 
 /**
@@ -103,6 +105,10 @@ export const botao = {
 export const superficie = {
   /** O único cartão elevado (Painel). Nada de cartão dentro dele. Nunca para embrulhar uma seção. */
   painel: "rounded-lg border border-border bg-card shadow-card",
+  /** Cartão de destaque na cor da marca, com texto quase preto (um por fileira). Junte com `painel`. */
+  destaque: "ds-accent",
+  /** Cartão de tinta: preto no tema claro, claro no tema escuro (um por fileira). Junte com `painel`. */
+  tinta: "ds-ink",
   /** Poço dentro de um painel: fundo levemente diferente, sem borda. */
   poco: "rounded-md bg-muted/60",
   /** Divisória fina entre seções. */
@@ -116,15 +122,15 @@ export const superficie = {
  */
 export const espaco = {
   /** Entre os blocos grandes da página (cabeçalho, barra, seções): 24 px (20 px no celular, 16/10/2026). */
-  pagina: "min-w-0 space-y-5 sm:space-y-6",
+  pagina: "min-w-0 space-y-6 sm:space-y-8",
   /** Seções abertas lado a lado: 32 px entre colunas, 28 px entre linhas (24 px no celular). */
   colunas: "grid min-w-0 items-start gap-x-8 gap-y-6 sm:gap-y-7",
   /** Itens de uma grade (mídia, item que é uma coisa): 16 px. */
-  grade: "grid min-w-0 gap-4",
+  grade: "grid min-w-0 gap-4 sm:gap-5",
   /** Grupos de funções (GrupoDeFuncoes): 24 px entre colunas, 20 px entre linhas. */
   grupos: "grid min-w-0 gap-x-6 gap-y-5",
-  /** Respiro interno de um Painel ou item (16 px no celular, 20 px de 640 para cima). */
-  interno: "p-4 sm:p-5",
+  /** Respiro interno de um Painel ou item (20 px no celular, 24 px de 640 para cima). */
+  interno: "p-5 sm:p-6",
 } as const;
 
 /**
@@ -140,7 +146,7 @@ export const lista = {
   /** A lista com traço leve entre as linhas (junte com `aberta`). */
   divisoria: "divide-y divide-border/50",
   /** Uma linha: canto, respiro e fundo suave no hover. */
-  linha: "flex min-w-0 items-center rounded-lg px-2.5 py-2.5 transition-colors hover:bg-muted/40",
+  linha: "flex min-w-0 items-center rounded-lg px-3 py-3 transition-colors hover:bg-muted/40",
   /** Linha em destaque (junte com `linha`): fundo verde leve no lugar do hover. */
   destaque: "bg-primary/[0.07] hover:bg-primary/10",
 } as const;

@@ -17,6 +17,7 @@ import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import { useAchados } from "@/hooks/useAchados";
 import FaixaDeAchados from "@/components/achados/FaixaDeAchados";
+import { Avatar, Chip, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
 import {
   AjudaRecolhida,
   AreaDeTrabalho,
@@ -26,7 +27,6 @@ import {
   Etapas,
   JanelaCentral,
   botao,
-  etiqueta,
   foco,
   juntar,
   larguraDaMesa,
@@ -223,8 +223,8 @@ export default function AdminEsteira() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Topo FIXO (não sticky): no celular, a rolagem nunca leva a semana
           junto. O espaço reservado abaixo tem a mesma altura, medida. */}
-      <header ref={headerRef} className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 pt-[calc(env(safe-area-inset-top)+0.625rem)] backdrop-blur">
-        <div className={juntar(larguraDaMesa, "px-3 sm:px-4 md:px-6")}>
+      <header ref={headerRef} className="fixed inset-x-0 top-0 z-30 border-b border-border/70 bg-background/90 pb-1 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-md lg:pb-3">
+        <div className={juntar(larguraDaMesa, "px-4 sm:px-6 lg:px-8")}>
           {/* 16/10/2026 (dono): padrão do painel. Linha 1: voltar, título, "?",
               frentes em ícone (tablet para cima), semana e números (notebook
               para cima) e as ações só em ícone, nome no title. Linha 2 só
@@ -244,25 +244,25 @@ export default function AdminEsteira() {
               itens={ABAS.map(({ k, rotulo, Icone, ajuda }) => ({ valor: k, rotulo, icone: <Icone className="h-4 w-4" />, contador: contagemDasAbas[k], ajuda }))}
             />
 
-            <div className="ml-3 hidden min-w-0 items-center lg:flex">
+            <div className="ml-4 hidden min-w-0 items-center lg:flex">
               <SemanaNav segunda={segunda} quando={quandoESemana} offset={semanaOffset} onMudar={irParaSemana} onHoje={() => setSemanaEscolhida("")} />
             </div>
-            {estadoDoTopo("ml-auto hidden pl-3 lg:flex")}
+            {(erro || (carregando && clientes.length === 0)) && estadoDoTopo("ml-auto hidden pl-3 lg:flex")}
 
-            <div className="ml-auto flex shrink-0 items-center pl-2 lg:ml-2 [&>*+*]:ml-1">
+            <div className="ml-auto flex shrink-0 items-center pl-2 [&>*+*]:ml-1.5">
               {profile?.role === "admin" && (
-                <Link to="/ciclo/revisao" aria-label="Revisão por cliente" title={revisoesPendentes > 0 ? `Revisão por cliente (${revisoesPendentes} esperando decisão)` : "Revisão por cliente"} className={juntar(botao.icone, "relative")}>
+                <Link to="/ciclo/revisao" aria-label="Revisão por cliente" title={revisoesPendentes > 0 ? `Revisão por cliente (${revisoesPendentes} esperando decisão)` : "Revisão por cliente"} className={juntar(botao.icone, "relative h-9 w-9 border border-border bg-card")}>
                   <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-                  {revisoesPendentes > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[11px] font-semibold leading-4 tabular-nums text-primary-foreground" aria-hidden="true">{revisoesPendentes}</span>}
+                  {revisoesPendentes > 0 && <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-accent-solid px-1 text-center text-[11px] font-semibold leading-[18px] tabular-nums text-on-accent" aria-hidden="true">{revisoesPendentes}</span>}
                 </Link>
               )}
-              <button type="button" onClick={() => setQuemEntraAberto(true)} aria-label="Quem entra" title="Quem entra" className={botao.icone}>
+              <button type="button" onClick={() => setQuemEntraAberto(true)} aria-label="Quem entra" title="Quem entra" className={juntar(botao.icone, "h-9 w-9 border border-border bg-card")}>
                 <Users className="h-4 w-4" aria-hidden="true" />
               </button>
-              <button type="button" aria-label="Atualizar" title="Atualizar" disabled={atualizando} onClick={() => void atualizar()} className={botao.icone}>
+              <button type="button" aria-label="Atualizar" title="Atualizar" disabled={atualizando} onClick={() => void atualizar()} className={juntar(botao.icone, "h-9 w-9 border border-border bg-card")}>
                 <RefreshCw className={`h-4 w-4 ${atualizando ? "animate-spin" : ""}`} aria-hidden="true" />
               </button>
-              <button type="button" aria-label="Por onde começar" title="Por onde começar" disabled={bloqueado} onClick={() => setComecarAberto(true)} className={juntar(botao.icone, "text-primary hover:text-primary")}>
+              <button type="button" aria-label="Por onde começar" title="Por onde começar" disabled={bloqueado} onClick={() => setComecarAberto(true)} className={juntar(botao.icone, "h-9 w-9 bg-accent-solid text-on-accent hover:bg-accent-solid/90 hover:text-on-accent")}>
                 <Compass className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
@@ -273,23 +273,55 @@ export default function AdminEsteira() {
             <div className="shrink-0">
               <SemanaNav segunda={segunda} quando={quandoESemana} offset={semanaOffset} onMudar={irParaSemana} onHoje={() => setSemanaEscolhida("")} />
             </div>
-            {estadoDoTopo("ml-auto flex pl-3")}
+            {estadoDoTopo("ml-auto flex pl-3 sm:hidden")}
           </div>
         </div>
       </header>
       <div style={{ height: headerH }} aria-hidden />
 
-      <main className={juntar(larguraDaMesa, "px-4 pb-[calc(env(safe-area-inset-bottom)+80px)] pt-3 md:px-6 md:pb-6")}>
+      <main className={juntar(larguraDaMesa, "px-4 pb-[calc(env(safe-area-inset-bottom)+96px)] pt-4 sm:px-6 sm:pt-6 md:pb-8 lg:px-8")}>
         <AreaDeTrabalho rotuloDoPrincipal="Clientes do ciclo" memoriaDaRolagem={`ciclo:lista:${aba}:${weekStart}`}>
           {erro && (
             <EstadoDeErro
-              className="mb-3"
+              className="mb-5"
               titulo="Não consegui atualizar a Esteira."
               descricao={clientes.length > 0 ? "Os dados abaixo são da última leitura concluída. As ações ficam pausadas até atualizar." : "A leitura está indisponível. Isso não significa que não há clientes ou pendências."}
               acao={<button type="button" disabled={atualizando} onClick={() => void atualizar()} className={juntar(botao.secundario, "h-8 text-[12px]")}>Tentar novamente</button>}
             />
           )}
-          {semanaOffset === 0 && <FaixaDeAchados className="mb-3" achados={achados} />}
+          {!erro && !(carregando && clientes.length === 0) && visiveis.length > 0 && (
+            <StatGrid cols={4} className="mb-5 max-sm:hidden sm:mb-6" label={`Resumo de ${aba === "avulso" ? "Avulso" : rotuloDaFrente}`}>
+              <StatCard
+                variant="ink"
+                label="Urgentes"
+                value={resumo.urgentes}
+                icon={<Flame className="h-4 w-4" />}
+                hint={`${resumo.atencao} de atenção`}
+              />
+              <StatCard
+                variant="accent"
+                label="Em dia"
+                value={resumo.emDia}
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                hint={`de ${plural(visiveis.length, "cliente", "clientes")}`}
+                chart={<ProgressBar value={resumo.emDia} max={visiveis.length} tone="current" label={`${resumo.emDia} de ${visiveis.length} clientes em dia`} />}
+              />
+              <StatCard
+                label="Rituais"
+                value={`${resumo.rituaisFeitos}/${visiveis.length * 3}`}
+                icon={<CalendarCheck className="h-4 w-4" />}
+                hint="feitos na semana"
+                chart={<ProgressBar value={resumo.rituaisFeitos} max={visiveis.length * 3} striped label={`Rituais ${resumo.rituaisFeitos} de ${visiveis.length * 3}`} />}
+              />
+              <StatCard
+                label="Feitos na semana"
+                value={resumo.feitos}
+                icon={<ListChecks className="h-4 w-4" />}
+                hint={resumo.entrada > 0 ? `${resumo.entrada} em entrada` : plural(visiveis.length, "cliente", "clientes")}
+              />
+            </StatGrid>
+          )}
+          {semanaOffset === 0 && <FaixaDeAchados className="mb-5" achados={achados} />}
           {carregando && clientes.length === 0 && !erro && <Carregando linhas={6} rotulo="Lendo a operação de cada cliente" />}
           {!erro && !carregando && visiveis.length === 0 && (
             <EstadoVazio
@@ -300,9 +332,9 @@ export default function AdminEsteira() {
             />
           )}
           {visiveis.length > 0 && (
-            <ul className={juntar("grid min-w-0 grid-cols-1 lg:grid-cols-2 lg:gap-x-8", visiveis.length >= 3 && "desk:grid-cols-3")} aria-label={`Clientes em ${aba === "avulso" ? "Avulso" : rotuloDaFrente}`}>
+            <ul className={juntar("grid min-w-0 grid-cols-1 gap-3 sm:gap-5 lg:grid-cols-2", visiveis.length >= 3 && "desk:grid-cols-3")} aria-label={`Clientes em ${aba === "avulso" ? "Avulso" : rotuloDaFrente}`}>
               {visiveis.map((c) => (
-                <li key={c.id} className="min-w-0 border-t border-border">
+                <li key={c.id} className="flex min-w-0">
                   <CartaoDoCliente
                     cliente={c}
                     frente={frente}
@@ -320,11 +352,12 @@ export default function AdminEsteira() {
 
       {/* Celular: as frentes na barra de baixo, a um toque do polegar. Do tablet
           para cima elas ficam no cabeçalho (Etapas). */}
-      <nav aria-label="Frentes do ciclo" className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="mx-auto flex h-14 max-w-[560px] items-stretch">
+      <nav aria-label="Frentes do ciclo" className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-3 md:hidden" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}>
+        <div className="pointer-events-auto mx-auto flex h-14 max-w-[420px] items-stretch rounded-full border border-border bg-card/95 p-1.5 shadow-pop backdrop-blur-md">
           {ABAS.map(({ k, rotulo, Icone }) => (
-            <button key={k} type="button" onClick={() => setAba(k)} aria-current={aba === k ? "page" : undefined} className={juntar("flex flex-1 flex-col items-center justify-center text-[11px]", aba === k ? "text-primary" : "text-muted-foreground", foco)}>
-              <Icone className="mb-0.5 h-5 w-5" aria-hidden="true" />{rotulo}
+            <button key={k} type="button" onClick={() => setAba(k)} aria-current={aba === k ? "page" : undefined} className={juntar("toque-compacto flex flex-1 items-center justify-center rounded-full text-[13px] font-medium transition-colors", aba === k ? "bg-foreground text-background" : "text-muted-foreground", foco)}>
+              <Icone className="mr-1.5 h-4 w-4" aria-hidden="true" />{rotulo}
+              <span className={juntar("ml-1.5 tabular-nums text-[11px]", aba === k ? "opacity-70" : "opacity-60")}>{contagemDasAbas[k]}</span>
             </button>
           ))}
         </div>
@@ -352,19 +385,19 @@ export default function AdminEsteira() {
             const top = fila[0];
             return (
               <div>
-                <p className={juntar(superficie.poco, "px-3 py-2 text-[13px] leading-5")}>
+                <p className={juntar(superficie.painel, superficie.destaque, "px-5 py-4 text-[15px] leading-6")}>
                   Comece por <span className="font-semibold">{top.c.nome}</span>: {top.urg.length ? `${top.urg.length} urgente${top.urg.length === 1 ? "" : "s"}` : top.att.length ? `${top.att.length} de atenção` : "o que pede a semana"}{top.primeiros[0] ? `. Primeiro: ${top.primeiros[0].titulo}, ${top.primeiros[0].passo.toLowerCase()}.` : "."}
                 </p>
-                <ol className="mt-2 divide-y divide-border">
+                <ol className="mt-3 divide-y divide-border/70">
                   {fila.map((x, i) => (
                     <li key={x.c.id}>
-                      <button type="button" onClick={() => { setComecarAberto(false); setDetalheId(x.c.id); }} className={juntar("flex w-full min-w-0 items-start rounded-md px-1 py-2.5 text-left hover:bg-muted/50", foco)}>
-                        <span className="mr-2.5 mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+                      <button type="button" onClick={() => { setComecarAberto(false); setDetalheId(x.c.id); }} className={juntar("flex w-full min-w-0 items-start rounded-md px-2 py-3.5 text-left transition-colors hover:bg-muted/60", foco)}>
+                        <span className={juntar("mr-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold tabular-nums", i === 0 ? "bg-foreground text-background" : "bg-muted text-muted-foreground")}>{i + 1}</span>
                         <span className="min-w-0 flex-1">
                           <span className="flex min-w-0 items-center">
                             <span className="mr-1.5 min-w-0 truncate text-[13px] font-semibold">{x.c.nome}</span>
-                            {x.urg.length > 0 && <span className="mr-1.5 inline-flex shrink-0 items-center text-[12px] font-semibold tabular-nums text-destructive" title={plural(x.urg.length, "urgente", "urgentes")}><Flame className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{x.urg.length}</span>}
-                            {x.att.length > 0 && <span className="mr-1.5 inline-flex shrink-0 items-center text-[12px] font-semibold tabular-nums text-warning" title={`${x.att.length} de atenção`}><AlertTriangle className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{x.att.length}</span>}
+                            {x.urg.length > 0 && <Chip tone="danger" className="mr-1.5" title={plural(x.urg.length, "urgente", "urgentes")} icon={<Flame className="h-3 w-3" />}>{x.urg.length}</Chip>}
+                            {x.att.length > 0 && <Chip tone="warning" className="mr-1.5" title={`${x.att.length} de atenção`} icon={<AlertTriangle className="h-3 w-3" />}>{x.att.length}</Chip>}
                             {x.rituaisFaltando > 0 && <span className="inline-flex shrink-0 items-center text-[11px] tabular-nums text-muted-foreground" title={`Rituais ${3 - x.rituaisFaltando} de 3`}><CalendarCheck className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{3 - x.rituaisFaltando}/3</span>}
                           </span>
                           {x.primeiros.map((it) => (
@@ -387,14 +420,15 @@ export default function AdminEsteira() {
         titulo={`Quem entra em ${rotuloDaFrente}`}
         descricao={ocultos.length === 0 ? "Ninguém oculto nesta frente" : plural(ocultos.length, "oculto", "ocultos")}
       >
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-border/70">
             {clientes.filter((c) => c.tipo !== "one_off").map((c) => {
               const temServico = c.fatos.servicos[frente];
               const oculto = c.fatos.oculto.areas.includes(frente);
               const estado = !temServico ? "sem este serviço" : oculto ? (c.fatos.oculto.ate ? `oculto até ${c.fatos.oculto.ate.slice(8, 10)}/${c.fatos.oculto.ate.slice(5, 7)}` : "fora desta frente") : "na esteira";
               return (
-                <li key={c.id} className="flex min-w-0 items-center justify-between py-2">
-                  <div className="mr-3 min-w-0"><p className="truncate text-[13px] font-medium">{c.nome}</p><p className={texto.auxiliar}>{estado}</p></div>
+                <li key={c.id} className="flex min-w-0 items-center py-3">
+                  <Avatar name={c.nome} size="sm" tone={temServico && !oculto ? "accent" : "neutral"} className="mr-3" />
+                  <div className="mr-3 min-w-0 flex-1"><p className="truncate text-[13px] font-medium">{c.nome}</p><p className={texto.auxiliar}>{estado}</p></div>
                   {temServico && canWrite && (
                     <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: c.id, area: frente, ocultar: !oculto, ateQuando: null }); if (ok) recarregarAposAcao(); }} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>{oculto ? "Incluir" : "Ocultar"}</button>
                   )}
@@ -410,9 +444,9 @@ export default function AdminEsteira() {
 /** Semana: anterior, o rótulo (toque volta para hoje) e a próxima. */
 function SemanaNav({ segunda, quando, offset, onMudar, onHoje }: { segunda: Date; quando: string; offset: number; onMudar: (delta: number) => void; onHoje: () => void }) {
   return (
-    <div className="flex min-w-0 items-center">
+    <div className="flex min-w-0 items-center rounded-full border border-border bg-card p-0.5">
       <button type="button" aria-label="Semana anterior" title="Semana anterior" onClick={() => onMudar(-1)} className={botao.icone}><ChevronLeft className="h-4 w-4" /></button>
-      <button type="button" onClick={onHoje} disabled={offset === 0} title={offset === 0 ? undefined : "Voltar para a semana atual"} className={juntar("mx-0.5 min-w-0 rounded-md px-1 text-center disabled:cursor-default", foco)}>
+      <button type="button" onClick={onHoje} disabled={offset === 0} title={offset === 0 ? undefined : "Voltar para a semana atual"} className={juntar("toque-compacto mx-0.5 min-w-0 rounded-full px-2 text-center disabled:cursor-default", foco)}>
         <span className="block truncate text-[13px] font-semibold leading-5">{weekLabel(segunda)}</span>
         {/* 16/10/2026: no celular a legenda só aparece fora da semana atual. */}
         <span className={juntar("block truncate text-[11px] leading-4", offset === 0 ? "text-muted-foreground max-sm:hidden" : "text-primary")}>{quando}</span>
@@ -438,43 +472,44 @@ function CartaoDoCliente({ cliente: c, frente, weekStart, fotos, onAbrir, onMudo
   const urgentes = itens.filter((i) => i.gravidade === "urgente").length;
   const atencao = itens.filter((i) => i.gravidade === "atencao").length;
   const insight = c.esteira.insights.filter((i) => i.frente === frente)[0];
+  const feitosRituais = r.filter((x) => x.feito).length;
   return (
-    <button type="button" onClick={onAbrir} className={juntar("block w-full min-w-0 rounded-md px-1 py-3 text-left transition-colors hover:bg-muted/40 lg:px-2", foco)}>
+    <button type="button" onClick={onAbrir} className={juntar(superficie.painel, "group flex w-full min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 sm:p-6", foco)} data-cartao-do-cliente="">
       <span className="flex min-w-0 items-center">
-        <span className="mr-2.5 shrink-0"><FotoDoCliente nome={c.nome} fotos={fotos} tamanho="md" /></span>
+        <span className="mr-3 shrink-0"><FotoDoCliente nome={c.nome} fotos={fotos} tamanho="md" /></span>
         <span className="mr-2 min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-semibold leading-5">{c.nome}</span>
+          <span className="block truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] sm:text-[18px] sm:leading-6">{c.nome}</span>
           {/* 16/10/2026 (dono, celular mais limpo): abaixo de 640 px o cartão é
               uma linha de app (foto, nome, uma linha de apoio, indicadores);
               a linha de apoio é o que mais pede, e a lista e os rituais
               ficam na janela do cliente. */}
-          <span className={juntar(texto.auxiliar, "block truncate", topo.length > 0 && "max-sm:hidden")}>{c.esteira.onboardingCompleto ? "Em operação" : "Entrada em andamento"}</span>
+          <span className={juntar(texto.auxiliar, "mt-0.5 block truncate", topo.length > 0 && "max-sm:hidden")}>{c.esteira.onboardingCompleto ? "Em operação" : "Entrada em andamento"}</span>
           {topo.length > 0 && (
-            <span className={juntar(texto.auxiliar, "block truncate sm:hidden")}>{topo[0].titulo}{itens.length > 1 ? ` · +${itens.length - 1}` : ""}</span>
+            <span className={juntar(texto.auxiliar, "mt-0.5 block truncate sm:hidden")}>{topo[0].titulo}{itens.length > 1 ? ` · +${itens.length - 1}` : ""}</span>
           )}
         </span>
-        <span className="flex shrink-0 items-center [&>*+*]:ml-1">
-          {urgentes > 0 && <span className="inline-flex items-center text-[12px] font-semibold tabular-nums text-destructive" title={plural(urgentes, "urgente", "urgentes")}><Flame className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true">{urgentes}</span><span className="sr-only">{plural(urgentes, "urgente", "urgentes")}</span></span>}
-          {atencao > 0 && <span className="inline-flex items-center text-[12px] font-semibold tabular-nums text-warning" title={`${atencao} de atenção`}><AlertTriangle className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true">{atencao}</span><span className="sr-only">{`${atencao} de atenção`}</span></span>}
-          {itens.length === 0 && <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>em dia</span>}
-          <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <span className="flex shrink-0 items-center [&>*+*]:ml-1.5">
+          {urgentes > 0 && <Chip tone="danger" size="md" title={plural(urgentes, "urgente", "urgentes")} icon={<Flame className="h-3.5 w-3.5" />}><span aria-hidden="true">{urgentes}</span><span className="sr-only">{plural(urgentes, "urgente", "urgentes")}</span></Chip>}
+          {atencao > 0 && <Chip tone="warning" size="md" title={`${atencao} de atenção`} icon={<AlertTriangle className="h-3.5 w-3.5" />}><span aria-hidden="true">{atencao}</span><span className="sr-only">{`${atencao} de atenção`}</span></Chip>}
+          {itens.length === 0 && <StatusPill tone="success">em dia</StatusPill>}
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-foreground group-hover:text-background max-sm:hidden"><ChevronRight className="h-4 w-4" aria-hidden="true" /></span>
         </span>
       </span>
       {topo.length > 0 && (
-        <span className="mt-1.5 block pl-[46px] max-sm:hidden">
+        <span className={juntar(superficie.poco, "mt-4 block px-3 py-1.5 max-sm:hidden")}>
           {topo.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={false} onMudou={onMudou} compacto />)}
-          {resto > 0 && <span className={juntar(texto.auxiliar, "block pl-[18px]")}>+ {resto} {resto === 1 ? "item" : "itens"}</span>}
+          {resto > 0 && <span className={juntar(texto.auxiliar, "block pb-1.5 pl-[18px]")}>+ {resto} {resto === 1 ? "item" : "itens"}</span>}
         </span>
       )}
-      <span className="mt-2 flex min-w-0 items-center pl-[46px] max-sm:hidden">
+      <span className="mt-auto flex min-w-0 items-center pt-4 max-sm:hidden">
         {r.map((x) => (
-          <span key={x.key} title={x.rotulo} className={`mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${x.feito ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}>
+          <span key={x.key} title={x.rotulo} className={`mr-1.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${x.feito ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground"}`}>
             {x.key === "segunda" ? "S" : x.key === "quarta" ? "Q" : "S"}
           </span>
         ))}
-        <span className={juntar(texto.auxiliar, "ml-1 inline-flex shrink-0 items-center tabular-nums")} title={`Rituais ${r.filter((x) => x.feito).length} de 3`}><CalendarCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />{r.filter((x) => x.feito).length}/3</span>
+        <span className={juntar(texto.auxiliar, "ml-1 inline-flex shrink-0 items-center tabular-nums")} title={`Rituais ${feitosRituais} de 3`}><CalendarCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />{feitosRituais}/3</span>
         {insight && (
-          <span className={juntar(texto.auxiliar, "ml-auto min-w-0 truncate pl-3")}>{insight.titulo}: {insight.atual ?? "–"}{insight.variacao !== null ? ` (${(insight.variacao as number) > 0 ? "+" : ""}${insight.variacao}%)` : ""}</span>
+          <span className={juntar(texto.auxiliar, "ml-auto min-w-0 truncate pl-3")}>{insight.titulo}: <span className="font-semibold tabular-nums text-foreground">{insight.atual ?? "–"}</span>{insight.variacao !== null ? ` (${(insight.variacao as number) > 0 ? "+" : ""}${insight.variacao}%)` : ""}</span>
         )}
       </span>
     </button>

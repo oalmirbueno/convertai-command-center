@@ -104,29 +104,29 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
     >
       {dados.isError && <p className="text-[13px] text-destructive">Não foi possível ler os extras deste cliente.</p>}
       {extras.length > 0 && (
-        <ul className="divide-y divide-border border-y border-border">
+        <ul className="divide-y divide-border/60">
           {extras.map((e) => {
             const doExtra = cobrancas.filter((c) => c.extra_id === e.id);
             const unico = andamentoDoUnico(doExtra, Number(e.valor) || 0);
             const encerrado = e.status === "encerrado";
             return (
-              <li key={e.id} className={juntar("min-w-0 py-2.5", encerrado && "opacity-60")} data-extra={e.id}>
+              <li key={e.id} className={juntar("min-w-0 py-4", encerrado && "opacity-60")} data-extra={e.id}>
                 <div className="flex min-w-0 flex-wrap items-baseline">
-                  <span className="mr-2 min-w-0 text-[14px] font-medium text-foreground">{e.nome}</span>
-                  <span className={juntar(etiqueta, "mr-2 bg-secondary text-muted-foreground")}>{nomeDaCategoria(e.categoria)}</span>
-                  {e.status === "aguardando" && <span className={juntar(etiqueta, "mr-2 bg-warning-soft text-warning")}>aguardando a entrega</span>}
-                  {encerrado && <span className={juntar(etiqueta, "mr-2 bg-secondary text-muted-foreground")}>encerrado em {dataCurta(e.encerrado_em)}</span>}
-                  <span className="ml-auto shrink-0 text-[14px] font-semibold tabular-nums text-foreground">
+                  <span className="mr-2 min-w-0 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{e.nome}</span>
+                  <span className={juntar(etiqueta, "mr-2 h-6 bg-muted px-2.5 text-muted-foreground")}>{nomeDaCategoria(e.categoria)}</span>
+                  {e.status === "aguardando" && <span className={juntar(etiqueta, "mr-2 h-6 bg-warning-soft px-2.5 text-warning")}>aguardando a entrega</span>}
+                  {encerrado && <span className={juntar(etiqueta, "mr-2 h-6 bg-muted px-2.5 text-muted-foreground")}>encerrado em {dataCurta(e.encerrado_em)}</span>}
+                  <span className="ml-auto shrink-0 text-[15px] font-semibold tabular-nums tracking-[-0.01em] text-foreground">
                     {e.cobranca === "mensal" ? `${dinheiro(e.valor)} por mês` : e.cobranca === "unico" ? dinheiro(e.valor) : e.percentual ? `${String(e.percentual).replace(".", ",")}%` : "variável"}
                   </span>
                 </div>
-                <p className={juntar(texto.auxiliar, "mt-0.5")}>
+                <p className={juntar(texto.auxiliar, "mt-1")}>
                   {e.cobranca === "mensal" && (e.inicio ? `Cobra desde ${dataCurta(e.inicio)}, todo dia ${e.dia_vencimento ?? Number(e.inicio.slice(8, 10))}.` : "Ainda não começou a cobrar: defina a data quando entregar.")}
                   {e.cobranca === "unico" && `Recebido ${dinheiro(unico.pago)} ${unico.aberto > 0 ? ` · a receber ${dinheiro(unico.aberto)}${unico.proxima ? ` (próxima em ${dataCurta(unico.proxima)})` : ""}` : ""}${unico.aLancar > 0 ? ` · falta lançar ${dinheiro(unico.aLancar)}` : ""}.`}
                   {e.cobranca === "comissao" && `${e.base_da_comissao ? `Sobre ${e.base_da_comissao}. ` : ""}${doExtra.length ? `Recebido ${dinheiro(unico.pago)} em ${doExtra.length} ${doExtra.length === 1 ? "lançamento" : "lançamentos"}${unico.aberto > 0 ? ` · a receber ${dinheiro(unico.aberto)}` : ""}.` : "Nada lançado ainda."}`}
                   {e.observacao ? ` ${e.observacao}` : ""}
                 </p>
-                <div className="-m-1 mt-1 flex flex-wrap items-center [&>*]:m-1">
+                <div className="-m-1 mt-2 flex flex-wrap items-center [&>*]:m-1">
                   {!encerrado && e.cobranca === "comissao" && <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setAcao({ tipo: "cobrancas", id: e.id, nova: true })} data-lancar-recebimento="">Lançar recebimento</button>}
                   {!encerrado && e.cobranca === "unico" && unico.aLancar > 0 && <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setAcao({ tipo: "cobrancas", id: e.id, nova: true })}>Adicionar parcela</button>}
                   <button type="button" className={juntar(botao.secundario, "h-8")} aria-expanded={acao?.id === e.id && acao.tipo === "cobrancas"} onClick={() => setAcao(acao?.id === e.id && acao.tipo === "cobrancas" ? null : { tipo: "cobrancas", id: e.id })} data-ver-cobrancas="">
@@ -179,7 +179,7 @@ function AcaoDoExtra({ extra, tipo, aoFechar, aoMudar }: { extra: Extra; tipo: "
   };
 
   return (
-    <div className="mt-2 rounded-md bg-secondary/60 px-3 py-3" data-acao-do-extra={tipo}>
+    <div className="mt-3 rounded-md bg-muted/60 p-4" data-acao-do-extra={tipo}>
       <GrupoDeCampos colunas={2}>
         <CampoDeFormulario rotulo={tipo === "iniciar" ? "Começa a cobrar em" : "Encerra em"}>
           <input className={campo} type="date" value={data} onChange={(e) => setData(e.target.value)} />
@@ -235,7 +235,7 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
   };
 
   return (
-    <div className="mt-2 rounded-md bg-secondary/60 px-3 py-3" data-editar-extra-form="">
+    <div className="mt-3 rounded-md bg-muted/60 p-4" data-editar-extra-form="">
       <GrupoDeCampos colunas={2}>
         <CampoDeFormulario rotulo="Nome" largo>
           <input className={campo} value={nome} maxLength={120} onChange={(e) => setNome(e.target.value)} />
@@ -283,11 +283,11 @@ function CobrancasDoExtra({ extra, cobrancas, sugestao, abrirNova, aoMudar }: { 
   const variavel = extra.cobranca === "comissao";
   const encerrado = extra.status === "encerrado";
   return (
-    <div className="mt-2 rounded-md bg-secondary/60 px-3 py-2" data-cobrancas-do-extra="">
+    <div className="mt-3 rounded-md bg-muted/60 px-4 py-3" data-cobrancas-do-extra="">
       {cobrancas.length === 0 && aberta !== "nova" && <p className={texto.auxiliar}>Nada lançado ainda.</p>}
       <ul className="min-w-0 text-[13px]">
         {cobrancas.map((c) => (
-          <li key={c.id} className="min-w-0 py-1" data-cobranca={c.id}>
+          <li key={c.id} className="min-w-0 py-1.5" data-cobranca={c.id}>
             <div className="flex min-w-0 items-baseline">
               <span className="w-24 shrink-0 tabular-nums text-muted-foreground">{dataCurta(c.due_date)}</span>
               <span className="mr-2 min-w-0 truncate text-foreground">{(c.description ?? "").replace(`${extra.nome} · `, "") || "cobrança"}</span>

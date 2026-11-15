@@ -1587,7 +1587,7 @@ export default function EditorialDetailSheet({
                     {isStaff &&
                       bundle.internal?.failure_reason &&
                       bundle.internal?.failure_code !== "autopublish" && (
-                      <div className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                      <div className="flex gap-2 rounded-md bg-danger-soft p-3">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                         <div>
                           <p className="text-[12px] leading-4 font-medium text-destructive">
@@ -1744,7 +1744,7 @@ export default function EditorialDetailSheet({
               })}
 
               {podeProgramarInline && (
-                <div className="rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] p-4 sm:p-5">
+                <div className="rounded-md border border-dashed border-primary/40 bg-accent-soft p-4 sm:p-5">
                   <div className="flex min-w-0 items-center">
                     <p className="min-w-0 truncate text-[13px] font-medium text-foreground">
                       {agendadaAtual ? "Remarcar publicação" : "Programar publicação"}
@@ -1817,7 +1817,7 @@ export default function EditorialDetailSheet({
                 ) : eventsFailed ? (
                   <div
                     role="alert"
-                    className="rounded-lg border border-destructive/20 bg-destructive/5 p-3"
+                    className="rounded-md bg-danger-soft p-3"
                   >
                     <p className="text-[12px] font-medium text-destructive">
                       Não foi possível carregar o histórico.

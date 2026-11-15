@@ -446,7 +446,7 @@ export default function PainelTrocaDeCenario({
               <li key={t.id}>
                 <button type="button" className={juntar("flex w-full min-w-0 items-center rounded-md px-2 py-1 text-left hover:bg-muted", atual && atual.id === t.id && "bg-muted")} onClick={() => setAtualId(t.id)}>
                   <span className="min-w-0 flex-1 truncate text-[12px]">{t.cenario}</span>
-                  <span className={juntar(etiqueta, "ml-2", t.estado === "pronto" ? "bg-primary/10 text-primary" : t.estado === "erro" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>{t.estado_texto}</span>
+                  <span className={juntar(etiqueta, "ml-2", t.estado === "pronto" ? "bg-accent-soft text-primary" : t.estado === "erro" ? "bg-danger-soft text-destructive" : "bg-muted text-muted-foreground")}>{t.estado_texto}</span>
                 </button>
               </li>
             ))}

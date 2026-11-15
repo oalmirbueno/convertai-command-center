@@ -20,10 +20,10 @@ import { dataCurtaOuSem, type Planejamento } from "./usePlanejamento";
  */
 
 export const TOM_DO_CALENDARIO: Record<EstadoNoCalendario["tom"], string> = {
-  ok: "bg-success/15 text-success",
-  andamento: "bg-primary/10 text-primary",
+  ok: "bg-success-soft text-success",
+  andamento: "bg-accent-soft text-primary",
   alerta: "bg-warning/15 text-foreground",
-  erro: "bg-destructive/10 text-destructive",
+  erro: "bg-danger-soft text-destructive",
   neutro: "bg-secondary text-muted-foreground",
   trava: "bg-muted text-muted-foreground",
 };

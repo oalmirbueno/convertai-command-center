@@ -116,7 +116,7 @@ function LinhaDoPost({ post, aberto, onAbrir }: { post: PostDeFotos; aberto: boo
             {dataCurta(post.item ? post.item.due_date : null)} · {post.cards.length ? `${post.cards.length} ${post.cards.length === 1 ? "foto" : "fotos"}` : "sem fotos"}
           </span>
         </span>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
       </button>
     </li>
   );
@@ -380,7 +380,7 @@ export function MontarOPost({
           </div>
         </div>
         {!post && !destinoFixo && (
-          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
             <CampoDeFormulario rotulo="Onde entra na Agenda">
               <SeletorCompacto modo="lista" rotulo="Item da Agenda" opcoes={opcoesDeDestino} valor={destino} onEscolher={setDestino} className="w-full" />
             </CampoDeFormulario>
@@ -524,7 +524,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
       titulo={estudio ? "" : <span className="block truncate">{post.item ? post.item.title : "Post de fotos"}</span>}
       recolher={estudio ? false : `mesa-foto:agenda:post:${post.id}`}
       resumo={estado.rotulo}
-      acao={estudio ? undefined : <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
+      acao={estudio ? undefined : <span className={`rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
     >
       <div className="min-w-0 space-y-4" data-post-aberto={post.id}>
         <p className="text-[12px] text-muted-foreground">
@@ -825,7 +825,7 @@ export default function EtapaAgenda() {
         )}
         {/* 28/09: a lista segue a rolagem da região principal (uma rolagem por região). */}
         {pendentes.length > 0 && (
-          <ul className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+          <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-2">
             {pendentes.map((p) => (
               <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
             ))}
@@ -834,7 +834,7 @@ export default function EtapaAgenda() {
         {publicados.length > 0 && (
           <details className="mt-3">
             <summary className="cursor-pointer text-[12px] text-muted-foreground">No ar ({publicados.length})</summary>
-            <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+            <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-2">
               {publicados.map((p) => (
                 <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
               ))}

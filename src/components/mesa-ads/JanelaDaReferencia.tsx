@@ -134,7 +134,7 @@ function Galeria({ imagens, r }: { imagens: ImagemDaGaleria[]; r: ReferenciaAds 
             <button type="button" aria-label="Próxima imagem" onClick={() => ir(1)} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-card hover:bg-muted">
               <ChevronRight className="h-4 w-4" />
             </button>
-            <span className="absolute bottom-2 right-2 rounded-full border border-border bg-background px-2 py-0.5 text-[11px] tabular-nums text-foreground">
+            <span className="absolute bottom-2 right-2 rounded-full border border-border bg-background px-2.5 py-1 text-[11px] tabular-nums text-foreground">
               {Math.min(i, total - 1) + 1} de {total}
             </span>
           </>
@@ -196,11 +196,11 @@ export function Indicadores({ m, className = "" }: { m: MetricasDaConta; classNa
   const visiveis = KPIS.filter((k) => m[k.chave] !== null);
   if (!visiveis.length) return null;
   return (
-    <dl className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${className}`}>
+    <dl className={`grid grid-cols-2 gap-3 sm:grid-cols-4 ${className}`}>
       {visiveis.map((k) => (
-        <div key={k.chave} className={juntar(superficie.painel, "min-w-0 px-4 py-3")}>
-          <dt className="truncate text-[12px] text-muted-foreground">{k.rotulo}</dt>
-          <dd className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums">{k.formato(m[k.chave])}</dd>
+        <div key={k.chave} className={juntar(superficie.poco, "min-w-0 px-4 py-4")}>
+          <dt className="truncate text-[12px] font-medium text-muted-foreground">{k.rotulo}</dt>
+          <dd className="mt-1.5 truncate text-[24px] font-semibold leading-8 tracking-[-0.03em] tabular-nums">{k.formato(m[k.chave])}</dd>
         </div>
       ))}
     </dl>
@@ -441,8 +441,8 @@ export default function JanelaDaReferencia({
                 <div className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
                   {r && <SeloDeEvidencia valor={r.evidencia} className="mb-1 mr-2" />}
                   {r && <span className="mb-1 mr-2">{daAgencia ? "Biblioteca da agência" : rotuloDaOrigem(r.origem)}</span>}
-                  {nicho && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">{nicho}</span>}
-                  {estilo && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">{humanizar(estilo)}</span>}
+                  {nicho && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px]">{nicho}</span>}
+                  {estilo && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px]">{humanizar(estilo)}</span>}
                   {detalhe.isFetching && (
                     <span className="mb-1 inline-flex items-center text-[12px]">
                       <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> buscando imagens e dados
@@ -534,7 +534,7 @@ export default function JanelaDaReferencia({
           {r && aba === "ficha" && (
             <div className="mx-auto max-w-3xl space-y-4">
               {blocoCompletar}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                 <div className="block min-w-0">
                   <span className="mb-1 flex items-center text-[12px] font-medium text-foreground/80">
                     Evidência
@@ -561,7 +561,7 @@ export default function JanelaDaReferencia({
                   <Input aria-label="Mecanismo" className="h-9 text-[13px]" value={mecanismo} readOnly={daAgencia} placeholder="Sem citar a marca" onChange={(e) => setMecanismo(e.target.value)} />
                 </label>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                 {CAMPOS_DA_FICHA.map((c) => {
                   const valor = typeof ficha[c.chave] === "string" ? String(ficha[c.chave]) : "";
                   return (

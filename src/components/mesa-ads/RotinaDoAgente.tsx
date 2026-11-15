@@ -139,7 +139,7 @@ function ItemFeito({ a, fazendo, onDesfazer, onLevar, onDescartar }: { a: AcaoFe
       <p className="flex min-w-0 flex-wrap items-center text-[13px] leading-snug">
         {a.estado === "feita" && a.tipo !== "parada" ? <Check className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" /> : a.estado === "proposta" ? <Bot className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" /> : <X className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         <span className="mr-2 min-w-0 font-medium [overflow-wrap:anywhere]">{a.resumo}</span>
-        {selo && <span className="mr-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{selo}</span>}
+        {selo && <span className="mr-2 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">{selo}</span>}
         <span className="text-[11px] text-muted-foreground">
           {dataEHora(a.criado_em)} · {a.origem === "rotina" ? "rotina" : a.origem === "equipe" ? "você, no Gerenciador" : "agente sênior"}
           {a.alvo ? ` · ${NIVEL[a.alvo.nivel] || "Item"}` : ""}
@@ -201,7 +201,7 @@ function Ajustes({ l, fazendo, onSalvar }: { l: LeituraDaRotina; fazendo: string
   );
   return (
     <form onSubmit={salvar} className="mt-2 min-w-0 space-y-3" aria-label="Ajustes da rotina">
-      <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         {entrada("Teto diário de verba (R$)", teto, setTeto, "sem teto")}
         {entrada("Subida por vez (%)", subida, setSubida, "20")}
         {entrada("Ações por rodada", porRodada, setPorRodada, "3")}
@@ -341,7 +341,7 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
       )}
 
       {ligada && e && (e.fez.length > 0 || e.planeja.length > 0) && (
-        <div className="mb-2 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2" aria-label="Última rodada">
+        <div className="mb-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2" aria-label="Última rodada">
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-muted-foreground">Fez na última rodada{e.rodada_em ? ` (${horaCurta(e.rodada_em)})` : ""}</p>
             {e.fez.length ? (
