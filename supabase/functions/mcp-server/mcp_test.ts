@@ -309,6 +309,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_list_social_posts',
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
+    'aceleriq_listar_precisa_de_voce',
+    'aceleriq_marcar_precisa_de_voce',
     'aceleriq_mcp_saude',
     'aceleriq_membros',
     'aceleriq_mensagens_automaticas_fila',
@@ -356,6 +358,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_reopen_task',
     'aceleriq_restore_file',
     'aceleriq_restore_project',
+    'aceleriq_revisar_trabalho_interno',
     'aceleriq_ritual_redigir',
     'aceleriq_search',
     'aceleriq_search_file_content',
@@ -1259,7 +1262,8 @@ Deno.test('2.3: o mapa do painel aponta as ações e o cérebro', async () => {
   assert(mapa.find((m) => m.area === 'Cerebro do cliente')!.pelo_mcp.includes('aceleriq_cerebro_registrar'));
   assert(mapa.find((m) => m.area === 'Mesa Ads')!.pelo_mcp.includes('aceleriq_mesa_ads_entregar_ao_gestor'));
   // 2.17: + aceleriq_mesa_campanha_acao (as ações novas da campanha).
-  assertEquals((out.counts as Record<string, number>).mesas_write, ACOES_2_3.length + ACOES_ADS_2_12.length + 1);
+  // 2.28: + aceleriq_revisar_trabalho_interno e aceleriq_marcar_precisa_de_voce (rodam com a sessão da pessoa).
+  assertEquals((out.counts as Record<string, number>).mesas_write, ACOES_2_3.length + ACOES_ADS_2_12.length + 1 + 2);
 });
 
 Deno.test('2.3: resposta com fôlego respira antes e entrega JSON-RPC válido (JSON e SSE)', async () => {
@@ -1369,4 +1373,127 @@ Deno.test('ajustar formato aprovado: ferramenta no catálogo, escopo editorial:w
   // Sem escopo de escrita não chama.
   assert(!canInvoke(readCtx, tool));
   assert(canInvoke(adminCtx, tool));
+});
+
+// ─── MCP 2.28.0 (14/11/2026): revisão interna, caixa Precisa de você e pedido ao dono ───
+
+Deno.test('2.28: as três ferramentas estão no catálogo, na versão certa e contadas na descoberta', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  assertEquals(MCP_VERSION, '2.28.0');
+  const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
+  for (const nome of ['aceleriq_revisar_trabalho_interno', 'aceleriq_listar_precisa_de_voce', 'aceleriq_marcar_precisa_de_voce']) {
+    assert(TOOL_MAP.get(nome), `${nome} no catálogo`);
+  }
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-11-14T12:00:00Z'),
+  });
+  assertEquals(d.toolCount, TOOLS.length);
+  assertEquals(TOOLS.length, 195);
+});
+
+Deno.test('revisão interna: escrita com mesas:write, cliente no escopo, RPC na ponte e schema fechado', async () => {
+  const { revisarTrabalhoSchema, NOTA_MINIMA_DO_AJUSTE } = await import('./modulos/precisa-de-voce-e-revisao.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
+  const tool = TOOL_MAP.get('aceleriq_revisar_trabalho_interno');
+  assert(tool, 'ferramenta no catálogo');
+  assert(tool.scopes.includes('mesas:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['decisao', 'idempotency_key', 'trabalho_id']);
+  assertEquals(schema.properties.decisao.enum, ['aprovado', 'ajuste']);
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_revisar_trabalho_interno'));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('revisar_trabalho_interno'));
+  assert(FERRAMENTAS_POR_AREA.aprovacoes.includes('aceleriq_revisar_trabalho_interno'));
+  // A descrição diz o limite, com todas as letras.
+  for (const trecho of ['aprovação do cliente NÃO muda', 'não aprova pelo cliente', 'não agenda', 'não publica']) {
+    assert(tool.description.includes(trecho), trecho);
+  }
+
+  const base = { trabalho_id: '33333333-3333-4333-8333-333333333333', decisao: 'aprovado', idempotency_key: 'revisao-0001' };
+  assert(revisarTrabalhoSchema.safeParse(base).success);
+  assert(revisarTrabalhoSchema.safeParse({ ...base, decisao: 'ajuste', nota: 'x'.repeat(NOTA_MINIMA_DO_AJUSTE) }).success);
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'ajuste' }).success, 'ajuste sem nota não passa');
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'ajuste', nota: 'curta' }).success, 'nota curta não passa');
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'ajuste', nota: '   espaços   ' }).success, 'espaço não conta');
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'approved' }).success);
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'aprovado_pelo_cliente' }).success);
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, client_approval: 'approved' }).success, 'campo a mais não passa');
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, agendar: true }).success, 'não aceita pedir agendamento');
+  assert(!canInvoke(readCtx, tool));
+  assert(!canInvoke(emptyCtx, tool));
+  assert(canInvoke(writeCtx, tool));
+  // Credencial presa a clientes pode chamar: o handler confere o cliente da peça.
+  assert(canUseToolWithDataScope(restrictedCtx, tool));
+});
+
+Deno.test('caixa Precisa de você: só leitura, com cache curto e visível para credencial restrita', async () => {
+  const { listarPrecisaDeVoceSchema } = await import('./modulos/precisa-de-voce-e-revisao.ts');
+  const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
+  const tool = TOOL_MAP.get('aceleriq_listar_precisa_de_voce');
+  assert(tool, 'ferramenta no catálogo');
+  assertEquals(tool.annotations?.readOnlyHint, true);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  assertEquals(tool.cacheSeg, 30);
+  assert(tool.scopes.includes('aceleriq:read'));
+  assert(canInvoke(readCtx, tool));
+  assert(!canInvoke(emptyCtx, tool));
+  assert(canUseToolWithDataScope(restrictedCtx, tool));
+  assert(FERRAMENTAS_POR_AREA.execucao.includes('aceleriq_listar_precisa_de_voce'));
+  const schema = tool.inputSchema as { required?: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals(schema.required ?? [], []);
+  assertEquals(schema.properties.tipo.enum, ['dinheiro', 'cliente_ou_plano', 'rejeicao_repetida', 'decisao_de_agente']);
+  assert(listarPrecisaDeVoceSchema.safeParse({}).success);
+  assert(listarPrecisaDeVoceSchema.safeParse({ tipo: 'dinheiro', limite: 10 }).success);
+  assert(!listarPrecisaDeVoceSchema.safeParse({ tipo: 'tudo' }).success);
+  assert(!listarPrecisaDeVoceSchema.safeParse({ limite: 0 }).success);
+  assert(!listarPrecisaDeVoceSchema.safeParse({ decidir: true }).success, 'leitura não aceita ação');
+});
+
+Deno.test('marcar para o dono: escrita sem vínculo obrigatório, sem ação escolhida pelo agente e com o limite na descrição', async () => {
+  const { marcarPrecisaDeVoceSchema } = await import('./modulos/precisa-de-voce-e-revisao.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
+  const tool = TOOL_MAP.get('aceleriq_marcar_precisa_de_voce');
+  assert(tool, 'ferramenta no catálogo');
+  assert(tool.scopes.includes('mesas:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['idempotency_key', 'o_que', 'operator', 'por_que']);
+  assert(!schema.required.includes('link_id'), 'não exige vínculo de execução');
+  assert(!('action_kind' in schema.properties), 'o agente não escolhe a ação: é sempre o pedido de decisão');
+  assert(!('payload' in schema.properties), 'não carrega ação a executar');
+  assertEquals(schema.properties.por_que.minLength, 10);
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_marcar_precisa_de_voce'));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('marcar_precisa_do_dono'));
+  assert(FERRAMENTAS_POR_AREA.execucao.includes('aceleriq_marcar_precisa_de_voce'));
+  assert(REGRAS_DE_ACAO.join(' ').includes('aceleriq_marcar_precisa_de_voce'));
+  for (const trecho of ['NÃO aprova', 'NÃO agenda', 'NÃO publica', 'não fala com o cliente']) {
+    assert(tool.description.includes(trecho), trecho);
+  }
+
+  const base = { operator: 'hermes', o_que: 'Renovar o domínio do cliente', por_que: 'O valor passa do teto combinado', idempotency_key: 'precisa-0001' };
+  assert(marcarPrecisaDeVoceSchema.safeParse(base).success);
+  assert(marcarPrecisaDeVoceSchema.safeParse({ ...base, client_id: '44444444-4444-4444-8444-444444444444', custo_previsto: 120 }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, por_que: 'porque' }).success, 'motivo curto não passa');
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, o_que: 'curto' }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, operator: 'Slug Errado!' }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, custo_previsto: -1 }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, action_kind: 'publicar' }).success, 'não aceita escolher ação');
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, status: 'aprovado' }).success, 'não aceita nascer decidido');
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(writeCtx, tool));
+  assert(canUseToolWithDataScope(restrictedCtx, tool));
 });

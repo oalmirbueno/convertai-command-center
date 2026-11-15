@@ -64,6 +64,7 @@ import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro
 import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspace-e-perfis.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
+import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
 import {
   CLASSES_DO_LEAD,
   ETAPAS_DO_FUNIL,
@@ -377,6 +378,10 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_reagendar_publicacao: 'editorial:write',
   aceleriq_editar_legenda_publicacao: 'editorial:write',
   aceleriq_ajustar_formato_publicacao: 'editorial:write',
+  // MCP 2.28 (14/11/2026): revisão interna, caixa Precisa de você e pedido ao dono.
+  aceleriq_revisar_trabalho_interno: 'mesas:write',
+  aceleriq_marcar_precisa_de_voce: 'mesas:write',
+  aceleriq_listar_precisa_de_voce: 'clients:read',
   aceleriq_perfis_instagram_gravar: 'clients:write',
   aceleriq_list_opportunities: 'commercial:read',
   aceleriq_get_opportunity: 'commercial:read',
@@ -3865,7 +3870,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Guia e panoramas (2.17)', rota: '/', para: 'Mapa completo com as ferramentas de cada area (Mes, Stories, Hype, Templates, Estudio, Mesa Site, Laboratorio, base dos agentes, membros) e o retrato numa chamada.', pelo_mcp: 'aceleriq_guia, aceleriq_panorama_do_cliente, aceleriq_panorama_da_casa, aceleriq_mcp_saude' },
   { area: 'Esteira', rota: '/ciclo', para: 'Acoes da semana a partir do dossie geral, historico e fatos, separadas entre social e trafego.', pelo_mcp: 'aceleriq_get_client_dossier, aceleriq_get_client_context' },
   { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
-  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_checklist, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
+  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_checklist, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee; o que espera o dono: aceleriq_listar_precisa_de_voce e aceleriq_marcar_precisa_de_voce' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente, rituais de relacionamento e o Dia Prioritario de cada cliente (clientes do dia, semana, pendencias e registros).', pelo_mcp: 'aceleriq_get_client_context, aceleriq_dia_prioritario (leitura), aceleriq_dia_prioritario_registrar (acao)' },
   { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado; avisos de post no ar: aceleriq_aviso_publicacao_fila, aceleriq_aviso_publicacao_preparar, aceleriq_aviso_publicacao_decidir, aceleriq_aviso_publicacao_marcar_enviado; lembrete de aprovação e cobrança aprovados pelo dono: aceleriq_mensagens_automaticas_fila, aceleriq_mensagens_automaticas_marcar_enviado' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
@@ -5100,6 +5105,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTA_DE_REAGENDAR,
   ...FERRAMENTA_DE_EDITAR_LEGENDA,
   ...FERRAMENTA_DE_AJUSTAR_FORMATO,
+  ...FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

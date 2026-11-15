@@ -70,6 +70,9 @@ export const RPCS_DA_PONTE = [
   'withdraw_file_client_approval',
   'editar_legenda_publicacao_aprovada',
   'ajustar_formato_publicacao_aprovada',
+  // MCP 2.28: revisão interna da peça e pedido ao dono. Nenhuma das duas aprova pelo cliente, agenda ou publica.
+  'revisar_trabalho_interno',
+  'marcar_precisa_do_dono',
 ] as const;
 export type RpcDaPonte = (typeof RPCS_DA_PONTE)[number];
 

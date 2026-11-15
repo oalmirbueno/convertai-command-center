@@ -69,6 +69,8 @@ const ROTULO_ACAO: Record<string, string> = {
   mudar_estrategia: "Mudar estratégia",
   alterar_responsavel: "Alterar responsável",
   promover_autonomia: "Promover autonomia",
+  // 14/11/2026: o agente marcou que a decisão é do dono (marcar_precisa_do_dono).
+  pedir_decisao_do_dono: "Decisão do dono",
 };
 
 const quando = (iso?: string | null) =>

@@ -3113,6 +3113,14 @@
       "remote_name": "extras_variavel_sem_percentual",
       "remote_statements_sha256": "0c127696597950e3be0451b2da392bc7d5d194b2f96db1bf35694fb727e5da73",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114230000",
+      "path": "supabase/migrations/20261114230000_marcar_precisa_do_dono.sql",
+      "local_sha256": "42567748c6814e0a85f2d61beaf7b2337e6b96523aa8e7a7bc6e3abfe50fd86b",
+      "remote_name": "marcar_precisa_do_dono",
+      "remote_statements_sha256": "b151e0966fb162930efe007a9205f2fec561b1332d63de5a654f4d63e1e85b34",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
