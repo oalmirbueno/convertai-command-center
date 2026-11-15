@@ -25,6 +25,7 @@ import SourceDashboard from "@/components/reports/SourceDashboard";
 import ReportComparison from "@/components/reports/ReportComparison";
 import MetricsAudit from "@/components/reports/MetricsAudit";
 import { CelulaDeNumero, FaixaDeNumeros } from "@/components/sistema";
+import { Sparkline, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 import {
   AjudaRecolhida,
   CabecalhoDePagina,
@@ -130,9 +131,9 @@ const fmtContagem = (v: number) =>
 
 /** Situação do indicador: cor e nome. */
 const SITUACAO = {
-  good: { rotulo: "Excelente", classe: "bg-primary/10 text-primary" },
-  warning: { rotulo: "Em otimização", classe: "bg-warning/10 text-warning" },
-  bad: { rotulo: "Em ajuste", classe: "bg-destructive/10 text-destructive" },
+  good: { rotulo: "Excelente", classe: "bg-accent-soft text-primary", tom: "success" as Tone },
+  warning: { rotulo: "Em otimização", classe: "bg-warning-soft text-warning", tom: "warning" as Tone },
+  bad: { rotulo: "Em ajuste", classe: "bg-danger-soft text-destructive", tom: "danger" as Tone },
 } as const;
 
 /** Tooltip dos gráficos: a superfície do painel, sem brilho. */
@@ -468,7 +469,7 @@ export default function ReportDetail() {
   // Documento: a página rola normal (nada de área com altura fixa, que
   // cortaria a impressão). Na impressão, borda e poço ficam claros e o "?"
   // some.
-  const raiz = "print-report min-w-0 space-y-4 print:bg-white print:[--foreground:0_0%_7%] print:[--muted-foreground:0_0%_35%] print:[--card:0_0%_100%] print:[--border:0_0%_88%] print:[--muted:0_0%_94%] print:[&_[data-ajuda-recolhida]]:hidden";
+  const raiz = "print-report min-w-0 space-y-6 print:space-y-4 print:bg-white print:[--foreground:0_0%_7%] print:[--muted-foreground:0_0%_35%] print:[--card:0_0%_100%] print:[--border:0_0%_88%] print:[--muted:0_0%_94%] print:[&_[data-ajuda-recolhida]]:hidden";
   const voltar = () => (window.history.length > 1 ? navigate(-1) : navigate("/relatorios"));
   const botaoVoltar = (
     <button
@@ -747,19 +748,18 @@ export default function ReportDetail() {
           ajuda="Indicadores-chave calculados com o investimento e os resultados do período. A situação compara com faixas de referência do mercado."
           divisoria
         >
-          <Painel semEspaco>
-            <FaixaDeNumeros semMoldura grade="grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-              {kpis.map((kpi, i) => (
-                <CelulaDeNumero
-                  key={i}
-                  rotulo={kpi.label}
-                  valor={kpi.value}
-                  lado={<span className={juntar(etiqueta, SITUACAO[kpi.status].classe)}>{SITUACAO[kpi.status].rotulo}</span>}
-                  apoio={kpi.detail}
-                />
-              ))}
-            </FaixaDeNumeros>
-          </Painel>
+          {/* Sem cartão sólido nem de tinta aqui: o relatório vai para o PDF e o fundo colorido não imprime. */}
+          <StatGrid cols={4} label="Indicadores">
+            {kpis.map((kpi, i) => (
+              <StatCard
+                key={i}
+                label={kpi.label}
+                value={kpi.value}
+                hint={kpi.detail}
+                corner={<StatusPill tone={SITUACAO[kpi.status].tom}>{SITUACAO[kpi.status].rotulo}</StatusPill>}
+              />
+            ))}
+          </StatGrid>
         </Secao>
       )}
 
@@ -817,7 +817,7 @@ export default function ReportDetail() {
           corpoClassName="space-y-4"
         >
           <Painel className="page-break-inside-avoid">
-            <div className="h-72 sm:h-96">
+            <div className="h-72 sm:h-[420px]">
               <ResponsiveContainer width="100%" height="100%">
                 {renderMainChart()!}
               </ResponsiveContainer>
@@ -826,44 +826,33 @@ export default function ReportDetail() {
 
           {/* Resumo por série */}
           {colStats.length > 0 && (
-            <Painel semEspaco titulo="Por métrica" descricao={`${colStats.length} ${colStats.length === 1 ? "métrica" : "métricas"}`}>
-              <FaixaDeNumeros semMoldura grade="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <section aria-label="Por métrica" className="min-w-0">
+              <div className="mb-3 flex min-w-0 items-baseline">
+                <h3 className={texto.tituloSecao}>Por métrica</h3>
+                <span className={juntar(texto.auxiliar, "ml-2")}>{`${colStats.length} ${colStats.length === 1 ? "métrica" : "métricas"}`}</span>
+              </div>
+              <StatGrid cols={4}>
                 {colStats.map((cs) => {
-                  const TrendIcon = cs.trend > 3 ? ArrowUpRight : cs.trend < -3 ? ArrowDownRight : ArrowRight;
-                  const tom = cs.trend > 3 ? "bg-primary/10 text-primary" : cs.trend < -3 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground";
-                  const series = chartData.map((r, i) => ({ i, v: Number(r[cs.col]) || 0 }));
+                  const series = chartData.map((r) => Number(r[cs.col]) || 0);
                   return (
-                    <CelulaDeNumero
+                    <StatCard
                       key={cs.col}
-                      rotulo={
+                      label={
                         <>
                           <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: cs.color }} aria-hidden="true" />
                           {cs.col}
                         </>
                       }
-                      lado={
-                        <span className={juntar(etiqueta, tom)}>
-                          <TrendIcon className="mr-0.5 h-3 w-3" aria-hidden="true" />
-                          {Math.abs(cs.trend).toFixed(0)}%
-                        </span>
-                      }
-                      valor={fmtContagem(cs.total)}
-                      apoio={`total · média ${fmtContagem(cs.avg)} · pico ${fmtContagem(cs.max)}`}
-                    >
-                      {series.length > 2 && (
-                        <div className="-mx-1 mt-2 h-10">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={series} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-                              <Area type="monotone" dataKey="v" stroke={cs.color} strokeWidth={1.5} fill={cs.color} fillOpacity={0.12} dot={false} isAnimationActive={false} />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        </div>
-                      )}
-                    </CelulaDeNumero>
+                      value={fmtContagem(cs.total)}
+                      delta={Math.abs(cs.trend) > 3 ? Math.round(cs.trend) : 0}
+                      deltaLabel={`${Math.abs(cs.trend).toFixed(0)}%`}
+                      hint={`total · média ${fmtContagem(cs.avg)} · pico ${fmtContagem(cs.max)}`}
+                      chart={series.length > 2 ? <span className="block" style={{ color: cs.color }}><Sparkline values={series} tone="current" height={44} /></span> : undefined}
+                    />
                   );
                 })}
-              </FaixaDeNumeros>
-            </Painel>
+              </StatGrid>
+            </section>
           )}
 
           {/* Jornada: da descoberta até a ação final */}
@@ -905,7 +894,7 @@ export default function ReportDetail() {
                     const isBottleneck = i === bottleneckIdx;
                     const isFinal = i === funnelData.length - 1;
                     return (
-                      <li key={i} className="min-w-0 px-4 py-3">
+                      <li key={i} className="min-w-0 px-5 py-4 sm:px-6">
                         <div className="flex min-w-0 items-start">
                           <span className="mt-0.5 w-6 shrink-0 text-[12px] tabular-nums text-muted-foreground">{i + 1}</span>
                           <div className="mr-3 min-w-0 flex-1">
@@ -931,11 +920,11 @@ export default function ReportDetail() {
                             </p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <p className="text-[15px] font-semibold leading-5 tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</p>
+                            <p className="text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</p>
                             <p className={juntar(texto.auxiliar, "mt-0.5")}>{i === 0 ? "entrada" : "permaneceram"}</p>
                           </div>
                         </div>
-                        <div className="ml-6 mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div className="ml-6 mt-2.5 h-2.5 overflow-hidden rounded-full bg-muted">
                           <div className="h-full rounded-full" style={{ width: `${widthPct}%`, background: stage.fill }} />
                         </div>
                       </li>
@@ -1108,7 +1097,7 @@ export default function ReportDetail() {
             {/* Celular: um período por linha, cada métrica com o valor à direita. */}
             <ul className="divide-y divide-border sm:hidden" aria-label="Dados por período">
               {chartData.map((row, i) => (
-                <li key={i} className="min-w-0 px-4 py-3">
+                <li key={i} className="min-w-0 px-5 py-4 sm:px-6">
                   <p className="break-words text-[13px] font-medium leading-5 text-foreground">{row.label}</p>
                   <ul className="mt-1 space-y-0.5">
                     {chartColumns.map((col, ci) => (

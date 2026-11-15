@@ -12,7 +12,7 @@ import {
   ShoppingCart, ArrowDownRight,
 } from "lucide-react";
 import { Painel, Secao, botao, etiqueta, juntar, texto } from "@/components/sistema";
-import { CelulaDeNumero, FaixaDeNumeros } from "@/components/sistema";
+import { StatCard, StatGrid } from "@/components/ds";
 
 const PALETTE = [
   "hsl(145, 100%, 50%)", "hsl(200, 100%, 50%)", "hsl(263, 70%, 66%)",
@@ -205,13 +205,11 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
     >
       {/* Números da planilha numa faixa só */}
       {heroKpis.length > 0 && (
-        <Painel semEspaco>
-          <FaixaDeNumeros semMoldura grade="grid-cols-2 lg:grid-cols-4">
-            {heroKpis.map((k, i) => (
-              <CelulaDeNumero key={i} rotulo={k.label} valor={k.value} apoio={k.sub ? <span className="block truncate">{k.sub}</span> : undefined} />
-            ))}
-          </FaixaDeNumeros>
-        </Painel>
+        <StatGrid cols={4} label={sourceLabel}>
+          {heroKpis.map((k, i) => (
+            <StatCard key={i} label={k.label} value={k.value} hint={k.sub || undefined} />
+          ))}
+        </StatGrid>
       )}
 
       {/* Funil de conversão (Ads) */}
@@ -281,7 +279,7 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
                   const rate = prev > 0 ? (stage.value / prev) * 100 : 100;
                   const dropOff = i > 0 ? prev - stage.value : 0;
                   return (
-                    <li key={i} className="min-w-0 py-2.5 first:pt-0 last:pb-0">
+                    <li key={i} className="min-w-0 py-3.5 first:pt-0 last:pb-0">
                       <div className="flex min-w-0 items-center">
                         <span className="mr-2 w-4 shrink-0 text-[12px] tabular-nums text-muted-foreground">{i + 1}</span>
                         <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: stage.fill }} aria-hidden="true" />
@@ -289,7 +287,7 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
                         <span className={juntar(etiqueta, "bg-muted text-foreground")}>{i > 0 ? rate.toFixed(1) + "%" : "100%"}</span>
                       </div>
                       <div className="ml-8 mt-1 flex min-w-0 items-baseline justify-between">
-                        <span className="text-[15px] font-semibold leading-5 tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</span>
+                        <span className="text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</span>
                         {dropOff > 0 && (
                           <span className={juntar(texto.auxiliar, "ml-2 inline-flex items-center tabular-nums")}>
                             <ArrowDownRight className="mr-0.5 h-3 w-3 text-destructive" aria-hidden="true" />
@@ -297,7 +295,7 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
                           </span>
                         )}
                       </div>
-                      <div className="ml-8 mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                      <div className="ml-8 mt-2 h-2 overflow-hidden rounded-full bg-muted">
                         <div className="h-full rounded-full" style={{ width: `${Math.min((stage.value / top) * 100, 100)}%`, background: stage.fill }} />
                       </div>
                     </li>
@@ -346,20 +344,20 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
                   </ResponsiveContainer>
                   <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                     <p className={texto.auxiliar}>Total</p>
-                    <p className="text-[15px] font-semibold tabular-nums text-foreground">{fmtN(pieTotal)}</p>
+                    <p className="text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmtN(pieTotal)}</p>
                   </div>
                 </div>
                 <ul className="min-w-0 divide-y divide-border sm:col-span-3">
                   {pieData.map((d, i) => {
                     const pct = pieTotal > 0 ? (d.value / pieTotal) * 100 : 0;
                     return (
-                      <li key={i} className="min-w-0 py-2 first:pt-0 last:pb-0">
+                      <li key={i} className="min-w-0 py-2.5 first:pt-0 last:pb-0">
                         <div className="flex min-w-0 items-center">
                           <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: d.fill }} aria-hidden="true" />
-                          <span className="mr-2 min-w-0 flex-1 truncate text-[12px] text-foreground">{d.name}</span>
-                          <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{pct.toFixed(1)}%</span>
+                          <span className="mr-2 min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{d.name}</span>
+                          <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{pct.toFixed(1)}%</span>
                         </div>
-                        <div className="ml-4 mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                        <div className="ml-4 mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
                           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.fill }} />
                         </div>
                       </li>
@@ -416,17 +414,17 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
         <div className="hidden overflow-x-auto md:block print:block">
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b border-border">
+              <tr className="bg-muted/60">
                 {colunasDaTabela.map((k) => (
-                  <th key={k} scope="col" className={juntar(texto.rotulo, "whitespace-nowrap px-3 py-2.5 first:pl-4 last:pr-4", typeof rows[0][k] === "number" ? "text-right" : "text-left")}>{k}</th>
+                  <th key={k} scope="col" className={juntar(texto.rotulo, "whitespace-nowrap px-3 py-3 first:pl-5 last:pr-5", typeof rows[0][k] === "number" ? "text-right" : "text-left")}>{k}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-border/70 [&>tr]:transition-colors hover:[&>tr]:bg-muted/40">
               {linhasDaTabela.map((r, i) => (
                 <tr key={i} className={!verTudo && i >= LIMITE ? "hidden print:table-row" : undefined}>
                   {Object.entries(r).map(([k, v], j) => (
-                    <td key={j} className={juntar("px-3 py-2 first:pl-4 last:pr-4", typeof v === "number" ? "whitespace-nowrap text-right tabular-nums text-foreground" : "text-foreground/80")}>
+                    <td key={j} className={juntar("px-3 py-3 first:pl-5 last:pr-5", typeof v === "number" ? "whitespace-nowrap text-right tabular-nums text-foreground" : "text-foreground/80")}>
                       {typeof v === "number"
                         ? (k === spendKey || k === revenueKey ? fmtMoney(v) : fmtN(v))
                         : String(v)}
