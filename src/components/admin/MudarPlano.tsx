@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CampoDeFormulario, botao, campo, juntar, texto } from "@/components/sistema";
+import { CampoDeFormulario, botao, campo, juntar, superficie, texto } from "@/components/sistema";
 import { useFinancePlans } from "@/hooks/useFinanceV2";
 import { supabase } from "@/integrations/supabase/client";
 import { dinheiro } from "@/lib/comercial";
@@ -69,11 +69,16 @@ export default function MudarPlano({ client, onSalvo }: {
 
   return (
     <>
-      <div className="flex min-w-0 items-center justify-between border-b border-border px-4 py-2 sm:px-5" data-plano-na-ficha="">
-        <p className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate")}>
-          {atual > 0 ? `${client.plan_name || "Mensalidade"} · ${dinheiro(atual)}/mês` : "Sem mensalidade"}
-        </p>
-        <button type="button" onClick={abrir} className={juntar(botao.secundario, "shrink-0")}>Mudar plano</button>
+      {/* Rodada ousada (15/11/2026): o plano é o cartão sólido da ficha, com o valor em número grande. */}
+      <div className={juntar(superficie.painel, superficie.destaque, "mt-4 flex min-w-0 items-center justify-between px-5 py-4 sm:px-6")} data-plano-na-ficha="">
+        <div className="mr-3 min-w-0">
+          <p className={juntar(texto.auxiliar, "truncate font-medium")}>{atual > 0 ? client.plan_name || "Mensalidade" : "Plano"}</p>
+          <p className="mt-0.5 truncate text-[24px] font-semibold leading-8 tracking-[-0.03em] tabular-nums text-foreground sm:text-[28px] sm:leading-9">
+            {atual > 0 ? dinheiro(atual) : "Sem mensalidade"}
+            {atual > 0 && <span className="ml-1 text-[13px] font-medium tracking-normal text-muted-foreground">/mês</span>}
+          </p>
+        </div>
+        <button type="button" onClick={abrir} className={juntar(botao.primario, "shrink-0")}>Mudar plano</button>
       </div>
       <Dialog open={aberto} onOpenChange={(a) => { if (!a && !salvando) setAberto(false); }}>
         <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md">
