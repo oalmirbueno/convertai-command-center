@@ -243,6 +243,8 @@ export interface LeituraDoDono {
   linhas: LinhasDoDono;
   /** Fontes que não puderam ser lidas agora. */
   fontesComErro: FonteDaCaixa[];
+  /** Fontes que bateram no teto da leitura, antes do filtro de escopo. A lista pode estar incompleta. */
+  fontesNoTeto: FonteDaCaixa[];
 }
 
 type Resposta = { data: unknown[] | null; error: { message?: string; code?: string } | null };
@@ -338,16 +340,19 @@ export async function lerLinhasDoDono(banco: Banco, agora: Date = new Date()): P
     return vazio;
   };
   const partes = valor(rejeicoes, 'rejeicoes', { rejeicoes: [], arquivos: [], trabalhos: [] });
-  return {
-    linhas: {
-      ...LINHAS_DO_DONO_VAZIAS,
-      aprovacoes: valor(aprovacoes, 'aprovacoes', []),
-      vinculos: valor(vinculos, 'vinculos', []),
-      acoesDeAnuncio: valor(anuncios, 'anuncios', []),
-      ...partes,
-    },
-    fontesComErro,
+  const linhas: LinhasDoDono = {
+    ...LINHAS_DO_DONO_VAZIAS,
+    aprovacoes: valor(aprovacoes, 'aprovacoes', []),
+    vinculos: valor(vinculos, 'vinculos', []),
+    acoesDeAnuncio: valor(anuncios, 'anuncios', []),
+    ...partes,
   };
+  const fontesNoTeto: FonteDaCaixa[] = [];
+  if (linhas.aprovacoes.length >= TETO_DE_APROVACOES) fontesNoTeto.push('aprovacoes');
+  if (linhas.vinculos.length >= TETO_DE_VINCULOS) fontesNoTeto.push('vinculos');
+  if (linhas.acoesDeAnuncio.length >= TETO_DE_PROPOSTAS) fontesNoTeto.push('anuncios');
+  if (linhas.rejeicoes.length >= TETO_DE_REJEICOES || linhas.trabalhos.length >= TETO_DE_TRABALHOS) fontesNoTeto.push('rejeicoes');
+  return { linhas, fontesComErro, fontesNoTeto };
 }
 
 interface Carteira {
@@ -429,8 +434,9 @@ export async function listarPrecisaDeVoce(
     por_tipo: porTipo,
     itens: visiveis.slice(0, limite).map(itemDaCaixa),
     tem_mais: visiveis.length > limite,
-    incompleta: leitura.fontesComErro.length > 0,
+    incompleta: leitura.fontesComErro.length > 0 || leitura.fontesNoTeto.length > 0,
     fontes_com_erro: leitura.fontesComErro,
+    fontes_no_teto: leitura.fontesNoTeto,
     regra: 'Só leitura: a lista aponta onde cada assunto se resolve no painel e não decide nada. O link é o caminho dentro do painel.',
   };
 }

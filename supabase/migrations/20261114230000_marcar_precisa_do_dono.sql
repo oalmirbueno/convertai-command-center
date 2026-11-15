@@ -130,25 +130,55 @@ BEGIN
   END IF;
 
   -- O vínculo e a tarefa são só referência: nada neles é alterado.
+  -- Conferimos que existem e que pertencem ao mesmo cliente do pedido.
   IF p_link_id IS NOT NULL THEN
-    SELECT COALESCE(_tarefa, l.kanban_task_id) INTO _tarefa
-      FROM public.operator_task_links l WHERE l.id = p_link_id;
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'vínculo de execução % não existe', p_link_id USING ERRCODE = '22023';
-    END IF;
+    DECLARE
+      _tarefa_do_vinculo uuid;
+    BEGIN
+      SELECT l.kanban_task_id INTO _tarefa_do_vinculo
+        FROM public.operator_task_links l WHERE l.id = p_link_id;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'vínculo de execução % não existe', p_link_id USING ERRCODE = '22023';
+      END IF;
+      IF p_kanban_task_id IS NOT NULL AND _tarefa_do_vinculo IS NOT NULL
+         AND _tarefa_do_vinculo IS DISTINCT FROM p_kanban_task_id THEN
+        RAISE EXCEPTION 'o vínculo e a tarefa informados não são do mesmo trabalho' USING ERRCODE = '22023';
+      END IF;
+      _tarefa := COALESCE(_tarefa, _tarefa_do_vinculo);
+    END;
   END IF;
-  IF p_kanban_task_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = p_kanban_task_id) THEN
+  IF _tarefa IS NOT NULL THEN
+    DECLARE
+      _cliente_da_tarefa uuid;
+    BEGIN
+      SELECT pr.client_id INTO _cliente_da_tarefa
+        FROM public.tasks t
+        JOIN public.projects pr ON pr.id = t.project_id
+       WHERE t.id = _tarefa AND t.deleted_at IS NULL;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'tarefa % não existe', _tarefa USING ERRCODE = '22023';
+      END IF;
+      IF p_client_id IS NOT NULL AND _cliente_da_tarefa IS DISTINCT FROM p_client_id THEN
+        RAISE EXCEPTION 'a tarefa ou o vínculo não pertence a este cliente' USING ERRCODE = '22023';
+      END IF;
+    END;
+  ELSIF p_kanban_task_id IS NOT NULL THEN
     RAISE EXCEPTION 'tarefa % não existe', p_kanban_task_id USING ERRCODE = '22023';
   END IF;
 
-  -- Idempotência: a chave é do operador. A trava evita dois pedidos iguais
-  -- quando a mesma chamada chega duas vezes ao mesmo tempo.
-  _chave := 'precisa_do_dono:' || _slug || ':' || _pedido;
+  -- Idempotência: a chave é do operador E do cliente (ou "interno").
+  -- Sem o cliente na chave, a mesma chave em outro cliente devolvia o pedido
+  -- alheio e não gravava o novo.
+  _chave := 'precisa_do_dono:' || _slug || ':' || COALESCE(p_client_id::text, 'interno') || ':' || _pedido;
   PERFORM pg_advisory_xact_lock(hashtextextended(_chave, 0));
 
   SELECT * INTO _aprov FROM public.operator_approvals
    WHERE action_kind = 'pedir_decisao_do_dono' AND request_key = _chave;
   IF FOUND THEN
+    IF _aprov.operator_id IS DISTINCT FROM _op.id
+       OR _aprov.client_id IS DISTINCT FROM p_client_id THEN
+      RAISE EXCEPTION 'esta chave já foi usada em outro pedido' USING ERRCODE = '23505';
+    END IF;
     RETURN jsonb_build_object(
       'ok', true,
       'ja_existia', true,

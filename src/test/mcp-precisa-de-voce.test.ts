@@ -220,6 +220,11 @@ describe("migration 20261114230000: marcar_precisa_do_dono", () => {
     expect(codigo).toMatch(/ON public\.operator_approvals \(request_key\)\s+WHERE action_kind = 'pedir_decisao_do_dono';/);
     expect(funcao).toContain("PERFORM pg_advisory_xact_lock(hashtextextended(_chave, 0));");
     expect(funcao).toContain("'ja_existia', true");
+    // A chave inclui o cliente (ou "interno"): a mesma chave em outro cliente não devolve o pedido alheio.
+    expect(funcao).toContain("COALESCE(p_client_id::text, 'interno')");
+    expect(funcao).toContain("esta chave já foi usada em outro pedido");
+    expect(funcao).toContain("a tarefa ou o vínculo não pertence a este cliente");
+    expect(funcao).toContain("o vínculo e a tarefa informados não são do mesmo trabalho");
   });
 
   it("SECURITY DEFINER com search_path vazio, só para authenticated, sem anon", () => {
