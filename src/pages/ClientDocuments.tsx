@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AjudaRecolhida, Carregando, EstadoVazio, Secao, SeletorCompacto, botao, espaco, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
-import { PageHeader, StatusPill, type Tone } from "@/components/ds";
+import { PageHeader, PillTabs, StatusPill, type Tone } from "@/components/ds";
 import { Bolha } from "@/components/client/pecasOusadas";
 // Frente DOC (29/09): o registro de cada entrega aparece em destaque para o cliente.
 import { ehRegistroDeEntrega, tituloDoRegistro } from "@/lib/documentos/registrarEntrega";
@@ -283,31 +283,19 @@ export default function ClientDocuments() {
         }
       />
 
-      {/* As pastas em azulejos grandes (as mesmas do seletor "Pasta", com a contagem): tocar abre a pasta. */}
+      {/* v4 F2 (passada estrutural): as pastas viraram abas em pílula com a contagem (como as referências),
+          no lugar dos azulejos grandes; tocar abre a pasta. */}
       {folderSummaries.length > 1 && (
-        <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5" aria-label="Pastas">
-          {[{ id: "todos" as FolderId | "todos", rotulo: "Tudo", total: visibleFiles.length }]
-            .concat(folderSummaries.map((entry) => ({ id: entry.folder.id as FolderId | "todos", rotulo: entry.folder.label, total: entry.total })))
-            .map((pasta, indice, lista) => {
-              const aberta = activeFolder === pasta.id;
-              return (
-                <li key={pasta.id} className={juntar("min-w-0", indice === 0 && lista.length % 2 === 1 && "max-sm:col-span-2")}>
-                  <button
-                    type="button"
-                    aria-pressed={aberta}
-                    onClick={() => selectFolder(pasta.id)}
-                    className={juntar(superficie.painel, aberta && (pasta.id === "todos" ? superficie.tinta : superficie.destaque), "flex h-full w-full min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5 sm:p-5", foco)}
-                  >
-                    <span className="flex w-full min-w-0 items-center justify-between">
-                      <Bolha tom={aberta ? "tinta" : "neutro"} className={aberta ? "bg-foreground/10 text-foreground" : ""}><FolderOpen className="h-4 w-4" /></Bolha>
-                      <span className="ml-2 text-[28px] font-semibold leading-9 tracking-[-0.03em] tabular-nums text-foreground">{pasta.total}</span>
-                    </span>
-                    <span className="mt-3 block w-full text-[13px] font-medium leading-[18px] text-foreground line-clamp-2 sm:mt-4">{pasta.rotulo}</span>
-                  </button>
-                </li>
-              );
-            })}
-        </ul>
+        <div className="min-w-0">
+          <PillTabs
+            label="Pastas"
+            value={activeFolder as string}
+            onChange={(v) => selectFolder(v as FolderId | "todos")}
+            tabs={[{ value: "todos", label: "Tudo", count: visibleFiles.length }].concat(
+              folderSummaries.map((entry) => ({ value: entry.folder.id as string, label: entry.folder.label, count: entry.total })),
+            )}
+          />
+        </div>
       )}
 
       {/* Uma barra só: projeto, pasta (com quantos itens tem em cada uma) e tipo.
@@ -360,7 +348,7 @@ export default function ClientDocuments() {
           descricao={`${registrosDeEntrega.length} ${registrosDeEntrega.length === 1 ? "documento" : "documentos"}`}
           ajuda="O documento de cada entrega da equipe: o que foi feito, com as imagens reais e os números com a fonte. Toque para abrir."
         >
-          <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/70 px-2 py-2 sm:px-3")} aria-label="Registros de entrega">
+          <ul className={juntar(superficie.painel, "min-w-0 space-y-0.5 px-2 py-2 sm:px-3")} aria-label="Registros de entrega">
             {registrosDeEntrega.map((f: any) => (
               <li
                 key={f.id}
@@ -393,7 +381,7 @@ export default function ClientDocuments() {
           descricao="Quando a equipe liberar um material ou pedir sua aprovação, ele aparece aqui na hora."
         />
       ) : (
-        <ul className={juntar(superficie.painel, "min-w-0 divide-y divide-border/70 px-2 py-2 sm:px-3")} aria-label="Documentos">
+        <ul className={juntar(superficie.painel, "min-w-0 space-y-0.5 px-2 py-2 sm:px-3")} aria-label="Documentos">
           {filteredFiles.map((f: any) => {
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
 

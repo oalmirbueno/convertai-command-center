@@ -61,18 +61,6 @@ export default function EtapaCriar() {
 
   return (
     <div className="min-w-0 space-y-5" data-etapa-criar="">
-      {esperando > 0 && (
-        <div className="flex min-w-0 flex-wrap items-center text-[13px]" data-esperando-aprovacao={esperando}>
-          <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="mr-2 min-w-0">
-            {esperando} {esperando === 1 ? "foto gerada espera" : "fotos geradas esperam"} a sua aprovação.
-          </span>
-          <button type="button" className={juntar("rounded-sm font-medium text-primary hover:underline", foco)} onClick={() => irPara("aprovar")}>
-            Aprovar agora
-          </button>
-        </div>
-      )}
-
       <Cartao
         titulo="O que você quer produzir?"
         recolher={false}
@@ -126,6 +114,18 @@ export default function EtapaCriar() {
           </div>
         )}
       </Cartao>
+      {/* v4: o aviso do que espera aprovação vem DEPOIS dos azulejos (ele chega com a leitura das fotos e empurrava a grade no celular). */}
+      {esperando > 0 && (
+        <div className="flex min-w-0 flex-wrap items-center text-[13px]" data-esperando-aprovacao={esperando}>
+          <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <span className="mr-2 min-w-0">
+            {esperando} {esperando === 1 ? "foto gerada espera" : "fotos geradas esperam"} a sua aprovação.
+          </span>
+          <button type="button" className={juntar("rounded-sm font-medium text-primary hover:underline", foco)} onClick={() => irPara("aprovar")}>
+            Aprovar agora
+          </button>
+        </div>
+      )}
 
       {kit && (
         <div className="flex min-w-0 items-center" data-produto-aberto="">

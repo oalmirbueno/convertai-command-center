@@ -24,6 +24,11 @@
  * - Gráficos: RingIcon, SegmentBar (barra segmentada com % e hachura), Stepper (etapas) e Heatmap.
  * - Card `icon` (ícone em círculo no cabeçalho), PageHeader `eyebrow` e `stats`, EmptyState hachurado.
  * - CSS: .ds-hatch / .ds-hatch-forte (hachura), .gap-bento / .gap-section (dois ritmos de espaço).
+ *
+ * B3 (rolagem): de 768 px para cima o topo fica parado e só o <main> rola. ScrollPanel é o painel com
+ * rolagem própria (altura da janela menos o topo e `offset`, só de 1024 px para cima; no celular a página
+ * rola). CSS: .rolagem-fina (barra fina + overscroll contido), .painel-rolavel / .painel-rolavel-max
+ * com --painel-desconto, e --altura-do-topo.
  */
 export { default as Card, CardSurface } from "./Card";
 export { default as StatCard, StatGrid, StatTrio, type StatCardProps } from "./StatCard";
@@ -39,3 +44,4 @@ export { default as Collapsible } from "./Collapsible";
 export { default as HelpTooltip } from "./HelpTooltip";
 export { default as OverflowMenu, type OverflowItem } from "./OverflowMenu";
 export { default as DataTable, CellIdentity, type DataColumn } from "./DataTable";
+export { default as ScrollPanel } from "./ScrollPanel";

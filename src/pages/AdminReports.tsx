@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
-import { Plus, FileText, Eye, Send, Folder, ChevronRight, Megaphone } from "lucide-react";
+import { Plus, FileText, Eye, Send, ChevronRight, Megaphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   AreaDeTrabalho,
@@ -19,7 +19,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { Avatar, PageHeader, StatCard, StatGrid, StatusPill } from "@/components/ds";
+import { Avatar, OverflowMenu, PageHeader, StatusPill } from "@/components/ds";
 import { groupReports, getClientName, PERIOD_ORDER } from "@/lib/reportGrouping";
 import { recordMemory } from "@/lib/clientMemory";
 
@@ -152,42 +152,14 @@ export default function AdminReports() {
             {/* O relatório de anúncios passou a nascer em Anúncios, onde os
                 números já estão coletados; aqui ficaria pedindo a planilha do
                 Gerenciador de novo. O de entrega continua sendo criado daqui. */}
-            <button type="button" onClick={() => navigate("/anuncios")} className={botao.secundario} aria-label="Relatório de anúncios">
-              <Megaphone className="h-4 w-4" aria-hidden="true" />
-              <span className="ml-1.5 hidden sm:inline">De anúncios</span>
-            </button>
             <button type="button" onClick={() => navigate("/relatorios/novo")} className={botao.primario} aria-label="Novo relatório de entrega">
               <Plus className="h-4 w-4" aria-hidden="true" />
-              <span className="ml-1.5 hidden sm:inline">De entrega</span>
+              <span className="ml-1.5 hidden sm:inline">Novo relatório</span>
             </button>
+            <OverflowMenu label="Mais ações de relatório" items={[{ label: "Relatório de anúncios", icon: <Megaphone className="h-4 w-4" />, onSelect: () => navigate("/anuncios") }]} />
           </>
         }
       />
-
-      {/* Os números da lista (os mesmos do filtro de situação), grandes; clicar filtra. */}
-      {/* Enquanto carrega, a fileira já ocupa o lugar dela (com "–"): a lista não pula quando os números chegam. */}
-      {(primeiraCarga || lista.length > 0) && (
-        <StatGrid cols={3} label="Resumo dos relatórios">
-          <StatCard variant="ink" label="Relatórios" value={primeiraCarga ? "–" : lista.length} icon={<FileText className="h-4 w-4" />} onClick={() => setFiltroStatus("todos")} />
-          <StatCard
-            variant="accent"
-            label="Publicados"
-            value={primeiraCarga ? "–" : lista.length - rascunhos}
-            icon={<Send className="h-4 w-4" />}
-            onClick={() => setFiltroStatus("publicados")}
-            progress={lista.length > 0 ? { value: lista.length - rascunhos, max: lista.length } : undefined}
-            hint={primeiraCarga ? "Carregando" : `de ${lista.length} no total`}
-          />
-          <StatCard
-            className="max-lg:col-span-2"
-            label="Rascunhos"
-            value={primeiraCarga ? "–" : rascunhos}
-            icon={<Folder className="h-4 w-4" />}
-            hint={primeiraCarga ? "Carregando" : rascunhos ? "Ainda não enviados ao cliente" : "Tudo publicado"}
-            onClick={() => setFiltroStatus("rascunhos")}
-          />
-        </StatGrid>
-      )}
 
       {(primeiraCarga || lista.length > 0) && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">

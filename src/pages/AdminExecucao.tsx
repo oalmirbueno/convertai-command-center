@@ -2342,7 +2342,8 @@ export default function AdminExecucao() {
         memoria="execucao-resumo"
         rotuloDaLateral="Atenção"
         iconeDaLateral={<ListChecks className="h-4 w-4" />}
-        lateral={aba === "performance" || aba === "central" ? undefined :
+        // v4 (15/11, passada estrutural): em Relatórios a faixa de números da própria aba já é o resumo; a lateral repetia os mesmos números.
+        lateral={aba === "performance" || aba === "central" || aba === "relatorios" ? undefined :
           <>
             <FecharResumo />
             <RegiaoRolavel modo="sempre" rotulo="Áreas e incidentes" memoria="execucao:areas" className="lg:pr-1">

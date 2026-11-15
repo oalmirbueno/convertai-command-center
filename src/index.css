@@ -1015,7 +1015,7 @@ body[data-gaveta-aberta] [data-casca="flutuante"] {
     display: flex;
   }
   [data-casca="conteudo"][data-com-trilho] {
-    padding-left: 96px;
+    padding-left: calc(max(0px, (100% - 1840px) / 2) + 96px);
   }
   body[data-modo-foco] [data-casca="conteudo"][data-com-trilho],
   body[data-embutido] [data-casca="conteudo"][data-com-trilho] {
@@ -1061,5 +1061,88 @@ svg.text-primary,
   }
   [data-topo-em-pilulas] [data-cronometro-do-topo="sem-cliente"] {
     width: 44px;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   B3 (15/11/2026, dono 17:09): ROLAGEM DA CASCA
+   ══════════════════════════════════════════════════════════════════════════
+   De 768 px para cima o topo e o trilho ficam parados e só a área de conteúdo
+   (<main data-casca="conteudo">) rola, como nas referências: a janela não rola
+   mais. O <main> tem a altura da tela, começa no y=0 (o topo flutua por cima,
+   então os sticky com top +80 px continuam no mesmo lugar) e ocupa a largura
+   toda: a barra de rolagem fica na borda da janela e o conteúdo continua com
+   no máximo 1840 px, centrado pelo recuo lateral. No celular nada muda: a
+   camada fixa entre o topo e a barra de baixo já rolava sozinha. */
+@media (min-width: 768px) {
+  html:has(> body [data-casca="conteudo"]) {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+  }
+  [data-casca="conteudo"] {
+    /* relative (sem z-index, então sem camada nova): prende aqui dentro o que é
+       absoluto sem pai posicionado. Estático, isso escapava do <main> e
+       esticava a página por baixo (a janela ganhava rolagem fantasma). */
+    position: relative;
+    height: 100vh;
+    height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding-left: calc(max(0px, (100% - 1840px) / 2) + 24px);
+    padding-right: calc(max(0px, (100% - 1840px) / 2) + 24px);
+    /* Âncoras e "ir até a seção" param abaixo do topo, não por baixo dele. */
+    scroll-padding-top: calc(env(safe-area-inset-top) + 88px);
+  }
+  body[data-modo-foco] [data-casca="conteudo"],
+  body[data-embutido] [data-casca="conteudo"] {
+    padding-left: 24px;
+    padding-right: 24px;
+    scroll-padding-top: 12px;
+  }
+}
+@media print {
+  html:has(> body [data-casca="conteudo"]) { overflow: visible !important; }
+  [data-casca="conteudo"] { height: auto !important; }
+}
+
+/* Barra de rolagem fina e discreta, para usar explicitamente onde a regra global
+   (todos os elementos, acima) não basta: cartões escuros e painéis tintos. */
+.rolagem-fina {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--foreground) / 0.12) transparent;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.rolagem-fina:hover {
+  scrollbar-color: hsl(var(--foreground) / 0.24) transparent;
+}
+
+/* Painel com rolagem própria (ds/ScrollPanel): no computador tem a altura da
+   janela menos o topo (e menos --painel-desconto, o que a tela tem acima do
+   painel) e rola por dentro; no celular e no tablet vira bloco normal e a
+   página rola (sem rolagem dentro de rolagem prendendo o dedo). */
+:root {
+  --altura-do-topo: calc(env(safe-area-inset-top) + 88px);
+}
+@media (min-width: 1024px) {
+  .painel-rolavel {
+    height: calc(100vh - var(--altura-do-topo) - 24px - var(--painel-desconto, 0px));
+    height: calc(100dvh - var(--altura-do-topo) - 24px - var(--painel-desconto, 0px));
+    min-height: 320px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .painel-rolavel-max {
+    max-height: calc(100vh - var(--altura-do-topo) - 24px - var(--painel-desconto, 0px));
+    max-height: calc(100dvh - var(--altura-do-topo) - 24px - var(--painel-desconto, 0px));
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
   }
 }

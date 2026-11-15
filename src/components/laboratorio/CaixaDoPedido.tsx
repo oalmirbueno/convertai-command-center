@@ -1,5 +1,5 @@
-import { forwardRef, type ReactNode } from "react";
-import { ArrowUp, Brush, Clapperboard, CreditCard, Globe, Images, ListChecks, Loader2, Megaphone, Presentation, Rocket, Route, ShoppingBag, Sparkles, SquarePen, Store, type LucideIcon } from "lucide-react";
+import { forwardRef, useState, type ReactNode } from "react";
+import { ArrowUp, Brush, ChevronDown, Clapperboard, CreditCard, Globe, Images, ListChecks, Loader2, Megaphone, Presentation, Rocket, Route, ShoppingBag, Sparkles, SquarePen, Store, type LucideIcon } from "lucide-react";
 import { botao, campoTexto, juntar, superficie } from "@/components/sistema";
 import { ATALHOS_DE_PROJETO_COMPLETO } from "@/lib/laboratorio/nos";
 import { CirculoDoIcone, pastelDe } from "./visual";
@@ -68,7 +68,17 @@ interface Props {
   extra?: ReactNode;
 }
 
+/**
+ * Início (passada estrutural, 15/11/2026): à vista só os cinco atalhos mais usados numa linha; o resto fica
+ * atrás da pílula "Mais", que abre ali mesmo (nenhum atalho some, só recolhe).
+ */
+const PRINCIPAIS_DA_INICIO = ["low_ticket", "funil", "empresa", "carrossel", "criativos"];
+
 const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPedido(p, ref) {
+  const [todos, setTodos] = useState(false);
+  const principais = p.atalhos.filter((a) => PRINCIPAIS_DA_INICIO.indexOf(a.id) >= 0);
+  const recolhidos = principais.length ? p.atalhos.filter((a) => PRINCIPAIS_DA_INICIO.indexOf(a.id) < 0) : [];
+  const daInicio = todos || !recolhidos.length ? p.atalhos : principais;
   // Canvas Studio (compacta): ícones em fila, o nome no title. Início (v4, 15/11/2026): cada atalho é uma
   // pílula com o ícone em círculo e o NOME à vista (antes era só o ícone e ninguém sabia o que era); os de
   // projeto completo levam o círculo de tinta. No celular a fila rola de lado por dentro, numa linha só.
@@ -104,8 +114,8 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
       })}
     </div>
   ) : (
-    <div className="scrollbar-hidden -mx-1 mt-4 flex min-w-0 items-center overflow-x-auto overscroll-x-contain px-1 pb-1 sm:flex-wrap sm:justify-center sm:overflow-visible" role="group" aria-label="Atalhos do pedido">
-      {p.atalhos.map((a) => {
+    <div className="scrollbar-hidden -mx-1 mt-5 flex min-w-0 items-center overflow-x-auto overscroll-x-contain px-1 pb-1 sm:flex-wrap sm:justify-center sm:overflow-visible" role="group" aria-label="Atalhos do pedido">
+      {daInicio.map((a) => {
         const I = a.icone;
         const completo = ATALHOS_DE_PROJETO_COMPLETO.indexOf(a.id) >= 0;
         return (
@@ -125,6 +135,18 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
           </button>
         );
       })}
+      {recolhidos.length ? (
+        <button
+          type="button"
+          className="toque-compacto mb-2 mr-2 inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-full px-4 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-expanded={todos}
+          onClick={() => setTodos(!todos)}
+          data-mais-atalhos=""
+        >
+          {todos ? "Menos" : `Mais ${recolhidos.length}`}
+          <ChevronDown className={juntar("ml-1 h-4 w-4 transition-transform motion-reduce:transition-none", todos ? "rotate-180" : null)} aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
   return (

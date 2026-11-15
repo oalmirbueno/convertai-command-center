@@ -168,7 +168,7 @@ export default function AbaProjetos({
         <ZonaVazia icone={<Workflow className="h-5 w-5" />} titulo="Nenhum projeto ainda" descricao="Peça um na Início ou abra um canvas em branco." acao={<button type="button" className={botao.secundario} onClick={() => void novo()}>Abrir um canvas em branco</button>} className="py-16" />
       ) : (
         <>
-          <div className="flex min-w-0 flex-wrap items-center rounded-[22px] bg-card p-1.5 shadow-card sm:rounded-full" data-filtros-dos-projetos="">
+          <div className="flex min-w-0 flex-wrap items-center" data-filtros-dos-projetos="">
             <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por nome ou cliente" rotulo="Buscar projetos" className="w-full sm:mr-2 sm:w-[280px]" />
             <div className="mt-1.5 min-w-0 max-w-full sm:mt-0">
               <SeletorCompacto opcoes={opcoes} valor={filtroValido} onEscolher={setFiltro} rotulo="Filtrar projetos" listaQuandoNaoCabe />

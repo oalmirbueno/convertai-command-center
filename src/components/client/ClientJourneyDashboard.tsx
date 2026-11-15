@@ -39,7 +39,7 @@ import {
 } from "@/components/sistema";
 import { Card, CardSurface, Donut, IconButton, List, ListRow, PageHeader, PillTabs, ProgressBar, StatCard, StatusPill, chartColor, type ChartTone, type Tone } from "@/components/ds";
 import CircularProgress from "./CircularProgress";
-import { AvisoEmFaixa, Azulejo, Bolha, Legenda, Metrica, Trilha } from "./pecasOusadas";
+import { AvisoEmFaixa, Bolha, Legenda, Metrica, Trilha } from "./pecasOusadas";
 import { FadeUp, StaggerContainer } from "./motion";
 import { useTelaPequena } from "./useTelaPequena";
 import ProjectJournal from "@/components/shared/ProjectJournal";
@@ -99,6 +99,9 @@ const ATALHOS = [
   { label: "Cofre", icon: FolderOpen, to: "/cofre" },
   { label: "Pedidos", icon: Inbox, to: "/pedidos" },
 ];
+
+/** Rótulo curto dos atalhos na fileira do celular (cabe inteiro em 360 px). */
+const ROTULO_CURTO: Record<string, string> = { "Aprovações": "Aprovar", "Calendário": "Agenda", "Relatórios": "Relatório" };
 
 // Etapas genericas de growth: valem para qualquer servico (social, trafego,
 // site, avulso, hibrido). A etapa e lida dos dados reais.
@@ -372,17 +375,31 @@ export default function ClientJourneyDashboard({
           }
         />
         {pequena && (
-          <nav aria-label="Atalhos" className="mt-5 grid min-w-0 grid-cols-3 gap-3">
-            {ATALHOS.map((atalho) => (
-              <Azulejo
-                key={atalho.to}
-                icone={<atalho.icon className="h-5 w-5" />}
-                rotulo={atalho.label}
-                aoClicar={() => navigate(atalho.to)}
-                destaque={atalho.to === "/aprovacoes" && temPendencia}
-                contador={atalho.to === "/aprovacoes" ? pendingFiles.length : undefined}
-              />
-            ))}
+          // v4 lote 3: no celular os 6 atalhos viram uma fileira compacta de ícones em círculo (antes eram 6 azulejos grandes
+          // que empurravam a ação principal para baixo). Todos continuam a um toque.
+          <nav aria-label="Atalhos" className="mt-4 flex min-w-0 items-start justify-between gap-1 rounded-[28px] bg-card px-2 py-3 shadow-card">
+            {ATALHOS.map((atalho) => {
+              const pede = atalho.to === "/aprovacoes" && temPendencia;
+              return (
+                <button
+                  key={atalho.to}
+                  type="button"
+                  onClick={() => navigate(atalho.to)}
+                  aria-label={pede ? `${atalho.label}: ${pendingFiles.length} aguardando` : atalho.label}
+                  className="flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-2xl py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${pede ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                    <atalho.icon className="h-[18px] w-[18px]" aria-hidden="true" />
+                    {pede && (
+                      <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background">
+                        {pendingFiles.length}
+                      </span>
+                    )}
+                  </span>
+                  <span className="w-full truncate text-center text-[10.5px] font-medium leading-4 tracking-tight text-muted-foreground">{ROTULO_CURTO[atalho.label] ?? atalho.label}</span>
+                </button>
+              );
+            })}
           </nav>
         )}
       </FadeUp>

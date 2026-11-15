@@ -2301,17 +2301,17 @@ export default function Workspace() {
           type="button"
           aria-label={`Contexto: ${contextLabel}`}
           className={juntar(
-            "inline-flex h-9 min-w-0 max-w-[120px] items-center rounded-md border border-border bg-transparent px-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-muted sm:max-w-[260px]",
+            // v4 G2: no celular vira círculo só com o ícone (o caminho já mostra o nome do contexto) e o "…" volta a caber na linha.
+            "inline-flex h-9 w-9 min-w-0 items-center justify-center rounded-full border border-border bg-card text-[13px] font-medium text-foreground transition-colors hover:bg-muted sm:w-auto sm:max-w-[260px] sm:justify-start sm:px-3",
             pickerOpen && "bg-muted",
             foco,
           )}
         >
           {scope === "global"
-            ? <Globe2 className="mr-1.5 hidden h-4 w-4 shrink-0 text-primary sm:inline-block" aria-hidden="true" />
-            : <Folder className="mr-1.5 hidden h-4 w-4 shrink-0 text-primary sm:inline-block" aria-hidden="true" />}
-          <span className="min-w-0 truncate sm:hidden">{scope === "global" ? "Global" : contextLabel}</span>
+            ? <Globe2 className="h-4 w-4 shrink-0 text-primary sm:mr-1.5" aria-hidden="true" />
+            : <Folder className="h-4 w-4 shrink-0 text-primary sm:mr-1.5" aria-hidden="true" />}
           <span className="hidden min-w-0 truncate sm:inline">{contextLabel}</span>
-          <ChevronDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronDown className="ml-1.5 hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:inline-block" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -2395,9 +2395,7 @@ export default function Workspace() {
   const acoesDoCabecalho = (
     <>
       {seletorDeContexto}
-      <button type="button" onClick={() => setNewFolderOpen(true)} className={juntar(botao.secundario, "hidden sm:inline-flex")}>
-        <FolderPlus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Pasta
-      </button>
+      {/* v4 (15/11, passada estrutural): uma ação principal (Enviar); "Nova pasta" mora no "…" em toda largura. */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" aria-label="Mais ações" className={juntar(botao.icone, "h-9 w-9")}>
@@ -2405,7 +2403,7 @@ export default function Workspace() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
-          <DropdownMenuItem className="sm:hidden" onSelect={() => setNewFolderOpen(true)}>
+          <DropdownMenuItem onSelect={() => setNewFolderOpen(true)}>
             <FolderPlus className="mr-2 h-3.5 w-3.5" /> Nova pasta
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setTemplateOpen(true)}>
@@ -2450,7 +2448,7 @@ export default function Workspace() {
         type="button"
         onClick={() => fileInputRef.current?.click()}
         aria-label="Enviar arquivos"
-        className={juntar(botao.primario, "px-2.5 sm:px-3.5")}
+        className={juntar(botao.primario, "px-2.5 max-sm:order-first sm:px-3.5")}
       >
         <Upload className="h-4 w-4" aria-hidden="true" />
         <span className="ml-1.5 hidden sm:inline">Enviar</span>
