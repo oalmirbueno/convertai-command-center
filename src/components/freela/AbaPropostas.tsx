@@ -255,7 +255,7 @@ export default function AbaPropostas() {
             <option key={c.id} value={c.id}>{c.nome}</option>
           ))}
         </select>
-        <p className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>Em aberto: {totalEmTexto(somaPorMoeda(emAberto))}</p>
+        <p className="inline-flex h-9 min-w-0 max-w-full items-center rounded-full bg-foreground px-4 text-[12px] font-medium tabular-nums text-background"><span className="mr-1.5 opacity-70">Em aberto</span><span className="truncate font-semibold">{totalEmTexto(somaPorMoeda(emAberto))}</span></p>
         <button type="button" onClick={abrirNovo} className={juntar(botao.primario, "ml-auto")}>
           <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
           <span className="hidden sm:inline">Nova proposta</span>

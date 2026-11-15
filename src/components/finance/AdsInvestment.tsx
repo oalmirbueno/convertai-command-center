@@ -6,7 +6,8 @@ import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
 import { Carregando, EstadoDeErro, Painel, Secao, botao, juntar, superficie, texto } from "@/components/sistema";
-import { GradeDeKpis, Kpi, type Tom } from "@/components/finance/pecasDoFinanceiro";
+import { GradeDeKpis, Kpi, type Tom, grafico } from "@/components/finance/pecasDoFinanceiro";
+import { ChartLegend } from "@/components/ds";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -103,7 +104,7 @@ export default function AdsInvestment({ billing: cobrancas, projectPayments }: P
   const roiTotal = totalInvested > 0 ? totalReceived / totalInvested : null;
 
   const numeros = [
-    { label: "Investido no mês", value: fmt(curInvested), sub: "Marketing + tráfego pago", tom: "aviso" as Tom },
+    { label: "Investido no mês", value: fmt(curInvested), sub: "Marketing + tráfego pago", tom: "neutro" as Tom },
     { label: "Recebido no mês", value: fmt(curReceived), sub: "Todas as entradas do mês", tom: "sucesso" as Tom },
     { label: "Retorno no mês", value: roiMonth === null ? "-" : `${roiMonth.toFixed(1)}x`, sub: roiMonth === null ? "Sem investimento no mês" : "Receita ÷ investimento", tom: "info" as Tom },
     { label: "Investido total", value: fmt(totalInvested), sub: roiTotal === null ? "Registre marketing ou tráfego" : `Retorno acumulado ${roiTotal.toFixed(1)}x`, tom: "neutro" as Tom },
@@ -123,8 +124,8 @@ export default function AdsInvestment({ billing: cobrancas, projectPayments }: P
       ) : isLoading ? (
         <Carregando forma="lista" linhas={3} rotulo="Carregando investimento em anúncios" />
       ) : (
-        <div className="space-y-4">
-          {/* Os quatro números numa faixa só (antes, um cartão por número). */}
+        <div className="space-y-4 sm:space-y-5">
+          {/* Rodada ousada: um cartão grande por número, o primeiro sólido e o segundo de tinta. */}
           <GradeDeKpis>
             {numeros.map((s) => (
               <Kpi key={s.label} rotulo={s.label} valor={s.value} apoio={s.sub} tom={s.tom} />
@@ -132,19 +133,20 @@ export default function AdsInvestment({ billing: cobrancas, projectPayments }: P
           </GradeDeKpis>
 
           <Painel titulo="Investido e receita" descricao="Últimos 6 meses">
-            <div className="h-[200px] min-w-0">
+            <ChartLegend className="mb-3 flex divide-y-0 [&>li+li]:ml-5 [&>li]:py-0" items={[{ label: "Investido em ads", tone: 3 }, { label: "Receita recebida", tone: 1 }]} />
+            <div className="h-[260px] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={series}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
+                <ComposedChart data={series} barCategoryGap="30%">
+                  <CartesianGrid {...grafico.grade} />
+                  <XAxis dataKey="label" {...grafico.eixo} />
+                  <YAxis {...grafico.eixo} width={44}
                     tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                    {...grafico.dica}
                     formatter={(v: number, name: string) => [fmt(Number(v)), name === "investido" ? "Investido em ads" : "Receita recebida"]}
                   />
-                  <Bar dataKey="investido" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} name="investido" isAnimationActive={false} />
-                  <Line type="monotone" dataKey="receita" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 3 }} name="receita" isAnimationActive={false} />
+                  <Bar dataKey="investido" fill={grafico.cor(3)} radius={grafico.raio} maxBarSize={32} name="investido" isAnimationActive={false} />
+                  <Line type="monotone" dataKey="receita" stroke={grafico.cor(1)} strokeWidth={3} dot={false} activeDot={{ r: 5, strokeWidth: 0 }} name="receita" isAnimationActive={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

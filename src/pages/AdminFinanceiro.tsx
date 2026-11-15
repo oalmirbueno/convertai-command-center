@@ -1380,7 +1380,7 @@ function LegacyFinanceiro() {
                     help={n.ajuda}
                     size={i === 0 ? "xl" : "lg"}
                     variant={i === 0 ? "ink" : i === 1 ? "accent" : "default"}
-                    className={juntar(semIconeNoCelular, i === 3 && overdueVal > 0 && "[&_.ds-stat-valor]:text-destructive")}
+                    className={juntar(semIconeNoCelular, i === 0 && "max-sm:col-span-2", i === 3 && overdueVal > 0 && "[&_.ds-stat-valor]:text-destructive")}
                     chart={
                       billingLoading ? undefined : i === 0 && reservedInBoxes > 0 && cashBalance > 0 ? (
                         <ProgressBar value={cashBalance - reservedInBoxes} max={cashBalance} striped label={`Livre ${fmt(cashBalance - reservedInBoxes)} de ${fmt(cashBalance)} em caixa`} />

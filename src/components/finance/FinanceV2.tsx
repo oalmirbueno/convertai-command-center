@@ -64,6 +64,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/ds";
 import {
   Dialog,
   DialogContent,
@@ -235,34 +236,25 @@ function MetricCard({
   detail,
   icon: Icon,
   tone = "neutral",
+  variant = "default",
 }: {
   label: string;
   value: string;
   detail: string;
   icon: typeof Banknote;
   tone?: "neutral" | "positive" | "negative" | "warning";
+  variant?: "default" | "accent" | "ink";
 }) {
-  const toneClass = {
-    neutral: "bg-muted text-foreground",
-    positive: "bg-success-soft text-success",
-    negative: "bg-danger-soft text-destructive",
-    warning: "bg-warning-soft text-warning",
-  }[tone];
+  // Rodada ousada (15/11/2026): o cartão de indicador do sistema, com número grande; o tom vira a cor do número só quando é negativo.
   return (
-    <Card className="overflow-hidden shadow-card">
-      <CardContent className="flex min-h-[132px] flex-col justify-between p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-[12px] font-medium leading-4 text-muted-foreground">{label}</p>
-          <span className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full", toneClass)}>
-            <Icon className="h-4 w-4" aria-hidden="true" />
-          </span>
-        </div>
-        <div className="mt-5">
-          <p className="text-[28px] font-semibold leading-9 tracking-[-0.025em] tabular-nums text-foreground">{value}</p>
-          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">{detail}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <StatCard
+      label={label}
+      value={value}
+      hint={detail}
+      icon={<Icon className="h-4 w-4" aria-hidden="true" />}
+      variant={variant}
+      className={tone === "negative" && variant === "default" ? "[&_.ds-stat-valor]:text-destructive" : tone === "warning" && variant === "default" ? "[&_.ds-stat-valor]:text-warning" : ""}
+    />
   );
 }
 
@@ -322,8 +314,9 @@ function OverviewTab({
   const modeLabel = MODES.find((item) => item.value === mode)?.label || mode;
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
         <MetricCard
+          variant="accent"
           label="Receitas"
           value={currency(data.income, currencyCode)}
           detail={`${modeLabel} em ${competenceLabel(competence)}`}
@@ -338,6 +331,7 @@ function OverviewTab({
           tone="negative"
         />
         <MetricCard
+          variant={data.net >= 0 ? "ink" : "default"}
           label="Resultado"
           value={currency(data.net, currencyCode)}
           detail={`Saldo inicial de ${currency(data.openingBalance, currencyCode)}`}
@@ -365,10 +359,10 @@ function OverviewTab({
               ["60 dias", data.forecast60Days],
               ["90 dias", data.forecast90Days],
             ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-md bg-muted/60 p-4">
+              <div key={String(label)} className="rounded-md bg-muted/60 p-4 sm:p-5">
                 <p className={texto.rotulo}>{label}</p>
                 <p className={cn(
-                  "mt-2 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums",
+                  "mt-2 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums",
                   Number(value) >= 0 ? "text-success" : "text-destructive",
                 )}>
                   {currency(Number(value), currencyCode)}
@@ -394,9 +388,9 @@ function OverviewTab({
               ["Receita recorrente", data.recurringRevenue, "text-primary"],
               ["Saldo projetado", data.openingBalance + data.net, "text-foreground"],
             ].map(([label, value, color]) => (
-              <div key={String(label)} className="rounded-md bg-muted/60 p-4">
+              <div key={String(label)} className="rounded-md bg-muted/60 p-4 sm:p-5">
                 <p className={texto.rotulo}>{label}</p>
-                <p className={cn("mt-2 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums", color)}>
+                <p className={cn("mt-2 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums", color)}>
                   {currency(Number(value), currencyCode)}
                 </p>
               </div>
@@ -554,7 +548,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard label="Entradas" value={compactCurrency(income)} detail={`${rows.filter((row) => row.direction === "income").length} ${cashMode ? "movimentos" : "lançamentos"}`} icon={ArrowDownToLine} tone="positive" />
+        <MetricCard variant="accent" label="Entradas" value={compactCurrency(income)} detail={`${rows.filter((row) => row.direction === "income").length} ${cashMode ? "movimentos" : "lançamentos"}`} icon={ArrowDownToLine} tone="positive" />
         <MetricCard label="Saídas" value={compactCurrency(expense)} detail={`${rows.filter((row) => row.direction === "expense").length} ${cashMode ? "movimentos" : "lançamentos"}`} icon={ArrowUpFromLine} tone="negative" />
         <MetricCard label={cashMode ? "Saldo líquido" : "Saldo em aberto"} value={compactCurrency(cashMode ? net : open)} detail={cashMode ? "Movimentos pela data de liquidação" : "Recebimentos e pagamentos pendentes"} icon={cashMode ? WalletCards : Clock3} tone={cashMode ? (net >= 0 ? "positive" : "negative") : "warning"} />
       </div>
@@ -567,7 +561,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
         <div className="overflow-x-auto">
           <table className="w-full min-w-[850px] text-[13px]">
             <caption className="sr-only">Lançamentos de {competenceLabel(competence)}</caption>
-            <thead className={cn("border-b bg-muted/40 text-left", texto.rotulo)}>
+            <thead className={cn("bg-muted/70 text-left [&_th]:py-3", texto.rotulo)}>
               <tr>
                 <th className="px-4 py-3 font-medium">Lançamento</th>
                 <th className="px-4 py-3 font-medium">{cashMode ? "Liquidação" : "Vencimento"}</th>
@@ -577,7 +571,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
                 <th className="px-4 py-3 text-right font-medium">Ação</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border/60 [&_td]:py-3.5">
               {rows.map((entry) => {
                 const canSettle = !readOnly && entry.canSettle;
                 return (
@@ -895,7 +889,7 @@ function SubscriptionsTab({ readOnly }: { readOnly: boolean }) {
         {!readOnly && <Button type="button" className="min-h-11" onClick={() => openAssign()}><Plus className="h-4 w-4" />Vincular cliente</Button>}
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard label="MRR contratado" value={compactCurrency(mrr)} detail={`${activeSummaries.length} clientes ativos e revisados`} icon={CircleDollarSign} tone="positive" />
+        <MetricCard variant="accent" label="MRR contratado" value={compactCurrency(mrr)} detail={`${activeSummaries.length} clientes ativos e revisados`} icon={CircleDollarSign} tone="positive" />
         <MetricCard label="A receber" value={compactCurrency(open)} detail="Saldo aberto das mensalidades" icon={FileClock} tone="warning" />
         <MetricCard label="Vencido" value={compactCurrency(overdue)} detail="Prioridade de cobrança" icon={CircleAlert} tone={overdue > 0 ? "negative" : "neutral"} />
       </div>

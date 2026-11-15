@@ -11,7 +11,7 @@ import {
   AjudaRecolhida, CampoDeFormulario, PainelDoAgente, Secao, SeletorCompacto,
   botao, campo, campoTexto, juntar, superficie, texto, useEstadoDaTela,
 } from "@/components/sistema";
-import { Etiqueta, GradeDeKpis, Kpi, corDoTom } from "@/components/finance/pecasDoFinanceiro";
+import { Etiqueta, GradeDeKpis, Kpi, corDoTom, fundoDoTom } from "@/components/finance/pecasDoFinanceiro";
 import { useFinanceSettings, useFinancePlans, useFinanceMutations } from "@/hooks/useFinanceV2";
 import {
   DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier, ONE_OFF_CATALOG,
@@ -481,8 +481,8 @@ ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevCol
   const linkDoWhatsapp = whatsappHref();
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
-      <div className="min-w-0 space-y-6">
+    <div className="grid min-w-0 grid-cols-1 gap-6 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
+      <div className="min-w-0 space-y-6 sm:space-y-8">
         {/* Diagnóstico em uma linha */}
         <Secao
           titulo="Diagnóstico do mês"
@@ -605,11 +605,13 @@ ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevCol
         {recommendations.map((r, i) => {
           const s = sevStyle[r.severity];
           return (
-            <div key={i} className={juntar(superficie.poco, "flex min-w-0 px-3 py-2.5")}>
-              <s.icon className={juntar("mr-2.5 mt-0.5 h-4 w-4 shrink-0", corDoTom[s.tom])} aria-hidden="true" />
+            <div key={i} className={juntar(superficie.poco, "flex min-w-0 p-4")}>
+              <span aria-hidden="true" className={juntar("mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full", fundoDoTom[s.tom])}>
+                <s.icon className="h-4 w-4" />
+              </span>
               <div className="min-w-0 flex-1">
                 <Etiqueta tom={s.tom}>{s.label}</Etiqueta>
-                <p className="mt-1 text-[13px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">{r.title}</p>
+                <p className="mt-2 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">{r.title}</p>
                 <p className={juntar(texto.auxiliar, "mt-1 leading-5 [overflow-wrap:anywhere]")}>{r.detail}</p>
               </div>
             </div>

@@ -44,7 +44,7 @@ export default function AdminFreela() {
   const setAba = (proxima: Aba) => navigate(proxima === "contatos" ? "/freela" : `/freela/${proxima}`);
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       <header className="min-w-0">
         <CabecalhoDePagina
           titulo="Freela"

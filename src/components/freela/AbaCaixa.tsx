@@ -2,17 +2,18 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CircleDollarSign, Pencil } from "lucide-react";
 import {
-  AjudaRecolhida, botao, campo, Carregando, EstadoDeErro, EstadoVazio, etiqueta, FaixaDeNumeros, juntar, RegiaoRolavel, SeletorCompacto, texto,
+  AjudaRecolhida, botao, campo, Carregando, EstadoDeErro, EstadoVazio, etiqueta, juntar, RegiaoRolavel, SeletorCompacto, texto,
   superficie,
 } from "@/components/sistema";
+import { Avatar, CardSurface, ProgressBar, StatusPill, type Tone } from "@/components/ds";
 import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dadosFreela";
 import { dataBR, fmtMoeda, hojeISO, ROTULO_STATUS_PARCELA, statusVisualDaParcela, type Moeda } from "@/lib/freela/freelaLib";
 
-const corDaParcela: Record<string, string> = {
-  aberta: "bg-warning-soft text-warning",
-  atrasada: "bg-danger-soft text-destructive",
-  paga: "bg-success-soft text-success",
-  cancelada: "bg-muted text-muted-foreground",
+const tomDaParcela: Record<string, Tone> = {
+  aberta: "warning",
+  atrasada: "danger",
+  paga: "success",
+  cancelada: "neutral",
 };
 
 /**
@@ -81,25 +82,40 @@ export default function AbaCaixa() {
   return (
     <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
       {/* Um cartão por moeda: os números nunca se misturam. */}
-      <div className="mb-3 grid min-w-0 shrink-0 grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="mb-5 grid min-w-0 shrink-0 grid-cols-1 gap-3 sm:gap-5 lg:grid-cols-2">
       {(["BRL", "USD"] as Moeda[]).map((moeda) => {
         const t = totaisPorMoeda(moeda);
+        const aReceber = t.aberto + t.atrasado;
         return (
-          <FaixaDeNumeros
-            key={moeda}
-            rotulo={moeda === "BRL" ? "Caixa em real (R$)" : "Caixa em dólar (US$)"}
-            colunas={3}
-            itens={[
-              { rotulo: "Em aberto", valor: fmtMoeda(t.aberto, moeda), ponto: "alerta" as const },
-              { rotulo: "Atrasado", valor: fmtMoeda(t.atrasado, moeda), ponto: "perigo" as const },
-              { rotulo: "Recebido no mês", valor: fmtMoeda(t.recebidoNoMes, moeda), ponto: "verde" as const },
-            ]}
-          />
+          <div key={moeda} role="group" aria-label={moeda === "BRL" ? "Caixa em real (R$)" : "Caixa em dólar (US$)"} className="min-w-0">
+            <CardSurface padded variant={moeda === "BRL" ? "ink" : "default"} className="flex h-full min-w-0 flex-col">
+              <div className="flex min-w-0 items-center">
+                <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-[13px] font-semibold text-foreground">{moeda === "USD" ? "US$" : "R$"}</span>
+                <p className="min-w-0 truncate text-[13px] font-medium leading-5 text-muted-foreground">Recebido no mês · {moeda === "BRL" ? "real" : "dólar"}</p>
+              </div>
+              <p className="mt-4 truncate text-[32px] font-semibold leading-10 tracking-[-0.035em] tabular-nums text-foreground sm:text-[40px] sm:leading-[44px]">{fmtMoeda(t.recebidoNoMes, moeda)}</p>
+              <dl className="mt-5 grid min-w-0 grid-cols-2 gap-x-4">
+                <div className="min-w-0">
+                  <dt className={juntar(texto.rotulo, "flex items-center")}><span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-warning" />Em aberto</dt>
+                  <dd className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmtMoeda(t.aberto, moeda)}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className={juntar(texto.rotulo, "flex items-center")}><span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />Atrasado</dt>
+                  <dd className={juntar("mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums", t.atrasado > 0 ? "text-destructive" : "text-foreground")}>{fmtMoeda(t.atrasado, moeda)}</dd>
+                </div>
+              </dl>
+              {aReceber > 0 && (
+                <div className="mt-auto pt-5">
+                  <ProgressBar value={t.aberto} max={aReceber} striped label={`Em dia ${fmtMoeda(t.aberto, moeda)} de ${fmtMoeda(aReceber, moeda)} a receber`} />
+                </div>
+              )}
+            </CardSurface>
+          </div>
         );
       })}
       </div>
 
-      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2 pb-1">
           <SeletorCompacto
             opcoes={[
               { valor: "todas", rotulo: "Todas" },
@@ -145,29 +161,32 @@ export default function AbaCaixa() {
             descricao="Gere as parcelas de um projeto na aba Projetos."
           />
         ) : (
-          <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-5")}>
+          <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden [&>li]:px-4 sm:[&>li]:px-6")}>
             {lista.map((p) => {
               const visual = statusVisualDaParcela(p, hoje);
               const projeto = projetoPorId.get(p.projeto_id);
               return (
-                <li key={p.id} className="flex min-w-0 items-center gap-2 px-1 py-2.5">
-                  <div className="mr-1 min-w-0 flex-1">
+                <li key={p.id} className="flex min-w-0 items-center py-3.5 transition-colors hover:bg-muted/40">
+                  <Avatar name={(projeto && nomeDoContato(projeto.contato_id)) || projeto?.titulo || "Projeto"} className="mr-3 hidden sm:inline-flex" />
+                  <div className="mr-3 min-w-0 flex-1">
                     <p className={juntar(texto.corpo, "truncate font-medium")}>
                       {projeto?.titulo || "Projeto"} · Parcela {p.numero}
                     </p>
-                    <p className={juntar(texto.auxiliar, "truncate")}>
+                    <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
                       {projeto ? nomeDoContato(projeto.contato_id) : ""}
                       {" · "}vence {dataBR(p.vencimento)}
                       {p.status === "paga" && p.pago_em && <> · paga em {dataBR(p.pago_em)}</>}
                       {p.description && <> · {p.description}</>}
                     </p>
                   </div>
-                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{p.moeda === "USD" ? "US$" : "R$"}</span>
-                  <span className="shrink-0 text-[13px] font-medium tabular-nums text-foreground">{fmtMoeda(p.valor, p.moeda)}</span>
-                  <span className={juntar(etiqueta, corDaParcela[visual] || "bg-muted text-muted-foreground")}>
+                  <StatusPill tone={tomDaParcela[visual] || "neutral"} className="mr-3 max-sm:hidden">
                     {ROTULO_STATUS_PARCELA[visual] || visual}
+                  </StatusPill>
+                  <span className="mr-2 flex shrink-0 flex-col items-end">
+                    <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmtMoeda(p.valor, p.moeda)}</span>
+                    <span className={juntar(etiqueta, "mt-1 bg-muted text-muted-foreground sm:hidden")}>{ROTULO_STATUS_PARCELA[visual] || visual}</span>
                   </span>
-                  <Link to="/freela/projetos" className={juntar(botao.barra, "inline-flex items-center")} aria-label="Abrir na aba Projetos">
+                  <Link to="/freela/projetos" className={juntar(botao.icone, "inline-flex items-center")} aria-label="Abrir na aba Projetos">
                     <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   </Link>
                 </li>

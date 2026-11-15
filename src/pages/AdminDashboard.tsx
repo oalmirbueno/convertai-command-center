@@ -726,9 +726,7 @@ export default function AdminDashboard() {
                     else if (entrada.projectId) navigate("/projetos");
                   }}
                 >
-                  <span aria-hidden="true" className="mr-3 mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                    <span className={`h-2 w-2 rounded-full ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
-                  </span>
+                  <div className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full mr-3 ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
                   <div className="min-w-0 flex-1">
                     <p className="break-words text-[13px] leading-5 text-foreground">{entrada.message}</p>
                     <p className="mt-1.5 flex items-center text-[12px] text-muted-foreground">

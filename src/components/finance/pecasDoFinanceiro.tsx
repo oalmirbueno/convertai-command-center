@@ -42,6 +42,17 @@ export const botaoDeLinha = juntar(
   foco,
 );
 
+/** A ação que resolve a linha (Pagar, Receber, Lançar): pílula de tinta, 32 px. */
+export const botaoPrincipalDeLinha = juntar(
+  "inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-foreground px-3.5 text-[12px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:pointer-events-none disabled:opacity-50",
+  foco,
+);
+
+/** Linha de lista do Financeiro (dentro de um Painel sem espaço): mais ar e fundo suave ao passar o mouse. */
+export const linhaDeLista = "flex min-w-0 flex-wrap items-center px-4 py-3.5 transition-colors hover:bg-muted/40 sm:px-6";
+/** A lista dessas linhas: traço fino entre elas. */
+export const listaDeLinhas = "divide-y divide-border/60";
+
 /** Onde o Kpi mora: solto, numa grade de cartões ou numa grade de poços (dentro de um Painel). */
 const DentroDaGrade = createContext<{ naGrade: boolean; emPoco: boolean; indice: number; destacar: boolean }>({ naGrade: false, emPoco: false, indice: -1, destacar: false });
 
@@ -205,6 +216,7 @@ export function Numeros({
   destaques = true,
   tamanho,
   emPoco = false,
+  grade: gradeExata,
   className = "",
   ...resto
 }: {
@@ -215,6 +227,8 @@ export function Numeros({
   tamanho?: "md" | "lg" | "xl";
   /** Dentro de um Painel: poços no lugar de cartões. */
   emPoco?: boolean;
+  /** Classes exatas da grade (ex.: "grid-cols-2 md:grid-cols-3"). Vence `colunas`. */
+  grade?: string;
   className?: string;
 } & Record<`data-${string}`, string | undefined>) {
   const n = itens.length;
@@ -232,7 +246,7 @@ export function Numeros({
               ? "grid-cols-2 lg:grid-cols-3 desk:grid-cols-5 max-lg:[&>*:last-child:nth-child(odd)]:col-span-2"
               : "grid-cols-2 lg:grid-cols-3 desk:grid-cols-6 max-lg:[&>*:last-child:nth-child(odd)]:col-span-2";
   return (
-    <div role="group" aria-label={rotulo} className={juntar("grid min-w-0", emPoco ? "gap-3" : "gap-3 sm:gap-5", grade, className)} {...resto}>
+    <div role="group" aria-label={rotulo} className={juntar("grid min-w-0", emPoco ? "gap-3" : "gap-3 sm:gap-5", gradeExata || grade, className)} {...resto}>
       {itens.map((item, i) => {
         const alerta = item.ponto === "perigo" || item.ponto === "alerta" || /destructive|warning/.test(item.corDoValor || "");
         const tipo = item.variante || (!destaques || emPoco || n < 2 || alerta ? "default" : i === 0 ? "accent" : i === 1 ? "ink" : "default");
@@ -275,7 +289,7 @@ export const tabela = {
   /** Quem rola para o lado no celular. */
   moldura: "min-w-0 overflow-x-auto",
   tabela: "w-full border-separate border-spacing-0 text-[13px] leading-5",
-  cabeca: "[&_th]:whitespace-nowrap [&_th]:bg-muted/70 [&_th]:px-4 [&_th]:py-3 [&_th]:text-left [&_th]:text-[12px] [&_th]:font-medium [&_th]:text-muted-foreground [&_th:first-child]:rounded-l-full [&_th:last-child]:rounded-r-full",
+  cabeca: "text-left [&_th]:whitespace-nowrap [&_th]:bg-muted [&_th]:px-4 [&_th]:py-3 [&_th]:text-[12px] [&_th]:font-medium [&_th]:text-muted-foreground [&_th:first-child]:rounded-l-full [&_th:last-child]:rounded-r-full",
   corpo: "[&_td]:border-b [&_td]:border-border/60 [&_td]:px-4 [&_td]:py-3.5 [&_tr:last-child>td]:border-b-0 [&_tr]:transition-colors [&_tr:hover>td]:bg-muted/40",
   numero: "text-right tabular-nums",
 } as const;

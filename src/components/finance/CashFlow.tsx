@@ -17,8 +17,9 @@ import {
   RegiaoRolavel, Secao, SeletorCompacto, botao, campo, campoTexto, foco, juntar, superficie, texto, useEstadoDaTela,
 } from "@/components/sistema";
 import {
-  AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, botaoDeLinha, corDoTom, type Tom,
+  AcoesDoDialogo, Etiqueta, GradeDeKpis, IconeDaLinha, Kpi, botaoDeLinha, botaoPrincipalDeLinha, corDoTom, grafico, linhaDeLista, listaDeLinhas, tabela, type Tom,
 } from "@/components/finance/pecasDoFinanceiro";
+import { ChartLegend, ProgressBar } from "@/components/ds";
 import NewIncomeModal from "./NewIncomeModal";
 // Frente CFO (30/09): a trava do limite do mês nas despesas novas.
 import { useTravaDeGasto } from "@/components/cfo/TravaDeGasto";
@@ -808,8 +809,8 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
   const renderExpenseRow = (e: any) => {
     const cm = catMeta(e.category);
     return (
-      <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
-        <span className="mr-3 h-2 w-2 shrink-0 rounded-full" style={{ background: cm.color }} aria-hidden="true" />
+      <li key={e.id} className={linhaDeLista}>
+        <IconeDaLinha className="hidden sm:inline-flex"><span className="h-2.5 w-2.5 rounded-full" style={{ background: cm.color }} /></IconeDaLinha>
         <div className="mr-3 min-w-0 flex-1 basis-48">
           <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
           <p className={juntar(texto.auxiliar, "truncate")}>
@@ -839,7 +840,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
   ];
 
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="min-w-0 space-y-6 sm:space-y-8">
       {janelaDaTrava}
       {/* Filtros e ações da aba: período e segmento (lembram ao voltar), CSV e Lançamento. */}
       <BarraDeAcoes
@@ -892,7 +893,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
         }
       >
         <GradeDeKpis colunas={5}>
-          <Kpi rotulo="Saldo em caixa hoje" valor={fmt(cashBalance)} apoio="Confira com o extrato" tom={cashBalance >= 0 ? "primario" : "perigo"} />
+          <Kpi rotulo="Saldo em caixa hoje" valor={fmt(cashBalance)} apoio="Confira com o extrato" tom={cashBalance >= 0 ? "primario" : "perigo"} icone={<Wallet className="h-4 w-4" />} />
           <Kpi rotulo="Base de meses anteriores" valor={fmt(openingBalance)} apoio="Ajustada na conciliação" tom="aviso" />
           <Kpi rotulo="Entradas (histórico)" valor={fmt(allTimeReceived)} apoio="Tudo que já foi recebido" tom="sucesso" />
           <Kpi rotulo="Saídas do mês" valor={fmt(cur.despesas + cur.pendDespesa)} apoio={`${fmt(cur.despesas)} pagas · ${fmt(cur.pendDespesa)} previstas`} tom="perigo" />
@@ -907,12 +908,12 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
         descricao={`Guardado ${fmt(reservedTotal)}`}
         ajuda="Dinheiro separado dentro do caixa. Você atualiza os valores; a sugestão aparece quando o guardado está diferente dela."
       >
-        <GradeDeKpis>
+        <GradeDeKpis destaques={false}>
           {BOX_DEFS.map((b) => {
             const value = Number(boxes[b.key]) || 0;
             const isEditing = editingBox?.key === b.key;
             return (
-              <Kpi key={b.key} rotulo={b.label} ajuda={b.hint} valor={fmt(value)} tom="info">
+              <Kpi key={b.key} rotulo={b.label} ajuda={b.hint} valor={fmt(value)} tom="info" icone={<PiggyBank className="h-4 w-4" />} grafico={reservedTotal > 0 ? <ProgressBar value={value} max={reservedTotal} height={6} tone={5} label={`${b.label}: ${fmt(value)} de ${fmt(reservedTotal)} guardados`} /> : undefined}>
                 {isEditing ? (
                   <div className="mt-2 flex min-w-0 items-center">
                     <input
@@ -955,6 +956,8 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
             valor={fmt(freeBalance)}
             apoio="Caixa − caixinhas"
             tom={freeBalance >= 0 ? "sucesso" : "perigo"}
+            variante={freeBalance >= 0 ? "ink" : "default"}
+            grafico={cashBalance > 0 && freeBalance >= 0 ? <ProgressBar value={freeBalance} max={cashBalance} height={6} striped label={`Livre ${fmt(freeBalance)} de ${fmt(cashBalance)} em caixa`} /> : undefined}
             ajuda={<>Saldo em caixa {fmt(cashBalance)} − caixinhas {fmt(reservedTotal)}. É o que pode ser usado sem tocar nas reservas.</>}
           />
         </GradeDeKpis>
@@ -963,14 +966,14 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
       {/* RESUMO DO MÊS */}
       <Secao divisoria titulo="Resumo do mês" ajuda="Indicadores operacionais. Investimento não entra aqui.">
         <GradeDeKpis>
-          <Kpi rotulo="Receitas do mês" valor={fmt(cur.receitas)} apoio={`+${fmt(cur.pendReceita)} previstas`} tom="sucesso" />
-          <Kpi rotulo="Despesas do mês" valor={fmt(cur.despesas)} apoio={`+${fmt(cur.pendDespesa)} previstas`} tom="perigo" />
-          <Kpi rotulo="Resultado do mês" valor={fmt(cur.net)} apoio={cur.net >= 0 ? "Saldo positivo" : "Saldo negativo"} tom={cur.net >= 0 ? "sucesso" : "perigo"} />
+          <Kpi rotulo="Receitas do mês" valor={fmt(cur.receitas)} apoio={`+${fmt(cur.pendReceita)} previstas`} tom="sucesso" icone={<ArrowUpRight className="h-4 w-4" />} grafico={cur.receitas + cur.pendReceita > 0 ? <ProgressBar value={cur.receitas} max={cur.receitas + cur.pendReceita} height={6} striped label={`Recebido ${fmt(cur.receitas)} de ${fmt(cur.receitas + cur.pendReceita)} do mês`} /> : undefined} />
+          <Kpi rotulo="Despesas do mês" valor={fmt(cur.despesas)} apoio={`+${fmt(cur.pendDespesa)} previstas`} tom="perigo" icone={<ArrowDownRight className="h-4 w-4" />} grafico={cur.despesas + cur.pendDespesa > 0 ? <ProgressBar value={cur.despesas} max={cur.despesas + cur.pendDespesa} height={6} striped tone={4} label={`Pago ${fmt(cur.despesas)} de ${fmt(cur.despesas + cur.pendDespesa)} do mês`} /> : undefined} />
+          <Kpi rotulo="Resultado do mês" valor={fmt(cur.net)} apoio={cur.net >= 0 ? "Saldo positivo" : "Saldo negativo"} tom={cur.net >= 0 ? "sucesso" : "perigo"} variante={cur.net >= 0 ? "ink" : "default"} />
           <Kpi rotulo={`Projeção ${period}m`} valor={fmt(lucroProj)} apoio={`Margem ${margem.toFixed(1)}%`} tom={lucroProj >= 0 ? "primario" : "aviso"} />
         </GradeDeKpis>
         {/* Capital de Investidor foi movido para sua própria aba ("Capital") em /financeiro */}
         {investorEntries.length > 0 && (
-          <p className={juntar(superficie.poco, "mt-3 flex min-w-0 items-center px-3 py-2 text-[12px] text-muted-foreground")}>
+          <p className={juntar(superficie.poco, "mt-4 flex min-w-0 items-center rounded-full px-4 py-2.5 text-[12px] text-muted-foreground")}>
             <Briefcase className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
             <span className="min-w-0 truncate">
               <span className="font-semibold tabular-nums text-primary">{fmt(investor.total)}</span> de capital de investidor ficam na aba Capital, fora deste fluxo.
@@ -985,40 +988,40 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
         titulo="Evolução do caixa"
         ajuda="Entradas e saídas por mês (a parte clara é o previsto) e o saldo acumulado projetado."
         acao={
-          <div className={juntar(texto.auxiliar, "hidden items-center sm:flex")}>
-            <span className="mr-3 flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-success" /> Receita</span>
-            <span className="mr-3 flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-destructive" /> Despesa</span>
-            <span className="flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-primary" /> Acumulado</span>
-          </div>
+          <ChartLegend
+            className="hidden divide-y-0 sm:flex [&>li+li]:ml-5 [&>li]:py-0"
+            items={[{ label: "Receita", tone: 1 }, { label: "Despesa", tone: 4 }, { label: "Acumulado", tone: 2 }]}
+          />
         }
       >
         <Painel>
-          <div className="h-[300px]">
+          <div className="h-[320px]">
             <ResponsiveContainer>
-              <ComposedChart data={series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <ComposedChart data={series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={4} barCategoryGap="26%">
                 <defs>
-                  <linearGradient id="recGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0.4} />
-                  </linearGradient>
-                  <linearGradient id="despGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0.4} />
-                  </linearGradient>
+                  {/* O previsto sai hachurado por cima do realizado, como nas referências. */}
+                  <pattern id="recPrev" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+                    <rect width="6" height="6" fill={grafico.cor(1)} opacity={0.16} />
+                    <rect width="2" height="6" fill={grafico.cor(1)} opacity={0.75} />
+                  </pattern>
+                  <pattern id="despPrev" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+                    <rect width="6" height="6" fill={grafico.cor(4)} opacity={0.16} />
+                    <rect width="2" height="6" fill={grafico.cor(4)} opacity={0.75} />
+                  </pattern>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
+                <CartesianGrid {...grafico.grade} />
+                <XAxis dataKey="label" {...grafico.eixo} />
+                <YAxis {...grafico.eixo} width={44}
                   tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                  {...grafico.dica}
                   formatter={(v: any) => fmt(Number(v))}
                 />
-                <Bar dataKey="receitas" stackId="in" fill="url(#recGrad)" radius={[4, 4, 0, 0]} name="Receita" isAnimationActive={false} />
-                <Bar dataKey="pendReceita" stackId="in" fill="hsl(var(--success) / 0.25)" radius={[4, 4, 0, 0]} name="Receita prevista" isAnimationActive={false} />
-                <Bar dataKey="despesas" stackId="out" fill="url(#despGrad)" radius={[4, 4, 0, 0]} name="Despesa" isAnimationActive={false} />
-                <Bar dataKey="pendDespesa" stackId="out" fill="hsl(var(--destructive) / 0.25)" radius={[4, 4, 0, 0]} name="Despesa prevista" isAnimationActive={false} />
-                <Line type="monotone" dataKey="acumulado" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3 }} name="Acumulado" isAnimationActive={false} />
+                <Bar dataKey="receitas" stackId="in" fill={grafico.cor(1)} radius={grafico.raio} maxBarSize={26} name="Receita" isAnimationActive={false} />
+                <Bar dataKey="pendReceita" stackId="in" fill="url(#recPrev)" radius={grafico.raio} maxBarSize={26} name="Receita prevista" isAnimationActive={false} />
+                <Bar dataKey="despesas" stackId="out" fill={grafico.cor(4)} radius={grafico.raio} maxBarSize={26} name="Despesa" isAnimationActive={false} />
+                <Bar dataKey="pendDespesa" stackId="out" fill="url(#despPrev)" radius={grafico.raio} maxBarSize={26} name="Despesa prevista" isAnimationActive={false} />
+                <Line type="monotone" dataKey="acumulado" stroke={grafico.cor(2)} strokeWidth={3} dot={false} activeDot={{ r: 5, strokeWidth: 0 }} name="Acumulado" isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -1026,18 +1029,18 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
       </Secao>
 
       {/* ANÁLISE · DRE + distribuição */}
-      <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 lg:grid-cols-3">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
         <Secao
           titulo="DRE simplificado"
           descricao={`${dre.length} meses`}
           ajuda="Resultado mensal: receita, despesa, lucro e margem. Soma o realizado e o previsto de cada mês."
           className="lg:col-span-2"
         >
-          <RegiaoRolavel memoria="financeiro:fluxo:dre" rotulo="DRE simplificado" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden px-4 py-1 sm:px-5")} className="lg:max-h-[360px]">
+          <RegiaoRolavel memoria="financeiro:fluxo:dre" rotulo="DRE simplificado" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden p-3 sm:p-4")} className="lg:max-h-[360px]">
             {/* Computador: tabela. Celular: lista. */}
-            <table className="hidden w-full text-[13px] sm:table">
-              <thead className="bg-card lg:sticky lg:top-0 lg:z-10">
-                <tr className="border-b border-border">
+            <table className={juntar(tabela.tabela, "hidden sm:table")}>
+              <thead className={juntar(tabela.cabeca, "bg-card lg:sticky lg:top-0 lg:z-10")}>
+                <tr>
                   <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Mês</th>
                   <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Receita</th>
                   <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Despesa</th>
@@ -1045,23 +1048,23 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                   <th className={juntar(texto.rotulo, "py-2 pl-3 text-right")}>Margem</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className={tabela.corpo}>
                 {dre.map((r, i) => (
                   <tr key={i}>
-                    <td className="py-2 pr-3 text-foreground">{r.label}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-success">{fmtCompact(r.receita)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-destructive">{fmtCompact(r.despesa)}</td>
+                    <td className="py-2 pr-3 font-medium text-foreground">{r.label}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-foreground">{fmtCompact(r.receita)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtCompact(r.despesa)}</td>
                     <td className={juntar("px-3 py-2 text-right font-semibold tabular-nums", r.lucro >= 0 ? "text-foreground" : "text-destructive")}>{fmtCompact(r.lucro)}</td>
-                    <td className={juntar("py-2 pl-3 text-right tabular-nums", r.margem >= 0 ? "text-success" : "text-destructive")}>
-                      {r.margem.toFixed(1)}%
+                    <td className="py-2 pl-3 text-right">
+                      <Etiqueta tom={r.margem >= 0 ? "sucesso" : "perigo"} semPonto>{r.margem.toFixed(1)}%</Etiqueta>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <ul className="divide-y divide-border sm:hidden">
+            <ul className="divide-y divide-border/60 px-1 sm:hidden">
               {dre.map((r, i) => (
-                <li key={i} className="min-w-0 py-2">
+                <li key={i} className="min-w-0 py-3">
                   <div className="flex min-w-0 items-center">
                     <span className="mr-2 min-w-0 flex-1 text-[13px] text-foreground">{r.label}</span>
                     <span className={juntar("shrink-0 text-[13px] font-semibold tabular-nums", r.lucro >= 0 ? "text-foreground" : "text-destructive")}>{fmtCompact(r.lucro)}</span>
@@ -1080,29 +1083,35 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
             <EstadoVazio compacto titulo="Nenhuma despesa cadastrada." />
           ) : (
             <>
-              <div className="h-[160px]">
-                <ResponsiveContainer>
-                  <PieChart>
-                    <Pie data={byCat} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={2} isAnimationActive={false}>
-                      {byCat.map((d, i) => <Cell key={i} fill={d.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(v: any) => fmt(Number(v))} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <ul className="mt-3 space-y-1.5">
-                {byCat.slice(0, 5).map((c, i) => {
-                  const pct = (c.value / byCat.reduce((a, x) => a + x.value, 0)) * 100;
-                  return (
-                    <li key={i} className="flex min-w-0 items-center text-[12px]">
-                      <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
-                      <span className="mr-2 min-w-0 flex-1 truncate text-foreground">{c.name}</span>
-                      <span className="mr-2 shrink-0 tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
-                      <span className="shrink-0 tabular-nums text-foreground">{fmtCompact(c.value)}</span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <Painel>
+                <div className="relative mx-auto h-[184px] w-[184px]">
+                  <ResponsiveContainer>
+                    <PieChart>
+                      <Pie data={byCat} dataKey="value" innerRadius={62} outerRadius={88} paddingAngle={3} cornerRadius={6} stroke="none" isAnimationActive={false}>
+                        {byCat.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      </Pie>
+                      <Tooltip formatter={(v: any) => fmt(Number(v))} {...grafico.dica} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-[11px] leading-4 text-muted-foreground">Total</span>
+                    <span className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{fmtCompact(byCat.reduce((a, x) => a + x.value, 0))}</span>
+                  </div>
+                </div>
+                <ul className="mt-4 divide-y divide-border/60">
+                  {byCat.slice(0, 5).map((c, i) => {
+                    const pct = (c.value / byCat.reduce((a, x) => a + x.value, 0)) * 100;
+                    return (
+                      <li key={i} className="flex min-w-0 items-center py-2 text-[13px] leading-5">
+                        <span className="mr-2.5 h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                        <span className="mr-2 min-w-0 flex-1 truncate text-muted-foreground">{c.name}</span>
+                        <span className="mr-3 shrink-0 text-[12px] tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
+                        <span className="shrink-0 font-medium tabular-nums text-foreground">{fmtCompact(c.value)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Painel>
             </>
           )}
         </Secao>
@@ -1148,16 +1157,16 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                     <div className="border-t border-border p-4"><EstadoVazio compacto titulo="Nada a receber no momento." /></div>
                   ) : (
                     <RegiaoRolavel memoria="financeiro:fluxo:a-receber" rotulo="A receber" sobre="cartao" className="lg:max-h-[420px]">
-                      <ul className="divide-y divide-border border-t border-border">
+                      <ul className={juntar(listaDeLinhas, "border-t border-border/60")}>
                         {accountsReceivable.map((r: any) => (
-                          <li key={r.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                          <li key={r.id} className={linhaDeLista}>
                             <div className="mr-3 min-w-0 flex-1 basis-48">
                               <p className="truncate text-[13px] font-medium text-foreground">{r.description}</p>
                               <p className={juntar(texto.auxiliar, "truncate")}>{r.client} · Vence {parseDate(r.due_date)?.toLocaleDateString("pt-BR")}</p>
                             </div>
                             <div className="ml-auto flex shrink-0 items-center py-0.5">
                               {prazo(r.overdue, r.daysUntil)}
-                              <span className="ml-3 text-[13px] font-semibold tabular-nums text-success">{fmt(r.amount)}</span>
+                              <span className="ml-3 text-[13px] font-semibold tabular-nums text-foreground">{fmt(r.amount)}</span>
                             </div>
                           </li>
                         ))}
@@ -1171,9 +1180,9 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                     <div className="border-t border-border p-4"><EstadoVazio compacto titulo="Nenhuma entrada recebida ainda." /></div>
                   ) : (
                     <RegiaoRolavel memoria="financeiro:fluxo:recebidas" rotulo="Recebidas" sobre="cartao" className="lg:max-h-[420px]">
-                      <ul className="divide-y divide-border border-t border-border">
+                      <ul className={juntar(listaDeLinhas, "border-t border-border/60")}>
                         {receivedList.map((r: any) => (
-                          <li key={r.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                          <li key={r.id} className={linhaDeLista}>
                             <div className="mr-3 min-w-0 flex-1 basis-48">
                               <p className="truncate text-[13px] font-medium text-foreground">{r.description}</p>
                               <p className={juntar(texto.auxiliar, "truncate")}>
@@ -1181,7 +1190,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                                 {r.partial && ` · parcial (${fmt(r.amount)} de ${fmt(r.total)})`}
                               </p>
                             </div>
-                            <span className="ml-auto shrink-0 py-0.5 text-[13px] font-semibold tabular-nums text-success">{fmt(r.amount)}</span>
+                            <span className="ml-auto shrink-0 py-0.5 text-[13px] font-semibold tabular-nums text-foreground">+ {fmt(r.amount)}</span>
                           </li>
                         ))}
                       </ul>
@@ -1225,12 +1234,12 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                     <div className="border-t border-border p-4"><EstadoVazio compacto titulo="Nada a pagar." /></div>
                   ) : (
                     <RegiaoRolavel memoria="financeiro:fluxo:a-pagar" rotulo="A pagar" sobre="cartao" className="lg:max-h-[420px]">
-                      <ul className="divide-y divide-border border-t border-border">
+                      <ul className={juntar(listaDeLinhas, "border-t border-border/60")}>
                         {accountsPayable.map((e: any) => {
                           const cm = catMeta(e.category);
                           return (
-                            <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
-                              <span className="mr-3 h-2 w-2 shrink-0 rounded-full" style={{ background: cm.color }} aria-hidden="true" />
+                            <li key={e.id} className={linhaDeLista}>
+                              <IconeDaLinha className="hidden sm:inline-flex"><span className="h-2.5 w-2.5 rounded-full" style={{ background: cm.color }} /></IconeDaLinha>
                               <div className="mr-3 min-w-0 flex-1 basis-48">
                                 <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
                                 <p className={juntar(texto.auxiliar, "truncate")}>
@@ -1241,7 +1250,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                               <div className="ml-auto flex shrink-0 items-center py-0.5">
                                 {prazo(e.overdue, e.daysUntil)}
                                 <span className="mx-3 text-[13px] font-semibold tabular-nums text-foreground">{fmt(Number(e.amount))}</span>
-                                <button type="button" onClick={() => togglePaid(e)} className={juntar(botaoDeLinha, "border-success/40 text-success hover:bg-success/10")}>Pagar</button>
+                                <button type="button" onClick={() => togglePaid(e)} className={botaoPrincipalDeLinha}>Pagar</button>
                                 {acoesDaLinha(e, isInvestor(e) ? "investment" : "expense")}
                               </div>
                             </li>
@@ -1280,8 +1289,8 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                           const fixedTotal = sum(bucket.fixed);
                           const oneOffTotal = sum(bucket.oneOff);
                           return (
-                            <div key={key} className="border-t border-border">
-                              <div className="flex min-w-0 flex-wrap items-center justify-between border-b border-border bg-card px-4 py-2 lg:sticky lg:top-0 lg:z-10">
+                            <div key={key} className="border-t border-border/60">
+                              <div className="flex min-w-0 flex-wrap items-center justify-between bg-muted px-4 py-2.5 sm:px-6 lg:sticky lg:top-0 lg:z-10">
                                 <p className="mr-3 text-[13px] font-semibold text-foreground">
                                   {key === "0000-00" ? "Sem data" : monthLabel(key)}
                                 </p>
@@ -1292,14 +1301,14 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                               </div>
                               {bucket.fixed.length > 0 && (
                                 <>
-                                  <p className={juntar(texto.rotulo, "px-4 pt-2")}>Fixas do mês</p>
-                                  <ul className="divide-y divide-border">{bucket.fixed.map(renderExpenseRow)}</ul>
+                                  <p className={juntar(texto.rotulo, "px-4 pt-3 sm:px-6")}>Fixas do mês</p>
+                                  <ul className={listaDeLinhas}>{bucket.fixed.map(renderExpenseRow)}</ul>
                                 </>
                               )}
                               {bucket.oneOff.length > 0 && (
                                 <>
-                                  <p className={juntar(texto.rotulo, "px-4 pt-2")}>Pontuais do mês</p>
-                                  <ul className="divide-y divide-border">{bucket.oneOff.map(renderExpenseRow)}</ul>
+                                  <p className={juntar(texto.rotulo, "px-4 pt-3 sm:px-6")}>Pontuais do mês</p>
+                                  <ul className={listaDeLinhas}>{bucket.oneOff.map(renderExpenseRow)}</ul>
                                 </>
                               )}
                             </div>
@@ -1313,7 +1322,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                 {/* SAÍDAS JÁ REALIZADAS · o espelho de "Recebidas" */}
                 {!estadoDasSaidas && abaSaidas === "done" && (
                   <>
-                    <div className={juntar(texto.auxiliar, "flex min-w-0 flex-wrap items-center justify-between border-t border-border px-4 py-2")}>
+                    <div className={juntar(texto.auxiliar, "flex min-w-0 flex-wrap items-center justify-between border-t border-border/60 px-4 py-3 sm:px-6")}>
                       <span className="mr-3">
                         Neste mês saiu <strong className="font-semibold tabular-nums text-destructive">{fmt(paidOutThisMonth)}</strong>
                       </span>
@@ -1327,12 +1336,12 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                       </div>
                     ) : (
                       <RegiaoRolavel memoria="financeiro:fluxo:realizadas" rotulo="Saídas realizadas" sobre="cartao" className="lg:max-h-[420px]">
-                        <ul className="divide-y divide-border border-t border-border">
+                        <ul className={juntar(listaDeLinhas, "border-t border-border/60")}>
                           {paidOutList.map((e: any) => {
                             const cm = catMeta(e.category);
                             return (
-                              <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
-                                <span className="mr-3 h-2 w-2 shrink-0 rounded-full" style={{ background: cm.color }} aria-hidden="true" />
+                              <li key={e.id} className={linhaDeLista}>
+                                <IconeDaLinha className="hidden sm:inline-flex"><span className="h-2.5 w-2.5 rounded-full" style={{ background: cm.color }} /></IconeDaLinha>
                                 <div className="mr-3 min-w-0 flex-1 basis-48">
                                   <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
                                   <p className={juntar(texto.auxiliar, "truncate")}>
@@ -1342,7 +1351,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                                   </p>
                                 </div>
                                 <div className="ml-auto flex shrink-0 items-center py-0.5">
-                                  <span className="mr-3 text-[13px] font-semibold tabular-nums text-destructive">{fmt(Number(e.amount))}</span>
+                                  <span className="mr-3 text-[13px] font-semibold tabular-nums text-foreground">− {fmt(Number(e.amount))}</span>
                                   <button type="button" onClick={() => togglePaid(e)}
                                     title="Estornar: apaga a saída e devolve o vencimento ao mês pago"
                                     className={botaoDeLinha}>
@@ -1361,7 +1370,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                 {/* PRÓ-LABORE · já configurado pelo proporcional ao faturamento */}
                 {!estadoDasSaidas && abaSaidas === "pro" && (
                   <div className="min-w-0 border-t border-border">
-                    <div className="space-y-3 p-4">
+                    <div className="space-y-4 p-4 sm:p-6">
                       <GradeDeKpis colunas={3} semMoldura>
                         <Kpi emPoco rotulo="Receita operacional do mês" valor={fmt(proLaboreView.operacional)} apoio={`${fmt(monthReceivedGross)} bruto − imposto`} />
                         <Kpi
@@ -1381,7 +1390,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                       </GradeDeKpis>
 
                       {!proLaboreView.molde && proLaboreView.proporcional > 0 && (
-                        <div className="flex min-w-0 flex-wrap items-center rounded-md border border-success/30 px-3 py-2">
+                        <div className="flex min-w-0 flex-wrap items-center rounded-md bg-accent-soft px-4 py-2.5">
                           <p className="mr-3 flex min-w-0 flex-1 items-center py-1 text-[13px] leading-5 text-muted-foreground">
                             <span className="min-w-0 truncate">Pró-labore ainda não lançado como saída</span>
                             <AjudaRecolhida className="ml-1" rotulo="Sobre lançar o pró-labore">
@@ -1389,7 +1398,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                             </AjudaRecolhida>
                           </p>
                           <button type="button" onClick={lancarProLaboreProporcional}
-                            className={juntar(botaoDeLinha, "border-success/40 text-success hover:bg-success/10")}>
+                            className={botaoPrincipalDeLinha}>
                             Lançar {fmt(proLaboreView.proporcional)}/mês
                           </button>
                         </div>
@@ -1410,9 +1419,9 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                       <div className="border-t border-border p-4"><EstadoVazio compacto titulo="Nenhuma retirada registrada ainda." /></div>
                     ) : (
                       <RegiaoRolavel memoria="financeiro:fluxo:prolabore" rotulo="Retiradas de pró-labore" sobre="cartao" className="lg:max-h-[300px]">
-                        <ul className="divide-y divide-border border-t border-border">
+                        <ul className={juntar(listaDeLinhas, "border-t border-border/60")}>
                           {proLaboreView.linhas.map((e: any) => (
-                            <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                            <li key={e.id} className={linhaDeLista}>
                               <div className="mr-3 min-w-0 flex-1 basis-48">
                                 <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
                                 <p className={juntar(texto.auxiliar, "truncate")}>
@@ -1446,12 +1455,12 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                     </div>
                   ) : (
                     <RegiaoRolavel memoria="financeiro:fluxo:investimentos" rotulo="Investimentos" sobre="cartao" className="lg:max-h-[420px]">
-                      <ul className="divide-y divide-border border-t border-border">
+                      <ul className={juntar(listaDeLinhas, "border-t border-border/60")}>
                         {investorEntries.map((e: any) => {
                           const cm = catMeta(e.category);
                           return (
-                            <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
-                              <Briefcase className="mr-3 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                            <li key={e.id} className={linhaDeLista}>
+                              <IconeDaLinha tom="primario" className="hidden sm:inline-flex"><Briefcase className="h-4 w-4" /></IconeDaLinha>
                               <div className="mr-3 min-w-0 flex-1 basis-48">
                                 <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
                                 <p className={juntar(texto.auxiliar, "truncate")}>
@@ -1461,7 +1470,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                               </div>
                               <div className="ml-auto flex shrink-0 items-center py-0.5">
                                 <Etiqueta tom="primario" className="mr-3">Capital</Etiqueta>
-                                <span className="text-[13px] font-semibold tabular-nums text-primary">{fmt(Number(e.amount))}</span>
+                                <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(Number(e.amount))}</span>
                                 {acoesDaLinha(e, "investment")}
                               </div>
                             </li>
@@ -1610,7 +1619,7 @@ function CabecalhoDoBloco({
   seletor?: ReactNode;
 }) {
   return (
-    <div className="-mb-1 flex min-w-0 flex-wrap items-center px-4 py-3 [&>*]:mb-1">
+    <div className="-mb-1 flex min-w-0 flex-wrap items-center px-4 py-4 sm:px-6 sm:py-5 [&>*]:mb-1">
       <button
         type="button"
         onClick={onAlternar}
@@ -1624,9 +1633,9 @@ function CabecalhoDoBloco({
       {aberto && seletor ? <div className="mr-4 min-w-0">{seletor}</div> : null}
       <span className="ml-auto flex shrink-0 items-center">
         {valores.map((v, i) => (
-          <span key={v.rotulo} className={juntar("text-right", i > 0 && "ml-4")}>
+          <span key={v.rotulo} className={juntar("text-right", i > 0 && "ml-5")}>
             <span className={juntar(texto.rotulo, "block")}>{v.rotulo}</span>
-            <span className={juntar("block text-[13px] font-semibold tabular-nums", corDoTom[v.tom])}>{v.valor}</span>
+            <span className={juntar("block text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums max-sm:text-[15px]", v.tom === "perigo" ? corDoTom[v.tom] : "text-foreground")}>{v.valor}</span>
           </span>
         ))}
       </span>
@@ -1735,9 +1744,9 @@ function LauncherChoice({ icon, tone, title, desc, onClick }: any) {
       <button
         type="button"
         onClick={onClick}
-        className={juntar("flex w-full min-w-0 items-start px-3 py-3 text-left transition-colors hover:bg-muted/60", foco)}
+        className={juntar("flex w-full min-w-0 items-center px-4 py-3.5 text-left transition-colors hover:bg-muted/60", foco)}
       >
-        <span className={juntar("mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md", iconTone[tone] || iconTone.primary)}>
+        <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full", iconTone[tone] || iconTone.primary)}>
           {icon}
         </span>
         <span className="min-w-0">

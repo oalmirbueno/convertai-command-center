@@ -98,19 +98,19 @@ export function useTravaDeGasto(origem: "caixa" | "custos_fixos"): { pedirLibera
       }
     >
       {a && (
-        <div className="min-w-0 space-y-3">
-          <dl className={juntar(superficie.poco, "grid min-w-0 grid-cols-3 gap-x-3 p-3")}>
+        <div className="min-w-0 space-y-4">
+          <dl className={juntar(superficie.poco, "grid min-w-0 grid-cols-3 gap-x-3 p-4")}>
             <div className="min-w-0">
               <dt className={texto.rotulo}>Gasto</dt>
-              <dd className="mt-0.5 truncate text-[15px] font-semibold tabular-nums text-foreground">{reais(a.valor)}</dd>
+              <dd className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground max-sm:text-[15px]">{reais(a.valor)}</dd>
             </div>
             <div className="min-w-0">
               <dt className={texto.rotulo}>Limite</dt>
-              <dd className="mt-0.5 truncate text-[15px] font-semibold tabular-nums text-foreground">{reais(a.limite)}</dd>
+              <dd className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground max-sm:text-[15px]">{reais(a.limite)}</dd>
             </div>
             <div className="min-w-0">
               <dt className={texto.rotulo}>Passa</dt>
-              <dd className="mt-0.5 truncate text-[15px] font-semibold tabular-nums text-destructive">{reais(a.excesso)}</dd>
+              <dd className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-destructive max-sm:text-[15px]">{reais(a.excesso)}</dd>
             </div>
           </dl>
           <p className={texto.corpo}>{a.motivo}</p>
