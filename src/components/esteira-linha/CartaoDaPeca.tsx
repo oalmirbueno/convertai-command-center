@@ -55,7 +55,7 @@ export default function CartaoDaPeca({ cartao, aoAbrir }: { cartao: CartaoDaEste
       >
         <MenuMais
           rotulo={`Mais ações: ${cartao.titulo}`}
-          className="h-6 w-6 text-muted-foreground opacity-60 hover:opacity-100 group-hover:opacity-100"
+          className="h-6 w-6 text-foreground/70 opacity-70 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:aria-expanded:opacity-100"
           itens={[
             {
               rotulo: "Abrir na página completa",

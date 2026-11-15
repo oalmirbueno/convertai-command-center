@@ -1,5 +1,5 @@
 import { useMemo, useRef, type UIEvent } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Flag } from "lucide-react";
 import { juntar, texto } from "@/components/sistema";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
 import type { CartaoDaEsteira, CelulaDaEsteira, DiaDaGrade, FaixaDaEsteira } from "@/lib/esteiraLinha/esteiraLinha";
@@ -146,7 +146,7 @@ export default function GradeDaEsteira({
                 <th
                   scope="row"
                   className={juntar(
-                    "sticky left-0 z-10 rounded-l-lg border-y border-l-4 border-border bg-card px-2.5 py-3 align-top font-normal sm:px-4 sm:py-6",
+                    "sticky left-0 z-10 rounded-l-lg border-y border-l-4 border-border bg-card px-2.5 py-3 align-top font-normal sm:px-4 sm:py-5",
                     corDeApoioDoCliente(faixa.clientId).faixa,
                   )}
                   data-cabecalho-da-faixa=""
@@ -163,14 +163,15 @@ export default function GradeDaEsteira({
                   </span>
                   <span className="block min-w-0">
                     {faixa.diaPrioritario !== null && (
-                        // De 640 px para cima o dia prioritário é uma pílula; no celular a coluna é estreita e fica a linha de texto.
-                        <span className={juntar(texto.auxiliar, "mt-1 block sm:mt-3 sm:inline-flex sm:h-6 sm:max-w-full sm:items-center sm:rounded-full sm:bg-accent-soft sm:px-2.5 sm:text-[11px] sm:font-medium sm:text-primary")}>
-                          <span className="sm:truncate">Dia prioritário: {faixa.nomeDoDiaPrioritario}</span>
+                        // Uma linha apagada com a bandeirinha (15/11: sem pílula repetida em cada cliente); o nome inteiro segue para leitor de tela.
+                        <span className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-center sm:mt-1.5 sm:pl-[52px]")} title={`Dia prioritário: ${faixa.nomeDoDiaPrioritario}`} data-dia-prioritario-da-faixa="">
+                          <Flag className="mr-1 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                          <span className="min-w-0 truncate"><span className="sr-only">Dia prioritário: </span>{faixa.nomeDoDiaPrioritario.split("-")[0]}{faixa.nomeDoDiaPrioritario.includes("-") && <span className="max-sm:sr-only">-{faixa.nomeDoDiaPrioritario.split("-").slice(1).join("-")}</span>}</span>
                         </span>
                       )}
                       {faixa.aprovacaoDoClienteDispensada && (
                         <span
-                          className={juntar(texto.auxiliar, "mt-1.5 block")}
+                          className={juntar(texto.auxiliar, "mt-1 block sm:pl-[52px]")}
                           data-aprovacao-dispensada=""
                           title="Regra do cadastro deste cliente: a revisão interna da agência basta. As peças não passam pela aprovação do cliente."
                         >
