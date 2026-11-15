@@ -835,7 +835,9 @@ function LegacyFinanceiro() {
             amount: remaining,
             due_date: currentBill.due_date || today,
             description: `Saldo restante: ${fmt(remaining)}`,
-          });
+            // O saldo de uma cobrança de extra continua ligado ao extra, senão some da ficha do cliente.
+            ...((currentBill as any).extra_id ? { extra_id: (currentBill as any).extra_id } : {}),
+          } as any);
           if (insertError) {
             // A original já virou "partial" e o saldo só existe na linha nova: sem ela, o restante sumia de
             // A receber, atrasados e régua (todos leem "pending") e a tela ainda dizia sucesso. Desfaz o parcial.
@@ -1024,21 +1026,34 @@ function LegacyFinanceiro() {
   const cardsDoFreela = linhasDoFreela.filter(([, moeda, modo]) => somaFreela(moeda, modo) > 0).map(([r, moeda, modo]) => cardFreela(r, moeda, modo));
 
   // A receber: cobranças pendentes, parcelas abertas e planos ativos ainda sem cobrança.
-  const monthlyPendingItems = showMonthly ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
+  const itemDaCobranca = (b: any) => {
     const client = (clients || []).find((c: any) => c.id === b.client_id);
     const due = parseAppDate(b.due_date);
     // Freela não tem cliente ligado (client_id NULL): aparece como "Freela" e
     // a baixa é na mesa /freela (o front nunca escreve no billing do freela).
     const freela = ehCobrancaFreela(b);
     return { id: b.id, label: b.description || (freela ? "Parcela freela" : "Renovação Mensal"), client: b.client_id ? (client?.company_name || client?.full_name || "-") : "Freela", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type, freela };
-  }) : [];
-  const indivPendingItems = showIndiv && origem !== "freela" ? filteredPayments.flatMap((pp: any) =>
-    (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
+  };
+  const monthlyPendingItems = showMonthly ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map(itemDaCobranca) : [];
+  const itensDasParcelas = (vale: (i: any) => boolean) => showIndiv && origem !== "freela" ? filteredPayments.flatMap((pp: any) =>
+    (pp.installments || []).filter((i: any) => (i.status === "pending" || i.status === "partial") && vale(i)).map((i: any) => ({
       id: i.id, label: `${pp.project?.name || "Projeto"} · ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
       client: pp.client?.company_name || pp.client?.full_name || "-", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
       brand: getProjectBrand(pp.project?.project_type), isOverdue: (() => { const due = parseAppDate(i.due_date); return due ? due < todayStart : false; })(), itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
     }))
   ) : [];
+  const indivPendingItems = itensDasParcelas(() => true);
+  // Na visão do mês, o que vence depois do mês escolhido não some: fica numa lista própria logo abaixo,
+  // com o mesmo "Pagar". Pedido do dono (15/11): "todos que eu lançar têm que aparecer ali como a pagar".
+  const depoisDoMes = (d?: string | null) => {
+    const data = parseAppDate(d || "");
+    return !!data && data.getFullYear() * 12 + data.getMonth() > selYear * 12 + selMonth;
+  };
+  const aReceberDepois: any[] = periodFilter === "month" ? [
+    ...(showMonthly ? pendingBills.filter((b: any) => b.type !== "ads_recharge" && !isPausedRenewal(b) && depoisDoMes(b.due_date)).map(itemDaCobranca) : []),
+    ...itensDasParcelas((i: any) => depoisDoMes(i.due_date)),
+  ].sort((a, b) => (parseAppDate(a.due)?.getTime() || 0) - (parseAppDate(b.due)?.getTime() || 0)) : [];
+  const aReceberDepoisTotal = aReceberDepois.reduce((t: number, it: any) => t + Number(it.amount || 0), 0);
   const extraItems = showMonthly && origem !== "freela" ? clientsWithPlanNotInBilling.map((c: any) => ({
     id: `extra-${c.id}`, label: c.plan_name ? `Renovação · ${c.plan_name}` : "Renovação Mensal",
     client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
@@ -1046,6 +1061,34 @@ function LegacyFinanceiro() {
   })) : [];
   const allPending: any[] = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
     .sort((a, b) => (parseAppDate(a.due)?.getTime() || 0) - (parseAppDate(b.due)?.getTime() || 0));
+  const linhaAReceber = (item: any) => (
+                        <li key={item.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                          <span className={juntar("mr-3 h-2 w-2 shrink-0 rounded-full", item.isOverdue ? "bg-destructive" : "bg-warning")} aria-hidden="true" />
+                          <div className="mr-3 min-w-0 flex-1">
+                            <p className={juntar(texto.corpo, "truncate")}>{item.label}</p>
+                            <p className={juntar(texto.auxiliar, "truncate")}>
+                              {item.client}
+                              <span className="hidden sm:inline"> · {item.brand}</span>
+                              {item.paidSoFar > 0 && <span className="text-success"> · já pago {fmt(item.paidSoFar)}</span>}
+                            </p>
+                          </div>
+                          <div className="mr-3 flex shrink-0 flex-col items-end">
+                            <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(item.amount)}</span>
+                            <span className={juntar("text-[11px] tabular-nums", item.isOverdue ? "text-destructive" : "text-muted-foreground")}>
+                              {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
+                            </span>
+                           </div>
+                          {item.freela ? (
+                            <Link to="/freela/caixa" className={juntar(acaoDaLinha, "text-primary")}>
+                              Ver no Freela
+                            </Link>
+                          ) : (
+                            <button type="button" onClick={() => void abrirPagamento(item)} className={juntar(acaoDaLinha, "text-success")}>
+                              Pagar
+                            </button>
+                          )}
+                        </li>
+  );
   const allPendingTotal = allPending.reduce((s: number, it: any) => s + Number(it.amount || 0), 0);
 
   const abrirPagamento = async (item: any) => {
@@ -1427,34 +1470,20 @@ function LegacyFinanceiro() {
                     divisoria
                   >
                     <ListaDoFinanceiro memoria="financeiro:a-receber" rotulo="A receber">
-                      {allPending.map((item: any) => (
-                        <li key={item.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
-                          <span className={juntar("mr-3 h-2 w-2 shrink-0 rounded-full", item.isOverdue ? "bg-destructive" : "bg-warning")} aria-hidden="true" />
-                          <div className="mr-3 min-w-0 flex-1">
-                            <p className={juntar(texto.corpo, "truncate")}>{item.label}</p>
-                            <p className={juntar(texto.auxiliar, "truncate")}>
-                              {item.client}
-                              <span className="hidden sm:inline"> · {item.brand}</span>
-                              {item.paidSoFar > 0 && <span className="text-success"> · já pago {fmt(item.paidSoFar)}</span>}
-                            </p>
-                          </div>
-                          <div className="mr-3 flex shrink-0 flex-col items-end">
-                            <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(item.amount)}</span>
-                            <span className={juntar("text-[11px] tabular-nums", item.isOverdue ? "text-destructive" : "text-muted-foreground")}>
-                              {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
-                            </span>
-                           </div>
-                          {item.freela ? (
-                            <Link to="/freela/caixa" className={juntar(acaoDaLinha, "text-primary")}>
-                              Ver no Freela
-                            </Link>
-                          ) : (
-                            <button type="button" onClick={() => void abrirPagamento(item)} className={juntar(acaoDaLinha, "text-success")}>
-                              Pagar
-                            </button>
-                          )}
-                        </li>
-                      ))}
+                      {allPending.map(linhaAReceber)}
+                    </ListaDoFinanceiro>
+                  </Secao>
+                )}
+                {aReceberDepois.length > 0 && (
+                  <Secao
+                    titulo="A receber nos próximos meses"
+                    descricao={`${aReceberDepois.length} ${aReceberDepois.length === 1 ? "item" : "itens"} · ${fmt(aReceberDepoisTotal)}`}
+                    ajuda="O que já está lançado e vence depois do mês escolhido. Não entra nos totais do mês; dá para receber adiantado em Pagar."
+                    divisoria
+                    data-a-receber-depois=""
+                  >
+                    <ListaDoFinanceiro memoria="financeiro:a-receber-depois" rotulo="A receber nos próximos meses">
+                      {aReceberDepois.map(linhaAReceber)}
                     </ListaDoFinanceiro>
                   </Secao>
                 )}
