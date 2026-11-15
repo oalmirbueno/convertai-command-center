@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
-import { Avatar, Card, CardSurface, ChartLegend, Chip, Donut, EmptyState, List, ListRow, MiniBars, PageHeader, PillTabs, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
+import { ArrowUpRight, Avatar, AvatarStack, ChartLegend, Donut, EmptyState, IconButton, List, ListRow, OverflowMenu, PageHeader, PillTabs, ProgressBar, StatusPill } from "@/components/ds";
+import BarrasPilula from "@/components/finance/BarrasPilula";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRecentActivity } from "@/hooks/useRecentActivity";
-import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign, Wallet, Briefcase, Users, ClipboardList } from "lucide-react";
+import { AlertTriangle, CalendarDays, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CheckCircle2, DollarSign, Wallet, Briefcase, Users, ClipboardList } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -61,19 +62,6 @@ const parseAppDate = (value?: string | null) => {
   return new Date(value);
 };
 
-/** Título de um bloco do Dashboard: ícone num círculo, título de 18 px e, à direita, o controle do bloco. */
-function TituloDoBloco({ icone, acao, children }: { icone?: ReactNode; acao?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="mb-4 flex min-w-0 items-center justify-between sm:mb-5">
-      <h2 className="flex min-w-0 items-center text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
-        {icone && <span aria-hidden="true" className="mr-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card text-foreground shadow-card">{icone}</span>}
-        <span className="truncate">{children}</span>
-      </h2>
-      {acao && <div className="ml-3 shrink-0">{acao}</div>}
-    </div>
-  );
-}
-
 export default function AdminDashboard() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
@@ -103,6 +91,7 @@ export default function AdminDashboard() {
   const [briefingLinkOpen, setBriefingLinkOpen] = useState(false);
   const [drawerProject, setDrawerProject] = useState<any>(null);
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
+  const [aba, setAba] = useState<"projetos" | "parcelas" | "atualizacoes" | "urgentes" | "vencimentos" | "parados">("projetos");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -239,18 +228,6 @@ export default function AdminDashboard() {
 
   // Linha de apoio curta: de onde vem o valor (recorrente, projetos ou os dois). O valor cheio fica na dica.
   const curto = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
-  const origem = (recorrente: number, projetos: number, antes?: string) => {
-    const partes = recorrente > 0 && projetos > 0 ? `${curto(recorrente)} recorrente + ${curto(projetos)} projetos` : recorrente > 0 ? "recorrente" : projetos > 0 ? "projetos" : "";
-    const linha = [antes, partes].filter(Boolean).join(" · ");
-    return linha ? <span title={`Recorrente ${fmt(recorrente)} · Projetos ${fmt(projetos)}`}>{linha}</span> : undefined;
-  };
-  const financeStats = [
-    { label: "Recebido", value: fmt(totalReceivedThisMonth), color: "bg-success", sub: origem(monthlyRevenue, individualPaidThisMonth, "no mês") },
-    { label: "Pendente", value: fmt(totalPendingThisMonth), color: "bg-warning", sub: origem(pendingBillsThisMonth, individualPendingThisMonth, "no mês") },
-    { label: "A vencer", value: fmt(totalDueSoon7), color: totalDueSoon7 > 0 ? "bg-warning" : "bg-muted-foreground", sub: origem(dueSoon7Billing, dueSoon7Individual, "em 7 dias") },
-    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive", sub: origem(overdueTotal, individualOverdue) },
-  ];
-
   const formatDate = (d: string) => {
     if (!d) return "";
     return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
@@ -338,13 +315,6 @@ export default function AdminDashboard() {
   ]);
 
   const iconesDosNumeros = [Briefcase, Users, ClipboardList, CheckCircle2];
-  const iconesDoFinanceiro = [
-    <TrendingUp key="r" className="h-4 w-4" />,
-    <Clock key="p" className="h-4 w-4" />,
-    <CreditCard key="v" className="h-4 w-4" />,
-    <AlertTriangle key="a" className="h-4 w-4" />,
-  ];
-
   // Saudação do topo: a hora do aparelho e o primeiro nome de quem entrou.
   const hora = now.getHours();
   const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
@@ -359,125 +329,288 @@ export default function AdminDashboard() {
   const totalDeTarefas = (allTasks || []).length;
   const tarefasFeitas = (allTasks || []).filter((t: any) => t.status === "done").length;
   const emRevisao = projects?.filter((p: any) => p.status === "review").length || 0;
-  const graficosDosNumeros: Array<{ chart?: ReactNode; hint?: ReactNode }> = [
-    {
-      chart: activeProjects.length > 0 ? <MiniBars values={projetosPorStatus} labels={statusDosAtivos.map((s) => s.label)} highlightIndex={statusDosAtivos.findIndex((s) => s.value === "active")} height={48} /> : undefined,
-      hint: activeProjects.length > 0 ? `${projetosPorStatus[statusDosAtivos.findIndex((s) => s.value === "active")] || 0} em andamento` : undefined,
-    },
-    {
-      chart: recorrentes.length > 0 ? <ProgressBar value={recorrentesAtivos} max={recorrentes.length} striped /> : undefined,
-      hint: recorrentes.length > 0 ? `ativos de ${recorrentes.length} recorrentes` : undefined,
-    },
-    {
-      chart: totalDeTarefas > 0 ? <ProgressBar value={tarefasFeitas} max={totalDeTarefas} striped tone={2} label={`${tarefasFeitas} feitas de ${totalDeTarefas}`} /> : undefined,
-      hint: totalDeTarefas > 0 ? `pendentes · ${tarefasFeitas} de ${totalDeTarefas} ${tarefasFeitas === 1 ? "feita" : "feitas"}` : undefined,
-    },
-    {
-      chart: activeProjects.length > 0 ? <ProgressBar value={emRevisao} max={activeProjects.length} striped tone={4} /> : undefined,
-      hint: activeProjects.length > 0 ? `de ${activeProjects.length} ${activeProjects.length === 1 ? "projeto" : "projetos"}` : undefined,
-    },
+  const dicasDosNumeros = [
+    activeProjects.length > 0 ? `projetos · ${projetosPorStatus[statusDosAtivos.findIndex((s) => s.value === "active")] || 0} em andamento` : undefined,
+    recorrentes.length > 0 ? `clientes ativos de ${recorrentes.length} recorrentes` : undefined,
+    totalDeTarefas > 0 ? `tarefas pendentes · ${tarefasFeitas} de ${totalDeTarefas} feitas` : undefined,
+    activeProjects.length > 0 ? `em revisão de ${activeProjects.length} projetos` : undefined,
   ];
   const previstoNoMes = totalReceivedThisMonth + totalPendingThisMonth;
   const individualEmDia = Math.max(individualPending - individualOverdue, 0);
 
+  // Recebido por mês (últimos 6): as mesmas faturas e parcelas pagas que a tela já lê, agrupadas pela data do pagamento.
+  const mesesDoGrafico = Array.from({ length: 6 }, (_, i) => new Date(thisYear, thisMonth - 5 + i, 1));
+  const chaveDoMes = (d: Date) => d.getFullYear() * 12 + d.getMonth();
+  const recebidoPorMes = new Map<number, number>();
+  paidBills.forEach((b: any) => {
+    const d = parseAppDate(b.paid_date || b.due_date);
+    if (d) recebidoPorMes.set(chaveDoMes(d), (recebidoPorMes.get(chaveDoMes(d)) || 0) + receivedOf(b));
+  });
+  (projectPayments || []).forEach((pp: any) => (pp.installments || []).forEach((i: any) => {
+    if (!["paid", "partial"].includes(i.status) || !i.paid_date) return;
+    const d = parseAppDate(i.paid_date);
+    if (d) recebidoPorMes.set(chaveDoMes(d), (recebidoPorMes.get(chaveDoMes(d)) || 0) + receivedOf(i));
+  }));
+  const barrasDoRecebido = mesesDoGrafico.map((d, i) => ({
+    rotulo: d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
+    valor: recebidoPorMes.get(chaveDoMes(d)) || 0,
+    previsto: i === 5 ? totalPendingThisMonth : 0,
+  }));
+  const barrasDosProjetos = statusDosAtivos.map((s, i) => ({ rotulo: s.label, valor: projetosPorStatus[i] }));
+  const pctRecebido = previstoNoMes > 0 ? Math.round((totalReceivedThisMonth / previstoNoMes) * 100) : 0;
+  const atrasadoTotal = overdueTotal + individualOverdue;
+  const temParcelas = isAdmin && (projectPayments || []).length > 0;
+
+  type Aba = "projetos" | "parcelas" | "atualizacoes" | "urgentes" | "vencimentos" | "parados";
+  const abas: Array<{ value: Aba; label: string; count?: number }> = [
+    { value: "projetos", label: "Projetos", count: filteredProjects.length },
+    ...(temParcelas ? [{ value: "parcelas" as Aba, label: "Parcelas" }] : []),
+    { value: "atualizacoes", label: "Atualizações" },
+    { value: "urgentes", label: "Urgentes", count: urgentTasks.length },
+    ...(isAdmin ? [{ value: "vencimentos" as Aba, label: "Vencimentos", count: clientsRenewalAlert.length }, { value: "parados" as Aba, label: "Parados", count: stalledProjects.length }] : []),
+  ];
+  const abaAberta: Aba = abas.some((a) => a.value === aba) ? aba : "projetos";
+
+  const [principal, ...outras] = quickActions;
+  const cartao = "min-w-0 rounded-lg border border-border bg-card shadow-card";
+  const abrir = (para: string, rotulo: string) => <IconButton to={para} label={rotulo} icon={<ArrowUpRight />} size="md" />;
+  const rolagemPropria = "lg:max-h-[420px] lg:overflow-y-auto lg:overscroll-contain lg:pr-1";
+
   return (
-    <div className="min-w-0 space-y-8 animate-fade-in sm:space-y-10">
-      <PageHeader title={primeiroNome ? `${saudacao},` : "Dashboard"} greeting={primeiroNome || undefined} subtitle={<span className="first-letter:uppercase">{hojePorExtenso}</span>} />
+    <div className="min-w-0 animate-fade-in">
+      <PageHeader
+        title={primeiroNome ? `${saudacao},` : "Dashboard"}
+        greeting={primeiroNome || undefined}
+        actions={
+          <div className="flex min-w-0 items-center" data-tour="dash-quick-actions">
+            <span className="mr-2 hidden h-11 items-center whitespace-nowrap rounded-full bg-card px-4 text-[13px] font-medium text-foreground shadow-card md:inline-flex">
+              <CalendarDays aria-hidden="true" className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span className="first-letter:uppercase">{hojePorExtenso}</span>
+            </span>
+            {principal && (
+              <button onClick={principal.action} className="toque-compacto inline-flex h-11 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-full bg-accent-solid px-3.5 text-[13px] font-semibold text-on-accent transition-colors hover:bg-accent-solid/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-5">
+                <principal.icon aria-hidden="true" className="h-4 w-4 sm:mr-2" />
+                <span className="sr-only sm:not-sr-only">{principal.label}</span>
+              </button>
+            )}
+            <OverflowMenu label="Mais ações" className="ml-1.5" items={outras.map((a) => ({ label: a.label, icon: <a.icon className="h-4 w-4" />, onSelect: a.action }))} />
+          </div>
+        }
+      />
 
-      {/* Quick Actions: uma linha só. No celular a faixa rola de lado por dentro (nada quebra em 4 linhas). */}
-      <div className="-mx-4 min-w-0 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden" data-tour="dash-quick-actions">
-        <div className="-m-1 flex w-max min-w-full flex-nowrap sm:w-auto sm:flex-wrap">
-          {quickActions.map((a, i) => (
-            <button
-              key={a.label}
-              onClick={a.action}
-              className={`toque-compacto m-1 inline-flex h-10 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-full pl-1.5 pr-4 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                i === 0 && isAdmin ? "bg-foreground text-background hover:bg-foreground/90" : "bg-card text-foreground shadow-card hover:bg-muted"
-              }`}
-            >
-              <span aria-hidden="true" className={`mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${i === 0 && isAdmin ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`}>
-                <a.icon className="h-3.5 w-3.5" />
+      {/* Bento de três colunas (referência Quixotic): destaque verde, gráfico no meio, operação à direita. */}
+      <div className="mt-6 grid min-w-0 grid-cols-1 gap-4 sm:mt-7 lg:grid-cols-12 lg:gap-5">
+        {/* Esquerda */}
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-3 lg:gap-5">
+          <section className={`${cartao} flex flex-1 flex-col p-3`}>
+            <div className="flex items-start justify-between px-3 pb-3 pt-2">
+              <div className="min-w-0">
+                <h2 className="truncate text-[16px] font-semibold leading-6 tracking-[-0.01em] text-foreground">{isAdmin ? "Recebido no mês" : "Projetos"}</h2>
+                <p className="truncate text-[12px] leading-4 text-muted-foreground">{isAdmin ? `de ${curto(previstoNoMes)} previstos` : "em andamento"}</p>
+              </div>
+              {abrir(isAdmin ? "/financeiro" : "/projetos", isAdmin ? "Abrir o Financeiro" : "Abrir Projetos")}
+            </div>
+            <div className="flex min-h-[168px] flex-1 flex-col justify-between rounded-[20px] bg-accent-solid p-5 text-on-accent">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-medium leading-4 text-on-accent-muted">{isAdmin ? "Entrou" : "Ativos"}</span>
+                {isAdmin ? <TrendingUp aria-hidden="true" className="h-4 w-4" /> : <Briefcase aria-hidden="true" className="h-4 w-4" />}
+              </div>
+              <p className="mt-3 truncate text-[30px] font-medium leading-9 tracking-[-0.03em] tabular-nums xl:text-[34px] xl:leading-10">{isAdmin ? fmt(totalReceivedThisMonth) : activeProjects.length}</p>
+              <div className="mt-4">
+                {isAdmin && (
+                  <span className="block h-1.5 w-full overflow-hidden rounded-full bg-black/15">
+                    <span className="block h-full rounded-full bg-on-accent" style={{ width: `${Math.min(100, pctRecebido)}%` }} />
+                  </span>
+                )}
+                <div className="mt-2 flex items-center justify-between text-[12px] leading-4 text-on-accent-muted">
+                  <span className="truncate">{isAdmin ? (monthlyRevenue > 0 && individualPaidThisMonth > 0 ? "recorrente + projetos" : individualPaidThisMonth > 0 ? "projetos" : "recorrente") : `${emRevisao} em revisão`}</span>
+                  {isAdmin && <span className="ml-2 shrink-0 font-semibold tabular-nums text-on-accent">{pctRecebido}%</span>}
+                </div>
+              </div>
+            </div>
+          </section>
+          {isAdmin && (
+            <button type="button" onClick={() => navigate("/financeiro")} className={`${cartao} flex cursor-pointer items-center justify-between p-5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}>
+              <span className="min-w-0">
+                <span className="block text-[12px] leading-4 text-muted-foreground">A vencer em 7 dias</span>
+                <span className="mt-1 block truncate text-[22px] font-medium leading-7 tracking-[-0.02em] tabular-nums text-foreground">{curto(totalDueSoon7)}</span>
               </span>
-              {a.label}
+              <span className="ml-3 shrink-0 rounded-full bg-accent-solid px-2.5 py-1 text-[11px] font-semibold leading-4 tabular-nums text-on-accent">{curto(totalPendingThisMonth)} no mês</span>
             </button>
-          ))}
+          )}
         </div>
-      </div>
 
-      {/* Stats */}
-      <div data-tour="dash-stats">
-        <StatGrid cols={4} label="Resumo da operação">
-          {stats.map((s, i) => {
-            const Icone = iconesDosNumeros[i] || Briefcase;
-            return (
-              <StatCard
-                key={s.label}
-                label={s.label}
-                value={s.value}
-                size="xl"
-                variant={i === 0 ? "accent" : i === 3 ? "ink" : "default"}
-                icon={<Icone className="h-4 w-4" />}
-                hint={graficosDosNumeros[i]?.hint}
-                chart={graficosDosNumeros[i]?.chart}
-              />
-            );
-          })}
-        </StatGrid>
-      </div>
+        {/* Centro: gráfico */}
+        <section className={`${cartao} p-5 sm:p-6 lg:col-span-6`}>
+          <div className="mb-5 flex min-w-0 items-center justify-between">
+            <div className="flex min-w-0 items-center">
+              <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">{isAdmin ? <DollarSign className="h-4 w-4" /> : <Briefcase className="h-4 w-4" />}</span>
+              <h2 className="truncate text-[16px] font-semibold leading-6 tracking-[-0.01em] text-foreground">{isAdmin ? "Recebido por mês" : "Projetos por etapa"}</h2>
+            </div>
+            {abrir(isAdmin ? "/financeiro" : "/projetos", isAdmin ? "Ver no Financeiro" : "Ver Projetos")}
+          </div>
+          {isAdmin ? (
+            <BarrasPilula itens={barrasDoRecebido} destaque={5} formatar={curto} altura={264} rotuloAcessivel="Recebido por mês, últimos 6 meses" />
+          ) : (
+            <BarrasPilula itens={barrasDosProjetos} destaque={statusDosAtivos.findIndex((s) => s.value === "active")} formatar={(v) => String(v)} altura={264} rotuloAcessivel="Projetos por etapa" />
+          )}
+        </section>
 
-      {/* Finance Stats - admin only */}
-      {isAdmin && (
-      <section className="min-w-0">
-        <TituloDoBloco icone={<DollarSign className="h-4 w-4" />}>Financeiro</TituloDoBloco>
-        <StatGrid cols={4} label="Financeiro do mês">
-          {financeStats.map((s, i) => (
-            <StatCard
-              key={s.label}
-              label={s.label}
-              value={s.value}
-              hint={(s as any).sub}
-              icon={iconesDoFinanceiro[i]}
-              variant={i === 0 ? "ink" : "default"}
-              className={i === 3 && overdueTotal + individualOverdue > 0 ? "[&_.ds-stat-valor]:text-destructive" : ""}
-              chart={
-                i === 0 && previstoNoMes > 0 ? (
-                  <ProgressBar value={totalReceivedThisMonth} max={previstoNoMes} label={`Recebido ${fmt(totalReceivedThisMonth)} de ${fmt(previstoNoMes)} previstos no mês`} />
-                ) : i === 1 && previstoNoMes > 0 ? (
-                  <ProgressBar value={totalPendingThisMonth} max={previstoNoMes} striped tone={4} label={`Pendente ${fmt(totalPendingThisMonth)} de ${fmt(previstoNoMes)} previstos no mês`} />
-                ) : undefined
-              }
-              onClick={() => navigate("/financeiro")}
-            />
-          ))}
-        </StatGrid>
-      </section>
-      )}
+        {/* Direita: operação e atraso */}
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-3 lg:gap-5">
+          <section className={`${cartao} p-3`} data-tour="dash-stats" aria-label="Resumo da operação">
+            <div className="grid grid-cols-2 gap-2">
+              {stats.map((s, i) => {
+                const Icone = iconesDosNumeros[i] || Briefcase;
+                const para = ["/projetos", "/clientes", "/kanban", "/projetos"][i];
+                return (
+                  <button key={s.label} type="button" onClick={() => navigate(para)} title={dicasDosNumeros[i] ? `${s.value} ${dicasDosNumeros[i]}` : undefined} className={`flex min-w-0 cursor-pointer flex-col rounded-[18px] p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${i === 0 ? "bg-foreground text-background hover:bg-foreground/90" : "bg-muted/70 text-foreground hover:bg-muted"}`}>
+                    <span className="flex items-center justify-between">
+                      <span className={`truncate text-[12px] font-medium leading-4 ${i === 0 ? "text-background/70" : "text-muted-foreground"}`}>{s.label}</span>
+                      <Icone aria-hidden="true" className={`ml-1 h-3.5 w-3.5 shrink-0 ${i === 0 ? "text-background/70" : "text-muted-foreground"}`} />
+                    </span>
+                    <span className="mt-3 text-[28px] font-medium leading-8 tracking-[-0.03em] tabular-nums">{s.value}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+          {isAdmin && (
+            <section className={`${cartao} flex flex-1 flex-col p-5`}>
+              <div className="flex items-center">
+                <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><AlertTriangle className="h-4 w-4" /></span>
+                <h2 className="truncate text-[16px] font-semibold leading-6 tracking-[-0.01em] text-foreground">Atrasado</h2>
+              </div>
+              <p className={`mt-4 truncate text-[30px] font-medium leading-9 tracking-[-0.03em] tabular-nums ${atrasadoTotal > 0 ? "text-destructive" : "text-foreground"}`}>{fmt(atrasadoTotal)}</p>
+              <button type="button" onClick={() => setAba("vencimentos")} className="mt-4 flex min-h-[64px] w-full cursor-pointer items-center justify-between rounded-[18px] bg-muted/70 px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-medium leading-5 text-foreground">Vencimento próximo</span>
+                  <span className="block truncate text-[12px] leading-4 text-muted-foreground">{clientsRenewalAlert.length === 0 ? "nenhum cliente" : `${clientsRenewalAlert.length} ${clientsRenewalAlert.length === 1 ? "cliente" : "clientes"}`}</span>
+                </span>
+                <AvatarStack className="ml-3" people={clientsRenewalAlert.map((c: any) => c.company_name || c.full_name)} max={3} />
+              </button>
+            </section>
+          )}
+        </div>
 
-      {/* Second Brain live pulse - admin only */}
-      {isAdmin && <SecondBrainPulseWidget />}
+        {/* Linha de baixo: uma lista só, com abas */}
+        <section className={`${cartao} p-5 sm:p-6 lg:col-span-9`}>
+          <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-y-3">
+            <PillTabs label="O que ver" value={abaAberta} onChange={(v) => setAba(v as Aba)} tabs={abas} />
+            {abaAberta === "projetos" && (
+              <PillTabs label="Filtrar por marca" variant="soft" size="sm" value={brandFilter} onChange={(v) => setBrandFilter(v as BrandFilter)} tabs={BRAND_FILTERS.map((f) => ({ value: f.value, label: f.label }))} />
+            )}
+          </div>
 
-      {/* Individual Project Payments - admin only */}
-      {isAdmin && (projectPayments || []).length > 0 && (
-        <section className="min-w-0">
-          <TituloDoBloco icone={<Briefcase className="h-4 w-4" />}>Projetos individuais</TituloDoBloco>
-          <div className="grid min-w-0 gap-4 sm:gap-5 lg:grid-cols-3">
-            <CardSurface padded variant="ink" className="flex min-w-0 flex-col">
-              <p className="text-[13px] font-medium leading-5 text-muted-foreground">Total contratado</p>
-              <p className="mt-3 truncate text-[32px] font-semibold leading-10 tracking-[-0.035em] tabular-nums text-foreground sm:text-[40px] sm:leading-[44px]">{fmt(individualTotal)}</p>
-              <div className="mt-6 flex min-w-0 items-center">
+          {abaAberta === "projetos" && (
+            loadingProjects ? (
+              <div aria-busy="true" className="space-y-2">{[0, 1, 2, 3].map((n) => <div key={n} className="h-[60px] rounded-lg bg-muted/60" />)}</div>
+            ) : filteredProjects.length === 0 ? (
+              <EmptyState icon={<Briefcase className="h-5 w-5" />} title="Nenhum projeto encontrado." />
+            ) : (
+              <div className={`min-w-0 ${rolagemPropria}`}>
+                <div aria-hidden="true" className="hidden items-center px-3 pb-2 text-[12px] leading-4 text-muted-foreground md:flex">
+                  <span className="min-w-0 flex-1">Projeto</span>
+                  <span className="w-40 shrink-0">Andamento</span>
+                  <span className="w-28 shrink-0">Prazo</span>
+                  <span className="w-24 shrink-0">Marca</span>
+                  {isAdmin && <span className="w-9 shrink-0" />}
+                </div>
+                {filteredProjects.map((p: any) => {
+                  const showMenu = menuProject === p.id;
+                  const projectTeam = teamByProject[p.id] || [];
+                  const cliente = p.client?.company_name || p.client?.full_name;
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex min-w-0 cursor-pointer items-center rounded-[14px] px-3 py-2.5 transition-colors hover:bg-muted/60"
+                      onClick={() => setDrawerProject(p)}
+                      title={[p.description, p.project_type?.replace("_", " "), projectTeam.length > 0 ? projectTeam.map((m) => m.name.split(" ")[0]).join(", ") : ""].filter(Boolean).join(" · ") || undefined}
+                    >
+                      <span className="relative mr-3 shrink-0">
+                        <Avatar name={cliente || p.name} />
+                        <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
+                      </span>
+                      <div className="mr-3 min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium leading-5 text-foreground">{p.name}</p>
+                        <p className="truncate text-[12px] leading-4 text-muted-foreground">{cliente}<span className="md:hidden">{p.deadline ? ` · ${new Date(p.deadline).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}` : ""}</span></p>
+                      </div>
+                      <div className="hidden w-40 shrink-0 pr-6 md:block">
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <PipelineBar pipeline={p.pipeline} />
+                          <p className="ml-2 text-[12px] font-medium tabular-nums text-foreground">{p.progress}%</p>
+                        </div>
+                        <ProgressBar value={Number(p.progress) || 0} max={100} height={6} label={`${p.progress}% concluído`} />
+                      </div>
+                      <span className="hidden w-28 shrink-0 truncate text-[13px] tabular-nums text-foreground md:block">{p.deadline ? formatDate(p.deadline) : "-"}</span>
+                      <span className="hidden w-24 shrink-0 md:block"><StatusPill plain tone="success">{getProjectBrand(p.project_type)}</StatusPill></span>
+                      <span className="mr-1 shrink-0 text-[12px] font-medium tabular-nums text-muted-foreground md:hidden">{Number(p.progress) || 0}%</span>
+                      {/* Editar, status, progresso e excluir mudam o projeto: só o admin pode (RLS). */}
+                      {isAdmin && (
+                        <Popover open={showMenu} onOpenChange={(o) => setMenuProject(o ? p.id : null)}>
+                          <PopoverTrigger asChild>
+                            <button
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label="Ações do projeto"
+                              className="toque-compacto inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-56 p-2" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => { setEditProject(p); setMenuProject(null); }}
+                              className="flex w-full cursor-pointer items-center rounded-sm border-none bg-transparent px-3 py-2 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                              <Edit3 className="mr-2.5 h-3.5 w-3.5" /> Editar
+                            </button>
+                            <div className="px-3 py-2">
+                              <p className="mb-1.5 text-[11px] text-muted-foreground">Status</p>
+                              <div className="-m-0.5 flex flex-wrap">
+                                {STATUS_OPTIONS.map((s) => (
+                                  <button key={s.value} onClick={() => handleStatusChange(p.id, s.value)}
+                                    className={`m-0.5 cursor-pointer rounded-full border px-2 py-0.5 text-[11px] transition-colors ${p.status === s.value ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-transparent text-muted-foreground hover:text-foreground"}`}>
+                                    {s.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="px-3 py-2">
+                              <p className="mb-1.5 text-[11px] text-muted-foreground">Progresso: {p.progress}%</p>
+                              <Slider defaultValue={[p.progress]} max={100} step={5} onValueCommit={(val) => handleProgressChange(p.id, val[0])} className="w-full" />
+                            </div>
+                            <button onClick={() => setConfirmDeleteProject(p.id)}
+                              className="flex w-full cursor-pointer items-center rounded-sm border-none bg-transparent px-3 py-2 text-left text-[13px] text-destructive transition-colors hover:bg-destructive/10">
+                              <Trash2 className="mr-2.5 h-3.5 w-3.5" /> Excluir
+                            </button>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          )}
+
+          {abaAberta === "parcelas" && (
+            <div className={`min-w-0 ${rolagemPropria}`}>
+              <div className="mb-3 flex min-w-0 items-center rounded-[18px] bg-muted/60 p-4">
                 <Donut
-                  size={112}
-                  thickness={14}
+                  size={72}
+                  thickness={10}
                   segments={[
                     { value: individualPaid, label: "Recebido", tone: 1 },
                     { value: individualEmDia, label: "Pendente", tone: "muted" },
                     { value: individualOverdue, label: "Atrasado", tone: 4 },
                   ]}
                 >
-                  <span className="text-[18px] font-semibold leading-6 tabular-nums">{individualTotal > 0 ? Math.round((individualPaid / individualTotal) * 100) : 0}%</span>
+                  <span className="text-[13px] font-semibold leading-5 tabular-nums">{individualTotal > 0 ? Math.round((individualPaid / individualTotal) * 100) : 0}%</span>
                 </Donut>
+                <div className="ml-4 min-w-0 flex-1">
+                  <p className="text-[12px] leading-4 text-muted-foreground">Total contratado</p>
+                  <p className="truncate text-[22px] font-medium leading-7 tracking-[-0.02em] tabular-nums text-foreground">{fmt(individualTotal)}</p>
+                </div>
                 <ChartLegend
-                  className="ml-5 flex-1"
+                  className="ml-4 hidden w-56 shrink-0 sm:block"
                   items={[
                     { label: "Recebido", value: fmt(individualPaid), tone: 1 },
                     { label: "Pendente", value: fmt(individualPending), tone: "muted" },
@@ -485,8 +618,6 @@ export default function AdminDashboard() {
                   ]}
                 />
               </div>
-            </CardSurface>
-            <Card title="Parcelas por projeto" subtitle={`${(projectPayments || []).length} ${(projectPayments || []).length === 1 ? "projeto" : "projetos"}`} collapsible={false} className="lg:col-span-2">
               <List label="Projetos individuais" divided={false}>
                 {(projectPayments || []).map((pp: any) => {
                   const paid = (pp.installments || [])
@@ -504,7 +635,7 @@ export default function AdminDashboard() {
                       status={
                         <span className="flex min-w-0 items-center">
                           <span className="mr-3 hidden w-24 md:block"><ProgressBar value={pct} max={100} tone={hasOverdue ? 4 : 1} label={`${pct}% recebido`} /></span>
-                          <StatusPill tone={hasOverdue ? "danger" : pct >= 100 ? "success" : "neutral"}>{hasOverdue ? "Atrasado" : `${pct}%`}</StatusPill>
+                          <StatusPill plain tone={hasOverdue ? "danger" : pct >= 100 ? "success" : "neutral"}>{hasOverdue ? "Atrasado" : `${pct}%`}</StatusPill>
                         </span>
                       }
                       value={fmt(paid)}
@@ -513,258 +644,154 @@ export default function AdminDashboard() {
                   );
                 })}
               </List>
-            </Card>
-          </div>
-        </section>
-      )}
-
-      {(isAdmin || isTeam) && (wallets || []).length > 0 && (
-        <section className="min-w-0">
-          <TituloDoBloco icone={<Wallet className="h-4 w-4" />}>Ads Wallet</TituloDoBloco>
-          <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-            {(wallets || []).map((w: any) => (
-              <StatCard
-                key={w.id}
-                label={w.client?.company_name || w.client?.full_name}
-                value={fmt(Number(w.balance))}
-                size="md"
-                hint={<StatusPill tone={Number(w.balance) < 100 ? "warning" : "neutral"}>{w.platform}</StatusPill>}
-                onClick={() => navigate("/financeiro")}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <Card
-        as="section"
-        title="Projetos ativos"
-        subtitle={`${filteredProjects.length} ${filteredProjects.length === 1 ? "projeto" : "projetos"}`}
-        collapsible={false}
-      >
-        <PillTabs
-          label="Filtrar por marca"
-          variant="soft"
-          size="sm"
-          value={brandFilter}
-          onChange={(v) => setBrandFilter(v as BrandFilter)}
-          tabs={BRAND_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
-          className="mb-4"
-        />
-        {loadingProjects ? (
-          <div aria-busy="true" className="space-y-2">{[0, 1, 2, 3].map((n) => <div key={n} className="h-[60px] rounded-lg bg-muted/60" />)}</div>
-        ) : filteredProjects.length === 0 ? (
-          <EmptyState icon={<Briefcase className="h-5 w-5" />} title="Nenhum projeto encontrado." />
-        ) : (
-          <div className="-mx-3 min-w-0">
-            {filteredProjects.map((p: any) => {
-              const showMenu = menuProject === p.id;
-              const projectTeam = teamByProject[p.id] || [];
-              const cliente = p.client?.company_name || p.client?.full_name;
-              return (
-                <div
-                  key={p.id}
-                  className={`relative cursor-pointer rounded-lg px-3 py-3 transition-colors hover:bg-muted/60 ${showMenu ? "z-50" : ""}`}
-                  onClick={() => setDrawerProject(p)}
-                  title={p.description || undefined}
-                  onMouseLeave={() => setMenuProject(null)}
-                >
-                  <div className="flex min-w-0 items-center">
-                    <span className="relative mr-3 shrink-0">
-                      <Avatar name={cliente || p.name} />
-                      <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
-                    </span>
-                    <div className="mr-3 min-w-0 flex-1">
-                      <div className="flex min-w-0 flex-wrap items-center">
-                        <span className="mr-2 min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{p.name}</span>
-                        <Chip className="mr-1.5 max-sm:hidden">{p.project_type?.replace("_", " ")}</Chip>
-                        {brandFilter === "all" && <Chip tone="accent">{getProjectBrand(p.project_type)}</Chip>}
-                      </div>
-                      <div className="mt-0.5 flex min-w-0 items-center">
-                        <p className="min-w-0 truncate text-[12px] leading-4 text-muted-foreground">{cliente}<span className="sm:hidden">{p.deadline ? ` · ${new Date(p.deadline).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}` : ""}</span></p>
-                        {projectTeam.length > 0 && (
-                          <span className="ml-2 hidden min-w-0 items-center text-[11px] text-muted-foreground sm:flex">
-                            <Users className="mr-1 h-3 w-3 shrink-0" />
-                            <span className="truncate">{projectTeam.map(m => m.name.split(" ")[0]).join(", ")}</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mr-4 hidden w-36 shrink-0 md:block">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <PipelineBar pipeline={p.pipeline} />
-                        <p className="ml-2 text-[12px] font-medium tabular-nums text-foreground">{p.progress}%</p>
-                      </div>
-                      <ProgressBar value={Number(p.progress) || 0} max={100} height={6} label={`${p.progress}% concluído`} />
-                    </div>
-                    {p.deadline && (
-                      <div className="mr-1 hidden shrink-0 items-center text-[12px] tabular-nums text-muted-foreground sm:flex">
-                        <Clock className="mr-1.5 h-3 w-3" />
-                        {formatDate(p.deadline)}
-                      </div>
-                    )}
-                    <span className="mr-1 shrink-0 text-[12px] font-medium tabular-nums text-muted-foreground md:hidden">{Number(p.progress) || 0}%</span>
-                    {/* Editar, status, progresso e excluir mudam o projeto: só o admin pode (RLS). */}
-                    {isAdmin && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setMenuProject(showMenu ? null : p.id); }}
-                      aria-label="Ações do projeto"
-                      className="toque-compacto inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                    )}
-                  </div>
-
-                  {isAdmin && showMenu && (
-                    <div className="absolute right-4 top-full z-50 w-56 rounded-md border border-border bg-popover p-2 shadow-pop animate-in fade-in zoom-in-95 duration-150">
-                      <button onClick={(e) => { e.stopPropagation(); setEditProject(p); setMenuProject(null); }}
-                        className="flex items-center w-full px-3 py-2 rounded-sm text-[13px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer bg-transparent border-none text-left">
-                        <Edit3 className="mr-2.5 w-3.5 h-3.5" /> Editar
-                      </button>
-                      <div className="px-3 py-2">
-                        <p className="text-[11px] text-muted-foreground mb-1.5">Status</p>
-                        <div className="-m-0.5 flex flex-wrap">
-                          {STATUS_OPTIONS.map((s) => (
-                            <button key={s.value} onClick={(e) => { e.stopPropagation(); handleStatusChange(p.id, s.value); }}
-                              className={`m-0.5 text-[11px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${p.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
-                              {s.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="px-3 py-2">
-                        <p className="text-[11px] text-muted-foreground mb-1.5">Progresso: {p.progress}%</p>
-                        <Slider defaultValue={[p.progress]} max={100} step={5} onValueCommit={(val) => handleProgressChange(p.id, val[0])} className="w-full" />
-                      </div>
-                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteProject(p.id); }}
-                        className="flex items-center w-full px-3 py-2 rounded-sm text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none text-left">
-                        <Trash2 className="mr-2.5 w-3.5 h-3.5" /> Excluir
-                      </button>
-                    </div>
-                  )}
-
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-
-      {/* Alerts Row: Clients renewal + Stalled Projects */}
-      {isAdmin && (clientsRenewalAlert.length > 0 || stalledProjects.length > 0) && (
-        <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
-          {clientsRenewalAlert.length > 0 && (
-            <Card title="Vencimento próximo" subtitle={`${clientsRenewalAlert.length} ${clientsRenewalAlert.length === 1 ? "cliente" : "clientes"}`} collapsible={false} className={stalledProjects.length === 0 ? "lg:col-span-2" : ""}>
-              <List label="Clientes com vencimento próximo" divided={false}>
-                {clientsRenewalAlert.map((c: any) => {
-                  const renewal = new Date(c.plan_renewal_date + "T00:00:00");
-                  const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
-                  const isExpired = diffDays < 0;
-                  return (
-                    <ListRow
-                      key={c.id}
-                      avatar={c.company_name || c.full_name}
-                      title={c.company_name || c.full_name}
-                      subtitle={c.plan_name || undefined}
-                      status={
-                        <StatusPill tone={isExpired ? "danger" : "warning"}>
-                          {isExpired ? `Vencido há ${Math.abs(diffDays)}d` : diffDays === 0 ? "Vence hoje" : `Vence em ${diffDays}d`}
-                        </StatusPill>
-                      }
-                      value={c.plan_value ? fmt(Number(c.plan_value)) : undefined}
-                      onClick={() => navigate("/clientes")}
-                    />
-                  );
-                })}
-              </List>
-            </Card>
-          )}
-
-          {stalledProjects.length > 0 && (
-            <Card title="Sem progresso recente" subtitle={`${stalledProjects.length} ${stalledProjects.length === 1 ? "projeto" : "projetos"}`} collapsible={false} className={clientsRenewalAlert.length === 0 ? "lg:col-span-2" : ""}>
-              <List label="Projetos sem progresso recente" divided={false}>
-                {stalledProjects.map((p: any) => {
-                  const daysSince = Math.floor((now.getTime() - new Date(p.updated_at || p.created_at).getTime()) / 86400000);
-                  return (
-                    <ListRow
-                      key={p.id}
-                      avatar={p.client?.company_name || p.client?.full_name || p.name}
-                      title={p.name}
-                      subtitle={p.client?.company_name || p.client?.full_name}
-                      status={<StatusPill>Parado há {daysSince}d</StatusPill>}
-                      value={`${p.progress}%`}
-                      onClick={() => setDrawerProject(p)}
-                    />
-                  );
-                })}
-              </List>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Updates + Urgent Tasks */}
-      <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
-        {/* O feed lê as DUAS fontes: os updates de projeto e a memória dos
-            clientes (ritual, entrega, avulso, decisão, relatório). Antes só
-            a primeira aparecia, e o painel mostrava menos movimento do que
-            houve. */}
-        <Card title="Atualizações recentes" collapsible={false}>
-          {loadingActivity ? (
-            <div aria-busy="true" className="space-y-2">{[0, 1, 2, 3].map((n) => <div key={n} className="h-[52px] rounded-lg bg-muted/60" />)}</div>
-          ) : (activity || []).length === 0 ? (
-            <EmptyState compact title="Nenhuma atualização." />
-          ) : (
-            <div className="-mx-3">
-              {(activity || []).map((entrada) => (
-                /* items-start + min-w-0 + quebra de palavra: no celular a linha
-                   longa quebrava desalinhada do ponto colorido. */
-                <div
-                  key={entrada.id}
-                  className="flex min-w-0 cursor-pointer items-start rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/60"
-                  onClick={() => {
-                    if (entrada.origin === "entrega") navigate("/relatorios");
-                    else if (entrada.origin === "avulso" || entrada.origin === "ciclo") navigate("/ciclo");
-                    else if (entrada.origin === "ritual") navigate("/central");
-                    else if (entrada.projectId) navigate("/projetos");
-                  }}
-                >
-                  <div className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full mr-3 ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
-                  <div className="min-w-0 flex-1">
-                    <p className="break-words text-[13px] leading-5 text-foreground">{entrada.message}</p>
-                    <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground">
-                      {entrada.originLabel} · {new Date(entrada.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
-        </Card>
 
-        <Card title="Tarefas urgentes" variant={urgentTasks.length > 0 ? "ink" : "default"} collapsible={false}>
-          {urgentTasks.length === 0 ? (
-            <EmptyState compact title="Nenhuma tarefa urgente." />
-          ) : (
-            <List label="Tarefas urgentes" divided={false}>
-              {urgentTasks.map((t: any) => (
-                <ListRow
-                  key={t.id}
-                  leading={
-                    <span aria-hidden="true" className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground">
-                      <AlertTriangle className="h-4 w-4" />
-                    </span>
-                  }
-                  title={t.title}
-                  subtitle={t.project?.name}
-                  status={<StatusPill tone={t.priority === "urgent" ? "danger" : "warning"}>{t.priority === "urgent" ? "Urgente" : "Alta"}</StatusPill>}
-                  value={t.due_date ? new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : undefined}
-                />
-              ))}
-            </List>
+          {/* O feed lê as DUAS fontes: os updates de projeto e a memória dos
+              clientes (ritual, entrega, avulso, decisão, relatório). */}
+          {abaAberta === "atualizacoes" && (
+            loadingActivity ? (
+              <div aria-busy="true" className="space-y-2">{[0, 1, 2, 3].map((n) => <div key={n} className="h-[52px] rounded-lg bg-muted/60" />)}</div>
+            ) : (activity || []).length === 0 ? (
+              <EmptyState compact title="Nenhuma atualização." />
+            ) : (
+              <div className={`min-w-0 ${rolagemPropria}`}>
+                {(activity || []).map((entrada) => (
+                  <div
+                    key={entrada.id}
+                    className="flex min-w-0 cursor-pointer items-start rounded-[14px] px-3 py-2.5 transition-colors hover:bg-muted/60"
+                    onClick={() => {
+                      if (entrada.origin === "entrega") navigate("/relatorios");
+                      else if (entrada.origin === "avulso" || entrada.origin === "ciclo") navigate("/ciclo");
+                      else if (entrada.origin === "ritual") navigate("/central");
+                      else if (entrada.projectId) navigate("/projetos");
+                    }}
+                  >
+                    <div className={`mr-3 mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-[13px] leading-5 text-foreground">{entrada.message}</p>
+                      <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground">
+                        {entrada.originLabel} · {new Date(entrada.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
-        </Card>
+
+          {abaAberta === "urgentes" && (
+            urgentTasks.length === 0 ? (
+              <EmptyState compact title="Nenhuma tarefa urgente." />
+            ) : (
+              <div className={`min-w-0 ${rolagemPropria}`}>
+                <List label="Tarefas urgentes" divided={false}>
+                  {urgentTasks.map((t: any) => (
+                    <ListRow
+                      key={t.id}
+                      leading={
+                        <span aria-hidden="true" className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground">
+                          <AlertTriangle className="h-4 w-4" />
+                        </span>
+                      }
+                      title={t.title}
+                      subtitle={t.project?.name}
+                      status={<StatusPill plain tone={t.priority === "urgent" ? "danger" : "warning"}>{t.priority === "urgent" ? "Urgente" : "Alta"}</StatusPill>}
+                      value={t.due_date ? new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : undefined}
+                    />
+                  ))}
+                </List>
+              </div>
+            )
+          )}
+
+          {abaAberta === "vencimentos" && (
+            clientsRenewalAlert.length === 0 ? (
+              <EmptyState compact title="Nenhum vencimento nos próximos 7 dias." />
+            ) : (
+              <div className={`min-w-0 ${rolagemPropria}`}>
+                <List label="Clientes com vencimento próximo" divided={false}>
+                  {clientsRenewalAlert.map((c: any) => {
+                    const renewal = new Date(c.plan_renewal_date + "T00:00:00");
+                    const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
+                    const isExpired = diffDays < 0;
+                    return (
+                      <ListRow
+                        key={c.id}
+                        avatar={c.company_name || c.full_name}
+                        title={c.company_name || c.full_name}
+                        subtitle={c.plan_name || undefined}
+                        status={
+                          <StatusPill plain tone={isExpired ? "danger" : "warning"}>
+                            {isExpired ? `Vencido há ${Math.abs(diffDays)}d` : diffDays === 0 ? "Vence hoje" : `Vence em ${diffDays}d`}
+                          </StatusPill>
+                        }
+                        value={c.plan_value ? fmt(Number(c.plan_value)) : undefined}
+                        onClick={() => navigate("/clientes")}
+                      />
+                    );
+                  })}
+                </List>
+              </div>
+            )
+          )}
+
+          {abaAberta === "parados" && (
+            stalledProjects.length === 0 ? (
+              <EmptyState compact title="Nenhum projeto parado há 14 dias." />
+            ) : (
+              <div className={`min-w-0 ${rolagemPropria}`}>
+                <List label="Projetos sem progresso recente" divided={false}>
+                  {stalledProjects.map((p: any) => {
+                    const daysSince = Math.floor((now.getTime() - new Date(p.updated_at || p.created_at).getTime()) / 86400000);
+                    return (
+                      <ListRow
+                        key={p.id}
+                        avatar={p.client?.company_name || p.client?.full_name || p.name}
+                        title={p.name}
+                        subtitle={p.client?.company_name || p.client?.full_name}
+                        status={<StatusPill plain>Parado há {daysSince}d</StatusPill>}
+                        value={`${p.progress}%`}
+                        onClick={() => setDrawerProject(p)}
+                      />
+                    );
+                  })}
+                </List>
+              </div>
+            )
+          )}
+        </section>
+
+        {/* Coluna direita de baixo: carteiras de anúncio e o Segundo Cérebro */}
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-3 lg:gap-5">
+          {(isAdmin || isTeam) && (wallets || []).length > 0 && (
+            <section className={`${cartao} p-5`}>
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex min-w-0 items-center">
+                  <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><Wallet className="h-4 w-4" /></span>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-[16px] font-semibold leading-6 tracking-[-0.01em] text-foreground">Ads Wallet</h2>
+                    <p className="truncate text-[12px] leading-4 tabular-nums text-muted-foreground">{fmt(totalAds)}</p>
+                  </div>
+                </div>
+                {abrir("/financeiro", "Abrir o Financeiro")}
+              </div>
+              <div className="-mx-2 lg:max-h-[220px] lg:overflow-y-auto lg:overscroll-contain">
+                {(wallets || []).map((w: any) => (
+                  <button key={w.id} type="button" onClick={() => navigate("/financeiro")} className="flex w-full min-w-0 cursor-pointer items-center rounded-[14px] px-2 py-2 text-left transition-colors hover:bg-muted/60">
+                    <Avatar name={w.client?.company_name || w.client?.full_name} size="sm" />
+                    <span className="ml-3 min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{w.client?.company_name || w.client?.full_name}</span>
+                      <span className="block truncate text-[12px] leading-4 text-muted-foreground">{w.platform}</span>
+                    </span>
+                    <span className={`ml-2 shrink-0 text-[13px] font-medium tabular-nums ${Number(w.balance) < 100 ? "text-warning" : "text-foreground"}`}>{fmt(Number(w.balance))}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          {isAdmin && <SecondBrainPulseWidget />}
+        </div>
       </div>
 
       <CreateProjectModal open={createProjectOpen || !!editProject} onClose={() => { setCreateProjectOpen(false); setEditProject(null); }} editProject={editProject} />
