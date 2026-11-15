@@ -5,13 +5,13 @@ import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useEditorialApprovalPreview } from "@/hooks/useEditorialCalendar";
 import { useToast } from "@/hooks/use-toast";
 import { Carregando, EstadoVazio, SeletorCompacto, botao, campo, espaco, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
-import { PageHeader, ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
+import { PageHeader, StatusPill, type Tone } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { AlertTriangle, CheckCircle2, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
@@ -375,30 +375,6 @@ export default function ClientApprovals() {
         }
       />
 
-      {/* Os números da fila (os mesmos do filtro), grandes; tocar num deles filtra. No celular a tela é um item por vez. */}
-      {!isLoading && !pequena && approvalFiles.length > 0 && (
-        <StatGrid cols={4} label="Resumo das aprovações">
-          <StatCard
-            variant={contagem.pending ? "accent" : "default"}
-            size="xl"
-            label="Esperando você"
-            value={contagem.pending}
-            hint={contagem.pending ? "Toque para ver só as pendentes" : "Nada esperando você"}
-            onClick={() => setFiltro("pending")}
-          />
-          <StatCard
-            variant="ink"
-            size="xl"
-            label="Aprovados"
-            value={contagem.approved}
-            onClick={() => setFiltro("approved")}
-            chart={contagem.todos > 0 ? <ProgressBar value={contagem.approved} max={contagem.todos} tone={1} label={`${contagem.approved} de ${contagem.todos} aprovados`} /> : undefined}
-          />
-          <StatCard size="xl" label="Com ajuste" value={contagem.rejected} onClick={() => setFiltro("rejected")} />
-          <StatCard size="xl" label="Todos" value={contagem.todos} onClick={() => setFiltro("todos")} />
-        </StatGrid>
-      )}
-
       {isLoading ? (
         <Carregando forma="grade" linhas={3} rotulo="Carregando aprovações" />
       ) : approvalFiles.length === 0 ? (
@@ -538,6 +514,13 @@ export default function ClientApprovals() {
                       <p className={texto.auxiliar}>Seu pedido de ajuste</p>
                       <p className="line-clamp-3 text-[12px] leading-4 text-foreground">{f.feedback}</p>
                     </div>
+                  )}
+                  {/* A ação da tela: quem espera você ganha o botão verde (o cartão inteiro abre a conferência). */}
+                  {f.approval_status === "pending" && (
+                    <span aria-hidden="true" className="mt-4 flex h-11 w-full items-center justify-center rounded-full bg-accent-solid text-[14px] font-semibold text-on-accent transition-opacity group-hover/cartao:opacity-90">
+                      {isReadOnly ? "Conferir" : "Conferir e aprovar"}
+                      <ArrowUpRight className="ml-1.5 h-4 w-4" />
+                    </span>
                   )}
                 </div>
               </div>
