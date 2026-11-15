@@ -76,8 +76,23 @@ export default {
         "warning-soft": "hsl(var(--warning-soft))",
         "danger-soft": "hsl(var(--danger-soft))",
         "info-soft": "hsl(var(--info-soft))",
+        // Rodada ousada (15/11/2026): destaque sólido, cartão de tinta e tons de gráfico.
+        "accent-solid": "hsl(var(--accent-solid))",
+        "on-accent": "hsl(var(--on-accent))",
+        ink: {
+          DEFAULT: "hsl(var(--card-ink))",
+          foreground: "hsl(var(--card-ink-foreground))",
+          muted: "hsl(var(--card-ink-muted))",
+        },
+        chart: {
+          1: "hsl(var(--chart-1))",
+          2: "hsl(var(--chart-2))",
+          3: "hsl(var(--chart-3))",
+          4: "hsl(var(--chart-4))",
+          5: "hsl(var(--chart-5))",
+        },
       },
-      // Cantos (redesenho de 14/11/2026): cartão 20 px (lg), controle 12 px (md),
+      // Cantos (rodada ousada de 15/11/2026): cartão 24 px (lg), controle 12 px (md),
       // etiqueta 8 px (sm). xl e 2xl ficam acima do cartão, para folha e janela.
       borderRadius: {
         "2xl": "calc(var(--radius) + 8px)",

@@ -57,7 +57,7 @@ export default function CabecalhoDePagina({
           {ajuda && <AjudaRecolhida className="ml-2">{ajuda}</AjudaRecolhida>}
           {aoLado && <div className="ml-4 flex min-w-0 flex-1 items-center">{aoLado}</div>}
         </div>
-        {descricao && <p className={juntar(texto.auxiliar, "mt-1 hidden truncate sm:block")}>{descricao}</p>}
+        {descricao && <p className={juntar(texto.corpo, "mt-1.5 hidden truncate text-muted-foreground sm:block")}>{descricao}</p>}
       </div>
       {acoes && (
         <div

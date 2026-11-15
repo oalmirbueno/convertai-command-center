@@ -3,12 +3,17 @@ import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import { juntar } from "@/components/sistema/estilos";
 
 /**
- * Topo de toda página: título, no máximo UMA linha curta de apoio, o "?" para
- * a explicação longa e, à direita, a ação principal. A barra de ferramentas
- * (busca, filtros, visões) entra logo abaixo, em `toolbar`.
+ * Topo de toda página: título grande (32 px; 24 px no celular), no máximo UMA
+ * linha curta de apoio, o "?" para a explicação longa e, à direita, a ação
+ * principal. A barra de ferramentas (busca, filtros, visões) entra logo
+ * abaixo, em `toolbar`.
+ *
+ * `greeting`: saudação na MESMA linha do título, com o nome apagado
+ * ("Bom dia," em `title` e o nome em `greeting`), como nas referências.
  */
 export default function PageHeader({
   title,
+  greeting,
   subtitle,
   help,
   actions,
@@ -19,6 +24,9 @@ export default function PageHeader({
   className = "",
 }: {
   title: ReactNode;
+  /** Segunda parte do título, apagada, na mesma linha (o nome na saudação). */
+  greeting?: ReactNode;
+  /** Uma linha curta de apoio embaixo do título (some no celular). */
   subtitle?: ReactNode;
   help?: ReactNode;
   /** Ações à direita: uma principal; o resto num OverflowMenu. */
@@ -33,8 +41,8 @@ export default function PageHeader({
 }) {
   return (
     <div className={juntar("min-w-0", className)} data-page-header="">
-      <CabecalhoDePagina titulo={title} descricao={subtitle} ajuda={help} acoes={actions} voltar={back ? { para: back.to, rotulo: back.label } : undefined} aoLado={beside} nivel={level} />
-      {toolbar && <div className="mt-4 min-w-0">{toolbar}</div>}
+      <CabecalhoDePagina titulo={greeting ? <>{title} <span className="font-normal text-muted-foreground">{greeting}</span></> : title} descricao={subtitle} ajuda={help} acoes={actions} voltar={back ? { para: back.to, rotulo: back.label } : undefined} aoLado={beside} nivel={level} />
+      {toolbar && <div className="mt-5 min-w-0 sm:mt-6">{toolbar}</div>}
     </div>
   );
 }

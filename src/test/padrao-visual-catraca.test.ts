@@ -282,9 +282,10 @@ describe("catraca do padrão visual (só desce)", () => {
 });
 
 describe("regras em código (src/components/sistema/regras.ts)", () => {
-  it("escala de fonte fechada: 11, 12, 13, 14, 15, 20, 24 e 28 px", () => {
-    // 28 px entrou em 14/11/2026 (redesenho): o número grande do cartão de indicador (texto.numeroGrande).
-    expect(Array.from(ESCALA_DE_FONTE)).toEqual([11, 12, 13, 14, 15, 20, 24, 28]);
+  it("escala de fonte fechada: 11, 12, 13, 14, 15, 18, 20, 24, 28, 32, 36, 40 e 48 px", () => {
+    // 28 px entrou em 14/11/2026 (redesenho). Em 15/11/2026 (rodada ousada, dono: "ficou igual") entraram
+    // 18 px (título de seção e de cartão), 32 px (título da página) e 32 a 48 px (número de destaque).
+    expect(Array.from(ESCALA_DE_FONTE)).toEqual([11, 12, 13, 14, 15, 18, 20, 24, 28, 32, 36, 40, 48]);
     expect(fontesForaDaEscala("text-[12px] sm:text-[12.5px] text-sm lg:text-lg text-[24px] text-primary text-left")).toEqual(["text-[12.5px]", "text-sm", "text-lg"]);
     for (const papel of Object.values(texto)) expect(fontesForaDaEscala(papel), papel).toEqual([]);
     expect(texto.etiqueta).toContain("text-[11px]");

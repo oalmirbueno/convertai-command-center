@@ -67,9 +67,27 @@ export default function Chip({
 }
 
 /**
- * Variação em pílula pequena ao lado de um número ("+12%", "-3"): verde quando
- * sobe, vermelho quando cai, neutro quando não mudou. `invert` troca o sentido
- * (custo que cai é bom).
+ * Estado em pílula: fundo suave no tom e a bolinha antes do texto ("Ativo",
+ * "Pendente", "Atrasado"). É a etiqueta de estado de linha de lista e de
+ * tabela. `pulse` faz a bolinha pulsar (algo acontecendo agora).
+ */
+export function StatusPill({ children, tone = "neutral", pulse = false, className = "", title }: { children: ReactNode; tone?: Tone; pulse?: boolean; className?: string; title?: string }) {
+  return (
+    <span
+      title={title}
+      data-status-pill={tone}
+      className={juntar("inline-flex h-6 min-w-0 max-w-full shrink-0 items-center whitespace-nowrap rounded-full pl-2 pr-2.5 text-[12px] font-medium leading-none", FUNDO[tone], tone === "neutral" && "text-muted-foreground", className)}
+    >
+      <StatusDot tone={tone} pulse={pulse} className="mr-1.5" />
+      <span className="min-w-0 truncate">{children}</span>
+    </span>
+  );
+}
+
+/**
+ * Variação em pílula pequena ao lado de um número ("+12%", "-3"): seta para
+ * cima em verde quando melhora, para baixo em vermelho quando piora, neutro
+ * quando não mudou. `invert` troca o sentido (custo que cai é bom).
  */
 export function DeltaChip({ value, label, invert = false, className = "" }: { value: number; label?: ReactNode; invert?: boolean; className?: string }) {
   const sobe = value > 0;
@@ -77,10 +95,12 @@ export function DeltaChip({ value, label, invert = false, className = "" }: { va
   const bom = invert ? cai : sobe;
   const ruim = invert ? sobe : cai;
   const tone: Tone = bom ? "success" : ruim ? "danger" : "neutral";
-  const texto = label !== undefined ? label : `${sobe ? "+" : ""}${value}%`;
+  const texto = label !== undefined ? label : `${sobe ? "+" : ""}${String(value).replace(".", ",")}%`;
   return (
     <Chip tone={tone} className={className}>
-      <span aria-hidden="true" className="mr-0.5">{sobe ? "↑" : cai ? "↓" : "•"}</span>
+      <svg aria-hidden="true" viewBox="0 0 10 10" className={juntar("mr-1 inline-block h-2.5 w-2.5 shrink-0", cai && "rotate-180", !sobe && !cai && "hidden")} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 8.5v-7M2 4.5l3-3 3 3" />
+      </svg>
       {texto}
     </Chip>
   );
