@@ -29,7 +29,7 @@ export function ModoDoEstudio({ modo, onModo, className = "" }: { modo: ModoDoEs
         title={dica}
         onClick={() => !ativa && onModo(valor)}
         className={juntar(
-          "toque-compacto inline-flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded-full px-3 text-[12px] font-medium transition-colors duration-200",
+          "toque-compacto inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[13px] font-medium transition-colors duration-200",
           ativa ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
           foco,
         )}
@@ -41,7 +41,7 @@ export function ModoDoEstudio({ modo, onModo, className = "" }: { modo: ModoDoEs
     );
   };
   return (
-    <div role="radiogroup" aria-label="Modo do Estúdio" className={juntar("inline-flex h-8 shrink-0 items-center rounded-full bg-muted p-0.5", className)} data-modo-do-estudio={modo}>
+    <div role="radiogroup" aria-label="Modo do Estúdio" className={juntar("inline-flex h-10 shrink-0 items-center rounded-full border border-border bg-card p-[3px]", className)} data-modo-do-estudio={modo}>
       {opcao("pautas", "Pautas do mês", "Pautas", <ListChecks className="h-3.5 w-3.5" />, "As artes do plano do mês, pela faixa das pautas")}
       {opcao("rapida", "Arte rápida", "Rápida", <Zap className="h-3.5 w-3.5" />, "Arte avulsa, fora do plano do mês: pedido, fotos e arquivos")}
     </div>
