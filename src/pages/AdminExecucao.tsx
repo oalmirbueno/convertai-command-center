@@ -47,6 +47,7 @@ import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-context
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
 import { excluirTarefa } from "@/lib/taskDelete";
 import DonoDaTarefa from "@/components/execucao/DonoDaTarefa";
+import PrimeiraLeitura, { EsqueletoDeCartoes } from "@/components/execucao/PrimeiraLeitura";
 import { registrarDecisaoDoDono, type ClienteDaDecisao } from "@/lib/decisaoDoVinculo";
 import { lazyDiscreto, quandoOcioso } from "@/lib/lazyComPreCarga";
 import {
@@ -242,6 +243,9 @@ const AREAS_FECHADAS = "aceleriq-execucao-areas-fechadas";
  * Padrões ESTÁVEIS das leituras (26/10). `data: x = []` cria uma lista nova a cada desenho
  * enquanto a leitura não chega, e todo useMemo que depende dela recalcula sem motivo.
  */
+/** v4 (15/11): leituras que a região espera responder UMA vez antes de aparecer (ver PrimeiraLeitura). */
+const LEITURAS_DO_RESUMO = [["operador-vinculos"], ["operador-tarefas"], ["operador-runs"], ["operadores-internos"], ["operador-tarefas-disponiveis"]] as const;
+const LEITURAS_DO_TRABALHO = [...LEITURAS_DO_RESUMO, ["operador-humanos"], ["execucao-pedidos"], ["aprovacoes-explicadas"], ["propostas-responsavel"], ["pedidos-de-acesso"]] as const;
 const SEM_LINHAS: any[] = [];
 const SEM_OPERADORES: Operador[] = [];
 const SEM_VINCULOS: Vinculo[] = [];
@@ -2228,6 +2232,8 @@ export default function AdminExecucao() {
             rotulo="Trabalho dos agentes"
             memoria={`execucao:${aba === "feito" ? "feito" : visao}`}
           >
+            {/* v4 (15/11): a região aparece inteira depois da primeira resposta de todas as leituras; antes cada uma empurrava a outra. */}
+            <PrimeiraLeitura chaves={LEITURAS_DO_TRABALHO} aguardar={carregandoVinculos && vinculos.length === 0} esqueleto={<EsqueletoDeCartoes rotulo="Carregando o trabalho dos agentes" alturas={[44, 360, 44, 420]} />}>
             <div className="space-y-6 lg:pb-6 lg:pr-1">
               {aba === "feito" && <OQueFoiFeito />}
               {aba === "decisoes" && <PedidosDeAcesso />}
@@ -2236,6 +2242,7 @@ export default function AdminExecucao() {
                   espera o agente. Sem isto, autorizar parecia concluir. */}
               {aba === "decisoes" && <OrdensAutorizadas />}
             </div>
+            </PrimeiraLeitura>
           </RegiaoRolavel>
         )}
       </div>
@@ -2341,6 +2348,7 @@ export default function AdminExecucao() {
           <>
             <FecharResumo />
             <RegiaoRolavel modo="sempre" rotulo="Áreas e incidentes" memoria="execucao:areas" className="lg:pr-1">
+              <PrimeiraLeitura chaves={LEITURAS_DO_RESUMO} aguardar={carregandoVinculos && vinculos.length === 0} esqueleto={<EsqueletoDeCartoes rotulo="Carregando o resumo" alturas={[48, 300, 92, 260]} className="pb-4" />}>
               <div className="space-y-6 pb-4">
                 <div aria-label="O que pede a sua atenção" role="group">
                   {atencao}
@@ -2352,6 +2360,7 @@ export default function AdminExecucao() {
                 />
                 {areasEIncidentes}
               </div>
+              </PrimeiraLeitura>
             </RegiaoRolavel>
           </>
         }
