@@ -1,0 +1,17 @@
+[Unit]
+Description=Aceleriq: lembrete de aprovação e mensagem da semana no grupo do cliente (uma rodada)
+After=network-online.target mercurio-pilot-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/aceleriq-grupo-cliente
+Environment=GRUPO_CLIENTE_MODO=previa
+Environment=GRUPO_CLIENTE_LIGADOS=lembrete,semana
+ExecStart=/opt/mercurio-pilot/node /opt/aceleriq-grupo-cliente/enviar.mjs
+TimeoutStartSec=300
+ProtectSystem=strict
+ReadWritePaths=/var/lib/aceleriq-grupo-cliente
+PrivateTmp=yes
+NoNewPrivileges=yes

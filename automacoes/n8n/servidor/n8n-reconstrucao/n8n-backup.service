@@ -1,0 +1,6 @@
+[Unit]
+Description=Aceleriq: cópia diária do n8n (volume, config, compose)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /usr/local/sbin/n8n-backup.sh

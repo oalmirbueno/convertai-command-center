@@ -13,6 +13,8 @@ var ACQ_COM_PADRAO = {
   retomada: { ativa: false, dias_sem_resposta: 4 },
   // Cadência (06/11, dono: 3 toques): abertura, retomada depois de 3 dias úteis e despedida depois de mais 4, só para quem não teve resposta de pessoa.
   cadencia: { ativa: false, dias_uteis: [3, 4] },
+  // 09/11 (dono: "o Rafael não pode parar do nada"): quem conversou e sumiu recebe uma volta dentro da janela de 24 h.
+  continuar: { ativa: false, horas_silencio: 2, janela_max_horas: 23, minutos_resposta: 30 },
   llm_url: 'https://openrouter.ai/api/v1/chat/completions',
   llm_modelo: 'anthropic/claude-sonnet-5.5',
   transcricao_modelo: 'google/gemini-2.5-flash',
@@ -37,8 +39,12 @@ function acqComCfg(cfg) {
   c.modelos = c.modelos || {};
   c.retomada = Object.assign({}, ACQ_COM_PADRAO.retomada, c.retomada || {});
   c.cadencia = Object.assign({}, ACQ_COM_PADRAO.cadencia, c.cadencia || {});
+  c.continuar = Object.assign({}, ACQ_COM_PADRAO.continuar, c.continuar || {});
   return c;
 }
+
+// O painel guarda qualificacao como texto desde o MCP 2.24 ('sim'/'nao'); as marcas antigas ficaram booleanas.
+function acqComSoRobo(q) { return !!q && (q.so_robo === true || q.so_robo === 'sim'); }
 
 // O transporte só liga quando o fluxo não está em dry-run, há phone_number_id e (para modelo)
 // o modelo está marcado como aprovado na config. A credencial da Meta é conferida pela própria

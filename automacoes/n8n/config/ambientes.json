@@ -199,7 +199,8 @@
       "dry_run_por_workflow": {
         "ACQ-06": true,
         "ACQ-07": true,
-        "ACQ-08": true
+        "ACQ-08": true,
+        "ACQ-09": true
       },
       "comercial": {
         "operador": "mercurio",
@@ -273,6 +274,59 @@
             3,
             4
           ]
+        },
+        "continuar": {
+          "ativa": true,
+          "horas_silencio": 2,
+          "janela_max_horas": 23,
+          "minutos_resposta": 30
+        }
+      },
+      "leitura_grupos": {
+        "ativo": true,
+        "llm_url": "https://openrouter.ai/api/v1/chat/completions",
+        "llm_modelo": "anthropic/claude-sonnet-5.5",
+        "dias_no_dossie": 7
+      },
+      "relatorio_anuncios": {
+        "ativo": true,
+        "preparar_envio": true,
+        "clientes_ensaio": [
+          "bad69252-05ad-4b80-ab76-4a0e9fd3c314",
+          "3d08338c-0c3b-453f-a64f-79a55c5711e8",
+          "3ba9540c-bc09-4026-b575-05fd0df4195f"
+        ],
+        "clientes_fora": []
+      },
+      "radar_anuncios": {
+        "ativo": true,
+        "tetos_semanais": {},
+        "clientes_fora": []
+      },
+      "mensagem_semana": {
+        "ativo": true,
+        "cliente_ensaio": "6a847578-ba39-44cd-be61-08e34e18e4c9",
+        "clientes_fora": []
+      },
+      "post_no_ar": {
+        "ativo": true,
+        "so_com_grupo": true,
+        "llm_url": "https://openrouter.ai/api/v1/chat/completions",
+        "llm_modelo": "anthropic/claude-sonnet-5.5",
+        "grupos": {
+          "39ebda82-637c-498b-a23a-b622f645e852": "Acerbi (CME) - MKT - Aceleriq",
+          "eb1270a5-4d9e-4c67-bb17-e25fa12ada34": "Mirante Luz Floripa - MKT - Aceleriq",
+          "5ae0705e-6f8c-40f1-b076-867fd2ab3178": "Preserva Eco - MKT - Aceleriq",
+          "52f2efb6-9928-4074-b8e2-bc972baf1f6a": "Rd Ar - MKT - Aceleriq",
+          "bad69252-05ad-4b80-ab76-4a0e9fd3c314": "SKC CONTABIL  - MKT - ACELERIQ",
+          "6a847578-ba39-44cd-be61-08e34e18e4c9": "Stop - MKT - Aceleriq",
+          "8801caa5-7505-44c9-9c14-e3019eace772": "Terra Flor - MKT - Aceleriq",
+          "3ba9540c-bc09-4026-b575-05fd0df4195f": "Thainá Rosa - MKT - Aceleriq",
+          "e590497e-f985-47be-b8f2-493bae1da7df": "Verzelo - MKT - Aceleriq",
+          "3d08338c-0c3b-453f-a64f-79a55c5711e8": "Softy - MKT - Aceleriq",
+          "d3dacbac-0da6-49eb-8322-31ae22bd79b4": "Casa dos Assados - MKT - Aceleriq",
+          "213848fc-5a01-400b-8896-ddde03ba33ec": "Skyfleet - MKT - Aceleriq",
+          "9b8e605b-8fba-4e57-9bfb-a2b6f9f311c0": "Aceleriq - MKT VD IA - Viauto.com.br"
         }
       }
     }

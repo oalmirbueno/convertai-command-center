@@ -1,0 +1,123 @@
+{
+ "erro": null,
+ "ultimo_no": "Gravar desfecho do registro",
+ "nos": {
+  "Escolher leads": {
+   "itens": 3,
+   "erro": null,
+   "saida": [
+    {
+     "cand": {
+      "lead_id": "97d4389e-1cb3-4d9b-bbe5-d44b19635722",
+      "tipo": "primeiro_contato",
+      "numero": "5541997103863",
+      "nome": "Leve Pilates Clássico",
+      "fato": {
+       "texto": "o site chama para a aula experimental, mas não mostra planos, valores nem vagas",
+       "fonte": "qualificacao.fato_observado"
+      },
+      "params": [
+       "pessoal",
+       "Leve Pilates Clássico",
+       "o site chama para a aula experimental, mas não mostra planos, valores nem vagas"
+      ],
+      "lead_frio": true,
+      "etapa": "novo",
+      "modelo_nome": "aceleriq_primeiro_contato_executivo",
+      "texto": "Oi, pessoal, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da Leve Pilates Clássico na internet e reparei que o site chama para a aula experimental, mas não mostra planos, valores nem vagas. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?"
+     },
+     "transporte": {
+      "ao_vivo": true,
+      "decisao": "enviar",
+      "motivo": null
+     },
+     "rodada": {
+      "motivo": null,
+      "limite": 5,
+      "ignorados": 3
+     },
+     "pg": [
+      "97d4389e-1cb3-4d9b-bbe5-d44b19635722",
+      "comercial_primeiro_contato_aceito,comercial_primeiro_contato_incerto",
+      "{\"schema_version\":\"1.0.0\",\"event_id\":\"6f33cd8f-27e4-4021-8e0e-36f1776f0e0b\",\"workflow_id\":\"ACQ-06\",\"run_id\":\"ACQ-06:2026-11-06T17:20:00.638Z:7796f06f\",\"client_id\":null,\"entity_type\":\"lead\",\"entity_id\":\"97d4389e-1cb3-4d9b-bbe5-d44b19635722\",\"occurred_at\":\"2026-11-06T17:20:00.638Z\",\"observed_at\":\"2026-11-06T17:20:05.844Z\",\"source\":\"n8n:ACQ-06\",\"source_version\":null,\"correlation_id\":\"ACQ-06:2026-11-06T17:20:00.638Z:7796f06f\",\"idempotency_key\":\"ACQ-06|primeiro_contato|97d4389e-1cb3-4d9b-bbe5-d44b19635722|2026-11-06\",\"evidence_refs\":[\"aceleriq_comercial_fila\"],\"tipo\":\"comercial_primeiro_contato_reivindicado\",\"payload\":{\"tipo\":\"primeiro_contato\",\"modelo\":\"aceleriq_primeiro_contato_executivo\",\"numero_final\":\"3863\",\"params\":[\"pessoal\",\"Leve Pilates Clássico\",\"o site chama para a aula experimental, mas não mostra planos, valores nem vagas\"],\"fato_fonte\":\"qualificacao.fato_observado\",\"texto\":\"Oi, pessoal, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da Leve Pilates Clássico na internet e reparei que o site chama para a aula experimental, mas não mostra planos, valores nem vagas. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?\",\"transporte\":\"enviar\",\"motivo\":null},\"payload_hash\":\"6a65d22ec1e8b6026b57aa114fa55722fe4a6a7cd29d460ccaf16c750d785302\"}",
+      "production"
+     ]
+    },
+    {
+     "cand": {
+      "lead_id": "4578590c-81f5-4510-bffe-64fbad91f197",
+      "tipo": "primeiro_contato",
+      "numero": "5541985036800",
+      "nome": "SL Studio Lisboa",
+      "fato": {
+       "texto": "a página de unhas do site ainda mostra um texto de exemplo (Lorem ipsum) no meio dos serviços",
+       "fonte": "qualificacao.fato_observado"
+      },
+      "params": [
+       "pessoal",
+       "SL Studio Lisboa",
+       "a página de unhas do site ainda mostra um texto de exemplo (Lorem ipsum) no meio dos serviços"
+      ],
+      "lead_frio": true,
+      "etapa": "novo",
+      "modelo_nome": "aceleriq_primeiro_contato_executivo",
+      "texto": "Oi, pessoal, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da SL Studio Lisboa na internet e reparei que a página de unhas do site ainda mostra um texto de exemplo (Lorem ipsum) no meio dos serviços. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?"
+     },
+     "transporte": {
+      "ao_vivo": true,
+      "decisao": "enviar",
+      "motivo": null
+     },
+     "rodada": {
+      "motivo": null,
+      "limite": 5,
+      "ignorados": 3
+     },
+     "pg": [
+      "4578590c-81f5-4510-bffe-64fbad91f197",
+      "comercial_primeiro_contato_aceito,comercial_primeiro_contato_incerto",
+      "{\"schema_version\":\"1.0.0\",\"event_id\":\"c3a09e17-bb1c-4a42-a639-6073eb00ab4e\",\"workflow_id\":\"ACQ-06\",\"run_id\":\"ACQ-06:2026-11-06T17:20:00.638Z:7796f06f\",\"client_id\":null,\"entity_type\":\"lead\",\"entity_id\":\"4578590c-81f5-4510-bffe-64fbad91f197\",\"occurred_at\":\"2026-11-06T17:20:00.638Z\",\"observed_at\":\"2026-11-06T17:20:05.847Z\",\"source\":\"n8n:ACQ-06\",\"source_version\":null,\"correlation_id\":\"ACQ-06:2026-11-06T17:20:00.638Z:7796f06f\",\"idempotency_key\":\"ACQ-06|primeiro_contato|4578590c-81f5-4510-bffe-64fbad91f197|2026-11-06\",\"evidence_refs\":[\"aceleriq_comercial_fila\"],\"tipo\":\"comercial_primeiro_contato_reivindicado\",\"payload\":{\"tipo\":\"primeiro_contato\",\"modelo\":\"aceleriq_primeiro_contato_executivo\",\"numero_final\":\"6800\",\"params\":[\"pessoal\",\"SL Studio Lisboa\",\"a página de unhas do site ainda mostra um texto de exemplo (Lorem ipsum) no meio dos serviços\"],\"fato_fonte\":\"qualificacao.fato_observado\",\"texto\":\"Oi, pessoal, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da SL Studio Lisboa na internet e reparei que a página de unhas do site ainda mostra um texto de exemplo (Lorem ipsum) no meio dos serviços. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?\",\"transporte\":\"enviar\",\"motivo\":null},\"payload_hash\":\"d5da0c049702d2a55effbfc5e8fcab151d08db9c0a443bbb7c795fcfa633e7e3\"}",
+      "production"
+     ]
+    },
+    {
+     "cand": {
+      "lead_id": "aec1f4f3-8c64-4056-a302-0b6a19882390",
+      "tipo": "primeiro_contato",
+      "numero": "5541987319208",
+      "nome": "Fluir Pilates",
+      "fato": {
+       "texto": "o site chama para a aula experimental gratuita, mas não mostra planos nem valores",
+       "fonte": "qualificacao.fato_observado"
+      },
+      "params": [
+       "pessoal",
+       "Fluir Pilates",
+       "o site chama para a aula experimental gratuita, mas não mostra planos nem valores"
+      ],
+      "lead_frio": true,
+      "etapa": "novo",
+      "modelo_nome": "aceleriq_primeiro_contato_executivo",
+      "texto": "Oi, pessoal, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da Fluir Pilates na internet e reparei que o site chama para a aula experimental gratuita, mas não mostra planos nem valores. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?"
+     },
+     "transporte": {
+      "ao_vivo": true,
+      "decisao": "enviar",
+      "motivo": null
+     },
+     "rodada": {
+      "motivo": null,
+      "limite": 5,
+      "ignorados": 3
+     },
+     "pg": [
+      "aec1f4f3-8c64-4056-a302-0b6a19882390",
+      "comercial_primeiro_contato_aceito,comercial_primeiro_contato_incerto",
+      "{\"schema_version\":\"1.0.0\",\"event_id\":\"205ff62c-307c-4c1f-a985-8b1d1380aeb9\",\"workflow_id\":\"ACQ-06\",\"run_id\":\"ACQ-06:2026-11-06T17:20:00.638Z:7796f06f\",\"client_id\":null,\"entity_type\":\"lead\",\"entity_id\":\"aec1f4f3-8c64-4056-a302-0b6a19882390\",\"occurred_at\":\"2026-11-06T17:20:00.638Z\",\"observed_at\":\"2026-11-06T17:20:05.849Z\",\"source\":\"n8n:ACQ-06\",\"source_version\":null,\"correlation_id\":\"ACQ-06:2026-11-06T17:20:00.638Z:7796f06f\",\"idempotency_key\":\"ACQ-06|primeiro_contato|aec1f4f3-8c64-4056-a302-0b6a19882390|2026-11-06\",\"evidence_refs\":[\"aceleriq_comercial_fila\"],\"tipo\":\"comercial_primeiro_contato_reivindicado\",\"payload\":{\"tipo\":\"primeiro_contato\",\"modelo\":\"aceleriq_primeiro_contato_executivo\",\"numero_final\":\"9208\",\"params\":[\"pessoal\",\"Fluir Pilates\",\"o site chama para a aula experimental gratuita, mas não mostra planos nem valores\"],\"fato_fonte\":\"qualificacao.fato_observado\",\"texto\":\"Oi, pessoal, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da Fluir Pilates na internet e reparei que o site chama para a aula experimental gratuita, mas não mostra planos nem valores. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?\",\"transporte\":\"enviar\",\"motivo\":null},\"payload_hash\":\"698c7c22b2fb13236fea712fa2713efaec32d31cda007618380c8b90b4d0d2f3\"}",
+      "production"
+     ]
+    }
+   ]
+  }
+ }
+}

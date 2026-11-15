@@ -1,0 +1,9 @@
+[Unit]
+Description=Aceleriq: cópia diária do n8n às 03h40 (hora de Brasília = 06h40 UTC)
+
+[Timer]
+OnCalendar=*-*-* 06:40:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

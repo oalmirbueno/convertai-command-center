@@ -283,9 +283,71 @@ test('cadência de 3 toques: retomada em 3 dias úteis, despedida em mais 4, rob
   const semDesp = cfg('test', (e) => { e.comercial.cadencia = { ativa: true, dias_uteis: [3, 4] }; e.comercial.modelos.retomada.aprovado = true; });
   assert.deepEqual(L.acq06Candidatos(fila([s1, s2]), semDesp, Date.parse('2026-11-11T13:00:00Z')).ignorados.map((x) => x.motivo), ['modelo_nao_aprovado:despedida']);
   const esc = L.acq07PedidosEscrita({ mensagem: { wamid: 'w', em: '2026-11-02T13:01:00Z' }, lead: { lead_id: LEADS.pronto, qualificacao: {}, mensagens: [] }, decisao: { motivos: [] }, julgamento: { remetente: 'resposta_automatica' } }, null, null, c, Date.now());
-  assert.deepEqual(esc.map((x) => x.argumentos.qualificacao), [{ so_robo: true }]);
+  assert.deepEqual(esc.map((x) => x.argumentos.qualificacao), [{ so_robo: 'sim' }], 'o painel só aceita texto em qualificacao');
   const esc2 = L.acq07PedidosEscrita({ mensagem: { wamid: 'w2', em: '2026-11-02T14:00:00Z' }, lead: { lead_id: LEADS.pronto, qualificacao: { so_robo: true }, mensagens: [] }, decisao: { motivos: [] }, julgamento: { remetente: 'humano' } }, null, null, c, Date.now());
-  assert.deepEqual(esc2.map((x) => x.argumentos.qualificacao), [{ so_robo: false }]);
+  assert.deepEqual(esc2.map((x) => x.argumentos.qualificacao), [{ so_robo: 'nao' }]);
+  assert.equal(L.acq06Candidatos(fila([s1, robo], { so_robo: 'sim' }), c, qui).candidatos[0].tipo, 'retomada', 'marca em texto também vale');
+  const pergunta = { direcao: 'saida', texto: 'Rafael aqui, com quem eu falo?', enviada_em: '2026-11-02T13:02:00Z' };
+  const pessoa = { direcao: 'entrada', texto: 'Instagram', enviada_em: '2026-11-02T13:01:00Z' };
+  const frio = (extra, q) => { const f = fila([s1, pessoa, pergunta], q); Object.assign(f.itens[0], { lead_frio: true }, extra); return f; };
+  assert.equal(L.acq06Candidatos(frio(), c, qui).candidatos[0].tipo, 'retomada', 'pessoa que sumiu depois da nossa pergunta entra na cadência');
+  assert.equal(L.acq06Candidatos(frio({ em_fechamento: true }), c, qui).candidatos.length, 0, 'em fechamento fica com o Almir');
+  assert.equal(L.acq06Candidatos(frio({}, { pausar_retomada: 'sim' }), c, qui).candidatos.length, 0, 'quem pediu tempo não recebe');
+  assert.equal(L.acq06Candidatos(frio({ lead_frio: false }), c, qui).candidatos.length, 0, 'só prospecção');
+});
+
+test('conversa parada: uma volta dentro da janela, só quando a vez é da pessoa', () => {
+  const c = cfg('test', (e) => { e.comercial.continuar = { ativa: true, horas_silencio: 2, janela_max_horas: 23, minutos_resposta: 30 }; });
+  const entrou = '2026-11-09T12:44:53Z', saiu = '2026-11-09T12:44:56Z';
+  const conversa = [{ direcao: 'saida', texto: 'Oferta do diagnóstico', enviada_em: '2026-11-09T12:40:00Z' }, { direcao: 'entrada', texto: 'Instagram', enviada_em: entrou }, { direcao: 'saida', texto: 'Quem responde lá?', enviada_em: saiu }];
+  const fila = (msgs, extra, q) => ({ config: { ativo: true, horario: '09:00 a 18:00', restam_hoje: 0 }, itens: [Object.assign({ lead_id: LEADS.pronto, nome: 'Luxmi', whatsapp: '5541985417260', etapa: 'contato', qualificacao: q || {}, mensagens: msgs, fatos: [] }, extra)] });
+  const aos = (iso) => Date.parse(iso);
+  const hora = aos('2026-11-09T15:00:00Z');
+  assert.equal(L.acq06ConversaParada(fila(conversa), c, hora).tipo, 'continuar', 'mais de 2 h em silêncio');
+  assert.equal(L.acq06ConversaParada(fila(conversa), cfg('test'), hora), null, 'desligado por padrão');
+  assert.equal(L.acq06ConversaParada(fila(conversa), c, aos('2026-11-09T13:30:00Z')), null, 'menos de 2 h');
+  assert.equal(L.acq06ConversaParada(fila(conversa), c, aos('2026-11-10T12:50:00Z')), null, 'passou de 23 h: só modelo');
+  assert.equal(L.acq06ConversaParada(fila(conversa.slice(0, 2)), c, hora), null, 'a vez é nossa');
+  assert.equal(L.acq06ConversaParada(fila(conversa.concat([{ direcao: 'saida', texto: 'Voltei', enviada_em: '2026-11-09T15:00:00Z' }])), c, aos('2026-11-09T18:00:00Z')), null, 'só uma volta por silêncio');
+  assert.equal(L.acq06ConversaParada(fila(conversa, { em_fechamento: true }), c, hora), null, 'em fechamento');
+  assert.equal(L.acq06ConversaParada(fila(conversa, {}, { so_robo: 'sim' }), c, hora), null, 'robô');
+  assert.equal(L.acq06ConversaParada(fila(conversa, {}, { pausar_retomada: 'sim' }), c, hora), null, 'pediu tempo');
+  assert.equal(L.acq06ConversaParada(fila(conversa, { nao_contatar: true }), c, hora), null, 'não contatar');
+  assert.equal(L.acq06ConversaParada(fila(conversa), c, aos('2026-11-09T22:30:00Z')), null, 'fora do horário');
+  const cand = L.acq06ConversaParada(fila(conversa), c, hora);
+  const ao = cfg('test', (e) => { e.comercial.phone_number_id = '123'; });
+  const envio = L.acq06EnvioContinuar(cand, { novo: true }, { decisao: 'enviar' }, ao, { ok: true, texto: 'Oi' });
+  assert.equal(envio.decisao, 'enviar'); assert.equal(envio.payload.type, 'text');
+  assert.equal(L.acq06EnvioContinuar(cand, { novo: true }, { decisao: 'enviar' }, ao, { ok: false, motivo: 'disse_agencia' }).decisao, 'pular', 'texto reprovado não sai');
+  assert.equal(L.acq06EnvioContinuar(cand, { novo: false }, { decisao: 'enviar' }, ao, { ok: true, texto: 'Oi' }).decisao, 'pular', 'uma por dia');
+  const des = L.acq06Desfecho(envio, { resultado: 'aceita', wamid: 'w' }, { run_id: 'r', agoraMs: hora, hoje: '2026-11-09' });
+  assert.equal(des.evento.tipo, 'comercial_continuar_enviada', 'fora da conta de modelos pagos');
+  assert.match(des.evento.idempotency_key, /2026-11-09/);
+});
+
+test('diagnóstico: pessoa aceitou, entrega com o site do cadastro e sem gravar que ela mandou o link', () => {
+  const c = cfg('test');
+  const lead = { lead_id: LEADS.pronto, etapa: 'contato', qualificacao: { site: 'https://www.clinicaluxmi.com.br/' }, mensagens: [{ direcao: 'saida', texto: 'Fazemos um diagnóstico gratuito. Posso preparar?' }], fatos: [] };
+  const julg = () => ({ remetente: 'humano', intencao: 'interessado', etapa: 'descobrir', objecao: 'nenhuma', p_pare: 0, entendeu_necessidade: true });
+  const m = { wamid: 'w', em: '2026-11-09T12:41:48Z', texto: 'Pode enviar por aqui mesmo', de: '5541985417260' };
+  const fila = { config: { ativo: true } };
+  const agora = Date.parse('2026-11-09T12:42:00Z');
+  const d = L.acq07Decidir(m, lead, {}, julg(), fila, c, agora, null);
+  assert.equal(d.etapa, 'entregar_diagnostico'); assert.equal(d.entregar_diagnostico, true);
+  const semOferta = L.acq07Decidir(m, Object.assign({}, lead, { mensagens: [{ direcao: 'saida', texto: 'Oi' }] }), {}, julg(), fila, c, agora, null);
+  assert.equal(semOferta.etapa, 'descobrir', 'sem oferta não há o que entregar');
+  const link = L.acq07LinkParaAbrir({ texto: 'Pode enviar' }, lead, d);
+  assert.equal(link.do_cadastro, true); assert.equal(link.host, 'www.clinicaluxmi.com.br');
+  assert.equal(L.acq07LinkParaAbrir({ texto: 'Pode enviar' }, lead, { etapa: 'descobrir' }), null, 'sem entrega, não abre');
+  assert.equal(L.acq07LinkParaAbrir({ texto: '' }, { qualificacao: { site: 'https://instagram.com/x' } }, { etapa: 'continuar' }), null, 'rede social não serve');
+  const pagina = L.acq07LerPagina({ body: '<title>Luxmi</title><p>' + 'clínica '.repeat(60) + '</p>', statusCode: 200 }, link);
+  assert.match(L.acq07BlocoDaPagina(pagina), /SITE DA EMPRESA/);
+  assert.equal(L.acq07BlocoDaPagina({ ok: false, do_cadastro: true, url: 'x', motivo: 'y' }), '', 'site fora do ar não vira assunto');
+  const esc = L.acq07PedidosEscrita({ mensagem: { wamid: 'w', em: m.em }, lead, decisao: { motivos: [], intencao: 'interessado' }, julgamento: { remetente: 'humano' }, pagina }, null, null, c, agora);
+  assert.equal(esc.filter((x) => x.ferramenta === 'aceleriq_comercial_registrar_fato').length, 0, 'não foi o lead quem mandou o link');
+  const pausa = L.acq07PedidosEscrita({ mensagem: { wamid: 'w', em: m.em }, lead, decisao: { motivos: [], intencao: 'nao_agora' }, julgamento: { remetente: 'humano' } }, null, null, c, agora);
+  assert.deepEqual(pausa.map((x) => x.argumentos.qualificacao), [{ pausar_retomada: 'sim' }]);
+  assert.ok(L.acq07PedidoLLM({ texto: 'x' }, lead, { etapa: 'continuar', faltam: [] }, { config: {} }, c, [], null).messages[0].content.includes('retomar uma única vez'));
 });
 
 test('motor de referências: o Jev escolhe as provas do lead e elas entram no texto', () => {

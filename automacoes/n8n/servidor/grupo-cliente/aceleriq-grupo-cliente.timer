@@ -1,0 +1,10 @@
+[Unit]
+Description=Aceleriq: mensagens no grupo do cliente, a cada 2 minutos
+
+[Timer]
+OnCalendar=*:0/2
+AccuracySec=20s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

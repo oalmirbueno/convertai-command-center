@@ -1,0 +1,25 @@
+{
+ "erro": null,
+ "ultimo_no": "Gravar cursor e eventos",
+ "nos": {
+  "Detectar e validar": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "tipo": "controle",
+     "falhas": [],
+     "inicializou": false,
+     "historico_ignorado": 0,
+     "para_captura": 0,
+     "pg": [
+      5,
+      "{\"desde\":\"2026-11-09T20:27:17.849Z\"}",
+      "[]",
+      "production"
+     ]
+    }
+   ]
+  }
+ }
+}

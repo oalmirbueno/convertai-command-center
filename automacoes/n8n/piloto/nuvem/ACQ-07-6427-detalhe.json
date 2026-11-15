@@ -1,0 +1,27 @@
+{
+ "erro": null,
+ "ultimo_no": "Separar mensagens",
+ "nos": {
+  "Conferir e separar": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "tipo": "status",
+     "_ctx": {
+      "run_id": "ACQ-07:2026-11-05T18:41:59.310Z:3949e810",
+      "agoraMs": 1793904119310
+     },
+     "pg": [
+      "{\"schema_version\":\"1.0.0\",\"event_id\":\"16b85953-aac9-429e-b933-7e5951d754b5\",\"workflow_id\":\"ACQ-07\",\"run_id\":\"ACQ-07:2026-11-05T18:41:59.310Z:3949e810\",\"client_id\":null,\"entity_type\":\"mensagem_whatsapp\",\"entity_id\":\"wamid.HBgMNTU0MTg4NDg4NDM1FQIAERgSQTlDNzcyREY3NzVCQTI0MTFCAA==\",\"occurred_at\":\"2026-11-05T18:41:54.000Z\",\"observed_at\":\"2026-11-05T18:41:59.311Z\",\"source\":\"n8n:ACQ-07\",\"source_version\":null,\"correlation_id\":\"ACQ-07:2026-11-05T18:41:59.310Z:3949e810\",\"idempotency_key\":\"ACQ-07|status|wamid.HBgMNTU0MTg4NDg4NDM1FQIAERgSQTlDNzcyREY3NzVCQTI0MTFCAA==|failed\",\"evidence_refs\":[\"wamid:wamid.HBgMNTU0MTg4NDg4NDM1FQIAERgSQTlDNzcyREY3NzVCQTI0MTFCAA==\"],\"tipo\":\"comercial_envio_falhou_na_entrega\",\"payload\":{\"wamid\":\"wamid.HBgMNTU0MTg4NDg4NDM1FQIAERgSQTlDNzcyREY3NzVCQTI0MTFCAA==\",\"status\":\"failed\",\"em\":\"2026-11-05T18:41:54.000Z\",\"destinatario_final\":\"8435\",\"erros\":[{\"code\":131042,\"title\":\"Business eligibility payment issue\",\"message\":\"Business eligibility payment issue\"}]},\"payload_hash\":\"750955f5a10a4152e03be9aeafc5085579fee738c1b66931f2b84c3ea073b31d\"}",
+      "production",
+      "ACQ-07|entrega_falhou|131042",
+      "aviso",
+      "WhatsApp não entregou mensagem do Mercúrio: Business eligibility payment issue",
+      "{\"wamid\":\"wamid.HBgMNTU0MTg4NDg4NDM1FQIAERgSQTlDNzcyREY3NzVCQTI0MTFCAA==\",\"status\":\"failed\",\"em\":\"2026-11-05T18:41:54.000Z\",\"destinatario_final\":\"8435\",\"erros\":[{\"code\":131042,\"title\":\"Business eligibility payment issue\",\"message\":\"Business eligibility payment issue\"}]}"
+     ]
+    }
+   ]
+  }
+ }
+}

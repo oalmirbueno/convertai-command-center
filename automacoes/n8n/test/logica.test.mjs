@@ -320,6 +320,16 @@ test('ACQ-03: agendada não dispara; conta errada e permalink de outra conta vã
   const semLink = Object.assign({}, cme, { permalink: 'https://example.com/x' });
   assert.match(L.acq03Validar(semLink, m.posts[IDS.acerbi], contas, AGORA).motivo, /permalink_invalido/);
 });
+test('ACQ-03: cliente com grupo não espera a coleta de métricas para avisar', () => {
+  const m = criarMundo(AGORA);
+  const pubs = L.acq03Publicacoes(m.calendario[IDS.acerbi], IDS.acerbi);
+  const contas = L.acq03ContasPorProjeto(pubs);
+  const cme = pubs.find((p) => p.publication_id === 'pub-cme-1');
+  assert.equal(L.acq03Validar(cme, [], contas, AGORA).estado === 'valida', false, 'sem grupo continua esperando a prova');
+  const v = L.acq03Validar(cme, [], contas, AGORA, true);
+  assert.equal(v.estado, 'valida'); assert.equal(v.motivo, 'publicado_no_painel_sem_coleta'); assert.equal(v.prova, null);
+  assert.match(L.acq03Validar(Object.assign({}, cme, { permalink: 'https://example.com/x' }), [], contas, AGORA, true).motivo, /permalink_invalido/);
+});
 
 test('ACQ-03: captura inválida falha explicitamente; fixture fica marcada', () => {
   assert.equal(L.acq03ValidarCaptura({ url: 'https://www.instagram.com/accounts/login/', file_id: 'f' }, '@miranteluzfloripa').motivo, 'tela_de_login');
@@ -351,6 +361,15 @@ test('ACQ-03: reconciliação diária só aponta exceções (agenda vazia, pront
 test('ACQ-04: normaliza formatos, recusa futuro e carimbo fora da janela', () => {
   const a = L.acq04Normalizar({ mensagem: { id: 'm1', grupo: 'g', de: '55', em: '2026-10-14T14:00:00Z', texto: 'oi' } }, 'teste', AGORA);
   assert.equal(a.mensagens.length, 1);
+  // Leitor dos grupos (09/11): leva quem falou, se saiu do nosso número e a que mensagem responde.
+  const lido = L.acq04Normalizar({ provedor: 'baileys_3429', mensagem: { id: 'B1', grupo: '1203@g.us', de: 'eu', em: '2026-10-14T14:00:00Z', tipo: 'audio', media_id: 'B1', de_mim: true, nome: null, resposta_a: 'Q9' } }, 'baileys_3429', AGORA).mensagens[0];
+  assert.deepEqual([lido.de_mim, lido.remetente, lido.resposta_a, lido.tipo, lido.provedor], [true, 'eu', 'Q9', 'audio', 'baileys_3429']);
+  assert.equal(a.mensagens[0].de_mim, false);
+  const segredo = 'a'.repeat(64);
+  assert.equal(L.acq04SegredoConfere(segredo, L.acqSha256(segredo)), true);
+  assert.equal(L.acq04SegredoConfere(segredo + 'x', L.acqSha256(segredo)), false);
+  assert.equal(L.acq04SegredoConfere(segredo, null), false, 'sem hash gravado nada entra');
+  assert.equal(L.acq04SegredoConfere('curto', L.acqSha256('curto')), false);
   const cloud = L.acq04Normalizar({ entry: [{ changes: [{ value: { messages: [{ id: 'wamid.1', from: '55', timestamp: String(Math.floor(AGORA / 1000)), type: 'audio', audio: { id: 'media-1' } }] } }] }] }, 'cloud', AGORA);
   assert.equal(cloud.mensagens[0].tipo, 'audio');
   assert.equal(L.acq04Normalizar({ mensagem: { id: 'm', de: '5', em: '2026-10-15T14:00:00Z' } }, 't', AGORA).erros[0], 'mensagem_no_futuro');
@@ -497,4 +516,45 @@ test('produção: a leitura automática do dossiê substitui a anterior, sem emp
   assert.equal(nav.decisao, 'simular', 'navegador remoto continua simulado em produção');
   const avi = L.acqProtegerChamada(Object.assign(ped('ACQ-03', 'aceleriq_aviso_publicacao_preparar', { operator: 'default', publication_id: 'p', mensagem: 'x', channel: 'portal', idempotency_key: 'acq03:p:x:aviso' }), { client_id_escopo: 'eb1270a5-4d9e-4c67-bb17-e25fa12ada34' }), cfgProd, CONTRATO);
   assert.equal(avi.decisao, 'escrever');
+});
+
+test('ACQ-03 no grupo: texto vem da legenda, com travas; falhou, vai o texto seguro; sem grupo não avisa', () => {
+  const prod = cfg('production');
+  const VERZELO = 'e590497e-f985-47be-b8f2-493bae1da7df', SOFTY = '3d08338c-0c3b-453f-a64f-79a55c5711e8', GATUM = 'e5911ef4-f703-42b8-8885-0f62cf566e79';
+  assert.equal(L.acq03Grupo(prod, VERZELO), 'Verzelo - MKT - Aceleriq');
+  assert.equal(L.acq03Grupo(prod, SOFTY), 'Softy - MKT - Aceleriq', 'grupo liberado em 09/11');
+  assert.equal(L.acq03Grupo(prod, GATUM), null, 'cliente sem grupo na ponte');
+  assert.equal(L.acq03Grupo(cfg('test'), VERZELO), null, 'fora da produção o caminho antigo segue');
+  const p = { client_id: VERZELO, publication_id: '346620a9-77a6-46e0-8bf5-5f6f42487dc3', content_type: 'carousel', permalink: 'https://www.instagram.com/p/Dfhg-p5mdIe/',
+    titulo: 'Não cortar galhos próximos à fiação', objetivo: 'Arte do Estúdio (Mesa do cliente). Um alerta sóbrio sobre galhos próximos à rede elétrica.',
+    legenda: 'Galhos próximos à fiação não são um serviço para tentar resolver por conta própria. Não corte nem toque nos fios.\n\n#poda #curitiba' };
+  assert.equal(L.acq03MensagemSegura(p), '*Post novo no ar*\n\nGalhos próximos à fiação não são um serviço para tentar resolver por conta própria.\n\nhttps://www.instagram.com/p/Dfhg-p5mdIe/');
+  assert.equal(L.acq03MensagemSegura({ legenda: null, permalink: 'https://www.instagram.com/p/x/' }), '*Post novo no ar*\n\nConteúdo novo publicado no perfil.\n\nhttps://www.instagram.com/p/x/');
+  const pedLlm = L.acq03PedidoRedacao(p, prod);
+  assert.equal(pedLlm.model, 'anthropic/claude-sonnet-5.5');
+  assert.doesNotMatch(pedLlm.messages[1].content, /Arte do Est/, 'o objetivo interno chega limpo ao modelo');
+  const r = (o) => ({ choices: [{ message: { content: JSON.stringify(o) } }] });
+  const boa = L.acq03LerRedacao(r({ tema: 'Por que não cortar galhos perto da fiação.', o_que_esperar: 'A ideia é alertar para o risco e lembrar de chamar quem é especializado.' }), p);
+  assert.deepEqual(boa, { ok: true, tema: 'Por que não cortar galhos perto da fiação', esperar: 'A ideia é alertar para o risco e lembrar de chamar quem é especializado.' });
+  assert.equal(L.acq03LerRedacao(r({ tema: 'Carrossel tipográfico sobre poda', o_que_esperar: '' }), p).motivo, 'linguagem_interna');
+  assert.equal(L.acq03LerRedacao(r({ tema: 'Poda segura perto da fiação', o_que_esperar: 'A ideia é garantir mais clientes.' }), p).motivo, 'promessa');
+  assert.equal(L.acq03LerRedacao(r({ tema: 'Poda com 30% de desconto', o_que_esperar: '' }), p).motivo, 'numero_fora_da_legenda');
+  assert.equal(L.acq03LerRedacao(r({ tema: 'Veja em verzelo.com.br a poda', o_que_esperar: '' }), p).motivo, 'tem_link');
+  assert.equal(L.acq03LerRedacao({ error: { message: 'x' } }, p).motivo, 'modelo_indisponivel');
+  assert.equal(L.acq03LerRedacao(r({ tema: 'Qualquer tema aqui', o_que_esperar: '' }), Object.assign({}, p, { legenda: '' })).motivo, 'sem_legenda');
+  const jev = (f, pr, i) => ({ answers: { fiel: { type: 'noul', noul: f }, promessa: { type: 'noul', noul: pr }, interno: { type: 'noul', noul: i } } });
+  const q = L.acq03PedidoConferencia(p, boa);
+  assert.deepEqual(Object.keys(q.questions), ['fiel', 'promessa', 'interno']); assert.equal(q.questions.fiel.type, 'noul');
+  assert.equal(L.acq03LerConferencia(jev(0.95, 0.03, 0.02)).ok, true);
+  assert.match(L.acq03LerConferencia(jev(0.4, 0.03, 0.02)).motivo, /jev_nao_fiel/);
+  assert.match(L.acq03LerConferencia(jev(0.95, 0.6, 0.02)).motivo, /jev_promessa/);
+  assert.equal(L.acq03LerConferencia({ error: 'x' }).motivo, 'jev_indisponivel');
+  const ok = L.acq03MensagemGrupo(p, boa, L.acq03LerConferencia(jev(0.95, 0.03, 0.02)));
+  assert.equal(ok.texto, '*Post novo no ar*\n\n*Tema:* Por que não cortar galhos perto da fiação\n\n*O que esperar:* A ideia é alertar para o risco e lembrar de chamar quem é especializado.\n\nhttps://www.instagram.com/p/Dfhg-p5mdIe/');
+  assert.equal(L.acq03MensagemGrupo(p, boa, L.acq03LerConferencia(jev(0.4, 0, 0))).origem, 'segura', 'Jev reprovou: texto seguro');
+  assert.equal(L.acq03MensagemGrupo(p, { ok: false, motivo: 'promessa' }, null).texto, L.acq03MensagemSegura(p));
+  const av = L.acq03PedidoAvisoGrupo(p, ok.texto, 'default', 'Verzelo - MKT - Aceleriq');
+  assert.equal(av.argumentos.channel, 'whatsapp'); assert.equal(av.argumentos.recipient, 'Verzelo - MKT - Aceleriq'); assert.match(av.argumentos.idempotency_key, /:grupo:[0-9a-f]{10}$/);
+  assert.equal(L.acqProtegerChamada(Object.assign(ped('ACQ-03', av.ferramenta, av.argumentos), { client_id_escopo: VERZELO }), prod, CONTRATO).decisao, 'escrever');
+  assert.equal(L.acqProtegerChamada(ped('ACQ-03', 'aceleriq_aviso_publicacao_decidir', { aviso_id: 'x' }), prod, CONTRATO).decisao, 'bloquear', 'o n8n continua sem decidir: quem aprova pela regra do dono é o servidor do Hermes');
 });

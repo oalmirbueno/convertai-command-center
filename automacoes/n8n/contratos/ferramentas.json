@@ -79,6 +79,7 @@
     "aceleriq_ritual_redigir"
   ],
   "por_workflow": {
+    "ACQ-09": ["aceleriq_get_current_dossier", "aceleriq_upsert_current_dossier"],
     "ACQ-01": [
       "aceleriq_dia_prioritario",
       "aceleriq_get_current_dossier",

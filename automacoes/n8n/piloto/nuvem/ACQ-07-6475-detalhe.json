@@ -1,0 +1,499 @@
+{
+ "erro": null,
+ "ultimo_no": "Gravar resultado das escritas",
+ "nos": {
+  "Decidir": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "mensagem": {
+      "de": "554198848435",
+      "em": "2026-11-05T21:01:31.000Z",
+      "tipo": "button",
+      "botao": "Quero o diagnóstico",
+      "midia": null,
+      "texto": "Quero o diagnóstico",
+      "wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+      "anuncio": null,
+      "midia_id": null,
+      "nome_perfil": "Almir B. Bueno",
+      "contexto_wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAERgSN0FENzA4NUE2NDU2ODUwMTczAA==",
+      "phone_number_id": "1382841941586124",
+      "wamids": [
+       "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA"
+      ],
+      "partes": [
+       {
+        "de": "554198848435",
+        "em": "2026-11-05T21:01:31.000Z",
+        "tipo": "button",
+        "botao": "Quero o diagnóstico",
+        "midia": null,
+        "texto": "Quero o diagnóstico",
+        "wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+        "anuncio": null,
+        "midia_id": null,
+        "nome_perfil": "Almir B. Bueno",
+        "contexto_wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAERgSN0FENzA4NUE2NDU2ODUwMTczAA==",
+        "phone_number_id": "1382841941586124"
+       }
+      ]
+     },
+     "lead": {
+      "whatsapp": "554198848435",
+      "lead_id": "40bcf663-9e4c-4b46-9cbf-c8f9efe855a4",
+      "nome": "Almir B. Bueno",
+      "empresa": null,
+      "email": null,
+      "etapa": "novo",
+      "origem": "whatsapp",
+      "lead_frio": false,
+      "primeiro_contato_feito": false,
+      "nao_contatar": false,
+      "classe": null,
+      "qualificacao": {
+       "fonte": "whatsapp_entrada",
+       "whatsapp_confirmado": true
+      },
+      "notas": null,
+      "mensagens": [],
+      "fatos": []
+     },
+     "registro_entrada": {
+      "ok": true,
+      "simulado": false,
+      "resultado": {
+       "mensagem": {
+        "id": "a444ca10-efa1-4ec7-ab23-df069fba1fb5",
+        "lead_id": "40bcf663-9e4c-4b46-9cbf-c8f9efe855a4",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "[botão] Quero o diagnóstico",
+        "enviada_em": "2026-11-05T21:01:31+00:00",
+        "operador_slug": null,
+        "autor_id": null,
+        "id_externo": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+        "created_at": "2026-11-05T21:01:59.091056+00:00"
+       },
+       "registrada": true,
+       "primeiro_contato": false
+      },
+      "erro": null
+     },
+     "julgamento": {
+      "intencao": "interessado",
+      "confianca": 1,
+      "p_pare": 0,
+      "remetente": "menu_de_robo",
+      "etapa": "descobrir",
+      "objecao": "nenhuma",
+      "plano": "nenhum",
+      "quer_google": false,
+      "escolheu_horario": false,
+      "entendeu_necessidade": false,
+      "insiste_no_preco": false,
+      "modelo": "jev-1.14.0"
+     },
+     "decisao": {
+      "acao": "responder",
+      "responder": true,
+      "caixa": false,
+      "parar": false,
+      "cobrar": false,
+      "motivos": [
+       "menu_de_robo"
+      ],
+      "intencao": "interessado",
+      "etapa": "descobrir",
+      "objecao": "nenhuma",
+      "modo": "menu",
+      "faltam": [],
+      "plano": null,
+      "agenda": false,
+      "voz": false
+     },
+     "agora": "2026-11-05T21:01:34.403Z",
+     "ate": "2026-11-26T21:01:34.403Z",
+     "google_url": "https://www.googleapis.com/calendar/v3",
+     "google_id": "primary"
+    }
+   ]
+  },
+  "Mercúrio redige (OpenRouter)": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "id": "gen-1793912520-u2Cyn4WyLMFLjMziFpbg",
+     "object": "chat.completion",
+     "created": 1793912520,
+     "model": "anthropic/claude-sonnet-5.5",
+     "provider": "Google",
+     "system_fingerprint": null,
+     "service_tier": null,
+     "choices": [
+      {
+       "index": 0,
+       "logprobs": null,
+       "finish_reason": "stop",
+       "native_finish_reason": "end_turn",
+       "message": {
+        "role": "assistant",
+        "content": "{\"mensagens\":[\"Quero o diagnóstico\"],\"nome_cobranca\":null,\"horario_escolhido\":null,\"plano_combinado\":null,\"com_desconto\":false,\"resumo_para_almir\":null}",
+        "refusal": null,
+        "reasoning": "This is just a button click saying \"Quero o diagnóstico\" with no real menu context, but I still need to produce the required JSON output with fields like mensagens, nome_cobranca, horario_escolhido, and the rest, so I need to figure out what response makes sense here.\n\n",
+        "reasoning_details": [
+         {
+          "type": "reasoning.text",
+          "text": "This is just a button click saying \"Quero o diagnóstico\" with no real menu context, but I still need to produce the required JSON output with fields like mensagens, nome_cobranca, horario_escolhido, and the rest, so I need to figure out what response makes sense here.\n\n",
+          "format": "anthropic-claude-v1",
+          "index": 0,
+          "signature": "CAQSiAsKEggTEAIYAjgBQgh0aGlua2luZxIMhtW6gRgUgTZRaEjYGgw2PnhgGfkHrP4CZTgiMFmX4LBya6inv3riYxqnrQ2CQf79HDkduCIwXVyxgElUAiihFzCQJU7Tj/cbx7Xa9yqjChYPq58mMUnOqwR9yzIAPLHt3kTqdVMsJ/ta99p6EnDCIkhOTrVKD5BWVg6ExVFiR9CNCuATAyqsRPA3VV6ox1AhP/kO1kcQvrVZ9o4DRrTc6F/zXvx4FrPpd6GGWqDNFGBeDR81dayYYl1WgDuhS17gGpqUyddIBeB75cNwHOA3NxAmY2YWMNTJn5YhoOJibjTnlZE6TpNCExnGnGbAGga1HCTAqr7lL853lvrlR8LiN+l9SwlV+x2JFscm4hDrxFvNVBFFFO5an5lO2QAG0AD5d4oFQZ20RoYz7P3IOW9KxJXGou20Xez9PUxpFmIMmDaWu/+ba2x7+mXEVyTji1eMCTt2Q61vKwRHTgiK60mVYHQlZhkjZbdlqOtZ/8B02DkT2BM99GurUrp1is9sn9sJEAsi0i7kys9fqRgiydOlbanG1tTW9zHEYKX52Tq/h22aFpg/6VbRpp9it8HT6Hw8D1FA/HFxSMRWiRbZeE73/cLpQNdpbt6M30mqHDwzK0Zz/aMl/A+hwkzdBnNM2SkWPLBxk/SKw7wf+Apy45jF9gVzEJhnEJzpIhpa1LviRqxJHvXavRIsWRTbrFQLq8JXI9YqrJqpZSsWAtPm2nK78ovbNqcBVncU98f+swrvCgubOIaTyNgx1XjII7jKOoIrscPqfQBBBte44oAQ6Nw82W2nWH8ZossoPWlyQHGX5Fm+RkftWqxCRkwkvzhAX9plDIDshcb4/v4xQ6w2N7N0SDWxr0xbsN3qgKamKt/qCjCKowACqKUFyS+57jAeiSzyoXxuIsdzTqsECMP2ljnYifIZWO+3Y0IBWYAbPAtgFthD5unR+BIGbtATL+zbaSf69UUph+pPWxjHUcY/dnxEt6x8qMlaRCJzCOCrs3Oezlaax4Spg1csRT3jEi0o2VcA0MlvNGZxYfq0+ZAnvs/i0Rb76RbQ55yYW0CKzkP+4Kv22ZZ0gLpzqpcMEMrdHxYNYp3Y8BKjVHiq0UYiuWBM0XLBbB0w9Vp8no+mhQGmM13iaXM4hHLdhZxGpN3t6pbdaqzcSUCb3HexM2CsVoheU5Ri4nOaViDpA5m9J1XLQkOLN8Tb4sLlD88WJGXVXttzt1etjlw4mpgApLG8olb4qVN0LGXJWksrYYpE9wSkKHjfTEQ1iEptt3mz+6qHnawr6pmK0amkutVQKVVymtVvfFyx5hW5RDCxVp1Vdd+owx9Zt4Yuw9FLGb7f+WpKPbKWNsAho2Fs3+ixs5oMDpqe6UsLur42xs6a8a+vOkhtoetLjRR90+5fZTx3CEvU30zHyTtCmGk6gd/RmbCFb+iph1cbZSYJAVApGmrKp6+J4y/teZewUD9YDYNicCw4J1sA56U+7EMeZzAa9WyjF2HjRpAeOlCBzVwXTYCORk5llubmHFaPxK8hwfaHnL9z+TNKDEBQUmdowytSvHJWmrARkOzTyyGb2XM/SBL+H4U8qesjC48FZNsy7SKvrFiM95uNB/FJNtd09Hn/6//9U5XtmCkc51qx4zj/kNBiLEKzRRpKlzvy0c21k22phvHbKk7Ncv876LU3CFYWMZKfuz+bmGWMEknzyUKUsVnmxA+hq6zC2YUUJ73TS9YIdqQm9WsOdXkW3A/MLAmNSDXS8uWclRpU9RZ96Wa5fVP5G5vW9LFjrpdTXtGDcDWHsg/n3S4yAGZTM1F4V1gB6IT1BH0C2t9qcY3THtlQJdWyE/h3Oo254GlyX2duO74oo/a0CpfRXVoYAQ==.eyJlbmRwb2ludF9zbHVnIjoiYW50aHJvcGljL2NsYXVkZS1zb25uZXQtNS41LTIwMjYwOTI4fGdvb2dsZS12ZXJ0ZXgvZ2xvYmFsIn0"
+         }
+        ]
+       }
+      }
+     ],
+     "usage": {
+      "prompt_tokens": 570,
+      "completion_tokens": 403,
+      "total_tokens": 973,
+      "cost": 0.00517,
+      "is_byok": false,
+      "prompt_tokens_details": {
+       "cached_tokens": 0,
+       "cache_write_tokens": 0,
+       "audio_tokens": 0,
+       "video_tokens": 0
+      },
+      "cost_details": {
+       "upstream_inference_cost": 0.00517,
+       "upstream_inference_prompt_cost": 0.00114,
+       "upstream_inference_completions_cost": 0.00403
+      },
+      "completion_tokens_details": {
+       "reasoning_tokens": 328,
+       "image_tokens": 0,
+       "audio_tokens": 0
+      }
+     }
+    }
+   ]
+  },
+  "Conferir texto": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "workflow_id": "ACQ-07",
+     "run_id": "ACQ-07:2026-11-05T21:01:34.403Z:949d2cb6",
+     "ambiente_chamador": "production",
+     "paginar": false,
+     "ref": "cobranca|wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+     "ferramenta": "nenhuma",
+     "argumentos": {},
+     "_it": {
+      "mensagem": {
+       "de": "554198848435",
+       "em": "2026-11-05T21:01:31.000Z",
+       "tipo": "button",
+       "botao": "Quero o diagnóstico",
+       "midia": null,
+       "texto": "Quero o diagnóstico",
+       "wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+       "anuncio": null,
+       "midia_id": null,
+       "nome_perfil": "Almir B. Bueno",
+       "contexto_wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAERgSN0FENzA4NUE2NDU2ODUwMTczAA==",
+       "phone_number_id": "1382841941586124",
+       "wamids": [
+        "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA"
+       ],
+       "partes": [
+        {
+         "de": "554198848435",
+         "em": "2026-11-05T21:01:31.000Z",
+         "tipo": "button",
+         "botao": "Quero o diagnóstico",
+         "midia": null,
+         "texto": "Quero o diagnóstico",
+         "wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+         "anuncio": null,
+         "midia_id": null,
+         "nome_perfil": "Almir B. Bueno",
+         "contexto_wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAERgSN0FENzA4NUE2NDU2ODUwMTczAA==",
+         "phone_number_id": "1382841941586124"
+        }
+       ]
+      },
+      "lead": {
+       "whatsapp": "554198848435",
+       "lead_id": "40bcf663-9e4c-4b46-9cbf-c8f9efe855a4",
+       "nome": "Almir B. Bueno",
+       "empresa": null,
+       "email": null,
+       "etapa": "novo",
+       "origem": "whatsapp",
+       "lead_frio": false,
+       "primeiro_contato_feito": false,
+       "nao_contatar": false,
+       "classe": null,
+       "qualificacao": {
+        "fonte": "whatsapp_entrada",
+        "whatsapp_confirmado": true
+       },
+       "notas": null,
+       "mensagens": [],
+       "fatos": []
+      },
+      "registro_entrada": {
+       "ok": true,
+       "simulado": false,
+       "resultado": {
+        "mensagem": {
+         "id": "a444ca10-efa1-4ec7-ab23-df069fba1fb5",
+         "lead_id": "40bcf663-9e4c-4b46-9cbf-c8f9efe855a4",
+         "direcao": "entrada",
+         "canal": "whatsapp",
+         "texto": "[botão] Quero o diagnóstico",
+         "enviada_em": "2026-11-05T21:01:31+00:00",
+         "operador_slug": null,
+         "autor_id": null,
+         "id_externo": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+         "created_at": "2026-11-05T21:01:59.091056+00:00"
+        },
+        "registrada": true,
+        "primeiro_contato": false
+       },
+       "erro": null
+      },
+      "julgamento": {
+       "intencao": "interessado",
+       "confianca": 1,
+       "p_pare": 0,
+       "remetente": "menu_de_robo",
+       "etapa": "descobrir",
+       "objecao": "nenhuma",
+       "plano": "nenhum",
+       "quer_google": false,
+       "escolheu_horario": false,
+       "entendeu_necessidade": false,
+       "insiste_no_preco": false,
+       "modelo": "jev-1.14.0"
+      },
+      "decisao": {
+       "acao": "responder",
+       "responder": true,
+       "caixa": false,
+       "parar": false,
+       "cobrar": false,
+       "motivos": [
+        "menu_de_robo"
+       ],
+       "intencao": "interessado",
+       "etapa": "descobrir",
+       "objecao": "nenhuma",
+       "modo": "menu",
+       "faltam": [],
+       "plano": null,
+       "agenda": false,
+       "voz": false
+      },
+      "agora": "2026-11-05T21:01:34.403Z",
+      "ate": "2026-11-26T21:01:34.403Z",
+      "google_url": "https://www.googleapis.com/calendar/v3",
+      "google_id": "primary",
+      "horarios": [],
+      "llm": null,
+      "llm_url": "https://openrouter.ai/api/v1/chat/completions",
+      "resposta": {
+       "ok": true,
+       "partes": [
+        "Quero o diagnóstico"
+       ],
+       "texto": "Quero o diagnóstico",
+       "nome_cobranca": null,
+       "horario_escolhido": null,
+       "plano_combinado": null,
+       "com_desconto": false,
+       "resumo": null,
+       "modelo": "anthropic/claude-sonnet-5.5"
+      }
+     }
+    }
+   ]
+  },
+  "Montar envio": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "mensagem": {
+      "de": "554198848435",
+      "em": "2026-11-05T21:01:31.000Z",
+      "tipo": "button",
+      "botao": "Quero o diagnóstico",
+      "midia": null,
+      "texto": "Quero o diagnóstico",
+      "wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+      "anuncio": null,
+      "midia_id": null,
+      "nome_perfil": "Almir B. Bueno",
+      "contexto_wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAERgSN0FENzA4NUE2NDU2ODUwMTczAA==",
+      "phone_number_id": "1382841941586124",
+      "wamids": [
+       "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA"
+      ],
+      "partes": [
+       {
+        "de": "554198848435",
+        "em": "2026-11-05T21:01:31.000Z",
+        "tipo": "button",
+        "botao": "Quero o diagnóstico",
+        "midia": null,
+        "texto": "Quero o diagnóstico",
+        "wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+        "anuncio": null,
+        "midia_id": null,
+        "nome_perfil": "Almir B. Bueno",
+        "contexto_wamid": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAERgSN0FENzA4NUE2NDU2ODUwMTczAA==",
+        "phone_number_id": "1382841941586124"
+       }
+      ]
+     },
+     "lead": {
+      "whatsapp": "554198848435",
+      "lead_id": "40bcf663-9e4c-4b46-9cbf-c8f9efe855a4",
+      "nome": "Almir B. Bueno",
+      "empresa": null,
+      "email": null,
+      "etapa": "novo",
+      "origem": "whatsapp",
+      "lead_frio": false,
+      "primeiro_contato_feito": false,
+      "nao_contatar": false,
+      "classe": null,
+      "qualificacao": {
+       "fonte": "whatsapp_entrada",
+       "whatsapp_confirmado": true
+      },
+      "notas": null,
+      "mensagens": [],
+      "fatos": []
+     },
+     "registro_entrada": {
+      "ok": true,
+      "simulado": false,
+      "resultado": {
+       "mensagem": {
+        "id": "a444ca10-efa1-4ec7-ab23-df069fba1fb5",
+        "lead_id": "40bcf663-9e4c-4b46-9cbf-c8f9efe855a4",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "[botão] Quero o diagnóstico",
+        "enviada_em": "2026-11-05T21:01:31+00:00",
+        "operador_slug": null,
+        "autor_id": null,
+        "id_externo": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAEhgUM0E5N0U3RDBCMTFBMTBGNEVFNDcA",
+        "created_at": "2026-11-05T21:01:59.091056+00:00"
+       },
+       "registrada": true,
+       "primeiro_contato": false
+      },
+      "erro": null
+     },
+     "julgamento": {
+      "intencao": "interessado",
+      "confianca": 1,
+      "p_pare": 0,
+      "remetente": "menu_de_robo",
+      "etapa": "descobrir",
+      "objecao": "nenhuma",
+      "plano": "nenhum",
+      "quer_google": false,
+      "escolheu_horario": false,
+      "entendeu_necessidade": false,
+      "insiste_no_preco": false,
+      "modelo": "jev-1.14.0"
+     },
+     "decisao": {
+      "acao": "responder",
+      "responder": true,
+      "caixa": false,
+      "parar": false,
+      "cobrar": false,
+      "motivos": [
+       "menu_de_robo"
+      ],
+      "intencao": "interessado",
+      "etapa": "descobrir",
+      "objecao": "nenhuma",
+      "modo": "menu",
+      "faltam": [],
+      "plano": null,
+      "agenda": false,
+      "voz": false
+     },
+     "agora": "2026-11-05T21:01:34.403Z",
+     "ate": "2026-11-26T21:01:34.403Z",
+     "google_url": "https://www.googleapis.com/calendar/v3",
+     "google_id": "primary",
+     "horarios": [],
+     "llm": null,
+     "llm_url": "https://openrouter.ai/api/v1/chat/completions",
+     "resposta": {
+      "ok": true,
+      "partes": [
+       "Quero o diagnóstico"
+      ],
+      "texto": "Quero o diagnóstico",
+      "nome_cobranca": null,
+      "horario_escolhido": null,
+      "plano_combinado": null,
+      "com_desconto": false,
+      "resumo": null,
+      "modelo": "anthropic/claude-sonnet-5.5"
+     },
+     "envio": {
+      "decisao": "enviar",
+      "motivo": null,
+      "url": "https://graph.facebook.com/v21.0/1382841941586124/messages",
+      "media_url": "https://graph.facebook.com/v21.0/1382841941586124/media",
+      "textos": [
+       "Quero o diagnóstico"
+      ],
+      "para": "554198848435",
+      "voz": null,
+      "quantas_voz": 0
+     },
+     "enviar": true,
+     "criar_google": false,
+     "evento_google": null
+    }
+   ]
+  },
+  "Separar partes": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "i": 0,
+     "envio": {
+      "url": "https://graph.facebook.com/v21.0/1382841941586124/messages",
+      "payload": {
+       "messaging_product": "whatsapp",
+       "recipient_type": "individual",
+       "to": "554198848435",
+       "type": "text",
+       "text": {
+        "preview_url": false,
+        "body": "Quero o diagnóstico"
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

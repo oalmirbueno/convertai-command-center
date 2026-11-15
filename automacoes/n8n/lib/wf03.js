@@ -56,7 +56,8 @@ function acq03PermalinkValido(platform, url) {
 function acq03NormalizarPermalink(u) { return String(u || '').replace(/^https:\/\/instagram\.com/, 'https://www.instagram.com').replace(/\/?$/, '/'); }
 
 // Valida uma publicação. contasExtras: contas conhecidas do projeto (ex.: CME com duas contas).
-function acq03Validar(p, posts, contasPorProjeto, agoraMs) {
+// dispensaProva (10/11, dono): aviso no grupo sai assim que o painel marca publicado; não espera a coleta de métricas.
+function acq03Validar(p, posts, contasPorProjeto, agoraMs, dispensaProva) {
   var r = { publication_id: p.publication_id, estado: null, motivo: null, platform_media_id: null, prova: null };
   if (p.status !== 'published') { r.estado = 'ignorar'; r.motivo = 'status_' + p.status + '_nao_e_publicacao'; return r; }
   if (!p.published_at) { r.estado = 'revisao'; r.motivo = 'published_sem_published_at'; return r; }
@@ -70,6 +71,7 @@ function acq03Validar(p, posts, contasPorProjeto, agoraMs) {
   // Prova atual: o mesmo permalink na coleta do Instagram (social_post_metrics), da mesma conta.
   var alvo = acq03NormalizarPermalink(p.permalink);
   var prova = (posts || []).filter(function (x) { return acq03NormalizarPermalink(x.permalink) === alvo; })[0];
+  if (!prova && dispensaProva) { r.estado = 'valida'; r.motivo = 'publicado_no_painel_sem_coleta'; return r; }
   if (!prova) {
     var horas = (agoraMs - Date.parse(p.published_at)) / 3600000;
     r.estado = horas > ACQ03_PROVA_PENDENTE_MAX_HORAS ? 'revisao' : 'prova_pendente';
@@ -180,4 +182,121 @@ function acq03ExcecoesEditoriais(clientId, agenda, pubsAgendadasPassadas, agoraM
     }
   });
   return ex;
+}
+
+// ---- 09/11/2026 (dono): o aviso vai para o grupo do cliente no WhatsApp e sai sozinho depois de publicado.
+// O texto nasce da legenda publicada (título e objetivo do painel têm linguagem interna: "Arte do Estúdio...",
+// "[ACERBI | 03/11] Carrossel", "sem texto pesado"). Modelo escreve, código e Jev conferem; falhou, vai o texto seguro.
+
+var ACQ03_INTERNO_RE = /arte do est[úu]dio|mesa do cliente|sem texto pesado|post direto|\bP\d{3}\b|\bAD\d{2}\b|tarefa [0-9a-f]{6,}|\bv\d\b|tipogr[áa]fic|\b4:5\b|\b9:16\b|\bCTA\b|\breel motion\b|\bbriefing\b|\blâmina|\bpe[çc]a est[áa]tica/i;
+
+function acq03PostNoAr(cfg) {
+  var c = (cfg && cfg.post_no_ar) || {};
+  return { ativo: c.ativo === true, so_com_grupo: c.so_com_grupo !== false, grupos: c.grupos || {}, llm_url: c.llm_url || null, llm_modelo: c.llm_modelo || null };
+}
+
+// Nome exato do grupo do cliente (a ponte confere de novo ao vivo antes de enviar). Sem grupo: null.
+function acq03Grupo(cfg, clientId) {
+  var c = acq03PostNoAr(cfg);
+  var n = c.ativo ? c.grupos[clientId] : null;
+  return n ? String(n) : null;
+}
+
+// Primeira frase da legenda publicada, sem hashtag nem quebra: já passou pela aprovação do cliente.
+function acq03PrimeiraFrase(legenda) {
+  var t = String(legenda || '').replace(/#[^\s#]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  var m = t.match(/^(.{12,180}?[.!?…])(\s|$)/);
+  var f = (m ? m[1] : t.slice(0, 160)).trim();
+  return f.length >= 8 ? f : null;
+}
+
+// Texto seguro, sem modelo.
+function acq03MensagemSegura(p) {
+  var f = acq03PrimeiraFrase(p.legenda);
+  return ['*Post novo no ar*', f || 'Conteúdo novo publicado no perfil.', p.permalink].join('\n\n');
+}
+
+function acq03PedidoRedacao(p, cfg) {
+  var c = acq03PostNoAr(cfg);
+  var tipo = { carousel: 'carrossel', reel: 'reel', video: 'reel', static: 'post', story: 'story' }[p.content_type] || 'post';
+  var sistema = [
+    'Você escreve, para o grupo de WhatsApp de um cliente da Aceleriq (empresa de marketing), o aviso de que um conteúdo dele acabou de ser publicado no Instagram.',
+    'Leia a legenda publicada e devolva dois campos, em português do Brasil, simples e direto, como a equipe falaria com o dono do negócio:',
+    '- tema: do que o conteúdo trata, em até 12 palavras, sem ponto final, sem aspas, sem emoji.',
+    '- o_que_esperar: uma frase curta, começando por "A ideia é", dizendo para que o conteúdo serve para o negócio (por exemplo lembrar, tirar uma dúvida comum, mostrar um trabalho, chamar para pedir orçamento). Use só o que a legenda e o objetivo sustentam. Se não der para saber, devolva "".',
+    'Nunca prometa resultado, alcance, vendas ou número. Não invente dado, preço, prazo ou nome que não esteja na legenda.',
+    'Não use linguagem interna de produção: nada de "Arte do Estúdio", "Mesa do cliente", código de tarefa, formato (4:5, tipográfico), "CTA", "briefing". Não cite o link.',
+    'Responda só em JSON: {"tema":"...","o_que_esperar":"..."}',
+  ].join('\n');
+  var usuario = JSON.stringify({ tipo: tipo, legenda_publicada: String(p.legenda || '').slice(0, 2200), objetivo_interno: p.objetivo ? acq03ObjetivoCurto(p.objetivo) : null });
+  return { model: c.llm_modelo, messages: [{ role: 'system', content: sistema }, { role: 'user', content: usuario }], max_tokens: 400, temperature: 0.3,
+    response_format: { type: 'json_schema', json_schema: { name: 'aviso', strict: true, schema: { type: 'object', additionalProperties: false, required: ['tema', 'o_que_esperar'],
+      properties: { tema: { type: 'string' }, o_que_esperar: { type: 'string' } } } } } };
+}
+
+// Confere o que o modelo devolveu. Número só se estiver na legenda; nada de link, promessa ou jargão.
+function acq03LerRedacao(resposta, p) {
+  if (!String(p.legenda || '').trim()) return { ok: false, motivo: 'sem_legenda' };
+  if (!resposta || resposta.error) return { ok: false, motivo: 'modelo_indisponivel' };
+  var bruto = resposta.choices && resposta.choices[0] && resposta.choices[0].message && resposta.choices[0].message.content;
+  var j = null, s = String(bruto || ''), a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { j = JSON.parse(s.slice(a, b + 1)); } catch (e) { j = null; } }
+  if (!j || typeof j.tema !== 'string') return { ok: false, motivo: 'json_invalido' };
+  var limpar = function (t) { return String(t || '').replace(/\*+/g, '').replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim(); };
+  var tema = limpar(j.tema).replace(/[.]+$/, ''), esperar = limpar(j.o_que_esperar);
+  if (tema.length < 6 || tema.length > 120) return { ok: false, motivo: 'tema_fora_do_tamanho' };
+  if (esperar.length > 220) return { ok: false, motivo: 'esperar_longo' };
+  var tudo = tema + ' ' + esperar;
+  if (/https?:\/\/|www\.|\.com\b/i.test(tudo)) return { ok: false, motivo: 'tem_link' };
+  if (ACQ03_INTERNO_RE.test(tudo)) return { ok: false, motivo: 'linguagem_interna' };
+  if (/garant|com certeza vai|vai (vender|bombar|viralizar)|resultado certo/i.test(tudo)) return { ok: false, motivo: 'promessa' };
+  var fonte = String(p.legenda || '') + ' ' + String(p.objetivo || '');
+  var numeros = tudo.match(/\d[\d.,]*/g) || [];
+  if (numeros.some(function (n) { return fonte.indexOf(n.replace(/[.,]$/, '')) < 0; })) return { ok: false, motivo: 'numero_fora_da_legenda' };
+  return { ok: true, tema: tema, esperar: esperar || null };
+}
+
+// Jev confere o texto contra a legenda (julgamento sobre linguagem: não é regra de código).
+function acq03PedidoConferencia(p, red) {
+  return { model: 'jev-latest',
+    state: { legenda_publicada: String(p.legenda || '').slice(0, 2200), objetivo_do_post: p.objetivo ? acq03ObjetivoCurto(p.objetivo) : null,
+      aviso: { tema: red && red.ok ? red.tema : '', o_que_esperar: red && red.ok ? (red.esperar || '') : '' } },
+    questions: {
+      fiel: { type: 'noul', instructions: 'O `aviso.tema` descreve corretamente o assunto de `legenda_publicada`, e `aviso.o_que_esperar` (quando preenchido) é sustentado por `legenda_publicada` ou `objetivo_do_post`?',
+        criteria: { true: 'Tudo o que o aviso afirma está na legenda ou no objetivo, mesmo com outras palavras.', false: 'O aviso fala de outro assunto, ou afirma fato, número, promoção ou intenção que não aparece na legenda nem no objetivo.' } },
+      promessa: { type: 'noul', instructions: 'O `aviso` promete ou sugere resultado para o negócio (vendas, clientes, alcance, crescimento) como algo que vai acontecer?',
+        criteria: { true: 'Diz ou insinua que o post vai trazer resultado.', false: 'Só diz do que o post trata e para que ele serve, sem prometer resultado.' } },
+      interno: { type: 'noul', instructions: 'O `aviso` usa linguagem interna de quem produziu o conteúdo, que o dono do negócio não deveria ler (nome de ferramenta, código de tarefa, instrução de design ou de formato)?' },
+    } };
+}
+
+function acq03LerConferencia(resposta) {
+  var a = (resposta && resposta.answers) || {};
+  var n = function (k) { return a[k] && typeof a[k].noul === 'number' ? a[k].noul : null; };
+  var fiel = n('fiel'), promessa = n('promessa'), interno = n('interno');
+  if (fiel === null || promessa === null || interno === null) return { ok: false, motivo: 'jev_indisponivel' };
+  if (fiel < 0.7) return { ok: false, motivo: 'jev_nao_fiel:' + fiel };
+  if (promessa > 0.35) return { ok: false, motivo: 'jev_promessa:' + promessa };
+  if (interno > 0.35) return { ok: false, motivo: 'jev_interno:' + interno };
+  return { ok: true, fiel: fiel, promessa: promessa, interno: interno };
+}
+
+// A mensagem do grupo: redigida só se o código e o Jev aprovaram; senão, a segura.
+function acq03MensagemGrupo(p, red, conf) {
+  if (!red || !red.ok) return { texto: acq03MensagemSegura(p), origem: 'segura', motivo: (red && red.motivo) || 'sem_redacao' };
+  if (!conf || !conf.ok) return { texto: acq03MensagemSegura(p), origem: 'segura', motivo: (conf && conf.motivo) || 'sem_conferencia' };
+  // 09/11 (dono): blocos separados por linha em branco e rótulos em negrito, para não ficar empilhado no WhatsApp.
+  var linhas = ['*Post novo no ar*', '*Tema:* ' + red.tema];
+  if (red.esperar) linhas.push('*O que esperar:* ' + red.esperar);
+  linhas.push(p.permalink);
+  return { texto: linhas.join('\n\n'), origem: 'redigida', motivo: null };
+}
+
+// Mesmo pedido do aviso, com destino no grupo. Chave própria: mudar o destino não reaproveita o aviso do portal.
+function acq03PedidoAvisoGrupo(p, mensagem, operador, grupo) {
+  return { ref: p.publication_id + '|aviso', ferramenta: 'aceleriq_aviso_publicacao_preparar', client_id_escopo: p.client_id, argumentos: {
+    operator: operador, publication_id: p.publication_id, mensagem: String(mensagem || '').slice(0, 2000), channel: 'whatsapp', recipient: String(grupo).slice(0, 250),
+    // a chave leva o texto: o modelo pode escrever diferente numa nova tentativa, e chave igual com texto diferente o painel recusa.
+    idempotency_key: 'acq03:' + p.publication_id + ':' + acqSha256(p.permalink || '').slice(0, 12) + ':grupo:' + acqSha256(String(mensagem || '')).slice(0, 10) } };
 }

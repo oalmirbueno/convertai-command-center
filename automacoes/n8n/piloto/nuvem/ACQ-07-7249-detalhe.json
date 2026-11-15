@@ -1,0 +1,393 @@
+{
+ "erro": null,
+ "ultimo_no": "Gravar resultado das escritas",
+ "nos": {
+  "Juntar mensagens": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "mais_nova": "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0EwREY5NkUyNDI5QzA1MThDRDgA",
+     "mensagens": [
+      {
+       "m": {
+        "de": "554196932016",
+        "em": "2026-11-07T02:05:34.000Z",
+        "tipo": "text",
+        "botao": null,
+        "midia": null,
+        "texto": "stop info.com",
+        "wamid": "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0FBNUJFQTA1MjY1NUIzQTU3N0EA",
+        "anuncio": null,
+        "midia_id": null,
+        "nome_perfil": "Pry",
+        "contexto_wamid": null,
+        "phone_number_id": "1382841941586124"
+       },
+       "de8": "4196932016"
+      },
+      {
+       "m": {
+        "de": "554196932016",
+        "em": "2026-11-07T02:05:49.000Z",
+        "tipo": "text",
+        "botao": null,
+        "midia": null,
+        "texto": "stop info.com.br",
+        "wamid": "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0EwREY5NkUyNDI5QzA1MThDRDgA",
+        "anuncio": null,
+        "midia_id": null,
+        "nome_perfil": "Pry",
+        "contexto_wamid": null,
+        "phone_number_id": "1382841941586124"
+       },
+       "de8": "4196932016"
+      }
+     ],
+     "ctx": {
+      "m": {
+       "de": "554196932016",
+       "em": "2026-11-07T02:05:49.000Z",
+       "tipo": "text",
+       "botao": null,
+       "midia": null,
+       "texto": "stop info.com.br",
+       "wamid": "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0EwREY5NkUyNDI5QzA1MThDRDgA",
+       "anuncio": null,
+       "midia_id": null,
+       "nome_perfil": "Pry",
+       "contexto_wamid": null,
+       "phone_number_id": "1382841941586124"
+      },
+      "de8": "4196932016",
+      "_ctx": {
+       "run_id": "ACQ-07:2026-11-07T02:05:52.128Z:eacfc461",
+       "agoraMs": 1794017152128
+      }
+     }
+    }
+   ]
+  },
+  "Decidir": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "mensagem": {
+      "de": "554196932016",
+      "em": "2026-11-07T02:05:49.000Z",
+      "tipo": "text",
+      "botao": null,
+      "midia": null,
+      "texto": "stop info.com\nstop info.com.br",
+      "wamid": "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0EwREY5NkUyNDI5QzA1MThDRDgA",
+      "anuncio": null,
+      "midia_id": null,
+      "nome_perfil": "Pry",
+      "contexto_wamid": null,
+      "phone_number_id": "1382841941586124",
+      "wamids": [
+       "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0FBNUJFQTA1MjY1NUIzQTU3N0EA",
+       "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0EwREY5NkUyNDI5QzA1MThDRDgA"
+      ],
+      "partes": [
+       {
+        "de": "554196932016",
+        "em": "2026-11-07T02:05:34.000Z",
+        "tipo": "text",
+        "botao": null,
+        "midia": null,
+        "texto": "stop info.com",
+        "wamid": "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0FBNUJFQTA1MjY1NUIzQTU3N0EA",
+        "anuncio": null,
+        "midia_id": null,
+        "nome_perfil": "Pry",
+        "contexto_wamid": null,
+        "phone_number_id": "1382841941586124"
+       },
+       {
+        "de": "554196932016",
+        "em": "2026-11-07T02:05:49.000Z",
+        "tipo": "text",
+        "botao": null,
+        "midia": null,
+        "texto": "stop info.com.br",
+        "wamid": "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0EwREY5NkUyNDI5QzA1MThDRDgA",
+        "anuncio": null,
+        "midia_id": null,
+        "nome_perfil": "Pry",
+        "contexto_wamid": null,
+        "phone_number_id": "1382841941586124"
+       }
+      ]
+     },
+     "lead": {
+      "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+      "nome": "Pry",
+      "empresa": null,
+      "whatsapp": "554196932016",
+      "email": null,
+      "etapa": "contato",
+      "origem": "whatsapp",
+      "lead_frio": false,
+      "primeiro_contato_feito": true,
+      "nao_contatar": false,
+      "classe": null,
+      "qualificacao": {
+       "fonte": "whatsapp_entrada",
+       "whatsapp_confirmado": true
+      },
+      "proxima_acao": null,
+      "proxima_acao_em": null,
+      "valores": {
+       "mensal": 0,
+       "avulso": 0
+      },
+      "notas": null,
+      "campanha": null,
+      "campanha_meta": null,
+      "mensagens": [
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Me conta, qual é o seu negócio e como os clientes chegam até você hoje?",
+        "enviada_em": "2026-11-07T01:59:34.469+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "Tenho uma loja de informática",
+        "enviada_em": "2026-11-07T02:00:26+00:00",
+        "operador_slug": null
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Loja de informática, legal. Tem muita gente decidindo entre conserto, peça e PC montado.",
+        "enviada_em": "2026-11-07T02:00:28.771+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Hoje o cliente chega mais pelo Google, pelo Instagram, por indicação ou passando na frente da loja?",
+        "enviada_em": "2026-11-07T02:00:29.771+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "Preciso faturar 100 mil mês",
+        "enviada_em": "2026-11-07T02:00:51+00:00",
+        "operador_slug": null
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "100 mil por mês é uma meta clara, Pry. Gosto de começar pelo número.",
+        "enviada_em": "2026-11-07T02:00:53.209+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Hoje a loja fatura mais ou menos quanto por mês?",
+        "enviada_em": "2026-11-07T02:00:54.209+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "google é indicação",
+        "enviada_em": "2026-11-07T02:01:22+00:00",
+        "operador_slug": null
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "50 mil",
+        "enviada_em": "2026-11-07T02:01:36+00:00",
+        "operador_slug": null
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Dobrar de 50 para 100 mil é um salto grande, Pry. Mas já ajuda saber que vocês têm Google e indicação funcionando.",
+        "enviada_em": "2026-11-07T02:01:37.561+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Quando alguém chama pelo Google pedindo orçamento, costuma fechar ou muita gente some depois do preço?",
+        "enviada_em": "2026-11-07T02:01:38.561+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "algumas some, mas a maioria fechamos o orçamento",
+        "enviada_em": "2026-11-07T02:02:58+00:00",
+        "operador_slug": null
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Isso é bom sinal, Pry. Se a maioria fecha, o seu comercial funciona.",
+        "enviada_em": "2026-11-07T02:02:59.839+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Então o desafio parece ser fazer chegar mais gente pedindo orçamento. Hoje, mais ou menos quantos orçamentos chegam por semana?",
+        "enviada_em": "2026-11-07T02:03:00.839+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "Não tenho essa base",
+        "enviada_em": "2026-11-07T02:03:59+00:00",
+        "operador_slug": null
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Tranquilo, Pry, muita loja nem anota isso. Só que sem essa conta fica difícil saber o que realmente traz cliente.",
+        "enviada_em": "2026-11-07T02:04:01.396+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Hoje a loja tem site próprio, ou o Google é só o perfil da loja mesmo?",
+        "enviada_em": "2026-11-07T02:04:02.396+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "tem site próprio",
+        "enviada_em": "2026-11-07T02:04:53+00:00",
+        "operador_slug": null
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Boa, site próprio ajuda bastante a dar confiança.",
+        "enviada_em": "2026-11-07T02:04:56.031+00:00",
+        "operador_slug": "mercurio"
+       },
+       {
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "saida",
+        "canal": "whatsapp",
+        "texto": "Hoje ele serve só de vitrine ou a pessoa consegue pedir orçamento direto por ele, por formulário ou WhatsApp?",
+        "enviada_em": "2026-11-07T02:04:57.031+00:00",
+        "operador_slug": "mercurio"
+       }
+      ],
+      "fatos": [],
+      "atende_desde": "2026-11-07T01:59:53.044653+00:00"
+     },
+     "registro_entrada": {
+      "ok": true,
+      "simulado": false,
+      "resultado": {
+       "mensagem": {
+        "id": "f35e63a6-d9bd-483b-84ce-42a6ef101305",
+        "lead_id": "b2e4fd7f-43ef-4f09-a85b-007975e469f5",
+        "direcao": "entrada",
+        "canal": "whatsapp",
+        "texto": "stop info.com.br",
+        "enviada_em": "2026-11-07T02:05:49+00:00",
+        "operador_slug": null,
+        "autor_id": null,
+        "id_externo": "wamid.HBgMNTU0MTk2OTMyMDE2FQIAEhgUM0EwREY5NkUyNDI5QzA1MThDRDgA",
+        "created_at": "2026-11-07T02:06:15.372613+00:00"
+       },
+       "registrada": true,
+       "primeiro_contato": false
+      },
+      "erro": null
+     },
+     "julgamento": {
+      "intencao": "pare",
+      "confianca": 0.94,
+      "p_pare": 0.95,
+      "remetente": "humano",
+      "etapa": "descobrir",
+      "objecao": "nenhuma",
+      "plano": "nenhum",
+      "quer_google": false,
+      "escolheu_horario": false,
+      "entendeu_necessidade": false,
+      "insiste_no_preco": false,
+      "modelo": "jev-1.14.0"
+     },
+     "decisao": {
+      "acao": "parar",
+      "responder": false,
+      "caixa": false,
+      "parar": true,
+      "cobrar": false,
+      "motivos": [
+       "jev_pare:0.95"
+      ],
+      "intencao": "pare",
+      "etapa": "descobrir",
+      "objecao": "nenhuma",
+      "modo": "venda",
+      "faltam": [],
+      "plano": null,
+      "agenda": false,
+      "voz": false,
+      "provas": [
+       {
+        "id": "3e768fd3-56a6-427e-b657-f37eec09c1a2",
+        "titulo": "Stop Info: três entradas, uma operação que responde",
+        "texto": "Assistência técnica, loja e PC gamer disputavam a mesma atenção e o orçamento começava sem contexto. A Aceleriq organizou três portais de entrada (manutenção, loja e montagem), cada um com linguagem e chamada próprias, e site, orçamento e mídia passaram a usar a mesma triagem. Google e Meta preparados para apontar para a intenção certa. Site: stopinfo.com.br",
+        "empresa": "Stop Info",
+        "link": "https://aceleriq.com/portfolio/cases/stop-info",
+        "nicho": "assistência técnica, informática, loja, varejo, serviço local"
+       },
+       {
+        "id": "d3b4656b-e96b-46bc-9b6c-2ffb2e79a600",
+        "titulo": "Verzelo: aquisição com rota, contexto e próximo passo",
+        "texto": "As campanhas recebiam contatos fora da área atendida. A segmentação foi concentrada em 4 regiões (Curitiba, Almirante Tamandaré, Itaperuçu e Rio Branco do Sul), os criativos passaram a explicar serviço e área, e site e Instagram Direct ganharam papéis diferentes. No recorte acompanhado, o primeiro contato qualificado veio do site. Site: verzelo.com.br",
+        "empresa": "Verzelo",
+        "link": "https://aceleriq.com/portfolio/cases/verzelo",
+        "nicho": "serviço premium, jardinagem, paisagismo, tráfego pago, serviço por região"
+       }
+      ]
+     },
+     "agora": "2026-11-07T02:05:52.128Z",
+     "ate": "2026-11-28T02:05:52.128Z",
+     "google_url": "https://www.googleapis.com/calendar/v3",
+     "google_id": "primary"
+    }
+   ]
+  }
+ }
+}

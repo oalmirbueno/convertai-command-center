@@ -34,7 +34,7 @@ if (arg('teste-real', null)) {
 export const IDS = {
   f00: 'AcqF00Ferramenta', e00: 'AcqE00ErrosComum', w01: 'Acq01ContextoRit', w02: 'Acq02DespachoApr',
   w03: 'Acq03PostNoArPub', w04: 'Acq04ConversasCt', w05: 'Acq05DiaPrioRadr',
-  w06: 'Acq06ComercialPC', w07: 'Acq07ComercialRs', w08: 'Acq08ComercialRp',
+  w06: 'Acq06ComercialPC', w07: 'Acq07ComercialRs', w08: 'Acq08ComercialRp', w09: 'Acq09ResumoDoDia', w10: 'Acq10FilaConversas', w11: 'Acq11MensagemSem', w12: 'Acq12MidiaGrupos', w13: 'Acq13RadarAnuncio', w14: 'Acq14InstagramCD', w15: 'Acq15RelatAnuncio',
 };
 // Credenciais só por referência (nome). Os ids são os da instância local de teste; na importação
 // em outra instância o n8n pede para escolher a credencial pelo nome.
@@ -479,7 +479,7 @@ return [{ json: { validos: r.validos.length, invalidos: r.invalidos, pg: [JSON.s
 function acq03() {
   const W = 'ACQ-03';
   const wf = new Wf(IDS.w03, 'ACQ-03-Post-No-Ar', 'Detecta publicação comprovada, valida conta/permalink/prova, captura o perfil e prepara o aviso para revisão; reconciliação editorial diária.');
-  const t1 = wf.no('A cada 10 minutos', 'n8n-nodes-base.scheduleTrigger', 1.4, { rule: { interval: [{ field: 'minutes', minutesInterval: 10 }] } }, { col: 0 }, 0);
+  const t1 = wf.no('A cada 10 minutos', 'n8n-nodes-base.scheduleTrigger', 1.4, { rule: { interval: [{ field: 'minutes', minutesInterval: 5 }] } }, { col: 0 }, 0);
   const t2 = manual(wf, 'Executar manualmente', 1);
   const t3 = cron(wf, 'Reconciliação diária 07h30', '0 30 7 * * *', 3);
   const t4 = wf.no('Entrada interna', 'n8n-nodes-base.executeWorkflowTrigger', 1.2, { inputSource: 'passthrough' }, { col: 0, notes: 'Entrada: { modo: poll|reconciliacao }.' }, 2);
@@ -525,8 +525,9 @@ const contas = acq03ContasPorProjeto(pubs);
 const itens = [], eventos = [];
 let pendenteMaisAntigo = null;
 det.novas.forEach((p) => {
-  if (posts[p.client_id] === null) { pendenteMaisAntigo = pendenteMaisAntigo || p.published_at; return; }
-  const v = acq03Validar(p, posts[p.client_id], contas, ctx.agoraMs);
+  const comGrupo = Boolean(acq03Grupo(CFG, p.client_id));
+  if (posts[p.client_id] === null && !comGrupo) { pendenteMaisAntigo = pendenteMaisAntigo || p.published_at; return; }
+  const v = acq03Validar(p, posts[p.client_id] || [], contas, ctx.agoraMs, comGrupo);
   if (v.estado === 'prova_pendente') { if (!pendenteMaisAntigo || p.published_at < pendenteMaisAntigo) pendenteMaisAntigo = p.published_at; return; }
   if (v.estado === 'ignorar') return;
   if (v.estado === 'revisao') {
@@ -572,20 +573,68 @@ return $('Detectar e validar').all().filter((i) => i.json.tipo === 'captura').ma
     screenshot_file_id: vc.ok ? vc.screenshot_file_id : null, captura: vc, comparacao: cmp, mensagem: msg.texto, afirma_crescimento: msg.afirma_crescimento };
   return { json: { pub: p, validacao: v, captura: vc, conteudo: conteudo } };
 });`, {}, 1);
+  // 09/11 (dono): com post_no_ar na config, o aviso vai para o grupo do cliente e o texto nasce da legenda publicada
+  // (modelo escreve, código e Jev conferem, texto seguro se falhar). Sem post_no_ar, as duas chamadas falham de
+  // propósito e o caminho antigo (portal, mensagem antiga) segue igual.
+  const rd = code(wf, 'Preparar texto do aviso', ['adaptador', 'wf03'], `
+const pn = acq03PostNoAr(CFG);
+return $input.all().map((i, idx) => {
+  const p = i.json.pub;
+  const grupo = acq03Grupo(CFG, p.client_id);
+  return { json: Object.assign({}, i.json, { grupo: grupo, llm_url: grupo && pn.llm_url ? pn.llm_url : 'http://127.0.0.1:9/sem-redacao', llm: grupo ? acq03PedidoRedacao(p, CFG) : {} }), pairedItem: { item: idx } };
+});`, {}, 1);
+  const ll = wf.no('Redigir aviso (OpenRouter)', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: 'Aceleriq Post no ar (n8n)' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llm) }}',
+    options: { timeout: 45000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.llm, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 3000 }, 1);
+  const pc = code(wf, 'Pedir conferência ao Jev', ['adaptador', 'wf03'], `
+const base = $('Preparar texto do aviso').all();
+return $input.all().map((i, idx) => {
+  const b = base[idx].json;
+  const red = b.grupo ? acq03LerRedacao(i.json, b.pub) : { ok: false, motivo: 'sem_grupo' };
+  return { json: { redacao: red, jev: acq03PedidoConferencia(b.pub, red), jev_url: red.ok ? CFG.jev_url : 'http://127.0.0.1:9/sem-conferencia' }, pairedItem: { item: idx } };
+});`, {}, 1);
+  const jc = wf.no('Conferir aviso com Jev', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.jev_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.jev) }}',
+    options: { timeout: 20000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.jev, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 3000 }, 1);
+  const ft = code(wf, 'Fechar texto do aviso', ['adaptador', 'wf03'], `
+const base = $('Preparar texto do aviso').all();
+const reds = $('Pedir conferência ao Jev').all();
+return $input.all().map((i, idx) => {
+  const b = base[idx].json, red = reds[idx].json.redacao;
+  if (!b.grupo) return { json: Object.assign({}, b, { llm: null, texto_grupo: null }), pairedItem: { item: idx } };
+  const conf = red.ok ? acq03LerConferencia(i.json) : null;
+  const msg = acq03MensagemGrupo(b.pub, red, conf);
+  const conteudo = Object.assign({}, b.conteudo, { mensagem: msg.texto, destino: { channel: 'whatsapp', recipient: b.grupo }, texto: { origem: msg.origem, motivo: msg.motivo, conferencia: conf } });
+  return { json: Object.assign({}, b, { llm: null, conteudo: conteudo, texto_grupo: { origem: msg.origem, motivo: msg.motivo } }), pairedItem: { item: idx } };
+});`, {}, 1);
   // O aviso vai para a Revisão do Ciclo (MCP 2.10.0); a captura do perfil é evidência extra, não condição.
+  // Com grupo: canal whatsapp e nome exato do grupo (quem decide e envia é o servidor do Hermes, com a regra do dono).
   const pav = code(wf, 'Pedir aviso na revisão', ['adaptador', 'wf03'], `
 ${PEDIDO(W)}
 const ctx = $('Preparar rodada').first().json._ctx;
-return $input.all().map((i) => ({ json: pedido(acq03PedidoAviso(i.json.pub, i.json.conteudo.mensagem, CFG.operador), ctx.run_id) }));`, {}, 1);
+const pn = acq03PostNoAr(CFG);
+return $input.all().map((i) => {
+  const p = i.json.pub;
+  if (i.json.grupo) return { json: pedido(acq03PedidoAvisoGrupo(p, i.json.conteudo.mensagem, CFG.operador, i.json.grupo), ctx.run_id) };
+  if (pn.ativo && pn.so_com_grupo) return { json: pedido({ ref: p.publication_id + '|aviso', ferramenta: 'nenhuma', argumentos: {} }, ctx.run_id) };
+  return { json: pedido(acq03PedidoAviso(p, i.json.conteudo.mensagem, CFG.operador), ctx.run_id) };
+});`, {}, 1);
   const fav = ferramenta(wf, 'Preparar aviso na revisão', {}, 1);
   const fch = code(wf, 'Fechar aviso', ['adaptador', 'wf03'], `
 const ctx = $('Preparar rodada').first().json._ctx;
 const res = $input.all().map((i) => i.json);
-return $('Montar aviso').all().map((i) => {
+const pn = acq03PostNoAr(CFG);
+return $('Fechar texto do aviso').all().map((i) => {
   const p = i.json.pub, v = i.json.validacao, vc = i.json.captura;
   const r = res.filter((x) => x.ref === p.publication_id + '|aviso')[0];
-  const st = acq03EstadoDoAviso(r);
-  const conteudo = Object.assign({}, i.json.conteudo, { aviso_id: st.aviso_id, revisao: st.estado === 'em_revisao' ? 'aviso na Revisão do Ciclo, aguardando o dono' : st.motivo });
+  const semGrupo = pn.ativo && pn.so_com_grupo && !i.json.grupo;
+  const st = semGrupo ? { estado: 'descartada', motivo: 'cliente_sem_grupo', aviso_id: null } : acq03EstadoDoAviso(r);
+  const conteudo = Object.assign({}, i.json.conteudo, { aviso_id: st.aviso_id, revisao: st.estado === 'em_revisao' ? (i.json.grupo ? 'aviso preparado para o grupo; o servidor do Hermes aprova pela regra do dono e envia' : 'aviso na Revisão do Ciclo, aguardando o dono') : st.motivo });
   const proposta = { workflow_id: 'ACQ-03', client_id: p.client_id, tipo: 'aviso_publicacao', referencia: p.publication_id, idempotency_key: 'acq03:' + p.publication_id + ':' + acqSha256(p.permalink).slice(0, 12),
     conteudo: conteudo, hash: acqHashDe(conteudo), estado: st.estado, motivo: st.motivo, ambiente: AMBIENTE };
   const ev = acqEvento({ workflow_id: 'ACQ-03', run_id: ctx.run_id, client_id: p.client_id, entity_type: 'publicacao', entity_id: p.publication_id, occurred_at: p.published_at,
@@ -640,7 +689,7 @@ return [{ json: { eventos: eventos.length, pg: [JSON.stringify(eventos), AMBIENT
   wf.liga(t4, sm); wf.liga(sm, pr, 0); wf.liga(sm, p, 1);
   wf.cadeia(p, lc, pcart, lcart, pl, lp, dv, sw);
   wf.liga(sw, gc, 0); wf.liga(sw, pcap, 1);
-  wf.cadeia(pcap, cap, ma, pav, fav, fch, ga);
+  wf.cadeia(pcap, cap, ma, rd, ll, pc, jc, ft, pav, fav, fch, ga);
   wf.cadeia(t3, pr, rc, prc, la, ex, gex);
   return wf;
 }
@@ -649,14 +698,23 @@ return [{ json: { eventos: eventos.length, pg: [JSON.stringify(eventos), AMBIENT
 function acq04() {
   const W = 'ACQ-04';
   const wf = new Wf(IDS.w04, 'ACQ-04-Conversas-Contexto', 'Mensagens e áudios: registro durável, deduplicação, transcrição, classificação (Jev) e proposta versionada para o Hermes.');
-  const t1 = wf.no('Mensagem recebida', 'n8n-nodes-base.webhook', 2.2, { httpMethod: 'POST', path: 'acq04-mensagens', authentication: 'headerAuth', responseMode: 'responseNode', options: {} },
-    { col: 0, credentials: CRED.wh04, webhookId: 'acq04-mensagens-0000-4000-a000-000000000004' }, 0);
+  const t1 = wf.no('Mensagem recebida', 'n8n-nodes-base.webhook', 2.2, { httpMethod: 'POST', path: 'acq04-mensagens', authentication: 'none', responseMode: 'responseNode', options: {} },
+    { col: 0, webhookId: 'acq04-mensagens-0000-4000-a000-000000000004' }, 0);
+  // Segredo do webhook (10/11): o n8n não cria credencial por API, então o segredo fica só no servidor do leitor e o
+  // banco guarda apenas o SHA-256 dele (acq_n8n.cursores, chave webhook_segredo_sha256). Sem hash gravado, nada entra.
+  const seg = wf.no('Ler segredo do webhook', 'n8n-nodes-base.postgres', 2.7, { operation: 'executeQuery', query: "select acq_n8n.cursor_ler('ACQ-04', 'webhook_segredo_sha256') as seg", options: {} },
+    { credentials: CRED.pg, retryOnFail: true, maxTries: 3, waitBetweenTries: 2000 }, 0);
   const t2 = wf.no('Entrada interna de teste', 'n8n-nodes-base.executeWorkflowTrigger', 1.2, { inputSource: 'passthrough' }, { col: 0 }, 1);
   const n = code(wf, 'Normalizar', ['wf04'], `
-const e = $input.first().json;
-const doWebhook = e.headers !== undefined && e.body !== undefined;
+const veioDoWebhook = $('Mensagem recebida').isExecuted;
+const e = veioDoWebhook ? $('Mensagem recebida').first().json : $input.first().json;
+const doWebhook = veioDoWebhook || (e.headers !== undefined && e.body !== undefined);
 const corpo = doWebhook ? e.body : e;
 const agoraMs = Date.now();
+if (veioDoWebhook) {
+  const s = $input.first().json.seg;
+  if (!acq04SegredoConfere(e.headers['x-acq-segredo'], s && s.existe && s.valor ? s.valor.sha256 : null)) return [{ json: { rejeitar: true, motivo: 'segredo_invalido', pg: [] } }];
+}
 if (doWebhook) {
   const c = acq04ConferirCarimbo(e.headers['x-acq-carimbo'], agoraMs);
   if (!c.ok) return [{ json: { rejeitar: true, motivo: c.motivo, pg: [] } }];
@@ -664,16 +722,16 @@ if (doWebhook) {
 const prov = (doWebhook && e.headers['x-provedor']) || corpo.provedor || CFG.provedor_mensagens;
 const r = acq04Normalizar(corpo, prov, agoraMs);
 if (!r.mensagens.length) return [{ json: { rejeitar: true, motivo: r.erros.join(';') || 'vazio', pg: [] } }];
-return r.mensagens.map((m) => ({ json: { mensagem: Object.assign({}, m, { transcricao_fixture: corpo.transcricao_fixture || null }), pg: [JSON.stringify(m)] } }));`);
+return r.mensagens.map((m) => ({ json: { mensagem: Object.assign({}, m, { transcricao_fixture: corpo.transcricao_fixture || corpo.transcricao || null }), pg: [JSON.stringify(m)] } }));`);
   const val = se(wf, 'Entrada válida?', '={{ $json.rejeitar !== true }}');
   const reg = pg(wf, 'Registrar mensagem', `select acq_n8n.mensagem_registrar($1::jsonb) as r`);
   const veio = se(wf, 'Veio do webhook?', `={{ $('Mensagem recebida').isExecuted }}`);
   const resp = wf.no('Confirmar recebimento', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify({ recebido: true, duplicada: $json.r.novo === false }) }}', options: {} }, { onError: 'continueRegularOutput' }, 0);
-  const rej = wf.no('Recusar entrada', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify({ recebido: false, motivo: $json.motivo }) }}', options: { responseCode: 400 } }, { onError: 'continueRegularOutput' }, 2);
+  const rej = wf.no('Recusar entrada', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify({ recebido: false, motivo: $json.motivo }) }}', options: { responseCode: "={{ $json.motivo === 'segredo_invalido' ? 401 : 400 }}" } }, { onError: 'continueRegularOutput' }, 2);
   const filt = code(wf, 'Só novas de cliente conhecido', [], `
 const msgs = $('Normalizar').all();
 return $input.all().map((i, idx) => ({ json: Object.assign({}, msgs[idx] ? msgs[idx].json.mensagem : {}, { registro: i.json.r }) }))
-  .filter((m) => m.registro && m.registro.novo === true && m.registro.estado === 'recebida');`);
+  .filter((m) => m.json.registro && m.json.registro.novo === true && m.json.registro.estado === 'recebida');`);
   const tra = code(wf, 'Transcrição', ['wf04'], `
 // Serviço de transcrição: dependência a homologar. Sem serviço, áudio fica 'pendente' (não inventa texto).
 // No ambiente de teste a fixture traz o resultado explícito em transcricao_fixture.
@@ -741,7 +799,7 @@ return $input.all().map((i, idx) => { const b = pedidos[idx].json._base; b.event
   acq_n8n.registrar_evento($6::jsonb, $7) as evento,
   case when $8::text is not null then acq_n8n.proposta_registrar($8::jsonb) end as proposta,
   case when $9::text is not null then acq_n8n.fato_propor($12::uuid, $9, $10::jsonb, $11::timestamptz, $5::uuid) end as fato`);
-  wf.cadeia(t1, n); wf.liga(t2, n);
+  wf.cadeia(t1, seg, n); wf.liga(t2, n);
   wf.liga(n, val);
   wf.liga(val, reg, 0); wf.liga(val, rej, 1);
   wf.cadeia(reg, veio);
@@ -750,6 +808,174 @@ return $input.all().map((i, idx) => { const b = pedidos[idx].json._base; b.event
   wf.cadeia(filt, tra, gt, ctx, lctx, pj, jv, dc, sh);
   wf.liga(sh, ph, 0); wf.liga(sh, fin, 1);
   wf.cadeia(ph, hf, hj, fin);
+  return wf;
+}
+
+// ================================================================ ACQ-09
+// Resumo do dia das conversas dos grupos (10/11/2026). Só roda para (cliente, dia) com mensagem nova desde o último
+// resumo; o resumo do dia substitui o anterior e a seção do dossiê é reescrita com os últimos dias, nunca empilhada.
+function acq09() {
+  const W = 'ACQ-09';
+  const wf = new Wf(IDS.w09, 'ACQ-09-Resumo-Do-Dia', 'Resumo do dia das conversas dos grupos por cliente: modelo escreve, Jev confere cada afirmação, grava um resumo por dia e atualiza a seção do dossiê.');
+  const t1 = cron(wf, 'Três vezes ao dia (11h30, 15h30 e 20h30)', '30 11,15,20 * * *', 0);
+  const t2 = manual(wf, 'Executar manualmente', 1);
+  const dia = code(wf, 'Dia da rodada', ['wf09'], `
+if (!acq09Config(CFG).ativo) return [];
+const sp = acqAgoraSP(Date.now());
+return [{ json: { hoje: sp.data, pg: ['baileys_3429', acqSomarDias(sp.data, -1)] } }];`);
+  const pend = pg(wf, 'Dias com conversa nova', 'select * from acq_n8n.resumo_dias_pendentes($1, $2::date)');
+  const mp = code(wf, 'Montar pedido de resumo', ['wf09'], `
+const c = acq09Config(CFG);
+return $input.all().filter((i) => i.json && i.json.client_id).map((i) => acq09Preparar(i.json)).filter((p) => p.tem_conteudo)
+  .map((p) => ({ json: { p: p, llm_url: c.llm_url, llm: acq09PedidoResumo(p, CFG) } }));`);
+  const ll = wf.no('Escrever resumo (OpenRouter)', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: 'Aceleriq Resumo dos grupos (n8n)' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llm) }}',
+    options: { timeout: 90000, batching: { batch: { batchSize: 2, batchInterval: 1500 } }, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.llm, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 4000 });
+  const pc = code(wf, 'Pedir conferência ao Jev', ['wf09'], `
+const base = $('Montar pedido de resumo').all();
+return $input.all().map((i, idx) => {
+  const p = base[idx].json.p;
+  const rascunho = acq09LerResumo(i.json, p);
+  return { json: { p: p, rascunho: rascunho, jev_url: CFG.jev_url, jev: rascunho ? acq09PedidoConferencia(rascunho, p) : { model: 'jev-latest', state: {}, questions: {} } } };
+});`);
+  const jv = wf.no('Conferir com Jev', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.jev_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.jev) }}',
+    options: { timeout: 30000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.jev, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 3, waitBetweenTries: 3000 });
+  const fe = code(wf, 'Fechar resumo', ['wf09'], `
+const base = $('Pedir conferência ao Jev').all();
+return $input.all().map((i, idx) => {
+  const b = base[idx].json;
+  const f = acq09Fechar(b.rascunho, i.json, b.p);
+  const texto = acq09Texto(f);
+  return { json: { f: f, texto: texto, pg: [f.client_id, f.dia, f.estado, JSON.stringify(f), texto, acq09Hash(f), b.p.total] } };
+});`);
+  const gr = pg(wf, 'Gravar resumo do dia', 'select acq_n8n.resumo_gravar($1::uuid, $2::date, $3, $4::jsonb, $5, $6, $7::int) as r');
+  const pd = code(wf, 'Pedir dossiê atual', ['adaptador', 'wf09'], `
+${PEDIDO(W)}
+const base = $('Fechar resumo').all();
+// Um pedido por cliente (o dia mais novo): dois dias do mesmo cliente na mesma rodada disputariam a versão do dossiê.
+// Entra quem mudou e quem ficou com o dossiê por gravar (rodada anterior simulada ou que falhou).
+const porCliente = {};
+$input.all().map((i, idx) => ({ r: i.json.r, f: base[idx].json.f })).filter((x) => x.f.estado === 'ok' && x.r && (x.r.mudou === true || x.r.dossie_pendente === true))
+  .forEach((x) => { const a = porCliente[x.f.client_id]; if (!a || x.f.dia > a.f.dia) porCliente[x.f.client_id] = x; });
+return Object.values(porCliente)
+  .map((x) => ({ json: pedido({ ref: x.f.client_id + '|dossie', ferramenta: 'aceleriq_get_current_dossier', argumentos: { client_id: x.f.client_id, dossier_type: 'contexto' } },
+    'ACQ-09:' + x.f.dia, { _f: { client_id: x.f.client_id, dia: x.f.dia } }) }));`);
+  const ld = ferramenta(wf, 'Ler dossiê');
+  const ps = code(wf, 'Preparar semana', ['wf09'], `
+const base = $('Pedir dossiê atual').all();
+return $input.all().map((i, idx) => { const f = base[idx].json._f;
+  return { json: { _f: f, ok: i.json.ok === true, dossie: i.json.resultado || null, pg: [f.client_id, f.dia, acq09Config(CFG).dias_no_dossie] } }; });`);
+  const ls = pg(wf, 'Ler últimos dias', 'select acq_n8n.resumo_semana($1::uuid, $2::date, $3::int) as semana');
+  const me = code(wf, 'Montar escrita do dossiê', ['adaptador', 'wf09'], `
+${PEDIDO(W)}
+const base = $('Preparar semana').all();
+const out = [];
+$input.all().forEach((i, idx) => {
+  const b = base[idx].json;
+  if (!b.ok || !b.dossie) return;
+  const atual = (b.dossie.current && b.dossie.current.content) || '';
+  const s = acq09SecaoDossie(i.json.semana || [], atual, acq09Config(CFG).dias_no_dossie);
+  if (!s.mudou || s.excede || !s.secao) return;
+  out.push({ json: pedido({ ref: b._f.client_id + '|escrita|dossie', client_id_escopo: b._f.client_id, ferramenta: 'aceleriq_upsert_current_dossier', argumentos: {
+    client_id: b._f.client_id, dossier_type: 'contexto', content: s.conteudo,
+    change_reason: 'ACQ-09: conversas do grupo de WhatsApp até ' + b._f.dia + ' (leitura automática, sem confirmação do dono)',
+    source: 'n8n:ACQ-09', expected_version: Number(b.dossie.current_version || 0), idempotency_key: 'acq09:' + b._f.client_id + ':' + b._f.dia + ':' + acqSha256(s.secao).slice(0, 16),
+    metadata: { origem: 'automacao', confirmado_pelo_dono: false } } }, 'ACQ-09:' + b._f.dia, { _f: b._f }) });
+});
+return out;`);
+  const gd = ferramenta(wf, 'Gravar dossiê');
+  const md = code(wf, 'Marcar dossiê gravado', [], `
+const base = $('Montar escrita do dossiê').all();
+return $input.all().map((i, idx) => ({ ok: i.json.ok === true && i.json.simulado !== true, f: base[idx].json._f })).filter((x) => x.ok).map((x) => ({ json: { pg: [x.f.client_id, x.f.dia] } }));`);
+  const rd = pg(wf, 'Registrar dossiê gravado', 'select acq_n8n.resumo_dossie_ok($1::uuid, $2::date) as r');
+  wf.liga(t1, dia); wf.liga(t2, dia);
+  wf.cadeia(dia, pend, mp, ll, pc, jv, fe, gr, pd, ld, ps, ls, me, gd, md, rd);
+  return wf;
+}
+
+// ================================================================ ACQ-10
+// Fila de pendências das conversas, para a agente Clio do Hermes (10/11/2026). Só responde a quem manda o segredo
+// (o banco guarda o SHA-256). A baixa é do banco: a pendência fecha quando existe tarefa citando grupo:<chave>.
+function acq10() {
+  const wf = new Wf(IDS.w10, 'ACQ-10-Fila-Conversas', 'Entrega à Clio (Hermes) os pedidos e pendências que saíram das conversas dos grupos, sem repetir o que já virou tarefa.');
+  const t1 = wf.no('Pedido da fila', 'n8n-nodes-base.webhook', 2.2, { httpMethod: 'POST', path: 'acq10-fila-conversas', authentication: 'none', responseMode: 'responseNode', options: {} },
+    { col: 0, webhookId: 'acq10-fila-conversas-0000-4000-a000-000000000010' }, 0);
+  const seg = wf.no('Ler segredo da fila', 'n8n-nodes-base.postgres', 2.7, { operation: 'executeQuery', query: "select acq_n8n.cursor_ler('ACQ-10', 'webhook_segredo_sha256') as seg", options: {} },
+    { credentials: CRED.pg, retryOnFail: true, maxTries: 3, waitBetweenTries: 2000 }, 0);
+  const c = code(wf, 'Conferir pedido', ['wf04'], `
+const e = $('Pedido da fila').first().json;
+const s = $input.first().json.seg;
+if (!acq04SegredoConfere((e.headers || {})['x-acq-segredo'], s && s.existe && s.valor ? s.valor.sha256 : null)) return [{ json: { rejeitar: true, motivo: 'segredo_invalido', pg: [] } }];
+return [{ json: { rejeitar: false, pg: [e.body && e.body.espiar === true ? 'true' : 'false'] } }];`);
+  const val = se(wf, 'Pedido válido?', '={{ $json.rejeitar !== true }}');
+  const fila = pg(wf, 'Montar fila', 'select acq_n8n.pendencias_fila($1::boolean) as fila');
+  const resp = wf.no('Entregar fila', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify($json.fila) }}', options: {} }, { onError: 'continueRegularOutput' }, 0);
+  const rej = wf.no('Recusar pedido', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify({ recebido: false, motivo: $json.motivo }) }}', options: { responseCode: 401 } }, { onError: 'continueRegularOutput' }, 2);
+  wf.cadeia(t1, seg, c, val, fila, resp);
+  wf.liga(val, rej, 1);
+  return wf;
+}
+
+// ================================================================ ACQ-12
+// Entender imagem, vídeo e documento dos grupos (11/11/2026). O leitor manda a imagem reduzida ou os quadros do vídeo
+// (com a fala já transcrita no servidor); um modelo de visão descreve; a descrição fica na mensagem e o ACQ-09 passa a
+// lê-la. O mesmo webhook anota o arquivo que a Clio guardou no painel. Mesmo segredo do ACQ-04 (só o hash no banco).
+function acq12() {
+  const wf = new Wf(IDS.w12, 'ACQ-12-Midia-Grupos', 'Imagem, vídeo e documento dos grupos: um modelo de visão descreve o que foi enviado e a descrição entra na mensagem, para o resumo do dia.');
+  const t1 = wf.no('Mídia recebida', 'n8n-nodes-base.webhook', 2.2, { httpMethod: 'POST', path: 'acq12-midia', authentication: 'none', responseMode: 'responseNode', options: {} },
+    { col: 0, webhookId: 'acq12-midia-0000-4000-a000-000000000012' }, 0);
+  const seg = wf.no('Ler segredo do leitor', 'n8n-nodes-base.postgres', 2.7, { operation: 'executeQuery', query: "select acq_n8n.cursor_ler('ACQ-04', 'webhook_segredo_sha256') as seg", options: {} },
+    { credentials: CRED.pg, retryOnFail: true, maxTries: 3, waitBetweenTries: 2000 }, 0);
+  const c = code(wf, 'Conferir mídia', ['wf04', 'wf12'], `
+const e = $('Mídia recebida').first().json;
+const h = e.headers || {};
+const s = $input.first().json.seg;
+if (!acq04SegredoConfere(h['x-acq-segredo'], s && s.existe && s.valor ? s.valor.sha256 : null)) return [{ json: { rejeitar: true, codigo: 401, motivo: 'segredo_invalido', pg: [] } }];
+const car = acq04ConferirCarimbo(h['x-acq-carimbo'], Date.now());
+if (!car.ok) return [{ json: { rejeitar: true, codigo: 400, motivo: car.motivo, pg: [] } }];
+const r = acq12Conferir(e.body);
+if (!r.ok) return [{ json: { rejeitar: true, codigo: 400, motivo: r.motivo, pg: [] } }];
+return [{ json: { rejeitar: false, pedido: r, pg: [r.provedor, r.mensagem_id] } }];`);
+  const val = se(wf, 'Pedido válido?', '={{ $json.rejeitar !== true }}');
+  const lm = pg(wf, 'Ler mensagem', 'select acq_n8n.midia_ler($1, $2) as m');
+  const mv = code(wf, 'Montar pedido de visão', ['wf09', 'wf12'], `
+const p = $('Conferir mídia').first().json.pedido;
+const m = $input.first().json.m || { existe: false };
+const usar = acq12PrecisaVisao(p, m);
+return [{ json: { existe: m.existe === true, usar_visao: usar, llm_url: acq09Config(CFG).llm_url, llm: usar ? acq12PedidoVisao(p, m) : acq12PedidoVazio() } }];`);
+  const ex = se(wf, 'Mensagem registrada?', '={{ $json.existe === true }}');
+  const ll = wf.no('Descrever (OpenRouter)', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: 'Aceleriq Midia dos grupos (n8n)' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llm) }}',
+    options: { timeout: 90000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.llm, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 4000 });
+  const fe = code(wf, 'Fechar descrição', ['wf12'], `
+const p = $('Conferir mídia').first().json.pedido;
+const m = $('Ler mensagem').first().json.m;
+const b = $('Montar pedido de visão').first().json;
+if (p.modo === 'arquivo') return [{ json: { falhou: false, pg: [p.provedor, p.mensagem_id, null, null, 'arquivo', p.file_id] } }];
+const f = acq12Fechar(p, m, $input.first().json, b.usar_visao);
+return [{ json: { falhou: f.falhou, pg: [p.provedor, p.mensagem_id, f.descricao, JSON.stringify(f.meta), 'descrever', null] } }];`);
+  const pr = se(wf, 'Descrição pronta?', '={{ $json.falhou !== true }}');
+  const gr = pg(wf, 'Gravar mídia', "select case when $5 = 'arquivo' then acq_n8n.midia_arquivo($1, $2, $6::uuid) else acq_n8n.midia_registrar($1, $2, $3, $4::jsonb) end as r");
+  const resp = wf.no('Confirmar mídia', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify($json.r) }}', options: {} }, { onError: 'continueRegularOutput' }, 0);
+  const rej = wf.no('Recusar mídia', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify({ ok: false, motivo: $json.motivo }) }}', options: { responseCode: '={{ $json.codigo || 400 }}' } }, { onError: 'continueRegularOutput' }, 2);
+  const naoTem = wf.no('Mensagem ainda não chegou', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify({ ok: false, motivo: "mensagem_nao_registrada" }) }}', options: { responseCode: 409 } }, { onError: 'continueRegularOutput' }, 2);
+  const semDesc = wf.no('Modelo não respondeu', 'n8n-nodes-base.respondToWebhook', 1.5, { respondWith: 'json', responseBody: '={{ JSON.stringify({ ok: false, motivo: "descricao_indisponivel" }) }}', options: { responseCode: 503 } }, { onError: 'continueRegularOutput' }, 2);
+  wf.cadeia(t1, seg, c, val);
+  wf.liga(val, lm, 0); wf.liga(val, rej, 1);
+  wf.cadeia(lm, mv, ex);
+  wf.liga(ex, ll, 0); wf.liga(ex, naoTem, 1);
+  wf.cadeia(ll, fe, pr);
+  wf.liga(pr, gr, 0); wf.liga(pr, semDesc, 1);
+  wf.cadeia(gr, resp);
   return wf;
 }
 
@@ -949,12 +1175,66 @@ $input.all().forEach((i) => {
 });
 return out;`);
   const gr = pg(wf, 'Gravar desfecho do registro', SQL_EVENTO_E_INCIDENTE(W, false));
+  // Volta em conversa parada (09/11): pessoa falou, nós perguntamos, ela sumiu. Um lead por rodada, texto livre na janela de 24 h.
+  const L = 3;
+  const ec = code(wf, 'Escolher conversa parada', ['comercial', 'wf06'], `
+const ctx = $('Preparar rodada').first().json._ctx;
+const r = $('Ler fila do Mercúrio').first().json;
+if (!r.ok) return [];
+const cand = acq06ConversaParada(r.resultado, CFG, ctx.agoraMs, acqComOrcamento($input.first().json, CFG));
+if (!cand) return [];
+const tr = acqComTransporte(CFG, ${JSON.stringify(W)});
+return [{ json: { cand: cand, transporte: tr, pg: acq06PgReivindicar(cand, acq06Reivindicacao(cand, tr, ctx), AMBIENTE) } }];`, {}, L);
+  const rc = pg(wf, 'Reivindicar conversa parada', `select case when exists (select 1 from acq_n8n.eventos e where e.workflow_id = 'ACQ-06' and e.entity_type = 'lead'
+    and e.entity_id = $1 and e.tipo = any(string_to_array($2, ',')))
+  then jsonb_build_object('novo', false, 'bloqueado', true)
+  else acq_n8n.registrar_evento($3::jsonb, $4) end as r`, {}, L);
+  const pc = code(wf, 'Preparar continuação', ['comercial', 'wf07'], `
+const b = $('Escolher conversa parada').first().json;
+const r = $input.first().json.r;
+if (!r || r.novo !== true) return [];
+return [{ json: Object.assign({}, b, { r: r, link: acq07LinkParaAbrir({ texto: '' }, b.cand.lead, { etapa: 'continuar' }), llm_url: acqComCfg(CFG).llm_url }) }];`, {}, L);
+  const as = wf.no('Abrir site do lead', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'GET', url: '={{ $json.link ? $json.link.url : "https://invalid.invalid/" }}',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'User-Agent', value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36' }, { name: 'Accept-Language', value: 'pt-BR,pt;q=0.9' }] },
+    options: { timeout: 12000, redirect: { redirect: { followRedirects: true, maxRedirects: 5 } }, response: { response: { fullResponse: true, neverError: true, responseFormat: 'text' } } },
+  }, { onError: 'continueRegularOutput', notes: 'Abre o site do cadastro para o diagnóstico. Sem site, a chamada cai e o fluxo segue.' }, L);
+  const pt = code(wf, 'Pedir texto da continuação', ['comercial', 'wf07'], `
+const b = $('Preparar continuação').first().json;
+const f = $('Ler fila do Mercúrio').first().json;
+const pagina = acq07LerPagina($input.first().json, b.link);
+const aviso = { texto: '(Aviso interno: a pessoa não respondeu à sua última mensagem. Escreva agora a sua volta.)' };
+const decisao = { etapa: 'continuar', modo: 'venda', objecao: null, faltam: [], provas: [], intencao: null };
+return [{ json: Object.assign({}, b, { pagina: pagina, llm: acq07PedidoLLM(aviso, b.cand.lead, decisao, f.resultado, CFG, [], pagina) }) }];`, {}, L);
+  const lc = wf.no('Rafael redige a volta (OpenRouter)', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: 'Aceleriq Mercurio (n8n)' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llm) }}',
+    options: { timeout: 60000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.llm, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 3000 }, L);
+  const cc = code(wf, 'Conferir continuação', ['comercial', 'wf06', 'wf07'], `
+const b = $('Pedir texto da continuação').first().json;
+const f = $('Ler fila do Mercúrio').first().json;
+const conf = (f.resultado && f.resultado.config) || {};
+const fonte = (conf.orientacoes || '') + '\\n' + (b.pagina && b.pagina.ok ? b.pagina.texto + ' ' + b.pagina.precos.join(' ') + ' ' + b.pagina.url : '');
+const resp = acq07LerLLM($input.first().json, CFG, fonte, { mensagens: b.cand.lead.mensagens || [] });
+const envio = acq06EnvioContinuar(b.cand, b.r, b.transporte, CFG, resp);
+return [{ json: { envio: envio, enviar: envio.decisao === 'enviar' } }];`, {}, L);
+  const sc = se(wf, 'Enviar continuação de verdade?', '={{ $json.enviar === true }}', {}, L);
+  const hc = httpMeta(wf, 'Enviar continuação (Cloud API)', {}, L);
+  const ca = code(wf, 'Classificar continuação', ['comercial'], `
+const b = $('Conferir continuação').first().json;
+return [{ json: { envio: b.envio, meta: acqComClassificarMeta($input.first().json) } }];`, {}, L);
   [t1, t2, t3].forEach((x) => wf.liga(x, p));
   wf.cadeia(p, lf, cm, es, rv, me, ev);
   wf.liga(ev, hm, 0); wf.liga(ev, sem, 1);
   wf.cadeia(hm, cl, de);
   wf.liga(sem, de);
   wf.cadeia(de, gd, pr, rg, dr, gr);
+  wf.liga(cm, ec);
+  wf.cadeia(ec, rc, pc, as, pt, lc, cc, sc);
+  wf.liga(sc, hc, 0); wf.liga(sc, sem, 1);
+  wf.cadeia(hc, ca, de);
   return wf;
 }
 
@@ -1136,7 +1416,7 @@ const f = $('Ler fila do Mercúrio').first().json;
 const fila = f.ok ? f.resultado : null;
 const r = $('Ler horários').isExecuted ? $('Ler horários').first().json : null;
 const horarios = (r && r.ok && r.resultado && r.resultado.horarios) || [];
-return [{ json: Object.assign({}, b, { horarios: horarios, link: acq07LinkParaAbrir(b.mensagem, b.lead), llm_url: acqComCfg(CFG).llm_url }) }];`);
+return [{ json: Object.assign({}, b, { horarios: horarios, link: acq07LinkParaAbrir(b.mensagem, b.lead, b.decisao), llm_url: acqComCfg(CFG).llm_url }) }];`);
   const ab = wf.no('Abrir link do lead', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'GET', url: '={{ $json.link ? $json.link.url : "https://invalid.invalid/" }}',
     sendHeaders: true, headerParameters: { parameters: [{ name: 'User-Agent', value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36' }, { name: 'Accept-Language', value: 'pt-BR,pt;q=0.9' }] },
@@ -1333,8 +1613,379 @@ return out;`, {}, 1);
   return wf;
 }
 
+// ================================================================ ACQ-11
+// Mensagem da semana no grupo do cliente (10/11/2026): segunda de manhã, quarta e sexta no fim da tarde. Escreve com o
+// escritor da Central, confere com o Jev contra as fontes e as mensagens anteriores e prepara o pedido na Revisão do
+// Ciclo com o grupo como destino. Quem aprova (pela regra do dono) e envia é servidor/grupo-cliente, no horário.
+// Fala direto com o MCP do painel (não passa pela ponte ACQ-00, que serve o comercial ao vivo).
+function acq11() {
+  const wf = new Wf(IDS.w11, 'ACQ-11-Mensagem-Da-Semana', 'Mensagem da semana no grupo do cliente: escritor da Central escreve, Jev confere contra o painel e as conversas, e o que passa vira pedido pronto para o envio automático.');
+  const t1 = cron(wf, 'Segunda 07h20', '20 7 * * 1', 0);
+  const t2 = cron(wf, 'Quarta e sexta 17h20', '20 17 * * 3,5', 1);
+  const t3 = manual(wf, 'Executar manualmente', 2);
+  const t4 = manual(wf, 'Ensaio de um cliente', 3);
+  const mcpHttp = (nome, timeout, lane = 0) => wf.no(nome, 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.mcp_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'Accept', value: 'application/json, text/event-stream' }, { name: 'MCP-Protocol-Version', value: '2025-06-18' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.rpc) }}',
+    options: { timeout, batching: { batch: { batchSize: 1, batchInterval: 1000 } }, response: { response: { fullResponse: true, responseFormat: 'json' } } },
+  }, { credentials: CRED.mcp, onError: 'continueRegularOutput', retryOnFail: false }, lane);
+  const p = code(wf, 'Preparar rodada', ['wf01', 'wf11'], `
+const c = acq11Config(CFG);
+if (!c.ativo) return [];
+let ensaio = false;
+try { ensaio = $('Ensaio de um cliente').isExecuted === true; } catch (x) { ensaio = false; }
+const agoraMs = Date.now();
+let ritual = acq01RitualDaRodada(agoraMs, null);
+if (ritual.erro && ensaio) ritual = acq01RitualDaRodada(agoraMs, 'meio_semana');
+if (ritual.erro) return [];
+const alvoEnsaio = (CFG.mensagem_semana || {}).cliente_ensaio || null;
+if (ensaio && !alvoEnsaio) return [];
+const clientes = acq11Clientes(CFG, ensaio ? alvoEnsaio : null);
+if (!clientes.length) return [];
+// No ensaio a semana ganha outro nome: o rascunho não conta como "já escrita" e o envio real nunca o aceita.
+const marca = ensaio ? 'ensaio:' + acqAgoraSP(agoraMs).data : ritual.semana;
+return [{ json: { ctx: { ritual: ritual, marca: marca, ensaio: ensaio }, pg: [JSON.stringify(clientes), ritual.semana, ritual.chave_ciclo, ritual.tipo] } }];`);
+  const al = pg(wf, 'Quem recebe hoje', 'select acq_n8n.mensagem_semana_alvos($1::jsonb, $2::date, $3, $4) as alvos');
+  const pt = code(wf, 'Pedir texto', ['wf11'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const t = acq11Triagem(($input.first().json.alvos || []).map((a) => ctx.ensaio ? Object.assign({}, a, { ja_enviada: false, ja_escrita: false }) : a));
+return t.escrever.map((a) => ({ json: { alvo: a, mcp_url: CFG.mcp_url,
+  rpc: acq11Rpc('aceleriq_ritual_redigir', { client_id: a.client_id, ritual: ctx.ritual.tipo }, a.client_id + ctx.marca) } }));`);
+  const ht = mcpHttp('Escrever com o escritor da Central', 170000);
+  const pc = code(wf, 'Pedir conferência ao Jev', ['wf11'], `
+const base = $('Pedir texto').all();
+return $input.all().map((i, idx) => {
+  const alvo = base[idx].json.alvo;
+  const texto = acq11LerTexto(acqInterpretarResposta({ ferramenta: 'aceleriq_ritual_redigir', tipo: 'geracao' }, i.json));
+  const enxuto = { client_id: alvo.client_id, cliente: alvo.cliente, grupo: alvo.grupo, project_id: alvo.project_id };
+  return { json: { alvo: enxuto, texto: texto, jev_url: CFG.jev_url,
+    jev: texto.ok ? acq11PedidoConferencia(texto, alvo) : { model: 'jev-latest', state: { vazio: true }, questions: { nada: { type: 'noul', instructions: 'O campo vazio é verdadeiro?' } } } } };
+});`);
+  const jv = wf.no('Conferir com Jev', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.jev_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.jev) }}',
+    options: { timeout: 45000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.jev, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 3, waitBetweenTries: 3000 });
+  const fe = code(wf, 'Fechar texto', ['wf11'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const base = $('Pedir conferência ao Jev').all();
+return $input.all().map((i, idx) => {
+  const b = base[idx].json;
+  if (!b.texto.ok) return { json: { alvo: b.alvo, tem_texto: false, motivos: ['escritor: ' + b.texto.motivo] } };
+  const conf = acq11Conferir(b.texto, i.json, { semana: ctx.marca, tipo: ctx.ritual.tipo });
+  if (conf.corpo && conf.corpo !== b.texto.body) b.texto = Object.assign({}, b.texto, { body: conf.corpo });
+  const rasc = acq11Rascunho(b.texto, b.alvo, ctx.ritual, conf);
+  if (ctx.ensaio) rasc.idempotency_key = 'acq11:' + b.alvo.client_id + ':' + ctx.marca + ':' + ctx.ritual.tipo + ':' + acqSha256(b.texto.body).slice(0, 10);
+  return { json: { alvo: b.alvo, tem_texto: true, texto: b.texto, conferencia: conf, mcp_url: CFG.mcp_url, rpc: acq11Rpc('aceleriq_create_report_draft', rasc, rasc.idempotency_key) } };
+});`);
+  const tem = se(wf, 'Tem texto?', '={{ $json.tem_texto === true }}');
+  const hd = mcpHttp('Guardar rascunho no painel', 60000);
+  const pr = code(wf, 'Pedir revisão', ['wf11'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const base = $('Tem texto?').all();
+const out = [];
+$input.all().forEach((i, idx) => {
+  const b = base[idx].json;
+  const r = acqInterpretarResposta({ ferramenta: 'aceleriq_create_report_draft', tipo: 'escrita' }, i.json);
+  const reportId = r.ok ? acq11IdDoRascunho(r.resultado) : null;
+  if (!reportId || !b.conferencia.ok) return;
+  const args = acq11PedidoRevisao(b.alvo, ctx.ritual, reportId, b.texto, acq11Config(CFG).operador);
+  if (ctx.ensaio) args.idempotency_key = 'acq11:' + b.alvo.client_id + ':' + ctx.marca + ':revisao:' + reportId;
+  out.push({ json: { alvo: b.alvo, report_id: reportId, conferencia: b.conferencia, mcp_url: CFG.mcp_url, rpc: acq11Rpc('aceleriq_central_review_preparar', args, args.idempotency_key) } });
+});
+return out;`);
+  const hp = mcpHttp('Preparar pedido para o grupo', 60000);
+  const rg = code(wf, 'Registrar resultado', ['wf11'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const base = $('Pedir revisão').all();
+return $input.all().map((i, idx) => {
+  const b = base[idx].json;
+  const r = acqInterpretarResposta({ ferramenta: 'aceleriq_central_review_preparar', tipo: 'escrita' }, i.json);
+  const ev = acqEvento({ workflow_id: 'ACQ-11', run_id: acqRunId('ACQ-11', Date.now(), b.alvo.client_id), client_id: b.alvo.client_id, entity_type: 'ritual', entity_id: ctx.ritual.tipo + ':' + ctx.marca,
+    occurred_at: new Date().toISOString(), source: 'n8n:ACQ-11', source_version: 'report:' + b.report_id,
+    idempotency_key: 'ACQ-11|' + b.alvo.client_id + '|' + ctx.marca + '|' + ctx.ritual.tipo + '|' + (r.ok ? 'pronta' : 'falhou') + '|' + b.report_id, evidence_refs: ['aceleriq_ritual_redigir', 'jev'],
+    tipo: r.ok ? 'mensagem_semana_pronta' : 'mensagem_semana_sem_pedido',
+    payload: { grupo: b.alvo.grupo, report_id: b.report_id, notas: b.conferencia.notas, ensaio: ctx.ensaio, erro: r.ok ? null : (r.erro && r.erro.tipo + ': ' + r.erro.mensagem) } });
+  return { json: { pg: [JSON.stringify(ev), AMBIENTE] } };
+});`);
+  const ge = pg(wf, 'Gravar evento', 'select acq_n8n.registrar_evento($1::jsonb, $2) as evento');
+  const linhaAviso = 'const a = acq11Aviso(x.alvo, ctx.ritual, x.etapa, x.motivos); return { json: { pg: [a.key + (ctx.ensaio ? "|" + ctx.marca : ""), a.wf, a.client_id, a.sev, a.titulo, JSON.stringify(a.detalhe)] } };';
+  const a1 = code(wf, 'Aviso: sem texto', ['wf01', 'wf11'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+return $input.all().map((i) => ({ alvo: i.json.alvo, etapa: 'texto', motivos: i.json.motivos })).map((x) => { ${linhaAviso} });`, {}, 2);
+  const a2 = code(wf, 'Aviso: conferência ou rascunho', ['wf01', 'wf11'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const base = $('Tem texto?').all();
+const out = [];
+$input.all().forEach((i, idx) => {
+  const b = base[idx].json;
+  const r = acqInterpretarResposta({ ferramenta: 'aceleriq_create_report_draft', tipo: 'escrita' }, i.json);
+  if (!r.ok) out.push({ alvo: b.alvo, etapa: 'rascunho', motivos: ['painel: ' + ((r.erro && r.erro.tipo) || 'falhou')] });
+  else if (!b.conferencia.ok) out.push({ alvo: b.alvo, etapa: 'conferencia', motivos: b.conferencia.motivos });
+  else if (!acq11IdDoRascunho(r.resultado)) out.push({ alvo: b.alvo, etapa: 'rascunho', motivos: ['painel: rascunho sem id'] });
+});
+return out.map((x) => { ${linhaAviso} });`, {}, 1);
+  const a3 = code(wf, 'Aviso: pedido não preparado', ['wf01', 'wf11'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const base = $('Pedir revisão').all();
+const out = [];
+$input.all().forEach((i, idx) => {
+  const r = acqInterpretarResposta({ ferramenta: 'aceleriq_central_review_preparar', tipo: 'escrita' }, i.json);
+  if (!r.ok) out.push({ alvo: base[idx].json.alvo, etapa: 'pedido', motivos: ['painel: ' + ((r.erro && r.erro.tipo) || 'falhou') + ' ' + String((r.erro && r.erro.mensagem) || '').slice(0, 80)] });
+});
+return out.map((x) => { ${linhaAviso} });`, {}, 3);
+  const av = pg(wf, 'Avisar o dono no painel', 'select acq_n8n.incidente_registrar($1, $2, $3::uuid, $4, $5, $6::jsonb) as r', {}, 2);
+  [t1, t2, t3, t4].forEach((x) => wf.liga(x, p));
+  wf.cadeia(p, al, pt, ht, pc, jv, fe, tem);
+  wf.liga(tem, hd, 0); wf.liga(tem, a1, 1);
+  wf.cadeia(hd, pr, hp, rg, ge);
+  wf.liga(hd, a2); wf.liga(hp, a3);
+  [a1, a2, a3].forEach((x) => wf.liga(x, av));
+  return wf;
+}
+
+// ================================================================ ACQ-13
+// Radar de anúncios (11/11/2026). Só leitura e aviso: regras fixas sobre o que o painel já coleta da Meta. Todo dia
+// 08h30 grava o boletim "radar" em /anuncios/hoje (só quando algo mudou, há crítico aberto ou é segunda); a cada 2 horas
+// a vigia roda as mesmas regras e só abre ou fecha incidente (crítico novo toca o sino do dono). Fala direto com o MCP
+// do painel, como o ACQ-11 (não passa pela ponte ACQ-00, que serve o comercial ao vivo).
+function acq13() {
+  const wf = new Wf(IDS.w13, 'ACQ-13-Radar-Anuncios', 'Radar de anúncios: regras fixas sobre a coleta do painel (conta parada, saldo, teto semanal, campanha vencida, custo fora do normal, anúncio com problema, tráfego contratado sem nada rodando, coleta parada). Só lê e avisa.');
+  const t1 = cron(wf, 'Todo dia 08h30', '30 8 * * *', 0);
+  const t2 = cron(wf, 'Vigia a cada 2 horas', '45 10-20/2 * * *', 1);
+  const t3 = manual(wf, 'Executar manualmente', 2);
+  const t4 = manual(wf, 'Ensaio (não grava nada)', 3);
+  const p = code(wf, 'Preparar rodada', ['wf13'], `
+if (!acq13Config(CFG).ativo) return [];
+const foi = (n) => { try { return $(n).isExecuted === true; } catch (x) { return false; } };
+const ensaio = foi('Ensaio (não grava nada)');
+return [{ json: { ctx: { ensaio: ensaio, boletim: !foi('Vigia a cada 2 horas') }, pg: ['radar'] } }];`);
+  const lf = pg(wf, 'Ler os fatos', 'select acq_n8n.radar_anuncios_fatos() as fatos where $1::text is not null');
+  const rg = code(wf, 'Aplicar as regras', ['wf13'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const fatos = $input.first().json.fatos;
+const agora = Date.now();
+const alertas = acq13Alertas(fatos, CFG, agora);
+if (ctx.ensaio) return [{ json: { ensaio: true, alertas: alertas, boletim: acq13Boletim(fatos, alertas, { novos: alertas, continuam: [], resolvidos: [] }, CFG, agora) } }];
+return [{ json: { ensaio: false, alertas: alertas, pg: [JSON.stringify(alertas)] } }];`);
+  const en = se(wf, 'É ensaio?', '={{ $json.ensaio === true }}');
+  const fim = wf.no('Resultado do ensaio', 'n8n-nodes-base.noOp', 1, {}, {}, 3);
+  const ge = pg(wf, 'Gravar estado dos alertas', 'select acq_n8n.radar_anuncios_gravar($1::jsonb) as delta');
+  const mb = code(wf, 'Montar boletim', ['wf13'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+if (!ctx.boletim) return [];
+const fatos = $('Ler os fatos').first().json.fatos;
+const alertas = $('Aplicar as regras').first().json.alertas;
+const b = acq13Boletim(fatos, alertas, $input.first().json.delta, CFG, Date.now());
+if (!b.gravar) return [];
+const args = Object.assign({}, b.argumentos); delete args.operator;
+return [{ json: { mcp_url: CFG.mcp_url, resumo: args.resumo, rpc: acq13Rpc('aceleriq_ads_boletim', args, 'radar|' + fatos.hoje) } }];`);
+  const hb = wf.no('Gravar boletim no painel', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.mcp_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'Accept', value: 'application/json, text/event-stream' }, { name: 'MCP-Protocol-Version', value: '2025-06-18' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.rpc) }}',
+    options: { timeout: 60000, response: { response: { fullResponse: true, responseFormat: 'json' } } },
+  }, { credentials: CRED.mcp, onError: 'continueRegularOutput', retryOnFail: false });
+  const cf = code(wf, 'Conferir gravação', ['wf13'], `
+const r = acqInterpretarResposta({ ferramenta: 'aceleriq_ads_boletim', tipo: 'escrita' }, $input.first().json);
+if (r.ok) return [];
+const dia = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+return [{ json: { pg: ['ACQ-13|boletim|' + dia, 'ACQ-13', null, 'aviso', 'Radar de anúncios: o boletim de hoje não foi gravado no painel',
+  JSON.stringify({ erro: r.erro && (r.erro.tipo + ': ' + r.erro.mensagem), o_que_fazer: 'Os alertas críticos continuam chegando pelo sino. Conferir a chave do n8n no painel.' })] } }];`);
+  const av = pg(wf, 'Avisar o dono no painel', 'select acq_n8n.incidente_registrar($1, $2, $3::uuid, $4, $5, $6::jsonb) as r');
+  [t1, t2, t3, t4].forEach((x) => wf.liga(x, p));
+  wf.cadeia(p, lf, rg, en);
+  wf.liga(en, fim, 0); wf.liga(en, ge, 1);
+  wf.cadeia(ge, mb, hb, cf, av);
+  return wf;
+}
+
+// ================================================================ ACQ-14
+// Instagram da Aceleriq: comentários (e depois Direct). Pedido do Almir em 11/11/2026. A coleta fica no banco
+// (acq_n8n.instagram_tick, a cada 5 min, com o token no cofre); este fluxo pega os pendentes, o Jev julga, o código
+// decide, um modelo redige, o Jev confere a resposta e tudo é registrado. NESTA VERSÃO NADA É PUBLICADO NO INSTAGRAM:
+// não existe nó que fale com a Meta. O que precisa do Almir vira aviso (e-mail + sino) em acq_n8n.instagram_registrar.
+function acq14() {
+  const wf = new Wf(IDS.w14, 'ACQ-14-Instagram-Comentarios', 'Instagram da Aceleriq: julga cada comentário novo (Jev), redige a resposta na voz da Aceleriq, confere e registra. Não publica nada; avisa o dono só quando precisa dele.');
+  const t1 = cron(wf, 'A cada 5 minutos', '2-59/5 * * * *', 0);
+  const t2 = manual(wf, 'Executar manualmente', 1);
+  const lp = pgLiteral(wf, 'Ler comentários pendentes', 'select acq_n8n.instagram_pendentes(10) as itens', { col: 1 });
+  wf.col = 2;
+  const mj = code(wf, 'Montar julgamento', ['instagram'], `
+const itens = $input.first().json.itens || [];
+return itens.map((e) => {
+  const post = { legenda: e.legenda || '', permalink: e.permalink || null, cta: acqIgCtaDaLegenda(e.legenda) };
+  const ev = { canal: e.canal, id: e.id, de_id: e.de_id, de_usuario: e.de_usuario, texto: e.texto || '', media_id: e.media_id, em: e.em, proprio: e.proprio === true, ja_respondido: e.ja_respondido === true };
+  return { json: { ev: ev, post: post, jev_url: CFG.jev_url, jev: acqIgPedidoJev(ev, post, []) } };
+});`);
+  const http = (nome, url, corpo, cred, titulo, ms) => wf.no(nome, 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url, authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: titulo }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: corpo,
+    options: { timeout: ms, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: cred, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 3000 });
+  const jv = http('Julgar com Jev', '={{ $json.jev_url }}', '={{ JSON.stringify($json.jev) }}', CRED.jev, 'Aceleriq Instagram (n8n)', 30000);
+  const dc = code(wf, 'Decidir e montar redação', ['instagram'], `
+const base = $('Montar julgamento').all();
+const cfg = CFG.instagram || {};
+const llmUrl = (CFG.comercial && CFG.comercial.llm_url) || 'https://openrouter.ai/api/v1/chat/completions';
+const agora = new Date().toISOString();
+return $input.all().map((r, i) => {
+  const b = base[i].json;
+  const julg = acqIgLerJev(r.json);
+  const d = acqIgDecidir(b.ev, julg, cfg, {}, b.post, agora);
+  const redigir = d.resposta_publica || d.direct;
+  return { json: { julg: julg, d: d, redigir: redigir, llm_url: redigir ? llmUrl : 'http://127.0.0.1:9/sem-redacao',
+    llm: redigir ? acqIgPedidoRedacao(b.ev, b.post, d, [], cfg) : {} }, pairedItem: { item: i } };
+});`);
+  const ll = http('Redigir (OpenRouter)', '={{ $json.llm_url }}', '={{ JSON.stringify($json.llm) }}', CRED.llm, 'Aceleriq Instagram (n8n)', 90000);
+  const mc = code(wf, 'Montar conferência', ['instagram'], `
+const base = $('Montar julgamento').all();
+const dec = $('Decidir e montar redação').all();
+return $input.all().map((r, i) => {
+  const red = dec[i].json.redigir ? acqIgLerRedacao(r.json) : null;
+  const txt = red ? [red.comentario, red.direct].filter(Boolean).join(' ') : '';
+  return { json: { red: red, conferir: !!txt, jev_url: txt ? CFG.jev_url : 'http://127.0.0.1:9/sem-conferencia',
+    jev: txt ? acqIgPedidoApoio(base[i].json.ev, base[i].json.post, txt) : {} }, pairedItem: { item: i } };
+});`);
+  const ja = http('Conferir resposta com Jev', '={{ $json.jev_url }}', '={{ JSON.stringify($json.jev) }}', CRED.jev, 'Aceleriq Instagram (n8n)', 30000);
+  const fe = code(wf, 'Fechar e montar registro', ['instagram'], `
+const base = $('Montar julgamento').all();
+const dec = $('Decidir e montar redação').all();
+const conf = $('Montar conferência').all();
+const saida = [];
+$input.all().forEach((r, i) => {
+  const b = base[i].json, d = dec[i].json.d, julg = dec[i].json.julg, c = conf[i].json;
+  // Sem julgamento do Jev: não registra; o evento volta na próxima rodada (três tentativas, depois o vigia avisa).
+  if (!julg && !b.ev.proprio && !b.ev.ja_respondido) return;
+  const apoio = c.conferir ? acqIgLerApoio(r.json) : undefined;
+  const f = acqIgFechar(d, c.red, apoio);
+  const temTexto = !!(f.comentario || f.direct);
+  const estado = d.acao === 'ignorar' ? 'ignorado' : (temTexto ? 'rascunho' : 'aviso'); // nada é publicado nesta versão
+  const reg = { estado: estado, tipo: julg ? julg.tipo : null, julgamento: julg, acao: d.acao, comentario: f.comentario, direct: f.direct, aviso: f.aviso, lead: d.lead,
+    motivos: f.motivos, aviso_texto: acqIgTextoDoAviso(b.ev, f, d, b.post.permalink) };
+  saida.push({ json: { id: b.ev.id, acao: d.acao, estado: estado, aviso: f.aviso, pg: [b.ev.id, JSON.stringify(reg)] } });
+});
+return saida;`);
+  const gr = pg(wf, 'Registrar no painel', 'select acq_n8n.instagram_registrar($1, $2::jsonb) as r');
+  wf.liga(t1, lp); wf.liga(t2, lp);
+  wf.cadeia(lp, mj, jv, dc, ll, mc, ja, fe, gr);
+  return wf;
+}
+
+// ================================================================ ACQ-15
+// Relatório semanal de anúncios para o cliente, em mensagem própria (decisão do dono em 11/11/2026). Números da semana
+// fechada por código, só o lado favorável; "o que fizemos" reescrito por modelo a partir das ações registradas na conta;
+// conferência igual à da mensagem da semana (Jev por frase, número por busca exata). Nesta fase só guarda o rascunho no
+// painel e avisa o dono uma vez por rodada: nada vai ao grupo. Fala direto com o MCP (não usa a ponte ACQ-00).
+function acq15() {
+  const wf = new Wf(IDS.w15, 'ACQ-15-Relatorio-Anuncios', 'Relatório semanal de anúncios para o cliente: números da semana fechada pelo lado favorável, o que a equipe fez e o próximo passo, conferidos pelo Jev. Guarda a prévia no painel para o dono; não envia.');
+  const t1 = cron(wf, 'Terça 08h40', '40 8 * * 2', 0);
+  const t2 = manual(wf, 'Executar manualmente', 1);
+  const t3 = manual(wf, 'Ensaio (clientes de ensaio)', 2);
+  const p = code(wf, 'Preparar rodada', ['wf11', 'wf13', 'wf15'], `
+const c = acq15Config(CFG);
+if (!c.ativo) return [];
+let ensaio = false;
+try { ensaio = $('Ensaio (clientes de ensaio)').isExecuted === true; } catch (x) { ensaio = false; }
+if (ensaio && !c.ensaio.length) return [];
+const clientes = acq15Clientes(CFG, ensaio ? c.ensaio : null);
+if (!clientes.length) return [];
+return [{ json: { ctx: { ensaio: ensaio, agora: Date.now() }, pg: [JSON.stringify(clientes)] } }];`);
+  const al = pg(wf, 'Ler a semana de cada cliente', 'select acq_n8n.relatorio_anuncios_alvos($1::jsonb) as alvos');
+  const pr = code(wf, 'Pedir redação', ['wf11', 'wf13', 'wf15'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const c = acq15Config(CFG);
+const t = acq15Triagem(($input.first().json.alvos || []).map((a) => ctx.ensaio ? Object.assign({}, a, { ja_escrito: false }) : a));
+return t.escrever.map((a) => { const tem = (a.acoes || []).length > 0 && !!c.llm_url;
+  return { json: { alvo: a, llm_url: tem ? c.llm_url : 'http://127.0.0.1:9/sem-redacao', llm: tem ? acq15PedidoRedacao(a, CFG) : {} } }; });`);
+  const ll = wf.no('Redigir o que fizemos (OpenRouter)', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: 'Aceleriq Relatorio de anuncios (n8n)' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llm) }}',
+    options: { timeout: 45000, batching: { batch: { batchSize: 1, batchInterval: 500 } }, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.llm, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 3000 });
+  const pc = code(wf, 'Montar e pedir conferência', ['wf11', 'wf13', 'wf15'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const base = $('Pedir redação').all();
+return $input.all().map((i, idx) => {
+  const alvo = base[idx].json.alvo;
+  const red = acq15LerRedacao(i.json, alvo);
+  if (!red.ok) return { json: { alvo: alvo, texto: null, motivo: 'redacao: ' + red.motivo, jev_url: CFG.jev_url, jev: { model: 'jev-latest', state: { vazio: true }, questions: { nada: { type: 'noul', instructions: 'O campo vazio é verdadeiro?' } } } } };
+  const texto = acq15Montar(alvo, red, ctx.agora);
+  return { json: { alvo: alvo, texto: texto, jev_url: CFG.jev_url, jev: acq11PedidoConferencia(texto, alvo) } };
+});`);
+  const jv = wf.no('Conferir com Jev', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.jev_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.jev) }}',
+    options: { timeout: 45000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.jev, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 3, waitBetweenTries: 3000 });
+  const fe = code(wf, 'Fechar relatório', ['wf11', 'wf13', 'wf15'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const base = $('Montar e pedir conferência').all();
+return $input.all().map((i, idx) => {
+  const b = base[idx].json;
+  if (!b.texto) return { json: { cliente: b.alvo.cliente, tem_texto: false, ok: false, motivos: [b.motivo] } };
+  const marca = ctx.ensaio ? 'ensaio:' + b.alvo.hoje : b.alvo.semana_inicio;
+  const conf = acq15Conferir(b.texto, i.json, marca);
+  const rasc = acq15Rascunho(b.alvo, b.texto, conf, marca);
+  return { json: { cliente: b.alvo.cliente, client_id: b.alvo.client_id, grupo: b.alvo.grupo, proximo: b.texto.next_steps, tem_texto: true, ok: conf.ok, motivos: conf.motivos, conferencia: conf, corpo: b.texto.body, marca: marca, mcp_url: CFG.mcp_url,
+    rpc: acq11Rpc('aceleriq_create_report_draft', rasc, rasc.idempotency_key) } };
+});`);
+  const tem = se(wf, 'Tem texto?', '={{ $json.tem_texto === true }}');
+  const hd = wf.no('Guardar prévia no painel', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.mcp_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'Accept', value: 'application/json, text/event-stream' }, { name: 'MCP-Protocol-Version', value: '2025-06-18' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.rpc) }}',
+    options: { timeout: 60000, batching: { batch: { batchSize: 1, batchInterval: 1000 } }, response: { response: { fullResponse: true, responseFormat: 'json' } } },
+  }, { credentials: CRED.mcp, onError: 'continueRegularOutput', retryOnFail: false });
+  const av = code(wf, 'Resumo para o dono', ['wf11', 'wf13', 'wf15'], `
+const ctx = $('Preparar rodada').first().json.ctx;
+const fechados = $('Fechar relatório').all().map((i) => i.json);
+const comTexto = fechados.filter((f) => f.tem_texto);
+const gravados = $input.all();
+const res = fechados.filter((f) => !f.tem_texto).map((f) => ({ ok: false, cliente: f.cliente, motivos: f.motivos }));
+comTexto.forEach((f, idx) => {
+  const r = acqInterpretarResposta({ ferramenta: 'aceleriq_create_report_draft', tipo: 'escrita' }, gravados[idx] && gravados[idx].json);
+  const id = r.ok ? acq11IdDoRascunho(r.resultado) : null;
+  res.push({ ok: f.ok && !!id, cliente: f.cliente, motivos: id ? f.motivos : ['painel: ' + ((r.erro && r.erro.tipo) || 'rascunho sem id')], report_id: id });
+});
+if (!res.length) return [];
+const a = acq15Aviso(res, (ctx.ensaio ? 'ensaio:' : '') + new Date(ctx.agora - 3 * 3600000).toISOString().slice(0, 16));
+return [{ json: { resultados: res, pg: [a.key, a.wf, a.client_id, a.sev, a.titulo, JSON.stringify(a.detalhe)] } }];`);
+  const ai = pg(wf, 'Avisar o dono no painel', 'select acq_n8n.incidente_registrar($1, $2, $3::uuid, $4, $5, $6::jsonb) as r');
+  [t1, t2, t3].forEach((x) => wf.liga(x, p));
+  wf.cadeia(p, al, pr, ll, pc, jv, fe, tem);
+  // Pedido de envio na Revisão do Ciclo: só com relatorio_anuncios.preparar_envio ligado (decisão do dono). Quem aprova
+  // pela autorização dele e envia na terça é servidor/grupo-cliente (frente "anuncios").
+  const pe = code(wf, 'Pedir envio', ['wf11', 'wf13', 'wf15'], `
+if (acq15Config(CFG).preparar_envio !== true) return [];
+const base = $('Tem texto?').all();
+const out = [];
+$input.all().forEach((i, idx) => {
+  const b = base[idx].json;
+  const r = acqInterpretarResposta({ ferramenta: 'aceleriq_create_report_draft', tipo: 'escrita' }, i.json);
+  const id = r.ok ? acq11IdDoRascunho(r.resultado) : null;
+  if (!id || !b.ok) return;
+  const args = acq15PedidoRevisao(b, id, CFG.operador || 'default');
+  out.push({ json: { mcp_url: CFG.mcp_url, rpc: acq11Rpc('aceleriq_central_review_preparar', args, args.idempotency_key) } });
+});
+return out;`, {}, 1);
+  const hp = wf.no('Preparar pedido para o grupo', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.mcp_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'Accept', value: 'application/json, text/event-stream' }, { name: 'MCP-Protocol-Version', value: '2025-06-18' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.rpc) }}',
+    options: { timeout: 60000, batching: { batch: { batchSize: 1, batchInterval: 1000 } }, response: { response: { fullResponse: true, responseFormat: 'json' } } },
+  }, { credentials: CRED.mcp, onError: 'continueRegularOutput', retryOnFail: false }, 1);
+  wf.liga(tem, hd, 0);
+  wf.cadeia(hd, av, ai);
+  wf.liga(hd, pe); wf.liga(pe, hp);
+  return wf;
+}
+
 export function gerarTodos() {
-  return [acq00(), acq00Erros(), acq01(), acq02(), acq03(), acq04(), acq05(), acq06(), acq07(), acq08()];
+  return [acq00(), acq00Erros(), acq01(), acq02(), acq03(), acq04(), acq05(), acq06(), acq07(), acq08(), acq09(), acq10(), acq11(), acq12(), acq13(), acq14(), acq15()];
 }
 
 if (process.argv[1] && process.argv[1].endsWith('gerar.mjs')) {

@@ -21,7 +21,9 @@ function acq04Normalizar(corpo, provedor, agoraMs) {
     });
   } else if (corpo && corpo.mensagem) {
     var m = corpo.mensagem;
-    msgs.push({ provider_message_id: m.id, group_id: m.grupo, remetente: m.de, occurred_at: m.em, tipo: m.tipo || 'texto', texto: m.texto || null, media_id: m.media_id || null });
+    // de_mim/nome/resposta_a vêm do leitor dos grupos (servidor/leitor-grupos); nos outros formatos ficam vazios.
+    msgs.push({ provider_message_id: m.id, group_id: m.grupo, remetente: m.de, occurred_at: m.em, tipo: m.tipo || 'texto', texto: m.texto || null, media_id: m.media_id || null,
+      de_mim: m.de_mim === true, remetente_nome: m.nome ? String(m.nome).slice(0, 80) : null, resposta_a: m.resposta_a || null });
   } else {
     erros.push('formato_desconhecido');
   }
@@ -43,6 +45,13 @@ function acq04ConferirCarimbo(carimbo, agoraMs) {
   if (!isFinite(t)) return { ok: false, motivo: 'carimbo_ausente' };
   if (Math.abs(agoraMs - t) > ACQ04_JANELA_ASSINATURA_MS) return { ok: false, motivo: 'carimbo_fora_da_janela' };
   return { ok: true };
+}
+
+// Segredo do webhook: o banco guarda só o SHA-256; quem chama manda o segredo no cabeçalho. Sem hash gravado, recusa.
+function acq04SegredoConfere(recebido, sha256Esperado) {
+  var r = String(recebido || '');
+  if (!sha256Esperado || String(sha256Esperado).length !== 64 || r.length < 32) return false;
+  return acqSha256(r) === String(sha256Esperado).toLowerCase();
 }
 
 // Agrupamento: mensagens do mesmo remetente no mesmo grupo a até 3 minutos formam um trecho.

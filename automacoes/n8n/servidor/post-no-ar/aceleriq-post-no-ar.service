@@ -1,0 +1,16 @@
+[Unit]
+Description=Aceleriq: aviso de post no ar no grupo do cliente (uma rodada)
+After=network-online.target mercurio-pilot-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/aceleriq-post-no-ar
+Environment=POST_NO_AR_MODO=previa
+ExecStart=/opt/mercurio-pilot/node /opt/aceleriq-post-no-ar/enviar.mjs
+TimeoutStartSec=240
+ProtectSystem=strict
+ReadWritePaths=/var/lib/aceleriq-post-no-ar
+PrivateTmp=yes
+NoNewPrivileges=yes

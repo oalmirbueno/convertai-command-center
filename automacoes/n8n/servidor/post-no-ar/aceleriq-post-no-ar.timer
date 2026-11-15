@@ -1,0 +1,10 @@
+[Unit]
+Description=Aceleriq: confere avisos de post no ar a cada 3 minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+AccuracySec=20s
+
+[Install]
+WantedBy=timers.target

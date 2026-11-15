@@ -1,0 +1,76 @@
+{
+ "erro": null,
+ "ultimo_no": "Conferir e separar",
+ "nos": {
+  "Ler corpo bruto": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "doWebhook": true,
+     "headers": {
+      "connection": "close",
+      "host": "blue-fly-822772.hostingersite.com",
+      "x-real-ip": "2a03:2880:10ff:46::",
+      "x-forwarded-for": "2a03:2880:10ff:46::, 2a03:2880:10ff:46::",
+      "content-length": "594",
+      "x-forwarded-proto": "https",
+      "x-real-port": "54396",
+      "x-forwarded-port": "443",
+      "x-port": "443",
+      "x-lscache": "1",
+      "accept": "*/*",
+      "user-agent": "facebookexternalua",
+      "content-type": "application/json",
+      "x-hub-signature": "sha1=d6c4747c3427aaeae8f12760507917d121ec1b1a",
+      "x-hub-signature-256": "sha256=8fc6f189c887ddc52711182f4cb7285dda7eb1fe4a585e8b62e40aed8315c4d1"
+     },
+     "body": {
+      "object": "whatsapp_business_account",
+      "entry": [
+       {
+        "id": "2522709858221533",
+        "changes": [
+         {
+          "value": {
+           "messaging_product": "whatsapp",
+           "metadata": {
+            "display_phone_number": "554197392161",
+            "phone_number_id": "1382841941586124"
+           },
+           "contacts": [
+            {
+             "wa_id": "554198848435",
+             "user_id": "BR.1060188463715582"
+            }
+           ],
+           "statuses": [
+            {
+             "id": "wamid.HBgMNTU0MTk4ODQ4NDM1FQIAERgSN0FENzA4NUE2NDU2ODUwMTczAA==",
+             "status": "sent",
+             "timestamp": "1793912454",
+             "recipient_id": "554198848435",
+             "recipient_user_id": "BR.1060188463715582",
+             "pricing": {
+              "billable": true,
+              "pricing_model": "PMP",
+              "category": "marketing",
+              "type": "regular"
+             }
+            }
+           ]
+          },
+          "field": "messages"
+         }
+        ]
+       }
+      ]
+     },
+     "agora": null,
+     "bruto": "{\"object\":\"whatsapp_business_account\",\"entry\":[{\"id\":\"2522709858221533\",\"changes\":[{\"value\":{\"messaging_product\":\"whatsapp\",\"metadata\":{\"display_phone_number\":\"554197392161\",\"phone_number_id\":\"1382841941586124\"},\"contacts\":[{\"wa_id\":\"554198848435\",\"user_id\":\"BR.1060188463715582\"}],\"statuses\":[{\"id\":\"wamid.HBgMNTU0MTk4ODQ4NDM1FQIAERgSN0FENzA4NUE2NDU2ODUwMTczAA==\",\"status\":\"sent\",\"timestamp\":\"1793912454\",\"recipient_id\":\"554198848435\",\"recipient_user_id\":\"BR.1060188463715582\",\"pricing\":{\"billable\":true,\"pricing_model\":\"PMP\",\"category\":\"marketing\",\"type\":\"regular\"}}]},\"field\":\"messages\"}]}]}",
+     "erro_bruto": null
+    }
+   ]
+  }
+ }
+}

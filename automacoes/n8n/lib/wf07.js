@@ -361,6 +361,9 @@ function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs, orcamento) {
   // Primeiro acolhe e entende. Preço e plano só depois, a não ser que a pessoa insista ou já queira fechar.
   var primeiraResposta = !(lead.mensagens || []).some(function (x) { return x.direcao === 'saida'; });
   if ((julg.entendeu_necessidade === false || primeiraResposta) && !julg.insiste_no_preco && ['apresentar', 'propor_fechamento', 'tratar_objecao'].indexOf(julg.etapa) >= 0) { julg.etapa = 'acolher'; d.etapa = 'acolher'; }
+  // 09/11 (dono): oferecemos o diagnóstico e a pessoa aceitou? Entrega agora, em vez de seguir perguntando.
+  var ofereceuDiagnostico = (lead.mensagens || []).some(function (x) { return x.direcao === 'saida' && /diagn[oó]stico/i.test(String(x.texto || '')); });
+  if (julg.intencao === 'interessado' && ofereceuDiagnostico && ['descobrir', 'acolher'].indexOf(julg.etapa) >= 0) { julg.etapa = 'entregar_diagnostico'; d.etapa = 'entregar_diagnostico'; d.entregar_diagnostico = true; }
   // Escolheu horário vale mais que a despedida na mesma mensagem: nunca promete conversa sem marcar.
   if (julg.escolheu_horario && julg.etapa === 'encerrar') { julg.etapa = 'confirmar_reuniao'; d.etapa = 'confirmar_reuniao'; }
   d.agenda = julg.etapa === 'propor_reuniao' || julg.etapa === 'confirmar_reuniao' || julg.escolheu_horario === true;
@@ -393,7 +396,11 @@ function acq07BaseDeVendas(conf) {
   }).join('\n\n').slice(0, 45000);
 }
 
+var ACQ07_COMO_ENTREGAR_DIAGNOSTICO = 'entregue o diagnóstico agora, nesta resposta, sem prometer para depois e sem pedir mais informação antes. Use só os Fatos confirmados, o que você viu no site e o que a pessoa contou. Aponte 2 ou 3 pontos concretos e diga o que você faria primeiro em cada um; se só tiver um fato, entregue esse e diga com honestidade o que ainda quer olhar. Não invente número, concorrente, posição no Google nem resultado. Se o histórico mostra que você já entregou, não repita: traga um ponto novo.';
+
 var ACQ07_INSTRUCAO_DA_ETAPA = {
+  entregar_diagnostico: 'A pessoa aceitou ou pediu o diagnóstico: ' + ACQ07_COMO_ENTREGAR_DIAGNOSTICO + ' Termine com uma pergunta só, que leve à decisão.',
+  continuar: 'A pessoa parou de responder há algumas horas e você vai retomar uma única vez, por iniciativa sua. A última mensagem do histórico é um aviso interno: nunca responda a ela nem a mencione. Não cobre resposta, não peça desculpa por insistir e não repita a pergunta que ficou sem resposta. Se ela aceitou ou pediu o diagnóstico, ' + ACQ07_COMO_ENTREGAR_DIAGNOSTICO + ' Se ela não pediu, traga um ponto concreto ligado ao que ela contou. Termine com uma pergunta fácil de responder.',
   acolher: 'Agora acolha. Receba bem, com calma e profissionalismo, agradeça o contato e entenda o que a pessoa precisa. Use no máximo duas mensagens curtas e uma pergunta só, sobre o negócio dela ou o que a trouxe aqui; se não souber o nome, pergunte. Não fale de plano, preço, método, painel nem diga o que faria. Se ela perguntou o preço, diga com naturalidade que passa, e que para indicar o certo precisa entender o caso dela.',
   descobrir: 'Agora descubra. Se ainda não souber o nome da pessoa, pergunte. Faça uma pergunta específica sobre o negócio ou sobre como os clientes chegam hoje. Ainda não ofereça plano.',
   apresentar: 'Agora mostre que entende do assunto: explique o que faria primeiro para a dor dita e por quê, e como funciona o acompanhamento, ligando à situação dele. Antes de qualquer valor, mostre o que a pessoa leva, ligado ao que ela contou: painel em tempo real, grupo no WhatsApp com a equipe, Dia Prioritário fixo na semana e os resumos de segunda, quarta e sexta. Se perguntou preço, dê o valor do plano certo depois disso, com a ancoragem das orientações; nunca mande o valor seco. Uma ideia por vez: no máximo três mensagens curtas, sem despejar tudo. Fale do painel e dos rituais só se ajudar nesta resposta. Termine com uma pergunta que leve à decisão.',
@@ -426,7 +433,7 @@ function acq07LinksDoTexto(t) {
 }
 
 // O link a abrir agora: o da rodada; senão, o último da conversa que ainda não virou fato no CRM.
-function acq07LinkParaAbrir(m, lead) {
+function acq07LinkParaAbrir(m, lead, decisao) {
   var daRodada = [];
   (m.partes && m.partes.length ? m.partes : [m]).forEach(function (p) { daRodada = daRodada.concat(acq07LinksDoTexto(p.texto)); });
   var abrivel = function (l) { return !l.rede_social; };
@@ -436,7 +443,13 @@ function acq07LinkParaAbrir(m, lead) {
   var antes = [];
   ((lead && lead.mensagens) || []).filter(function (x) { return x.direcao === 'entrada'; }).slice(-12).forEach(function (x) { antes = antes.concat(acq07LinksDoTexto(x.texto)); });
   antes = antes.filter(abrivel).filter(function (l) { return lidos.indexOf(l.host) < 0; });
-  return antes.length ? antes[antes.length - 1] : null;
+  if (antes.length) return antes[antes.length - 1];
+  // Para entregar o diagnóstico, abre o site que já temos no cadastro; rede social não serve.
+  if (decisao && (decisao.entregar_diagnostico || decisao.etapa === 'continuar')) {
+    var doCadastro = acq07LinksDoTexto(lead && lead.qualificacao && lead.qualificacao.site).filter(abrivel)[0];
+    if (doCadastro) return Object.assign(doCadastro, { do_cadastro: true });
+  }
+  return null;
 }
 
 function acq07TextoDoHtml(h) {
@@ -451,7 +464,7 @@ function acq07LerPagina(resp, link) {
   var r = resp || {};
   var html = typeof r === 'string' ? r : (typeof r.body === 'string' ? r.body : typeof r.data === 'string' ? r.data : '');
   var status = Number(r.statusCode) || (html ? 200 : 0);
-  var base = { url: link.url, host: link.host, ok: false };
+  var base = { url: link.url, host: link.host, ok: false, do_cadastro: link.do_cadastro === true };
   if (!html || status >= 400 || html.length < 200) return Object.assign(base, { motivo: r.error ? String(r.error.message || r.error).slice(0, 160) : 'pagina_vazia_ou_status_' + status });
   var meta = function (nome) { var x = html.match(new RegExp('<meta[^>]+(?:name|property)=["\']' + nome + '["\'][^>]*content=["\']([^"\']*)', 'i')) || html.match(new RegExp('<meta[^>]+content=["\']([^"\']*)["\'][^>]*(?:name|property)=["\']' + nome + '["\']', 'i')); return x ? acq07TextoDoHtml(x[1]).slice(0, 300) : null; };
   var titulo = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1];
@@ -482,8 +495,9 @@ function acq07LerPagina(resp, link) {
 // O bloco do prompt com o que foi visto no link. Também serve de fonte para as travas de preço e link.
 function acq07BlocoDaPagina(p) {
   if (!p) return '';
+  if (!p.ok && p.do_cadastro) return '';
   if (!p.ok) return 'A pessoa mandou o link ' + p.url + ', mas a página não carregou agora (' + p.motivo + '). Diga isso com naturalidade, sem dizer que você não acessa a internet, e siga a conversa.';
-  return ['O QUE VOCÊ VIU AGORA NO LINK QUE A PESSOA MANDOU (' + p.url + '; é fato, use com detalhes concretos, sem inventar o que não está aqui):',
+  return [(p.do_cadastro ? 'O QUE VOCÊ VIU AGORA NO SITE DA EMPRESA (' : 'O QUE VOCÊ VIU AGORA NO LINK QUE A PESSOA MANDOU (') + p.url + '; é fato, use com detalhes concretos, sem inventar o que não está aqui):',
     p.titulo ? 'Título: ' + p.titulo : '', p.descricao ? 'Descrição: ' + p.descricao : '',
     'Plataforma: ' + (p.plataforma.join(', ') || 'não identificada') + (p.checkout.length ? ' | checkout: ' + p.checkout.join(', ') : ''),
     'Produtos na página: ' + (p.produtos.join('; ') || 'nenhum listado'), 'Preços que aparecem: ' + (p.precos.join(', ') || 'nenhum'),
@@ -666,13 +680,16 @@ function acq07PedidosEscrita(it, estadoEnvio, meta, cfg, agoraMs) {
   if (rem && !/^simulado/.test(String(lead.lead_id))) {
     // Robô só marca se ninguém foi visto antes; pessoa sempre desmarca (e uma pessoa vista não volta a ser robô).
     var soRobo = rem !== 'humano';
-    if (soRobo ? qual.so_robo === undefined : qual.so_robo === true) {
-      out.push({ ref: 'so-robo|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_update_opportunity', argumentos: { opportunity_id: lead.lead_id, qualificacao: { so_robo: soRobo } } });
+    if (soRobo ? qual.so_robo === undefined : acqComSoRobo(qual)) {
+      out.push({ ref: 'so-robo|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_update_opportunity', argumentos: { opportunity_id: lead.lead_id, qualificacao: { so_robo: soRobo ? 'sim' : 'nao' } } });
     }
+    // Quem pede tempo não recebe volta automática; voltou a mostrar interesse, libera.
+    var pausa = d.intencao === 'nao_agora' && qual.pausar_retomada !== 'sim' ? 'sim' : (d.intencao === 'interessado' && qual.pausar_retomada === 'sim' ? 'nao' : null);
+    if (pausa) out.push({ ref: 'pausa|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_update_opportunity', argumentos: { opportunity_id: lead.lead_id, qualificacao: { pausar_retomada: pausa } } });
   }
   // O que foi lido no link vira ficha no CRM: o site (o lead mandou) e o retrato da página.
   var pg = it.pagina;
-  if (pg && pg.ok && !/^simulado/.test(String(lead.lead_id))) {
+  if (pg && pg.ok && !pg.do_cadastro && !/^simulado/.test(String(lead.lead_id))) {
     out.push({ ref: 'fato-site|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_comercial_registrar_fato',
       argumentos: { lead_id: lead.lead_id, campo: 'site', valor: pg.url.slice(0, 200), operador: c.operador,
         evidencias: [{ tipo: 'lead_confirmou_na_conversa', detalhe: ('O lead mandou o link no WhatsApp em ' + String(m.em).slice(0, 10) + '.').slice(0, 500), fonte_url: pg.url.slice(0, 500) }] } });

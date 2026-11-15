@@ -9,7 +9,50 @@ var ACQ06_TIPOS_QUE_BLOQUEIAM = {
   primeiro_contato: ['comercial_primeiro_contato_aceito', 'comercial_primeiro_contato_incerto'],
   retomada: ['comercial_retomada_aceito', 'comercial_retomada_incerto'],
   despedida: ['comercial_despedida_aceito', 'comercial_despedida_incerto'],
+  continuar: [], // pode acontecer de novo em outro silêncio; o limite é um por lead por dia (chave da reivindicação).
 };
+
+function acq06UltimoEm(msgs) {
+  return msgs.reduce(function (m, s) { var t = Date.parse(s.enviada_em); return isFinite(t) && t > m ? t : m; }, -Infinity);
+}
+
+// Conversa em que uma pessoa falou, nós perguntamos e ela sumiu, ainda dentro da janela de texto livre.
+// Devolve um lead por rodada (o que falou por último) ou null. O texto é redigido depois, com a conversa.
+function acq06ConversaParada(fila, cfg, agoraMs, orcamento) {
+  var c = acqComCfg(cfg), conf = (fila && fila.config) || {}, r = c.continuar;
+  if (!r.ativa || !fila || !conf.ativo) return null;
+  if (orcamento && !orcamento.pode_responder) return null;
+  var h = acqComHorarioDaFila(conf), agora = acqComNoHorario(agoraMs, h[0], h[1]);
+  if (!agora.dia_util || !agora.dentro || conf.dentro_do_horario === false) return null;
+  var melhor = null, melhorEm = -Infinity;
+  (fila.itens || []).forEach(function (it) {
+    if (!it || !acqUuidValido(it.lead_id) || acqComNaoContatar(it) || it.em_fechamento === true) return;
+    var q = it.qualificacao || {};
+    if (q.client_id || acqComSoRobo(q) || q.pausar_retomada === 'sim') return;
+    if (['ganho', 'perdido'].indexOf(it.etapa) >= 0) return;
+    var msgs = it.mensagens || [];
+    var ultE = acq06UltimoEm(msgs.filter(function (m) { return m.direcao === 'entrada'; }));
+    var ultS = acq06UltimoEm(msgs.filter(function (m) { return m.direcao === 'saida'; }));
+    if (!isFinite(ultE) || !isFinite(ultS) || ultS < ultE) return; // a vez de responder é nossa: quem cuida é o ACQ-07
+    if (ultS - ultE > Number(r.minutos_resposta) * 60000) return; // a última saída já foi uma volta: só uma por silêncio
+    if (agoraMs - ultS < Number(r.horas_silencio) * 3600000 || agoraMs - ultE > Number(r.janela_max_horas) * 3600000) return;
+    var n = acqComNumero(it.whatsapp);
+    if (!n || n.fixo || ultE <= melhorEm) return;
+    melhorEm = ultE;
+    melhor = { lead_id: it.lead_id, tipo: 'continuar', numero: n.numero, nome: acqComNomeDoLead(it), fato: null, params: [], etapa: it.etapa, modelo_nome: null, texto: null, lead: it };
+  });
+  return melhor;
+}
+
+// Envio da volta: texto livre já conferido pelas travas do ACQ-07. Texto reprovado não sai.
+function acq06EnvioContinuar(cand, reivindicacao, transporte, cfg, resp) {
+  var c = acqComCfg(cfg), r = reivindicacao || {};
+  var base = { lead_id: cand.lead_id, tipo: 'continuar', numero: cand.numero, texto: resp && resp.ok ? resp.texto : null, modelo: null, params: [], fato: null };
+  if (r.novo !== true) return Object.assign(base, { decisao: 'pular', motivo: 'ja_tentado_hoje' });
+  if (!resp || !resp.ok) return Object.assign(base, { decisao: 'pular', motivo: 'texto_reprovado:' + (resp && resp.motivo) });
+  if (transporte.decisao !== 'enviar') return Object.assign(base, { decisao: transporte.decisao, motivo: transporte.motivo });
+  return Object.assign(base, { decisao: 'enviar', motivo: null, url: String(c.graph_url).replace(/\/+$/, '') + '/' + c.phone_number_id + '/messages', payload: acqComPayloadTexto(cand.numero, resp.texto) });
+}
 
 // fila: resultado de aceleriq_comercial_fila. Devolve a regra da rodada e os candidatos em ordem.
 function acq06Candidatos(fila, cfg, agoraMs, orcamento) {
@@ -43,16 +86,18 @@ function acq06Candidatos(fila, cfg, agoraMs, orcamento) {
     var saidas = msgs.filter(function (m) { return m.direcao === 'saida'; });
     var tipo = null;
     // Robô de atendimento do lead não conta como resposta (o ACQ-07 marca qualificacao.so_robo).
-    var humano = entradas.length > 0 && q.so_robo !== true;
+    var humano = entradas.length > 0 && !acqComSoRobo(q);
     var toques = saidas.filter(function (s) { return acqComEhModelo(s.texto, cfg); }).length;
     if (!toques && (it.primeiro_contato_feito || saidas.length)) toques = 1;
     if (!it.primeiro_contato_feito && saidas.length === 0) {
       if (entradas.length) return ign('conversa_aberta_pelo_lead');
       tipo = 'primeiro_contato';
     } else if (c.cadencia.ativa) {
-      if (humano || toques < 1 || toques > 2) return;
-      var ultimaSaida = saidas.reduce(function (m, s) { var t = Date.parse(s.enviada_em); return isFinite(t) && t > m ? t : m; }, -Infinity);
-      var ultimaEntrada = entradas.reduce(function (m, s) { var t = Date.parse(s.enviada_em); return isFinite(t) && t > m ? t : m; }, -Infinity);
+      var ultimaSaida = acq06UltimoEm(saidas), ultimaEntrada = acq06UltimoEm(entradas);
+      // 09/11: prospecção em que a pessoa falou e sumiu depois da nossa pergunta entra na cadência.
+      // Quem pediu tempo, está em fechamento ou espera resposta nossa fica fora.
+      var pessoaSumiu = humano && it.lead_frio === true && ultimaSaida >= ultimaEntrada && it.em_fechamento !== true && q.pausar_retomada !== 'sim';
+      if ((humano && !pessoaSumiu) || toques < 1 || toques > 2) return;
       var desde = Math.max(ultimaSaida, ultimaEntrada);
       if (acqComDiasUteis(desde, agoraMs) < Number(c.cadencia.dias_uteis[toques - 1])) return;
       tipo = toques === 1 ? 'retomada' : 'despedida';
@@ -128,7 +173,10 @@ function acq06Desfecho(envio, meta, ctx) {
   var est = envio.decisao === 'enviar' ? (meta ? meta.resultado : 'incerta') : envio.decisao;
   if (est === 'pular') return { evento: null, incidente: null, estado: est };
   var nomeEst = { aceita: 'aceito', recusada: 'recusado', incerta: 'incerto', simular: 'simulado_ok', bloquear: 'bloqueado', pular: 'pulado' }[est] || est;
-  var chave = 'ACQ-06|' + envio.tipo + '|' + envio.lead_id + '|' + (est === 'aceita' || est === 'incerta' ? nomeEst : ctx.hoje + '|' + nomeEst);
+  // A volta é texto livre, não modelo pago: "enviada" fica fora da contagem de modelos (comercial_%_aceito) e pode repetir em outro dia.
+  var ehContinuar = envio.tipo === 'continuar';
+  if (ehContinuar && est === 'aceita') nomeEst = 'enviada';
+  var chave = 'ACQ-06|' + envio.tipo + '|' + envio.lead_id + '|' + (!ehContinuar && (est === 'aceita' || est === 'incerta') ? nomeEst : ctx.hoje + '|' + nomeEst);
   var ev = acqEvento({ workflow_id: 'ACQ-06', run_id: ctx.run_id, entity_type: 'lead', entity_id: envio.lead_id,
     occurred_at: new Date(ctx.agoraMs).toISOString(), source: 'n8n:ACQ-06', idempotency_key: chave,
     tipo: 'comercial_' + envio.tipo + '_' + nomeEst, evidence_refs: meta && meta.wamid ? ['wamid:' + meta.wamid] : [],

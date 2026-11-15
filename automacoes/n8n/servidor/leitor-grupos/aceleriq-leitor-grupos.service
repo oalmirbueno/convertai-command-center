@@ -1,0 +1,32 @@
+[Unit]
+Description=Aceleriq: leitor dos grupos de clientes (so leitura, segundo aparelho do numero da equipe)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aceleriq-leitor
+Group=aceleriq-leitor
+WorkingDirectory=/opt/aceleriq-leitor-grupos
+EnvironmentFile=/etc/aceleriq-leitor-grupos/leitor.env
+ExecStart=/opt/mercurio-pilot/node /opt/aceleriq-leitor-grupos/leitor.mjs
+Restart=on-failure
+RestartSec=20
+# 77 = aparelho sem pareamento ou removido no celular: nao adianta reiniciar.
+RestartPreventExitStatus=77
+UMask=0077
+# Teto de recursos: a transcricao nunca disputa com a ponte do comercial nem com o Hermes.
+CPUQuota=150%
+MemoryMax=2500M
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/aceleriq-leitor-grupos
+
+[Install]
+WantedBy=multi-user.target

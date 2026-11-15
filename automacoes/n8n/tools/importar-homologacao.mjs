@@ -12,7 +12,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : d; };
 const PASTA = path.resolve(raiz, arg('pasta', 'workflows'));
 const SOMENTE = arg('somente', null);
-const ORDEM = ['ACQ-00-Erros', 'ACQ-00-Ferramenta-Aceleriq', 'ACQ-01-Contexto-Rituais', 'ACQ-02-Despacho-Aprovado', 'ACQ-03-Post-No-Ar', 'ACQ-04-Conversas-Contexto', 'ACQ-05-Dia-Prioritario-Radar', 'ACQ-06-Comercial-Primeiro-Contato', 'ACQ-07-Comercial-Respostas', 'ACQ-08-Comercial-Repasses'];
+const ORDEM = ['ACQ-00-Erros', 'ACQ-00-Ferramenta-Aceleriq', 'ACQ-01-Contexto-Rituais', 'ACQ-02-Despacho-Aprovado', 'ACQ-03-Post-No-Ar', 'ACQ-04-Conversas-Contexto', 'ACQ-05-Dia-Prioritario-Radar', 'ACQ-06-Comercial-Primeiro-Contato', 'ACQ-07-Comercial-Respostas', 'ACQ-08-Comercial-Repasses', 'ACQ-09-Resumo-Do-Dia', 'ACQ-10-Fila-Conversas', 'ACQ-11-Mensagem-Da-Semana', 'ACQ-12-Midia-Grupos', 'ACQ-13-Radar-Anuncios', 'ACQ-14-Instagram-Comentarios', 'ACQ-15-Relatorio-Anuncios'];
 const ID_LOCAL = { 'ACQ-00-Erros': 'AcqE00ErrosComum', 'ACQ-00-Ferramenta-Aceleriq': 'AcqF00Ferramenta' };
 // Nomes humanos na instância (04/11/2026). O casamento é por nome: sem isto, reimportar duplicaria.
 const NOME_REMOTO = {
@@ -20,12 +20,19 @@ const NOME_REMOTO = {
   'ACQ-00-Ferramenta-Aceleriq': 'Apoio: ponte com o painel',
   'ACQ-01-Contexto-Rituais': 'Rituais da semana e dossiê (o Hermes já faz)',
   'ACQ-02-Despacho-Aprovado': 'Envio das mensagens aprovadas (o Hermes já faz)',
-  'ACQ-03-Post-No-Ar': 'Aviso de post no ar para o cliente',
-  'ACQ-04-Conversas-Contexto': 'Leitura das conversas dos grupos',
-  'ACQ-05-Dia-Prioritario-Radar': 'Lista do dia: o que fazer em cada cliente',
+  'ACQ-03-Post-No-Ar': 'Clientes: aviso de post no ar no grupo',
+  'ACQ-04-Conversas-Contexto': 'Clientes: leitura das conversas dos grupos',
+  'ACQ-05-Dia-Prioritario-Radar': 'Clientes: lista do dia de cada cliente',
   'ACQ-06-Comercial-Primeiro-Contato': 'Comercial: primeiro contato no WhatsApp',
   'ACQ-07-Comercial-Respostas': 'Comercial: respostas no WhatsApp',
   'ACQ-08-Comercial-Repasses': 'Comercial: repasse no WhatsApp da Aceleriq',
+  'ACQ-09-Resumo-Do-Dia': 'Clientes: resumo do dia das conversas dos grupos',
+  'ACQ-10-Fila-Conversas': 'Clientes: fila de pendências das conversas (Clio)',
+  'ACQ-11-Mensagem-Da-Semana': 'Clientes: mensagem da semana no grupo (seg, qua, sex)',
+  'ACQ-12-Midia-Grupos': 'Clientes: entender imagens e vídeos dos grupos',
+  'ACQ-13-Radar-Anuncios': 'Clientes: radar de anúncios (só lê e avisa)',
+  'ACQ-14-Instagram-Comentarios': 'Instagram: comentários e Direct da Aceleriq',
+  'ACQ-15-Relatorio-Anuncios': 'Clientes: relatório semanal de anúncios (prévia para o dono)',
 };
 // Atualizar fluxo publicado só com pedido explícito; a nova versão só vale depois de publicar.
 const PERMITIR_ATIVO = process.argv.includes('--permitir-ativo');

@@ -1,0 +1,665 @@
+{
+ "fluxo": "ACQ-14-Instagram-Comentarios",
+ "execucao": "20931",
+ "status": "success",
+ "segundos": 11,
+ "erro": null,
+ "ultimo_no": "Registrar no painel",
+ "nos": {
+  "Executar manualmente": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Ler comentários pendentes": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Montar julgamento": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Julgar com Jev": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Decidir e montar redação": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Redigir (OpenRouter)": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Montar conferência": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Conferir resposta com Jev": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Fechar e montar registro": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Registrar no painel": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  }
+ },
+ "bruto": {
+  "execution": {
+   "id": "20931",
+   "workflowId": "UcSx2ZJCxWL9DPNB",
+   "mode": "manual",
+   "status": "success",
+   "startedAt": "2026-11-11T18:57:33.513Z",
+   "stoppedAt": "2026-11-11T18:57:41.006Z",
+   "retryOf": null,
+   "retrySuccessId": null,
+   "waitTill": null
+  },
+  "data": {
+   "version": 1,
+   "startData": {},
+   "resultData": {
+    "runData": {
+     "Executar manualmente": [
+      {
+       "startTime": 1794423453520,
+       "executionIndex": 0,
+       "source": [],
+       "hints": [],
+       "executionTime": 0,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {},
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Ler comentários pendentes": [
+      {
+       "startTime": 1794423453520,
+       "executionIndex": 1,
+       "source": [
+        {
+         "previousNode": "Executar manualmente",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 903,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "itens": [
+             {
+              "em": "2026-11-05T00:00:50+00:00",
+              "id": "18143443027626970",
+              "canal": "comentario",
+              "de_id": "2630632867366581",
+              "texto": "Suporte",
+              "legenda": null,
+              "proprio": false,
+              "media_id": "17889765030486663",
+              "permalink": "https://www.instagram.com/reel/DfUyaGBk0YN/",
+              "de_usuario": "navadwipchandra",
+              "ja_respondido": false
+             }
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Montar julgamento": [
+      {
+       "startTime": 1794423454423,
+       "executionIndex": 2,
+       "source": [
+        {
+         "previousNode": "Ler comentários pendentes",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 60,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "ev": {
+             "canal": "comentario",
+             "id": "18143443027626970",
+             "de_id": "2630632867366581",
+             "de_usuario": "navadwipchandra",
+             "texto": "Suporte",
+             "media_id": "17889765030486663",
+             "em": "2026-11-05T00:00:50+00:00",
+             "proprio": false,
+             "ja_respondido": false
+            },
+            "post": {
+             "legenda": "",
+             "permalink": "https://www.instagram.com/reel/DfUyaGBk0YN/",
+             "cta": null
+            },
+            "jev_url": "https://api.typesafe.ai/v1/systemone",
+            "jev": {
+             "model": "jev-latest",
+             "state": {
+              "contexto": "Perfil de Instagram da Aceleriq, empresa de marketing e tecnologia para pequenas empresas. Comentário público num post da própria Aceleriq.",
+              "post": {
+               "legenda": "",
+               "palavra_pedida": null,
+               "promessa": null
+              },
+              "conversa_anterior": [],
+              "mensagem": "Suporte"
+             },
+             "questions": {
+              "tipo": {
+               "type": "choice",
+               "instructions": "O que é `mensagem`?",
+               "criteria": {
+                "palavra_chave": "A pessoa escreve a palavra que o post pediu em `post.palavra_pedida`, com ou sem variação, erro de digitação, minúscula, emoji ou frase em volta (\"quero o SALÃO\", \"salao\", \"manda a lista\"). Só vale se o post pediu uma palavra.",
+                "elogio": "Elogio, apoio, aplauso, emoji positivo, agradecimento ou torcida, sem pergunta.",
+                "pergunta_comercial": "Pergunta preço, como contratar, se atende a cidade ou o ramo dela, pede proposta, orçamento, contato ou diz que quer o serviço da Aceleriq.",
+                "duvida_do_conteudo": "Pergunta ou comentário sobre o assunto do post, sem falar em contratar: pede explicação, discorda com educação, conta o caso dela.",
+                "critica": "Reclamação ou crítica à Aceleriq, ao atendimento, a um serviço prestado ou ao conteúdo, mesmo dura, feita por alguém que parece falar a sério.",
+                "ofensa_ou_spam": "Xingamento, ataque gratuito, golpe, divulgação de outro perfil ou serviço, corrente, link suspeito ou texto automático sem relação com o post.",
+                "conversa": "Marca um amigo, responde a outra pessoa, manda um cumprimento solto ou algo que não cabe nas outras opções."
+               }
+              },
+              "pede_palavra": {
+               "type": "noul",
+               "instructions": "O post pede que a pessoa comente a palavra em `post.palavra_pedida` para receber o que está em `post.promessa`. Em `mensagem`, a pessoa está pedindo isso? Vale variação, erro de digitação ou frase com o mesmo sentido. Se `post.palavra_pedida` for nulo, a resposta é não."
+              },
+              "ofensa": {
+               "type": "noul",
+               "instructions": "`mensagem` contém xingamento, humilhação, discurso de ódio ou ataque pessoal?"
+              },
+              "spam": {
+               "type": "noul",
+               "instructions": "`mensagem` é propaganda de terceiro, golpe, corrente ou texto automático sem relação com o post?"
+              },
+              "critica_legitima": {
+               "type": "noul",
+               "instructions": "`mensagem` é uma reclamação sobre um serviço prestado pela Aceleriq ou sobre o atendimento da Aceleriq, feita por alguém que parece ser cliente ou ex-cliente? Discordar do conteúdo do post, fazer uma pergunta ou reclamar de outra empresa não conta."
+              },
+              "quer_proposta": {
+               "type": "noul",
+               "instructions": "Considerando `conversa_anterior` e `mensagem`, a pessoa pede preço, proposta, orçamento, reunião ou diz que quer contratar?"
+              },
+              "quer_humano": {
+               "type": "noul",
+               "instructions": "Em `mensagem`, a pessoa pede para falar com uma pessoa, com o Almir ou com o responsável?"
+              }
+             }
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Julgar com Jev": [
+      {
+       "startTime": 1794423454484,
+       "executionIndex": 3,
+       "source": [
+        {
+         "previousNode": "Montar julgamento",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 242,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "model": "jev-1.14.0",
+            "answers": {
+             "tipo": {
+              "type": "choice",
+              "choice": "conversa",
+              "confidence": 0.56,
+              "probabilities": {
+               "palavra_chave": 0.02,
+               "elogio": 0,
+               "pergunta_comercial": 0.27,
+               "duvida_do_conteudo": 0.04,
+               "critica": 0.01,
+               "ofensa_ou_spam": 0.04,
+               "conversa": 0.62
+              }
+             },
+             "pede_palavra": {
+              "type": "noul",
+              "noul": 0.02
+             },
+             "ofensa": {
+              "type": "noul",
+              "noul": 0.01
+             },
+             "spam": {
+              "type": "noul",
+              "noul": 0.3
+             },
+             "critica_legitima": {
+              "type": "noul",
+              "noul": 0.12
+             },
+             "quer_proposta": {
+              "type": "noul",
+              "noul": 0.05
+             },
+             "quer_humano": {
+              "type": "noul",
+              "noul": 0.27
+             }
+            },
+            "usage": {
+             "input_tokens": 1006,
+             "output_tokens": 198
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Decidir e montar redação": [
+      {
+       "startTime": 1794423454726,
+       "executionIndex": 4,
+       "source": [
+        {
+         "previousNode": "Julgar com Jev",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 39,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "julg": {
+             "tipo": "conversa",
+             "confianca": 0.56,
+             "p_palavra": 0.02,
+             "p_ofensa": 0.01,
+             "p_spam": 0.3,
+             "p_critica": 0.12,
+             "p_proposta": 0.05,
+             "p_humano": 0.27,
+             "modelo": "jev-1.14.0"
+            },
+            "d": {
+             "acao": "ignorar",
+             "resposta_publica": false,
+             "direct": false,
+             "ocultar": false,
+             "lead": false,
+             "aviso": null,
+             "publicar": false,
+             "motivos": [
+              "conversa"
+             ]
+            },
+            "redigir": false,
+            "llm_url": "http://127.0.0.1:9/sem-redacao",
+            "llm": {}
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Redigir (OpenRouter)": [
+      {
+       "startTime": 1794423454765,
+       "executionIndex": 5,
+       "source": [
+        {
+         "previousNode": "Decidir e montar redação",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 3019,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "error": {
+             "message": "connect ECONNREFUSED 127.0.0.1:9",
+             "name": "Error",
+             "stack": "Error: connect ECONNREFUSED 127.0.0.1:9\n    at AxiosError.from (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/axios@1.18.0_patch_hash=149e256a2a7b632497650b32816716ced972ab02a5ab00fbd8a5158a51722c4_437e4fafb503be805d1d0ae72f0b0deb/node_modules/axios/dist/node/axios.cjs:1355:24)\n    at RedirectableRequest.handleRequestError (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/axios@1.18.0_patch_hash=149e256a2a7b632497650b32816716ced972ab02a5ab00fbd8a5158a51722c4_437e4fafb503be805d1d0ae72f0b0deb/node_modules/axios/dist/node/axios.cjs:4026:25)\n    at RedirectableRequest.emit (node:events:526:24)\n    at ClientRequest.eventHandlers.<computed> (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/follow-redirects@1.16.0_debug@4.4.3_supports-color@8.1.1_/node_modules/follow-redirects/index.js:56:24)\n    at ClientRequest.emit (node:events:514:20)\n    at emitErrorEvent (node:_http_client:114:11)\n    at Socket.socketErrorListener (node:_http_client:768:5)\n    at Socket.emit (node:events:526:24)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/axios@1.18.0_patch_hash=149e256a2a7b632497650b32816716ced972ab02a5ab00fbd8a5158a51722c4_437e4fafb503be805d1d0ae72f0b0deb/node_modules/axios/dist/node/axios.cjs:5427:41)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at invokeAxios (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+backend-network@file++++home+runner+_work+n8n+n8n+packages+@n8n+backend-network/node_modules/@n8n/backend-network/src/http/axios/invoke.ts:15:10)\n    at executeLegacyRequest (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+backend-network@file++++home+runner+_work+n8n+n8n+packages+@n8n+backend-network/node_modules/@n8n/backend-network/src/http/legacy-request.ts:83:6)\n    at Object.requestLegacy (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+backend-network@file++++home+runner+_work+n8n+n8n+packages+@n8n+backend-network/node_modules/@n8n/backend-network/src/http/outbound-http.ts:213:13)\n    at proxyRequestToAxios (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file++++home+runner+_work+n8n+n8n+packages+core/node_modules/n8n-core/src/execution-engine/node-execution-context/utils/request-helpers/legacy-request-adapter.ts:27:9)\n    at Object.request (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file++++home+runner+_work+n8n+n8n+packages+core/node_modules/n8n-core/src/execution-engine/node-execution-context/utils/request-helpers/factory.ts:167:11)",
+             "code": "ECONNREFUSED"
+            },
+            "details": {
+             "message": "The service refused the connection - perhaps it is offline",
+             "httpCode": "ECONNREFUSED",
+             "body": null,
+             "context": {
+              "itemIndex": 0
+             }
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Montar conferência": [
+      {
+       "startTime": 1794423457784,
+       "executionIndex": 6,
+       "source": [
+        {
+         "previousNode": "Redigir (OpenRouter)",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 45,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "red": null,
+            "conferir": false,
+            "jev_url": "http://127.0.0.1:9/sem-conferencia",
+            "jev": {}
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Conferir resposta com Jev": [
+      {
+       "startTime": 1794423457829,
+       "executionIndex": 7,
+       "source": [
+        {
+         "previousNode": "Montar conferência",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 3017,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "error": {
+             "message": "connect ECONNREFUSED 127.0.0.1:9",
+             "name": "Error",
+             "stack": "Error: connect ECONNREFUSED 127.0.0.1:9\n    at AxiosError.from (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/axios@1.18.0_patch_hash=149e256a2a7b632497650b32816716ced972ab02a5ab00fbd8a5158a51722c4_437e4fafb503be805d1d0ae72f0b0deb/node_modules/axios/dist/node/axios.cjs:1355:24)\n    at RedirectableRequest.handleRequestError (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/axios@1.18.0_patch_hash=149e256a2a7b632497650b32816716ced972ab02a5ab00fbd8a5158a51722c4_437e4fafb503be805d1d0ae72f0b0deb/node_modules/axios/dist/node/axios.cjs:4026:25)\n    at RedirectableRequest.emit (node:events:526:24)\n    at ClientRequest.eventHandlers.<computed> (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/follow-redirects@1.16.0_debug@4.4.3_supports-color@8.1.1_/node_modules/follow-redirects/index.js:56:24)\n    at ClientRequest.emit (node:events:514:20)\n    at emitErrorEvent (node:_http_client:114:11)\n    at Socket.socketErrorListener (node:_http_client:768:5)\n    at Socket.emit (node:events:526:24)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/axios@1.18.0_patch_hash=149e256a2a7b632497650b32816716ced972ab02a5ab00fbd8a5158a51722c4_437e4fafb503be805d1d0ae72f0b0deb/node_modules/axios/dist/node/axios.cjs:5427:41)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at invokeAxios (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+backend-network@file++++home+runner+_work+n8n+n8n+packages+@n8n+backend-network/node_modules/@n8n/backend-network/src/http/axios/invoke.ts:15:10)\n    at executeLegacyRequest (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+backend-network@file++++home+runner+_work+n8n+n8n+packages+@n8n+backend-network/node_modules/@n8n/backend-network/src/http/legacy-request.ts:83:6)\n    at Object.requestLegacy (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+backend-network@file++++home+runner+_work+n8n+n8n+packages+@n8n+backend-network/node_modules/@n8n/backend-network/src/http/outbound-http.ts:213:13)\n    at proxyRequestToAxios (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file++++home+runner+_work+n8n+n8n+packages+core/node_modules/n8n-core/src/execution-engine/node-execution-context/utils/request-helpers/legacy-request-adapter.ts:27:9)\n    at Object.request (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file++++home+runner+_work+n8n+n8n+packages+core/node_modules/n8n-core/src/execution-engine/node-execution-context/utils/request-helpers/factory.ts:167:11)",
+             "code": "ECONNREFUSED"
+            },
+            "details": {
+             "message": "The service refused the connection - perhaps it is offline",
+             "httpCode": "ECONNREFUSED",
+             "body": null,
+             "context": {
+              "itemIndex": 0
+             }
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Fechar e montar registro": [
+      {
+       "startTime": 1794423460846,
+       "executionIndex": 8,
+       "source": [
+        {
+         "previousNode": "Conferir resposta com Jev",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 29,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "id": "18143443027626970",
+            "acao": "ignorar",
+            "estado": "ignorado",
+            "aviso": null,
+            "pg": [
+             "18143443027626970",
+             "{\"estado\":\"ignorado\",\"tipo\":\"conversa\",\"julgamento\":{\"tipo\":\"conversa\",\"confianca\":0.56,\"p_palavra\":0.02,\"p_ofensa\":0.01,\"p_spam\":0.3,\"p_critica\":0.12,\"p_proposta\":0.05,\"p_humano\":0.27,\"modelo\":\"jev-1.14.0\"},\"acao\":\"ignorar\",\"comentario\":null,\"direct\":null,\"aviso\":null,\"lead\":false,\"motivos\":[\"conversa\"],\"aviso_texto\":null}"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Registrar no painel": [
+      {
+       "startTime": 1794423460875,
+       "executionIndex": 9,
+       "source": [
+        {
+         "previousNode": "Fechar e montar registro",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 131,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "r": {
+             "ok": true,
+             "avisou": false
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ]
+    },
+    "pinData": {
+     "Executar manualmente": [
+      {
+       "json": {},
+       "pairedItem": {
+        "item": 0
+       }
+      }
+     ]
+    },
+    "lastNodeExecuted": "Registrar no painel"
+   },
+   "executionData": {
+    "contextData": {
+     "node:Julgar com Jev": {
+      "response": {
+       "body": {
+        "model": "jev-1.14.0",
+        "answers": {
+         "tipo": {
+          "type": "choice",
+          "choice": "conversa",
+          "confidence": 0.56,
+          "probabilities": {
+           "palavra_chave": 0.02,
+           "elogio": 0,
+           "pergunta_comercial": 0.27,
+           "duvida_do_conteudo": 0.04,
+           "critica": 0.01,
+           "ofensa_ou_spam": 0.04,
+           "conversa": 0.62
+          }
+         },
+         "pede_palavra": {
+          "type": "noul",
+          "noul": 0.02
+         },
+         "ofensa": {
+          "type": "noul",
+          "noul": 0.01
+         },
+         "spam": {
+          "type": "noul",
+          "noul": 0.3
+         },
+         "critica_legitima": {
+          "type": "noul",
+          "noul": 0.12
+         },
+         "quer_proposta": {
+          "type": "noul",
+          "noul": 0.05
+         },
+         "quer_humano": {
+          "type": "noul",
+          "noul": 0.27
+         }
+        },
+        "usage": {
+         "input_tokens": 1006,
+         "output_tokens": 198
+        }
+       },
+       "headers": {
+        "date": "Wed, 11 Nov 2026 18:57:34 GMT",
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+        "connection": "close",
+        "x-typesafe-request-id": "req_01a1cbf8fb5c7d9cb937756116c13ab0",
+        "x-envoy-upstream-service-time": "156",
+        "server": "cloudflare",
+        "cf-cache-status": "DYNAMIC",
+        "set-cookie": [
+         "__cf_bm=SAKyooXWaZEVptrao5o4wzVbxr_kRlPAQmn_otg_Z9s-1794423454.5483165-1.0.1.1-K_lcORpcyz2F1XN2.FMCrnPjDO9zG5l2V3ihTzf1AqcXmfZJYGWH8.fJQzri.kPoxIJijQ25Z8W_FdDOdDYRvHx9pTn74DqVOnzV0z56XwT3IqRQxwlARop9i5MUeY.N; HttpOnly; SameSite=None; Partitioned; Secure; Path=/; Domain=typesafe.ai; Expires=Wed, 11 Nov 2026 19:27:34 GMT"
+        ],
+        "cf-ray": "a58f85feef13e738-EWR",
+        "alt-svc": "h3=\":443\"; ma=86400"
+       },
+       "statusCode": 200,
+       "statusMessage": "OK"
+      }
+     }
+    },
+    "nodeExecutionStack": [],
+    "metadata": {},
+    "waitingExecution": {},
+    "waitingExecutionSource": {},
+    "runtimeData": {
+     "version": 1,
+     "establishedAt": 1794423453490,
+     "source": "manual",
+     "triggerNode": {
+      "name": "Executar manualmente",
+      "type": "n8n-nodes-base.manualTrigger"
+     },
+     "redaction": {
+      "version": 2,
+      "production": false,
+      "manual": false
+     }
+    }
+   },
+   "resumeToken": "9779e78d2b2dd897298a5c216e2882e75a850293e52591832c865651e664d595"
+  }
+ }
+}
