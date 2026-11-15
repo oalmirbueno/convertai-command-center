@@ -2,27 +2,31 @@ import { juntar, texto } from "@/components/sistema";
 import { ETAPAS_DA_ESTEIRA } from "@/lib/esteiraLinha/esteiraLinha";
 import { ESTILO_DA_ETAPA } from "./estilosDaEtapa";
 
-/** Legenda do rodapé: as etapas na ordem do caminho da peça e as marcas do dia prioritário. */
+/**
+ * Legenda das etapas, na ordem do caminho da peça, e as marcas do dia
+ * prioritário. Desde a limpeza de 14/11/2026 (21h53) ela mora no "?" ao lado
+ * do título da Esteira, não num rodapé comprido.
+ */
 export default function LegendaDasEtapas() {
   return (
-    <footer aria-label="Legenda das etapas" className="border-t border-border pt-3">
-      <ul className="flex flex-wrap gap-x-5 gap-y-2">
-        {ETAPAS_DA_ESTEIRA.map((e) => (
-          <li key={e.etapa} className={juntar(texto.auxiliar, "flex items-center")}>
-            <span className={juntar("mr-1.5 h-2 w-2 rounded-full", ESTILO_DA_ETAPA[e.etapa].ponto)} aria-hidden="true" />
+    <ul aria-label="Legenda das etapas" className="mt-2 space-y-1.5" data-legenda-das-etapas="">
+      {ETAPAS_DA_ESTEIRA.map((e) => (
+        <li key={e.etapa} className={juntar(texto.auxiliar, "flex items-start")}>
+          <span className={juntar("mr-2 mt-1.5 h-2 w-2 shrink-0 rounded-full", ESTILO_DA_ETAPA[e.etapa].ponto)} aria-hidden="true" />
+          <span>
             <span className="font-medium text-foreground">{e.rotulo}</span>
             <span className="ml-1">{e.descricao}</span>
-          </li>
-        ))}
-        <li className={juntar(texto.auxiliar, "flex items-center")}>
-          <span className="mr-1.5 h-3 w-3 rounded-sm border border-border bg-accent" aria-hidden="true" />
-          <span className="font-medium text-foreground">Dia prioritário</span>
+          </span>
         </li>
-        <li className={juntar(texto.auxiliar, "flex items-center")}>
-          <span className="mr-1.5 h-3 w-3 rounded-sm border border-amber-500/50 bg-amber-500/15" aria-hidden="true" />
-          <span className="font-medium text-foreground">Dia prioritário sem peça</span>
-        </li>
-      </ul>
-    </footer>
+      ))}
+      <li className={juntar(texto.auxiliar, "flex items-center")}>
+        <span className="mr-2 h-3 w-3 shrink-0 rounded-sm border border-border bg-accent" aria-hidden="true" />
+        <span className="font-medium text-foreground">Dia prioritário</span>
+      </li>
+      <li className={juntar(texto.auxiliar, "flex items-center")}>
+        <span className="mr-2 h-3 w-3 shrink-0 rounded-sm border border-amber-500/50 bg-amber-500/15" aria-hidden="true" />
+        <span className="font-medium text-foreground">Dia prioritário sem peça</span>
+      </li>
+    </ul>
   );
 }

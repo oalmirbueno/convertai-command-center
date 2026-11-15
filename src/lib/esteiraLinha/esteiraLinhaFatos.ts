@@ -10,7 +10,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { contentTypeForDeliveryType, isPublishableTask } from "@/lib/taskDeliveryTypes";
-import { somarDias, type ArquivoDaPeca, type PecaFato, type RevisaoInterna } from "./esteiraLinha";
+import { janelaDeLeitura, type ArquivoDaPeca, type DiasDoPeriodo, type PecaFato, type RevisaoInterna } from "./esteiraLinha";
 
 export interface LinhaDePost {
   id: string;
@@ -274,17 +274,17 @@ async function lerCarimbos(db: { from: (tabela: string) => { select: (colunas: s
 }
 
 /**
- * Lê as linhas da semana que começa em `segunda` (YYYY-MM-DD, São Paulo)
- * para os clientes dados. A janela do banco tem um dia de folga de cada
- * lado; quem decide o dia certo é a regra pura, no fuso de São Paulo.
+ * Lê as linhas do período que começa em `segunda` (YYYY-MM-DD, São Paulo)
+ * para os clientes dados: 7 dias (padrão) ou 14. A janela do banco tem um
+ * dia de folga de cada lado; quem decide o dia certo é a regra pura, no fuso
+ * de São Paulo.
  */
-export async function lerLinhasDaEsteiraLinha(clientIds: string[], segunda: string): Promise<LinhasDaEsteiraLinha> {
+export async function lerLinhasDaEsteiraLinha(clientIds: string[], segunda: string, dias: DiasDoPeriodo = 7): Promise<LinhasDaEsteiraLinha> {
   const vazio: LinhasDaEsteiraLinha = { posts: [], publicacoes: [], tarefas: [], vinculos: [], trabalhos: [], arquivos: [] };
   if (!clientIds.length) return vazio;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
-  const de = somarDias(segunda, -1);
-  const ate = somarDias(segunda, 8);
+  const { de, ate } = janelaDeLeitura(segunda, dias);
   const deInstante = `${de}T00:00:00Z`;
   const ateInstante = `${ate}T00:00:00Z`;
   const COLUNAS_DA_PUBLICACAO = "id, post_id, client_id, file_id, status, scheduled_at, published_at, permalink";
@@ -349,9 +349,9 @@ export async function lerLinhasDaEsteiraLinha(clientIds: string[], segunda: stri
   return { posts, publicacoes, tarefas, vinculos, trabalhos, arquivos, revisores };
 }
 
-/** As peças da semana, prontas para `montarGrade`. */
-export async function lerPecasDaEsteiraLinha(clientIds: string[], segunda: string): Promise<PecaFato[]> {
-  return juntarPecas(await lerLinhasDaEsteiraLinha(clientIds, segunda));
+/** As peças do período, prontas para `montarGrade`. */
+export async function lerPecasDaEsteiraLinha(clientIds: string[], segunda: string, dias: DiasDoPeriodo = 7): Promise<PecaFato[]> {
+  return juntarPecas(await lerLinhasDaEsteiraLinha(clientIds, segunda, dias));
 }
 
 /**

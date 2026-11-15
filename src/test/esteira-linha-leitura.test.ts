@@ -85,6 +85,26 @@ describe("leitura em lote", () => {
     expect(decidirEtapa(tarefa)?.etapa).toBe("revisao");
   });
 
+  it("a janela do banco respeita o período: 7 dias (padrão) ou 14, com um dia de folga de cada lado", async () => {
+    const janela = () => {
+      const pub = banco.chamadas.find((c) => c.tabela === "editorial_publications") as Chamada;
+      const tarefas = banco.chamadas.find((c) => c.tabela === "tasks") as Chamada;
+      return { ou: String(pub.passos.find((p) => p[0] === "or")?.[1]), gte: tarefas.passos.find((p) => p[0] === "gte"), lte: tarefas.passos.find((p) => p[0] === "lte") };
+    };
+    await lerLinhasDaEsteiraLinha(CLIENTES, "2026-11-16");
+    expect(janela().ou).toContain("scheduled_at.lt.2026-11-24T00:00:00Z");
+    expect(janela().gte).toEqual(["gte", "due_date", "2026-11-15"]);
+    expect(janela().lte).toEqual(["lte", "due_date", "2026-11-24"]);
+
+    banco.chamadas = [];
+    await lerLinhasDaEsteiraLinha(CLIENTES, "2026-11-16", 14);
+    expect(janela().ou).toContain("scheduled_at.gte.2026-11-15T00:00:00Z");
+    expect(janela().ou).toContain("scheduled_at.lt.2026-12-01T00:00:00Z");
+    expect(janela().ou).toContain("published_at.lt.2026-12-01T00:00:00Z");
+    expect(janela().gte).toEqual(["gte", "due_date", "2026-11-15"]);
+    expect(janela().lte).toEqual(["lte", "due_date", "2026-12-01"]);
+  });
+
   it("sem cliente não consulta nada; erro do banco vira erro, não grade vazia", async () => {
     expect((await lerLinhasDaEsteiraLinha([], "2026-11-16")).posts).toEqual([]);
     expect(banco.chamadas).toHaveLength(0);

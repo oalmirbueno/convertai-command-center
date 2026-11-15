@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDiasPrioritarios } from "@/lib/diaPrioritarioApi";
-import { montarGrade, podeAbrirEstudio, type ClienteDaFaixa, type FaixaDaEsteira } from "@/lib/esteiraLinha/esteiraLinha";
+import { montarGrade, podeAbrirEstudio, type ClienteDaFaixa, type DiasDoPeriodo, type FaixaDaEsteira } from "@/lib/esteiraLinha/esteiraLinha";
 import { lerModosDeAprovacao, lerPecasDaEsteiraLinha } from "@/lib/esteiraLinha/esteiraLinhaFatos";
 
 interface ClienteCadastrado {
@@ -22,10 +22,11 @@ export const clientesAtivosDaEsteira = (clients: ClienteCadastrado[] | undefined
     .map((c) => ({ id: String(c.id), nome: String(c.company_name || c.full_name || c.email || "Cliente"), planStatus: c.plan_status ?? null }));
 
 /**
- * Esteira em linha do tempo: a carteira ativa, as peças da semana pedida e o
- * dia prioritário de cada cliente, já montados em faixas. Só leitura.
+ * Esteira em linha do tempo: a carteira ativa, as peças do período pedido
+ * (uma ou duas semanas a partir de `segunda`) e o dia prioritário de cada
+ * cliente, já montados em faixas. Só leitura.
  */
-export function useEsteiraLinha(segunda: string) {
+export function useEsteiraLinha(segunda: string, diasDoPeriodo: DiasDoPeriodo = 7) {
   const { user, profile } = useAuth();
   const clientes = useClients();
   const dias = useDiasPrioritarios();
@@ -33,10 +34,10 @@ export function useEsteiraLinha(segunda: string) {
   const ids = useMemo(() => ativos.map((c) => c.id).sort(), [ativos]);
 
   const pecas = useQuery({
-    queryKey: ["esteira-linha", user?.id, profile?.role, segunda, ids.join(",")],
+    queryKey: ["esteira-linha", user?.id, profile?.role, segunda, diasDoPeriodo, ids.join(",")],
     enabled: Boolean(user?.id) && ids.length > 0,
     staleTime: 60_000,
-    queryFn: () => lerPecasDaEsteiraLinha(ids, segunda),
+    queryFn: () => lerPecasDaEsteiraLinha(ids, segunda, diasDoPeriodo),
   });
 
   // A regra de aprovação do cliente no cadastro (hoje só a Softy é `dispensada`).
@@ -55,9 +56,10 @@ export function useEsteiraLinha(segunda: string) {
       pecas: pecas.data ?? [],
       diasPrioritarios: dias.data ?? [],
       segunda,
+      dias: diasDoPeriodo,
       podeAbrirEstudio: podeEstudio,
     }),
-    [ativos, modos.data, pecas.data, dias.data, segunda, podeEstudio],
+    [ativos, modos.data, pecas.data, dias.data, segunda, diasDoPeriodo, podeEstudio],
   );
 
   const carregando = clientes.isLoading || dias.isLoading || (ids.length > 0 && pecas.isLoading);
