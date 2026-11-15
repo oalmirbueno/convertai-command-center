@@ -263,7 +263,7 @@ function QuadroDaLogo({
   const altura = compacto ? "h-24 sm:h-28" : "h-32";
   if (!imagem) {
     return (
-      <div className={`flex ${altura} w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted text-[12px] text-muted-foreground`}>
+      <div className={`flex ${altura} w-full items-center justify-center rounded-lg bg-muted text-[12px] font-medium text-muted-foreground ${carregando ? "" : "ds-hatch"}`}>
         {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sem logo"}
       </div>
     );
