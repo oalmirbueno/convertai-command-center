@@ -528,6 +528,10 @@ export default function MesaDoCliente() {
       clientId={clientId}
       marcaId={marca ? marca.id : null}
       telaCheia={telaCheia}
+      // v4 S3 (rolagem interna): desde a rolagem global (B3) quem rola é o <main>, que já começa abaixo
+      // do topo; o top de +80px da casca deixava o cabeçalho 80px abaixo, com uma faixa vazia e cobrindo
+      // o começo da aba. Aqui ele gruda na borda do padding do <main> (pt-4), como no celular.
+      className="md:[&>header[data-cabecalho-da-mesa]]:-top-4"
       cliente={
         // 16/10/2026 (dono: "Escolher cliente: só o ícone"): o cliente aparece como avatar com as iniciais; o nome fica no title.
         <SeletorDeClientesDaMesa
