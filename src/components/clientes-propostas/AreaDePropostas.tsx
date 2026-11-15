@@ -9,6 +9,7 @@ import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Esta
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, etiqueta, foco, juntar, texto } from "@/components/sistema/estilos";
+import { Avatar, StatusPill, type Tone } from "@/components/ds";
 import { dataCurta } from "../../../supabase/functions/_shared/proposta-modelo";
 import NovaProposta, { type ClienteDaEscolha, type ClienteParaCriar, type TipoDaNovaProposta } from "./NovaProposta";
 import {
@@ -33,33 +34,44 @@ export const COR_DO_STATUS: Record<string, string> = {
   expirada: "bg-muted text-muted-foreground",
 };
 
+/** O mesmo status, no tom da pílula (bolinha + fundo suave). */
+export const TOM_DO_STATUS: Record<string, Tone> = {
+  rascunho: "neutral",
+  enviada: "accent",
+  vista: "warning",
+  aceita: "success",
+  recusada: "danger",
+  expirada: "neutral",
+};
+
 const MOSTRAR = 8;
 
 /** Uma linha da lista de propostas (a mesma na área de Clientes e na ficha do cliente). */
 export function LinhaDaProposta({ l, cliente, onAbrir }: { l: LinhaDaCarteira; cliente?: string; onAbrir: (l: LinhaDaCarteira) => void }) {
   return (
     <li className="min-w-0" data-linha-da-proposta={l.id}>
-      <button type="button" onClick={() => onAbrir(l)} className={juntar("flex w-full min-w-0 items-center px-3 py-2.5 text-left transition-colors hover:bg-muted/30 sm:px-4", foco)} aria-label={`Abrir a proposta ${l.numero}${cliente ? ` de ${cliente}` : ""}`}>
+      <button type="button" onClick={() => onAbrir(l)} className={juntar("flex w-full min-w-0 items-center px-4 py-3.5 text-left transition-colors hover:bg-muted/50 sm:px-6 sm:py-4", foco)} aria-label={`Abrir a proposta ${l.numero}${cliente ? ` de ${cliente}` : ""}`}>
+        <Avatar name={cliente || l.titulo} tone={l.status === "aceita" ? "solid" : "neutral"} className="mr-3 hidden sm:inline-flex" />
         <span className="block min-w-0 flex-1">
           <span className="flex min-w-0 items-center">
-            <span className={juntar(texto.corpo, "min-w-0 truncate font-semibold")}>{cliente || l.titulo}</span>
-            <span className={juntar(etiqueta, "ml-1.5", COR_DO_STATUS[l.status] || COR_DO_STATUS.rascunho)}>{situacaoDaLinha({ ...l, status: l.status })}</span>
-            {l.upsell && <span className={juntar(etiqueta, "ml-1.5 bg-accent/15 text-foreground")}>Upsell</span>}
+            <span className="min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{cliente || l.titulo}</span>
+            <StatusPill tone={TOM_DO_STATUS[l.status] || "neutral"} className="ml-2">{situacaoDaLinha({ ...l, status: l.status })}</StatusPill>
+            {l.upsell && <span className={juntar(etiqueta, "ml-1.5 h-6 bg-foreground px-2.5 text-background")}>Upsell</span>}
             {l.followup && (
-              <span className={juntar(etiqueta, "ml-1.5 hidden bg-warning-soft text-warning sm:inline-flex")} title={l.followup.texto}>
+              <span className={juntar(etiqueta, "ml-1.5 hidden h-6 bg-warning-soft px-2.5 text-warning sm:inline-flex")} title={l.followup.texto}>
                 <BellRing className="mr-1 h-3 w-3" aria-hidden="true" />
                 Follow-up
               </span>
             )}
           </span>
-          <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+          <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>
             Nº {l.numero}
             {cliente ? ` · ${l.titulo}` : ""}
             {l.followup ? ` · ${l.followup.texto}` : ""}
           </span>
         </span>
-        <span className="ml-3 hidden shrink-0 text-right sm:block">
-          <span className={juntar(texto.corpo, "block tabular-nums")}>{valorDaLinha(l)}</span>
+        <span className="ml-4 hidden shrink-0 text-right sm:block">
+          <span className="block text-[15px] font-semibold leading-5 tabular-nums tracking-[-0.01em] text-foreground">{valorDaLinha(l)}</span>
           <span className={juntar(texto.auxiliar, "block tabular-nums")}>{l.validade_ate ? `Vale até ${dataCurta(l.validade_ate)}` : "Sem validade"}</span>
         </span>
       </button>
@@ -115,7 +127,7 @@ export default function AreaDePropostas({
   return (
     <section ref={raiz} id="propostas" aria-label="Propostas" className="min-w-0 scroll-mt-24" data-area-de-propostas="">
       <CabecalhoDeSecao
-        className="mb-3"
+        className="mb-4"
         titulo="Propostas"
         descricao={resumo}
         ajuda="Proposta comercial com link e aceite. Nova proposta abre uma janela só: cliente novo (do lead do Comercial ou criando o cliente agora), venda nova para cliente da casa ou upsell, que nasce com o que ele já tem e os resultados reais. A proposta abre na Mesa Proposta, no caminho Conversa, Rascunho, Revisar, Enviar e Acompanhar."
@@ -151,7 +163,7 @@ export default function AreaDePropostas({
         ) : (
           <>
             <Painel semEspaco>
-              <ul className="divide-y divide-border">
+              <ul className="divide-y divide-border/60">
                 {visiveis.map((l) => (
                   <LinhaDaProposta key={l.id} l={l} cliente={nomeDoCliente(l.client_id)} onAbrir={(x) => navigate(enderecoDaProposta(x))} />
                 ))}
