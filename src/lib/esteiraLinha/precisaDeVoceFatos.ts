@@ -54,6 +54,33 @@ const emLotes = (ids: string[]): string[][] => {
 
 const diasAtras = (agora: Date, dias: number) => new Date(agora.getTime() - dias * 86_400_000).toISOString();
 
+
+/** Teto de versões seguintes a percorrer a partir dos arquivos rejeitados. */
+export const TETO_DE_HOPS_DA_CADEIA = 8;
+
+/**
+ * Completa a cadeia de versões para a frente: filhos, netos, etc. Sem isso,
+ * uma peça já aprovada ou arquivada uns hops à frente continuaria na caixa.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function completarCadeiaDeArquivos(db: any, iniciais: LinhaDeArquivoRejeitado[], colunas: string): Promise<LinhaDeArquivoRejeitado[]> {
+  const porId = new Map(iniciais.map((a) => [a.id, a]));
+  let fronteira = iniciais.map((a) => a.id);
+  for (let hop = 0; hop < TETO_DE_HOPS_DA_CADEIA && fronteira.length; hop += 1) {
+    const filhos = (await Promise.all(emLotes(fronteira).map((lote) =>
+      linhasDe<LinhaDeArquivoRejeitado>(db.from("staff_files_secure").select(colunas).in("revision_of_file_id", lote))
+    ))).flat();
+    const novos: string[] = [];
+    for (const a of filhos) {
+      if (porId.has(a.id)) continue;
+      porId.set(a.id, a);
+      novos.push(a.id);
+    }
+    fronteira = novos;
+  }
+  return Array.from(porId.values());
+}
+
 /** Rejeições do cliente, as versões dos arquivos envolvidos e as peças do Estúdio com mais de uma volta. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function lerRejeicoes(db: any, agora: Date): Promise<Pick<LinhasDoDono, "rejeicoes" | "arquivos" | "trabalhos">> {
@@ -71,16 +98,16 @@ async function lerRejeicoes(db: any, agora: Date): Promise<Pick<LinhasDoDono, "r
 
   const COLUNAS_DO_ARQUIVO = "id, client_id, file_name, revision_of_file_id, approval_status, archived_at, created_at";
   const idsRejeitados = rejeicoes.map((r) => r.file_id);
-  const [rejeitados, revisoes, tarefas] = await Promise.all([
+  const [rejeitados, tarefas] = await Promise.all([
     Promise.all(emLotes(idsRejeitados).map((lote) => linhasDe<LinhaDeArquivoRejeitado>(db.from("staff_files_secure").select(COLUNAS_DO_ARQUIVO).in("id", lote)))),
-    Promise.all(emLotes(idsRejeitados).map((lote) => linhasDe<LinhaDeArquivoRejeitado>(db.from("staff_files_secure").select(COLUNAS_DO_ARQUIVO).in("revision_of_file_id", lote)))),
     Promise.all(emLotes(trabalhosBrutos.map((t) => t.task_id || "")).map((lote) => linhasDe<{ id: string; title: string | null }>(db.from("tasks").select("id, title").in("id", lote)))),
   ]);
-  const arquivoPorId = new Map<string, LinhaDeArquivoRejeitado>();
-  for (const a of [...rejeitados.flat(), ...revisoes.flat()]) arquivoPorId.set(a.id, a);
+  // Anda a cadeia para a frente (f1 → f2 → f3 → f4): um hop só perderia a
+  // versão que já resolveu a peça, e a caixa ficaria pedindo o dono à toa.
+  const arquivos = await completarCadeiaDeArquivos(db, rejeitados.flat(), COLUNAS_DO_ARQUIVO);
   const tituloDaTarefa = new Map(tarefas.flat().map((t) => [t.id, t.title]));
   const trabalhos = trabalhosBrutos.map((t) => ({ ...t, titulo: t.task_id ? tituloDaTarefa.get(t.task_id) ?? null : null }));
-  return { rejeicoes, arquivos: Array.from(arquivoPorId.values()), trabalhos };
+  return { rejeicoes, arquivos, trabalhos };
 }
 
 /** Lê tudo o que a caixa precisa. Nunca lança: fonte com erro entra em `fontesComErro`. */

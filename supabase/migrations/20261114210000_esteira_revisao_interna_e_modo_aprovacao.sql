@@ -173,12 +173,16 @@ BEGIN
            revisao_nota = _nota,
            revisao_arquivo_id = _arquivo_id
      WHERE id = _t.id;
+  END IF;
 
-    -- O portão da agência no arquivo (Double-Gate), pelas funções de sempre.
-    -- Só o arquivo ainda interno e não travado entra; arquivo já liberado ao
-    -- cliente não é tocado. Quem não é gestor do cliente deixa o carimbo e o
-    -- portão do arquivo segue esperando o gestor, como já era.
-    IF _arquivo_id IS NOT NULL THEN
+  -- O portão da agência no arquivo (Double-Gate), pelas funções de sempre.
+  -- Só o arquivo ainda interno e não travado entra; arquivo já liberado ao
+  -- cliente não é tocado. Quem não é gestor do cliente deixa o carimbo e o
+  -- portão do arquivo segue esperando o gestor, como já era.
+  -- Esta reconciliação roda também na repetição: se o carimbo já existia e o
+  -- portão ficou pendente (quem carimbou não era gestor, ou o espelhamento
+  -- falhou), o gestor conclui na segunda chamada, sem regravar o carimbo.
+  IF _arquivo_id IS NOT NULL THEN
       BEGIN
         SELECT f.id, f.visibility, f.agency_approval_status, f.locked_at, f.status
           INTO _arquivo
@@ -212,7 +216,6 @@ BEGIN
         -- motivo volta na resposta e o arquivo fica como estava.
         _arquivo_aviso := left(SQLERRM, 300);
       END;
-    END IF;
   END IF;
 
   SELECT * INTO _t FROM public.estudio_trabalhos WHERE id = p_trabalho_id;

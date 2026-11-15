@@ -94,4 +94,15 @@ describe("migration: revisar_trabalho_interno", () => {
     expect(funcao).toContain("AND _t.revisao_arquivo_id IS NOT DISTINCT FROM _arquivo_id THEN");
     expect(funcao).toContain("'ja_registrado', _repetido");
   });
+
+  it("na repetição ainda tenta reconciliar o portão pendente da agência, sem regravar o carimbo", () => {
+    const marca = funcao.indexOf("_repetido := true");
+    const update = funcao.indexOf("UPDATE public.estudio_trabalhos");
+    const fechaIdempotencia = funcao.indexOf("END IF;", update);
+    const espelho = funcao.indexOf("PERFORM public.review_file_agency(");
+    expect(marca).toBeGreaterThanOrEqual(0);
+    expect(update).toBeGreaterThan(marca);
+    expect(espelho).toBeGreaterThan(fechaIdempotencia);
+    expect(sql).toContain("Esta reconciliação roda também na repetição");
+  });
 });

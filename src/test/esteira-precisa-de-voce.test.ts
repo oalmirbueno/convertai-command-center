@@ -16,7 +16,23 @@ vi.mock("@/integrations/supabase/client", () => {
   const from = (tabela: string) => {
     const chamada = { tabela, passos: [] as Array<[string, ...unknown[]]> };
     banco.chamadas.push(chamada);
-    const resposta = () => (banco.erroEm[tabela] ? { data: null, error: banco.erroEm[tabela] } : { data: banco.linhas[tabela] ?? [], error: null });
+    const resposta = () => {
+      if (banco.erroEm[tabela]) return { data: null, error: banco.erroEm[tabela] };
+      let data = banco.linhas[tabela] ?? [];
+      // Os filtros `.in` de staff_files_secure precisam valer: a leitura da
+      // cadeia anda de hop em hop e, sem filtro, o mock devolveria o f4 logo
+      // no primeiro passo (o defeito que este teste cobre).
+      if (tabela === "staff_files_secure") {
+        for (const passo of chamada.passos) {
+          if (passo[0] === "in" && Array.isArray(passo[2])) {
+            const col = String(passo[1]);
+            const lote = new Set(passo[2] as string[]);
+            data = data.filter((linha) => lote.has(String((linha as Record<string, unknown>)[col] ?? "")));
+          }
+        }
+      }
+      return { data, error: null };
+    };
     const q: Record<string, unknown> = { then: (ok: (r: unknown) => unknown, falha?: (e: unknown) => unknown) => Promise.resolve(resposta()).then(ok, falha) };
     for (const m of ["select", "in", "eq", "neq", "gte", "or", "order", "limit"]) {
       q[m] = (...args: unknown[]) => {
@@ -192,7 +208,7 @@ describe("leitura da caixa", () => {
     const { linhas, fontesComErro } = await lerLinhasDoDono(new Date("2026-11-15T12:00:00Z"));
     expect(fontesComErro).toEqual([]);
     // Uma consulta por fonte (e três de apoio para as rejeições), nunca uma por cliente.
-    expect(banco.chamadas.length).toBeLessThanOrEqual(8);
+    expect(banco.chamadas.length).toBeLessThanOrEqual(16);
     const passos = (tabela: string) => banco.chamadas.find((c) => c.tabela === tabela)!.passos;
     expect(passos("operator_approvals")).toContainEqual(["in", "status", ["pendente", "adiado"]]);
     expect(passos("operator_task_links")).toContainEqual(["eq", "approval_required", true]);
@@ -214,5 +230,19 @@ describe("leitura da caixa", () => {
     expect(linhas.aprovacoes).toEqual([]);
     expect(linhas.acoesDeAnuncio).toEqual([]);
     expect(linhas.rejeicoes).toHaveLength(2);
+  });
+
+  it("anda a cadeia de versões além do filho direto: se a última já foi aprovada, a peça sai da caixa", async () => {
+    banco.linhas.estudio_trabalhos = [];
+    banco.linhas.staff_files_secure = [
+      arquivo("f1"),
+      arquivo("f2", { revision_of_file_id: "f1", created_at: "2026-11-05T10:00:00Z" }),
+      arquivo("f3", { revision_of_file_id: "f2", approval_status: "pending", created_at: "2026-11-09T10:00:00Z" }),
+      arquivo("f4", { revision_of_file_id: "f3", approval_status: "approved", created_at: "2026-11-12T10:00:00Z" }),
+    ];
+    const { linhas, fontesComErro } = await lerLinhasDoDono(new Date("2026-11-15T12:00:00Z"));
+    expect(fontesComErro).toEqual([]);
+    expect(linhas.arquivos.map((a) => a.id).sort()).toEqual(["f1", "f2", "f3", "f4"]);
+    expect(montarPedidosDoDono(entrada(linhas)).map((p) => p.chave)).toEqual(["aprovacao:a1"]);
   });
 });
