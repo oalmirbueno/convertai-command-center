@@ -115,7 +115,7 @@ export default function EtapaRoteiro({
   if (roteirosQ.isLoading) return <Carregando forma="aba" rotulo="Carregando o roteiro" />;
   if (roteiroId && !linha) {
     return (
-      <EstadoVazio
+      <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
         icone={<FileText className="h-5 w-5" />}
         titulo="Este roteiro não está na lista do cliente."
         acao={
@@ -130,7 +130,7 @@ export default function EtapaRoteiro({
   if (solto) return <RoteiroSolto roteiro={solto} onDescartar={() => setSolto(null)} />;
   if (!tarefaId && !avulso) {
     return (
-      <EstadoVazio
+      <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
         icone={<FileText className="h-5 w-5" />}
         titulo="Escolha uma peça na Agenda ou comece um roteiro avulso."
         acao={

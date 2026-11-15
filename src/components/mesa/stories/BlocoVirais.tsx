@@ -66,7 +66,7 @@ export default function BlocoVirais({
   };
 
   if (!moldes.length) {
-    return <EstadoVazio icone={<Flame className="h-5 w-5" />} titulo="Nenhum molde viral ainda" descricao="Os moldes chegam com a função dos stories" />;
+    return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Flame className="h-5 w-5" />} titulo="Nenhum molde viral ainda" descricao="Os moldes chegam com a função dos stories" />;
   }
 
   return (

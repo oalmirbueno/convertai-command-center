@@ -160,7 +160,7 @@ export default function EtapaPdf({ roteiroId }: { roteiroId: string | null }) {
         {url ? (
           <iframe title="Prévia do PDF do roteiro" src={url} className="block h-[70vh] w-full bg-white lg:h-[78vh]" />
         ) : (
-          <EstadoVazio icone={<FileText className="h-5 w-5" />} titulo="Escolha ao menos um roteiro para ver o PDF." />
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<FileText className="h-5 w-5" />} titulo="Escolha ao menos um roteiro para ver o PDF." />
         )}
       </section>
     </div>

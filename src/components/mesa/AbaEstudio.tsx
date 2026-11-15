@@ -371,7 +371,7 @@ function BarraDeFerramentas({
     <TooltipProvider delayDuration={250}>
       <nav
         aria-label="Ferramentas"
-        className={vertical ? "flex w-14 shrink-0 flex-col items-center border-l border-border py-3" : "flex min-w-0 overflow-x-auto border-t border-border px-2 py-2"}
+        className={vertical ? "flex w-16 shrink-0 flex-col items-center border-l border-border py-3" : "scrollbar-hidden flex min-w-0 overflow-x-auto overscroll-x-contain border-t border-border px-2 py-2"}
       >
         {ferramentas.map((f) => {
           const def = FERRAMENTAS[f];
@@ -386,8 +386,8 @@ function BarraDeFerramentas({
                   aria-label={def.rotulo}
                   aria-pressed={aberta}
                   className={`relative flex shrink-0 items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                    vertical ? "mb-1.5 h-10 w-10 rounded-full" : "mr-1 h-11 min-w-[68px] flex-col rounded-[16px] px-2.5"
-                  } ${aberta ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                    vertical ? "mb-2 h-10 w-10 rounded-full" : "mr-1.5 h-11 min-w-[68px] flex-col rounded-[16px] px-2.5"
+                  } ${aberta ? "bg-foreground text-background" : "bg-muted text-foreground hover:bg-foreground hover:text-background"}`}
                 >
                   <Icone className="h-[18px] w-[18px]" />
                   {!vertical && <span className="mt-0.5 text-[11px] leading-none">{def.rotulo}</span>}
@@ -1493,8 +1493,8 @@ export function DetalheDoItem({
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[18px] font-semibold leading-6 tracking-[-0.02em]" title={item.title}>{item.title}</h2>
-            <p className="mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground">
+            <h2 className="truncate text-[20px] font-medium leading-7 tracking-[-0.025em] sm:text-[22px]" title={item.title}>{item.title}</h2>
+            <p className="mt-1 flex min-w-0 items-center text-[11px] text-muted-foreground">
               <span className="truncate">{rapida ? rapida.subtitulo : <>{dataCurta(item.due_date)} · {formatoDoItem(item)}</>}</span>
               <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
               {item.momento && (
@@ -1653,7 +1653,9 @@ export function DetalheDoItem({
       descricao={comNotaDoFundo(`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`, [c.ordem])}
       // v4 (uma ação principal por vez): só a lâmina aberta ganha o botão cheio; as outras ficam discretas.
       variant={v ? "ghost" : c.ordem === selecionado ? "default" : "outline"}
-      className="h-8 w-full gap-1 px-2 text-[11px]"
+      // v4 (referências): um círculo só com o ícone; o preço de cada lâmina fica na dica (o total já está no Gerar de cima).
+      semPreco
+      className="h-8 w-8 gap-1 rounded-full p-0 text-[11px]"
       disabled={laminaOcupada(c.ordem) || entregue || semTipografia}
       partes={() => partesGerarDas([c.ordem]).concat(partesDoFundo([c.ordem]))}
       executar={() => gerarEConferir(c.ordem)}
@@ -1876,7 +1878,7 @@ export function DetalheDoItem({
       <div className="flex min-h-0 shrink-0 flex-col border-r border-border" style={{ width: LARGURA_NA_PRANCHETA + 32 }}>
         <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium text-muted-foreground" title={`${trabalho?.direcao?.origem === "roteiro" ? "Direção do roteiro" : "Direção do diretor"}${infinito ? ", carrossel contínuo" : ""}. ${ordemTravada ? `Lâminas: clique escolhe, duplo clique amplia. ${AVISO_DA_ORDEM_NO_CONTINUO}` : "Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem"}`}>
           <span className="min-w-0 flex-1 truncate">Prancheta</span>
-          <span className="ml-1 shrink-0 normal-case tracking-normal tabular-nums" data-resumo-da-prancheta="">{laminasComArte}/{cardsDaDirecao.length}</span>
+          <span className={`ml-1 inline-flex h-6 shrink-0 items-center rounded-full px-2 font-semibold normal-case tracking-normal tabular-nums ${cardsDaDirecao.length > 0 && laminasComArte >= cardsDaDirecao.length ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`} data-resumo-da-prancheta="">{laminasComArte}/{cardsDaDirecao.length}</span>
         </p>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8">
           {prancheta(true)}
@@ -2453,13 +2455,15 @@ export function DetalheDoItem({
   };
 
   const cabecalhoDoPainel = ferramenta ? (
-    <div className="flex h-11 shrink-0 items-center border-b border-border px-4">
-      <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{FERRAMENTAS[ferramenta].rotulo}</p>
+    <div className="flex h-14 shrink-0 items-center px-4">
+      {/* v4 (cabeçalho de cartão das referências): ícone em círculo, título e fechar em círculo. */}
+      <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary">{(() => { const I = FERRAMENTAS[ferramenta].icone; return <I className="h-4 w-4" />; })()}</span>
+      <p className="min-w-0 flex-1 truncate text-[15px] font-medium tracking-[-0.01em]">{FERRAMENTAS[ferramenta].rotulo}</p>
       <button
         type="button"
         onClick={() => setFerramenta("")}
         aria-label="Fechar a ferramenta"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-foreground hover:text-background"
       >
         <X className="h-4 w-4" />
       </button>
@@ -2480,7 +2484,7 @@ export function DetalheDoItem({
           <div className="flex min-h-0 min-w-0 flex-1">{centro}</div>
           {/* Painel deslizante da ferramenta: abre ao lado da barra, com rolagem própria. */}
           <div
-            className="min-h-0 shrink-0 overflow-hidden border-border transition-[width] duration-200 ease-out"
+            className="min-h-0 shrink-0 overflow-hidden border-border"
             style={{ width: ferramenta ? LARGURA_DO_PAINEL : 0, borderLeftWidth: ferramenta ? 1 : 0 }}
           >
             {ferramenta && (
@@ -2546,13 +2550,13 @@ function mesesDoSeletor(mesAtual: string): string[] {
 /** O estúdio antes de haver pauta para abrir (lista vazia ou ainda lendo). */
 function SemPauta({ carregando, vazia }: { carregando: boolean; vazia: boolean }) {
   return (
-    <div className={juntar(superficie.painel, "flex min-h-[320px] flex-1 flex-col items-center justify-center p-8 text-center")}>
+    <div className={juntar(superficie.painel, "ds-hatch flex min-h-[320px] flex-1 flex-col items-center justify-center p-8 text-center")} data-empty-state="">
       {carregando ? (
         <p className="inline-flex items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a pauta…</p>
       ) : (
         <>
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-solid text-on-accent" aria-hidden="true"><ListChecks className="h-6 w-6" /></span>
-          <p className="mt-4 text-[20px] font-semibold leading-7 tracking-[-0.02em]">{vazia ? "Nenhuma pauta de arte neste período" : "Escolha uma pauta na faixa acima"}</p>
+          <p className="mt-4 text-[20px] font-medium leading-7 tracking-[-0.02em]">{vazia ? "Nenhuma pauta de arte neste período" : "Escolha uma pauta na faixa acima"}</p>
           <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">
             {vazia ? "Troque o período na faixa ou complete a agenda pela aba Mês." : "O estúdio abre com a pauta escolhida."}
           </p>

@@ -283,7 +283,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
           </div>
         )}
         {!planos.length ? (
-          <EstadoVazio titulo="Nenhum plano ainda" descricao="Use um kit ou peça ao diretor para montar o roteiro." acao={<button type="button" className={botao.secundario} onClick={() => irPara("kit")}>Escolher kit</button>} />
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhum plano ainda" descricao="Use um kit ou peça ao diretor para montar o roteiro." acao={<button type="button" className={botao.secundario} onClick={() => irPara("kit")}>Escolher kit</button>} />
         ) : (
           <>
             {/* 28/09: sem altura fixa e sem região própria. A principal da AreaDeTrabalho já rola

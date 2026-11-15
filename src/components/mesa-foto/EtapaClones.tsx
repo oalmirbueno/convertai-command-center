@@ -2416,7 +2416,7 @@ export default function EtapaClones() {
         ) : clonesQ.isLoading ? (
           <Carregando forma="aba" rotulo="Lendo os clones" />
         ) : (
-          <EstadoVazio
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
             icone={<UserRound className="h-5 w-5" />}
             titulo="Crie o primeiro clone"
             descricao="De 1 a 4 fotos reais da pessoa e a autorização de uso de imagem."

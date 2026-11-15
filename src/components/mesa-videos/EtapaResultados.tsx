@@ -178,7 +178,7 @@ export default function EtapaResultados({ irPara }: { irPara: IrPara }) {
             ))}
           </ul>
         ) : (
-          <EstadoVazio
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
             icone={<Film className="h-5 w-5" />}
             titulo="Nenhum vídeo gerado ainda"
             descricao={naFila ? `${naFila} ${naFila === 1 ? "pedido está" : "pedidos estão"} na fila, esperando o motor de vídeo.` : "Prepare um pedido em Gerar ou suba um vídeo gerado fora."}

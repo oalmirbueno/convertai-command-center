@@ -336,7 +336,7 @@ export default function MesaPublicidade() {
     >
 
       {!clientId && (
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Megaphone className="h-5 w-5" />}
           titulo="Escolha um cliente para abrir a Mesa Publicidade dele."
           descricao="Campanhas de produto, com o custo antes."

@@ -183,7 +183,7 @@ export default function EtapaRevisao() {
     return (
       <div className="min-w-0 space-y-6" data-etapa-publicidade="revisao">
         <CabecalhoDaEtapa titulo="Revisão" ajuda={ajuda} />
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<ScanSearch className="h-5 w-5" />}
           titulo="Peça as tomadas à Mesa Foto antes."
           acao={

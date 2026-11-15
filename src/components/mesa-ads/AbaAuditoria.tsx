@@ -87,7 +87,7 @@ export default function AbaAuditoria() {
       {q.isLoading && <Carregando forma="aba" rotulo="Lendo as auditorias" />}
       {q.isError && <EstadoDeErro titulo="Não deu para ler as auditorias" descricao={q.error instanceof Error ? q.error.message : ""} />}
       {!q.isLoading && !q.isError && !atual && (
-        <EstadoVazio icone={<ShieldCheck className="h-5 w-5" />} titulo="Nenhuma auditoria ainda" descricao="Rode a primeira: leva alguns segundos e não custa nada (é cálculo do painel, sem IA)." />
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<ShieldCheck className="h-5 w-5" />} titulo="Nenhuma auditoria ainda" descricao="Rode a primeira: leva alguns segundos e não custa nada (é cálculo do painel, sem IA)." />
       )}
 
       {atual && (

@@ -27,6 +27,7 @@ export function ModoDoEstudio({ modo, onModo, className = "", curto: sempreCurto
         role="radio"
         aria-checked={ativa}
         title={dica}
+        aria-label={sempreCurto ? rotulo : undefined}
         onClick={() => !ativa && onModo(valor)}
         className={juntar(
           "toque-compacto inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[13px] font-medium transition-colors duration-200",

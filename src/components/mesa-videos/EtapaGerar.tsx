@@ -294,7 +294,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
           {carregando ? (
             <Carregando linhas={4} rotulo="Lendo as cenas" />
           ) : !origens.length ? (
-            <EstadoVazio
+            <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
               icone={<Clapperboard className="h-5 w-5" />}
               titulo="Nenhuma cena para gerar"
               descricao="Monte a História no Canvas, aprove um roteiro ou use o modo Livre."

@@ -366,7 +366,7 @@ export default function MesaIdentidade() {
       }
     >
       {!clientId && (
-        <EstadoVazio icone={<Palette className="h-5 w-5" />} titulo="Escolha um cliente para abrir a Mesa Identidade dele." descricao="Identidade visual, naming e brandbook." />
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Palette className="h-5 w-5" />} titulo="Escolha um cliente para abrir a Mesa Identidade dele." descricao="Identidade visual, naming e brandbook." />
       )}
 
       {valor && (

@@ -197,7 +197,7 @@ export default function EtapaTomadas() {
     return (
       <div className="min-w-0 space-y-6" data-etapa-publicidade="tomadas">
         <CabecalhoDaEtapa titulo="Tomadas" ajuda="Seis tomadas, uma por função, pedidas à Mesa Foto." />
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Camera className="h-5 w-5" />}
           titulo="Aprove um território antes."
           acao={

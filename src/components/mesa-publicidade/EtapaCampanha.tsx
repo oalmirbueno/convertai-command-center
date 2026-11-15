@@ -399,7 +399,7 @@ export default function EtapaCampanha() {
           <EscolherProduto kits={listaDeKits} onCriado={() => setNova(false)} />
         ) : (
           <div data-sem-produto="">
-            <EstadoVazio
+            <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
               icone={<Package className="h-5 w-5" />}
               titulo="Este cliente ainda não tem produto na Mesa Foto."
               descricao="Suba e identifique o produto lá: ele aparece aqui na hora."

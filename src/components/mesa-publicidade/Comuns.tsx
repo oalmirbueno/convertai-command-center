@@ -152,7 +152,7 @@ export function FontesDoProduto({ ids, fotos, max = 6 }: { ids: string[]; fotos:
 export function SemCampanha({ etapa }: { etapa: string }) {
   const { irPara } = useMesaPublicidade();
   return (
-    <EstadoVazio
+    <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
       titulo={`Abra uma campanha para ver ${etapa}.`}
       acao={
         <button type="button" className={botao.secundario} onClick={() => irPara("campanha")}>

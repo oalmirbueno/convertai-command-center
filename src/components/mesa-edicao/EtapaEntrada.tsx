@@ -407,7 +407,7 @@ export default function EtapaEntrada({ irPara }: { irPara: IrPara }) {
               ))}
             </ul>
           ) : (
-            <EstadoVazio
+            <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
               icone={<Upload className="h-5 w-5" />}
               titulo="Arraste os vídeos para cá"
               descricao="Ou use Subir vídeos. Os aprovados da Mesa Vídeos entram sozinhos."

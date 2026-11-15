@@ -254,7 +254,7 @@ export function Esboco({ card, total, largura }: { card: CardDaDirecao; total: n
   const alinhar = alinhamento === "centro" ? "items-center text-center" : alinhamento === "direita" ? "items-end text-right" : "items-start text-left";
   const medidas = medidasDoEsboco(blocos, largura, caixa);
   return (
-    <div className="absolute inset-0 overflow-hidden bg-secondary">
+    <div className="ds-hatch absolute inset-0 overflow-hidden bg-secondary">
       {/* margens de segurança */}
       <div className="absolute border border-dashed border-muted-foreground/30" style={{ left: "8.3%", right: "8.3%", top: "7.4%", bottom: "7.9%" }} />
       <div
@@ -339,7 +339,7 @@ function Lamina({
   const deslocamento = arrasto.transform ? `translate3d(${arrasto.transform.x}px, ${arrasto.transform.y}px, 0)` : undefined;
   const funcao = funcaoDaLamina(card);
   const altura = Math.round(largura / (proporcao > 0 ? proporcao : 0.8));
-  const cantos = colado ? `${primeira ? "rounded-l-lg" : ""} ${ultima ? "rounded-r-lg" : ""}` : "rounded-lg border";
+  const cantos = colado ? `${primeira ? "rounded-l-md" : ""} ${ultima ? "rounded-r-md" : ""}` : "rounded-md border";
   const trabalhando = !!andamento && andamento.etapa !== "fila";
   const espaco = colado ? "" : vertical ? (ultima ? "" : "mb-3") : "mr-3";
 
@@ -379,9 +379,10 @@ function Lamina({
         </button>
         {/* 17/10/2026 (dono: "no mobile está faltando um botão ali de ajustar"): no toque, a linha e o ajuste crescem para 36 px. */}
         <div className="mt-1.5 flex h-5 min-w-0 items-center px-0.5 [@media(pointer:coarse)]:h-9">
-          <span className="min-w-0 flex-1 truncate text-[11px] leading-none">
-            <span className={`font-semibold tabular-nums ${ativo ? "text-primary" : "text-foreground"}`}>{card.ordem}</span>
-            <span className={funcao === "capa" ? "font-medium text-primary" : "text-muted-foreground"}> {funcao}</span>
+          <span className="flex min-w-0 flex-1 items-center text-[11px] leading-none">
+            {/* v4: o número da lâmina num círculo (de tinta na aberta), como os contadores das referências. */}
+            <span className={`inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[10.5px] font-semibold tabular-nums ${ativo ? "bg-foreground text-background" : "bg-muted text-foreground"}`}>{card.ordem}</span>
+            <span className={`ml-1 min-w-0 truncate ${funcao === "capa" ? "font-medium text-primary" : "text-muted-foreground"}`}> {funcao}</span>
           </span>
           {versao && onAjustar && !andamento && (
             <button
@@ -407,7 +408,7 @@ function Lamina({
               v{versao.versao}
             </button>
           ) : (
-            !versao && (estadoSemVersao || <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">sem arte</span>)
+            !versao && (estadoSemVersao || <span className="sr-only">sem arte</span>)
           )}
           {arrastavel && (
             <span

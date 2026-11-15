@@ -94,7 +94,7 @@ export default function EscolherMidia({
             ))}
           </ul>
         ) : (
-          <EstadoVazio icone={<Link2 className="h-5 w-5" />} titulo="Nada ligado ao Quadro" descricao="Ligue um Resultado ou um Vídeo ao Quadro no Canvas." />
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Link2 className="h-5 w-5" />} titulo="Nada ligado ao Quadro" descricao="Ligue um Resultado ou um Vídeo ao Quadro no Canvas." />
         )
       ) : aba === "fotos" ? (
         listaDeFotos.length ? (
@@ -104,7 +104,7 @@ export default function EscolherMidia({
             ))}
           </ul>
         ) : (
-          <EstadoVazio icone={<ImageIcon className="h-5 w-5" />} titulo={fotos.isLoading ? "Lendo o acervo" : "Sem fotos no acervo"} descricao="Suba ou gere fotos na Mesa Foto." />
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<ImageIcon className="h-5 w-5" />} titulo={fotos.isLoading ? "Lendo o acervo" : "Sem fotos no acervo"} descricao="Suba ou gere fotos na Mesa Foto." />
         )
       ) : listaDeVideos.length ? (
         <ul className="grid min-w-0 grid-cols-3 gap-3 sm:grid-cols-4">
@@ -113,7 +113,7 @@ export default function EscolherMidia({
           ))}
         </ul>
       ) : (
-        <EstadoVazio icone={<Film className="h-5 w-5" />} titulo={videos.isLoading ? "Lendo os vídeos" : "Sem vídeos"} descricao="Gere pelo cartão Vídeo ou suba na Mesa Vídeos." />
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Film className="h-5 w-5" />} titulo={videos.isLoading ? "Lendo os vídeos" : "Sem vídeos"} descricao="Gere pelo cartão Vídeo ou suba na Mesa Vídeos." />
       )}
     </JanelaCentral>
   );

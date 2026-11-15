@@ -292,7 +292,7 @@ export default function BlocoSequencia({
       />
 
       {!sequencia ? (
-        <EstadoVazio icone={<Clapperboard className="h-5 w-5" />} titulo="Nenhuma sequência ainda" descricao="Escolha o modelo e o dia e crie a sequência" />
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Clapperboard className="h-5 w-5" />} titulo="Nenhuma sequência ainda" descricao="Escolha o modelo e o dia e crie a sequência" />
       ) : (
         <Secao
           divisoria

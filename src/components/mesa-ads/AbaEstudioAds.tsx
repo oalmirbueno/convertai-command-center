@@ -472,7 +472,7 @@ export default function AbaEstudioAds({
     return (
       <div className="min-w-0 space-y-4">
         {painelDaCampanha}
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Clapperboard className="h-5 w-5" />}
           titulo="Nenhum criativo produzido ainda"
           descricao={'No Plano de teste, escolha os ângulos e os formatos e use "Produzir criativos", ou puxe as peças prontas de uma campanha.'}

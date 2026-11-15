@@ -211,6 +211,12 @@ interface BotaoComCustoProps {
   variant?: "default" | "outline" | "secondary" | "ghost";
   size?: "default" | "sm";
   className?: string;
+  /**
+   * v4 (15/11/2026, "o mesmo preço repetido em cada miniatura"): esconde a pílula do preço;
+   * o valor continua no title do botão e para o leitor de tela. Para botão que se repete
+   * numa lista (um por lâmina) quando o total já aparece no botão principal.
+   */
+  semPreco?: boolean;
   rotuloConfirmar?: string;
   /**
    * Sempre pede o segundo clique, mesmo barato (ex.: refazer artes que já
@@ -245,6 +251,7 @@ export function BotaoComCusto({
   size = "sm",
   className = "",
   sempreConfirmar = false,
+  semPreco = false,
 }: BotaoComCustoProps) {
   const mesa = useMesa();
   const avisarErro = useAvisarErro();
@@ -317,11 +324,12 @@ export function BotaoComCusto({
       disabled={disabled || rodando}
       onClick={() => void clicar()}
       className={className}
-      title={descricao || titulo}
+      title={semPreco && valor !== undefined ? `${descricao || titulo} · ~${usd(valor)}` : descricao || titulo}
     >
       {rodando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
       {armado ? (valor === undefined ? "Sem estimativa: clique de novo" : "Clique de novo para confirmar") : rotulo}
-      {!rodando && valor !== undefined && (
+      {semPreco && !rodando && valor !== undefined && <span className="sr-only"> ~{usd(valor)}</span>}
+      {!semPreco && !rodando && valor !== undefined && (
         <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-px text-[11px] font-normal opacity-80 dark:bg-white/10">
           ~{usd(valor)}
         </span>
