@@ -1,0 +1,10 @@
+{
+  // Publicar: npx wrangler@4 deploy (nesta pasta). Conta da Cloudflare onde está o domínio aceleriq.com.br.
+  "name": "aceleriq-n8n-porta",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "account_id": "f1a32e14e962f68134a06c0370e45e0e",
+  "workers_dev": false,
+  "routes": [{ "pattern": "n8n.aceleriq.com.br", "custom_domain": true }],
+  "vars": { "ORIGEM": "https://n8n-recovery.srv1769409.hstgr.cloud" }
+}

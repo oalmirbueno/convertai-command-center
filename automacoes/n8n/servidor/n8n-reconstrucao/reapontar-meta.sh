@@ -9,7 +9,8 @@ BASE="${1:?diga o endereço, ex.: https://n8n.aceleriq.com.br}"
 BASE="${BASE%/}"
 C=n8n-recovery-n8n-1
 APP=923847673362091
-docker exec "$C" n8n list:workflow --active=true 2>/dev/null | grep -q '^Acq07ComercialRs|' || { echo "ACQ-07 não está publicado; nada alterado"; exit 1; }
+ATIVOS=$(docker exec "$C" n8n list:workflow --active=true 2>/dev/null || true)
+case "$ATIVOS" in *"Acq07ComercialRs|"*) ;; *) echo "ACQ-07 não está publicado; nada alterado"; exit 1;; esac
 curl -fsS -m 20 "$BASE/healthz" >/dev/null || { echo "$BASE/healthz não respondeu; nada alterado"; exit 1; }
 T=$(mktemp)
 BASE="$BASE" APP="$APP" python3 - > "$T" <<'PY'
