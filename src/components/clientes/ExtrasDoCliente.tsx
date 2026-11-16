@@ -126,6 +126,7 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
                   {e.cobranca === "unico" && `Recebido ${dinheiro(unico.pago)} ${unico.aberto > 0 ? ` · a receber ${dinheiro(unico.aberto)}${unico.proxima ? ` (próxima em ${dataCurta(unico.proxima)})` : ""}` : ""}${unico.aLancar > 0 ? ` · falta lançar ${dinheiro(unico.aLancar)}` : ""}.`}
                   {e.cobranca === "comissao" && `${e.base_da_comissao ? `Sobre ${e.base_da_comissao}. ` : ""}${doExtra.length ? `Recebido ${dinheiro(unico.pago)} em ${doExtra.length} ${doExtra.length === 1 ? "lançamento" : "lançamentos"}${unico.aberto > 0 ? ` · a receber ${dinheiro(unico.aberto)}` : ""}.` : "Nada lançado ainda."}`}
                   {e.observacao ? ` ${e.observacao}` : ""}
+                  {e.afiliado_nome && Number(e.afiliado_percentual) > 0 ? ` Indicação: ${e.afiliado_nome}, ${String(e.afiliado_percentual).replace(".", ",")}% de cada pagamento.` : ""}
                 </p>
                 <div className="-m-1 mt-2 flex flex-wrap items-center [&>*]:m-1">
                   {!encerrado && e.cobranca === "comissao" && <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setAcao({ tipo: "cobrancas", id: e.id, nova: true })} data-lancar-recebimento="">Lançar recebimento</button>}
@@ -212,8 +213,12 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
   const [baseDaComissao, setBaseDaComissao] = useState(extra.base_da_comissao ?? "");
   const [dia, setDia] = useState(extra.dia_vencimento ? String(extra.dia_vencimento) : "");
   const [observacao, setObservacao] = useState(extra.observacao ?? "");
+  const [afiliadoNome, setAfiliadoNome] = useState(extra.afiliado_nome ?? "");
+  const [afiliadoPct, setAfiliadoPct] = useState(paraCampo(extra.afiliado_percentual));
   const [ocupado, setOcupado] = useState(false);
   const comissao = extra.cobranca === "comissao";
+  const pctAfiliado = numero(afiliadoPct);
+  const faltaAfiliado = pctAfiliado > 100 ? "O repasse vai até 100%." : pctAfiliado > 0 && afiliadoNome.trim().length < 2 ? "Diga quem indicou." : null;
   const falta = nome.trim().length < 2 ? "Escreva o nome." : comissao ? (numero(percentual) <= 100 ? null : "O percentual vai até 100.") : numero(valor) > 0 ? null : "Diga o valor.";
 
   const salvar = async () => {
@@ -225,6 +230,10 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
         _dados: { nome: nome.trim(), categoria, valor: comissao ? null : numero(valor), percentual: comissao && numero(percentual) > 0 ? numero(percentual) : null, base_da_comissao: baseDaComissao, dia_vencimento: extra.cobranca === "mensal" && Number(dia) >= 1 ? Number(dia) : null, observacao },
       });
       if (error) throw error;
+      const { error: afError } = await (supabase as any).from("client_extras")
+        .update(pctAfiliado > 0 ? { afiliado_nome: afiliadoNome.trim(), afiliado_percentual: pctAfiliado } : { afiliado_nome: null, afiliado_percentual: null })
+        .eq("id", extra.id);
+      if (afError) throw afError;
       toast.success(`${nome.trim()} atualizado. O Financeiro já acompanha.`);
       await aoMudar();
       aoFechar();
@@ -268,11 +277,17 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
         <CampoDeFormulario rotulo="Observação" largo>
           <input className={campo} value={observacao} maxLength={200} onChange={(e) => setObservacao(e.target.value)} />
         </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Quem indicou" apoio="Opcional.">
+          <input className={campo} value={afiliadoNome} maxLength={80} onChange={(e) => setAfiliadoNome(e.target.value)} placeholder="Nome" data-afiliado-nome="" />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Repasse (%)" apoio="De cada pagamento; vira despesa a pagar. Vazio = sem repasse.">
+          <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={afiliadoPct} onChange={(e) => setAfiliadoPct(e.target.value)} placeholder="Ex.: 10" />
+        </CampoDeFormulario>
       </GrupoDeCampos>
       <div className="-m-1 mt-2 flex flex-wrap items-center [&>*]:m-1">
-        <button type="button" className={juntar(botao.primario, "h-8")} disabled={ocupado || !!falta} onClick={() => void salvar()}>{ocupado ? "Salvando…" : "Salvar"}</button>
+        <button type="button" className={juntar(botao.primario, "h-8")} disabled={ocupado || !!falta || !!faltaAfiliado} onClick={() => void salvar()}>{ocupado ? "Salvando…" : "Salvar"}</button>
         <button type="button" className={juntar(botao.secundario, "h-8")} onClick={aoFechar}>Cancelar</button>
-        {falta && <span className={juntar(texto.auxiliar, "text-warning")}>{falta}</span>}
+        {(falta || faltaAfiliado) && <span className={juntar(texto.auxiliar, "text-warning")}>{falta || faltaAfiliado}</span>}
       </div>
     </div>
   );
