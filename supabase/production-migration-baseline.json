@@ -3129,6 +3129,14 @@
       "remote_name": "mesa_campanhas_arquivar",
       "remote_statements_sha256": "7c40ff05843fda09855eff12bfe46c77fcf49359791bbbe5affeb7102aa594e3",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261116130000",
+      "path": "supabase/migrations/20261116130000_afiliado_dos_extras.sql",
+      "local_sha256": "258f649818902a6a4088bb75a562fafb495f712d391101eaaff3bc88981221de",
+      "remote_name": "afiliado_dos_extras",
+      "remote_statements_sha256": "1ea27fcab305a537213001bdb097a0a8ead324b83f3ff7783daa86264c756ac5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
