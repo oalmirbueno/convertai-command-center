@@ -38,6 +38,8 @@ import ExtrasDoCliente from "@/components/clientes/ExtrasDoCliente";
 import GerarLinkDoBriefing from "@/components/briefing/GerarLinkDoBriefing";
 import { estadoDoLink, modeloDeFabrica } from "../../../supabase/functions/_shared/briefing-modelos";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
+import { buildPlanoComEntrada, lerValorBR, percentualDaEntrada } from "@/lib/paymentInstallments";
+import { somarMeses } from "@/lib/extrasDoCliente";
 import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
 import ClientConnectionsPanel from "@/components/admin/ClientConnectionsPanel";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
@@ -209,7 +211,7 @@ export default function EditClientDrawer({
   // Payment management state
   const [payCreateForProject, setPayCreateForProject] = useState<string | null>(null);
   const [payTotal, setPayTotal] = useState("");
-  const [payEntryPct, setPayEntryPct] = useState("50");
+  const [payEntryPct, setPayEntryPct] = useState(""); // entrada em R$ (16/11: valor livre, não mais %)
   const [payInstCount, setPayInstCount] = useState("1");
   const [payNotes, setPayNotes] = useState("");
   const [paySubmitting, setPaySubmitting] = useState(false);
@@ -588,32 +590,27 @@ export default function EditClientDrawer({
   };
 
   const handleCreatePayment = async (projectId: string) => {
-    const total = parseFloat(payTotal);
-    const entryPct = parseFloat(payEntryPct);
-    const count = parseInt(payInstCount);
-    if (!total || isNaN(entryPct) || !count) return;
+    const total = lerValorBR(payTotal);
+    const entryAmount = Math.min(lerValorBR(payEntryPct), total);
+    const entryPct = percentualDaEntrada(total, entryAmount);
+    const count = Math.max(parseInt(payInstCount) || 1, 1);
+    if (!(total > 0)) return;
     setPaySubmitting(true);
     try {
-      const entryAmount = (total * entryPct) / 100;
-      const remaining = total - entryAmount;
-      const perInstallment = count > 0 ? remaining / count : 0;
       const { data: paymentData, error: paymentError } = await supabase
         .from("project_payments")
         .insert({ project_id: projectId, client_id: client.id, total_value: total, entry_percentage: entryPct, entry_amount: entryAmount, installments_count: count, notes: payNotes.trim() || null, created_by: profile?.id })
         .select().single();
       if (paymentError) throw paymentError;
-      const rows: any[] = [{ payment_id: paymentData.id, installment_number: 0, amount: entryAmount, due_date: todayBR(), status: "pending", description: `Entrada (${entryPct}%)` }];
-      for (let i = 1; i <= count; i++) {
-        const d = new Date(); d.setMonth(d.getMonth() + i);
-        rows.push({ payment_id: paymentData.id, installment_number: i, amount: perInstallment, due_date: toBRDateKey(d), status: "pending", description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}` });
-      }
+      const hoje = todayBR();
+      const rows = buildPlanoComEntrada({ paymentId: paymentData.id, total, entrada: entryAmount, entradaEm: hoje, entradaPaga: false, parcelas: count, primeiraEm: entryAmount > 0 ? somarMeses(hoje, 1) : hoje });
 
       const { error: instErr } = await supabase.from("payment_installments").insert(rows);
       if (instErr) throw instErr;
       queryClient.invalidateQueries({ queryKey: ["client-nonrecurring-projects"] });
       queryClient.invalidateQueries({ queryKey: ["project-payments"] });
       toast.success("Plano de pagamento criado!");
-      setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes("");
+      setPayCreateForProject(null); setPayTotal(""); setPayEntryPct(""); setPayInstCount("1"); setPayNotes("");
     } catch (err: any) { toast.error(err.message || "Erro ao criar plano"); }
     setPaySubmitting(false);
   };
@@ -1241,7 +1238,7 @@ export default function EditClientDrawer({
                                 {payCreateForProject !== proj.id && (
                                   <button
                                     type="button"
-                                    onClick={() => { setPayCreateForProject(proj.id); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
+                                    onClick={() => { setPayCreateForProject(proj.id); setPayTotal(""); setPayEntryPct(""); setPayInstCount("1"); setPayNotes(""); }}
                                     className={juntar(botao.discreto, "ml-3 h-8 text-primary")}
                                   >
                                     <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Criar plano de pagamento
@@ -1252,12 +1249,12 @@ export default function EditClientDrawer({
                                 <div className={juntar(superficie.poco, "mt-3 p-4")}>
                                   <GrupoDeCampos colunas={3}>
                                     <CampoDeFormulario rotulo="Valor total (R$)" obrigatorio>
-                                      <input type="number" placeholder="5000" value={payTotal} onChange={(e) => setPayTotal(e.target.value)} className={juntar(campo, "tabular-nums")} />
+                                      <input inputMode="decimal" placeholder="5000" value={payTotal} onChange={(e) => setPayTotal(e.target.value)} className={juntar(campo, "tabular-nums")} />
                                     </CampoDeFormulario>
-                                    <CampoDeFormulario rotulo="Entrada (%)">
-                                      <input type="number" min="0" max="100" value={payEntryPct} onChange={(e) => setPayEntryPct(e.target.value)} className={juntar(campo, "tabular-nums")} />
+                                    <CampoDeFormulario rotulo="Entrada (R$)">
+                                      <input inputMode="decimal" placeholder="0,00" value={payEntryPct} onChange={(e) => setPayEntryPct(e.target.value)} className={juntar(campo, "tabular-nums")} />
                                     </CampoDeFormulario>
-                                    <CampoDeFormulario rotulo="Parcelas">
+                                    <CampoDeFormulario rotulo={lerValorBR(payEntryPct) > 0 ? "Restante em" : "Parcelas"}>
                                       <input type="number" min="1" max="24" value={payInstCount} onChange={(e) => setPayInstCount(e.target.value)} className={juntar(campo, "tabular-nums")} />
                                     </CampoDeFormulario>
                                     <CampoDeFormulario rotulo="Observações" largo>
@@ -1266,19 +1263,19 @@ export default function EditClientDrawer({
                                   </GrupoDeCampos>
                                   <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between">
                                     <p className={juntar(texto.auxiliar, "mr-3 min-w-0 tabular-nums")}>
-                                      {parseFloat(payTotal) > 0
-                                        ? `Entrada R$ ${((parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} (${payEntryPct}%) · ${payInstCount}x de R$ ${(((parseFloat(payTotal) - (parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100) / (parseInt(payInstCount) || 1))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                                      {lerValorBR(payTotal) > 0
+                                        ? `${lerValorBR(payEntryPct) > 0 ? `Entrada R$ ${Math.min(lerValorBR(payEntryPct), lerValorBR(payTotal)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} · restante ` : ""}${Math.max(parseInt(payInstCount) || 1, 1)}x de R$ ${(Math.max(lerValorBR(payTotal) - lerValorBR(payEntryPct), 0) / Math.max(parseInt(payInstCount) || 1, 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
                                         : ""}
                                     </p>
                                     <div className="flex [&>*+*]:ml-2">
                                       <button
                                         type="button"
-                                        onClick={() => { setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
+                                        onClick={() => { setPayCreateForProject(null); setPayTotal(""); setPayEntryPct(""); setPayInstCount("1"); setPayNotes(""); }}
                                         className={botao.discreto}
                                       >
                                         Cancelar
                                       </button>
-                                      <button type="button" onClick={() => handleCreatePayment(proj.id)} disabled={paySubmitting || !parseFloat(payTotal)} className={botao.primario}>
+                                      <button type="button" onClick={() => handleCreatePayment(proj.id)} disabled={paySubmitting || !(lerValorBR(payTotal) > 0) || lerValorBR(payEntryPct) > lerValorBR(payTotal)} className={botao.primario}>
                                         {paySubmitting ? "Criando..." : "Criar plano"}
                                       </button>
                                     </div>

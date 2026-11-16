@@ -22,6 +22,9 @@ export type Extra = {
   encerrado_em: string | null;
   observacao: string | null;
   created_at: string;
+  /** Quem indicou e o percentual repassado sobre cada cobrança paga deste extra (vira despesa a pagar). */
+  afiliado_nome?: string | null;
+  afiliado_percentual?: number | null;
 };
 
 export type CobrancaDeExtra = { id: string; extra_id: string; amount: number; paid_amount: number | null; status: string; due_date: string; paid_date: string | null; description: string | null; competencia?: string | null };

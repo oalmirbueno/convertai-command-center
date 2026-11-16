@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { lerValorBR } from "@/lib/paymentInstallments";
 import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, MenuMais, Secao, SeletorCompacto, botao, campo, etiqueta, juntar, texto } from "@/components/sistema";
 import {
   ATALHOS,
@@ -34,7 +35,7 @@ import {
 const dinheiro = (v: number) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const hoje = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
 const dataCurta = (iso?: string | null) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
-const numero = (t: string) => Number(String(t).replace(/\./g, "").replace(",", ".")) || 0;
+const numero = (t: string) => lerValorBR(t);
 
 function mensagemDoErro(e: unknown): string {
   const m = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
