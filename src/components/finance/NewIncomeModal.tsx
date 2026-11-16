@@ -66,11 +66,14 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   const [entrada, setEntrada] = useState("");
   const [entradaPaga, setEntradaPaga] = useState(true);
   const [primeiraParcela, setPrimeiraParcela] = useState(() => somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
-  // Suporte mensal que entra junto (vira um extra mensal do cliente).
+  // Suporte mensal que entra junto (vira um extra mensal do cliente) e a indicação sobre ele.
   const [temSuporte, setTemSuporte] = useState(false);
   const [suporteValor, setSuporteValor] = useState("");
   const [suporteDepoisDaEntrega, setSuporteDepoisDaEntrega] = useState(true);
   const [suporteInicio, setSuporteInicio] = useState(() => somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
+  const [temAfiliado, setTemAfiliado] = useState(false);
+  const [afiliadoNome, setAfiliadoNome] = useState("");
+  const [afiliadoPct, setAfiliadoPct] = useState("");
 
   const selectedClient = useMemo(
     () => (clients || []).find((c: any) => c.id === clientId),
@@ -126,6 +129,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     setEntrada(""); setEntradaPaga(true); setPrimeiraParcela(somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
     setTemSuporte(false); setSuporteValor(""); setSuporteDepoisDaEntrega(true);
     setSuporteInicio(somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
+    setTemAfiliado(false); setAfiliadoNome(""); setAfiliadoPct("");
   };
   const numeroBR = lerValorBR;
 
@@ -143,6 +147,9 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     if (valorDaEntrada > total) return toast.error("A entrada é maior que o valor total");
     if (temSuporte && !(numeroBR(suporteValor) > 0)) return toast.error("Informe o valor do suporte por mês");
     if (temSuporte && !suporteDepoisDaEntrega && !suporteInicio) return toast.error("Informe quando o suporte começa");
+    if (temSuporte && temAfiliado && (afiliadoNome.trim().length < 2 || !(numeroBR(afiliadoPct) > 0) || numeroBR(afiliadoPct) > 100)) {
+      return toast.error("Informe o nome de quem indicou e o percentual (até 100%)");
+    }
 
     setSaving(true);
     let createdProjectId: string | null = null;
@@ -301,7 +308,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
       // Suporte mensal: vira um extra do cliente (Extras e produtos), com a cobrança de cada mês pelo banco.
       if (temSuporte) {
         const nomeDoProjeto = projectMode === "new" ? name.trim() : (existingProjects.find((p) => p.id === existingProjectId)?.name || "projeto");
-        const { error: extraError } = await (supabase as any).rpc("extra_salvar", {
+        const { data: extra, error: extraError } = await (supabase as any).rpc("extra_salvar", {
           _dados: {
             client_id: clientId,
             nome: `Suporte e manutenção · ${nomeDoProjeto}`.slice(0, 120),
@@ -314,6 +321,11 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         if (extraError) {
           console.warn("Falha ao criar o suporte mensal", extraError);
           toast.warning("Entrada salva, mas o suporte mensal não. Adicione na ficha do cliente, em Extras e produtos.");
+        } else if (temAfiliado && extra?.id) {
+          const { error: afError } = await (supabase as any).from("client_extras")
+            .update({ afiliado_nome: afiliadoNome.trim(), afiliado_percentual: numeroBR(afiliadoPct) })
+            .eq("id", extra.id);
+          if (afError) toast.warning("Suporte criado, mas a indicação não. Edite o suporte na ficha do cliente.");
         }
       }
 
@@ -555,6 +567,23 @@ export default function NewIncomeModal({ open, onClose }: Props) {
                   <CampoDeFormulario rotulo="Primeira mensalidade em">
                     <Input type="date" value={suporteInicio} onChange={(e) => setSuporteInicio(e.target.value)} className="h-9" />
                   </CampoDeFormulario>
+                )}
+                <label className="flex min-w-0 cursor-pointer items-center sm:col-span-full">
+                  <input type="checkbox" checked={temAfiliado} onChange={(e) => setTemAfiliado(e.target.checked)} className="mr-2.5 h-4 w-4 shrink-0 accent-primary" data-tem-afiliado="" />
+                  <span className="min-w-0 flex-1">
+                    <span className={juntar(texto.corpo, "block font-medium")}>Veio por indicação</span>
+                    <span className={juntar(texto.auxiliar, "block truncate")}>Cada mensalidade paga gera o repasse em Despesas.</span>
+                  </span>
+                </label>
+                {temAfiliado && (
+                  <>
+                    <CampoDeFormulario rotulo="Quem indicou" obrigatorio>
+                      <Input value={afiliadoNome} onChange={(e) => setAfiliadoNome(e.target.value)} className="h-9" placeholder="Nome" />
+                    </CampoDeFormulario>
+                    <CampoDeFormulario rotulo="Repasse (%)" obrigatorio apoio={numeroBR(afiliadoPct) > 0 && numeroBR(suporteValor) > 0 ? `R$ ${(Math.round(numeroBR(suporteValor) * numeroBR(afiliadoPct)) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} por mês` : undefined}>
+                      <Input inputMode="decimal" value={afiliadoPct} onChange={(e) => setAfiliadoPct(e.target.value)} className="h-9" placeholder="Ex.: 10" />
+                    </CampoDeFormulario>
+                  </>
                 )}
               </>
             )}
