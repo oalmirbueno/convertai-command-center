@@ -11,7 +11,7 @@
  * mês, mas continua na lista para escolher.
  *
  * Ação (POST { acao } na função mesa-foto, sem IA, custo zero):
- * - campanhas_listar { client_id } -> { mes, hoje, campanha_do_mes_id, campanhas }
+ * - campanhas_listar { client_id, incluir_arquivadas? } -> { mes, hoje, campanha_do_mes_id, campanhas }
  *
  * O resumo da campanha (tema, período, oferta, identidade, pautas do mês)
  * entra no contexto de todo planejamento da Mesa Foto (index.ts,
@@ -26,6 +26,10 @@ import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import type { Chamador, FerramentasDaMesa } from "./ferramentas.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// 16/11/2026: campanha arquivada sai da lista e nunca é a do mês.
+import { campanhaArquivada, lerComFiltroDoArquivo, type ModoDoArquivo } from "../_shared/arquivo-da-campanha.ts";
+
+const CAMPOS_DA_CAMPANHA = "id, nome, pedido, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade, referencias_ids, proposta_id, criado_em";
 
 // ------------------------------------------------------------------ tipos
 
@@ -42,6 +46,8 @@ export type LinhaCampanhaDaMesa = {
   referencias_ids: string[] | null;
   proposta_id: string | null;
   criado_em: string | null;
+  /** 16/11/2026: arquivada (migration 20261116120000); lida à parte, ausente antes do SQL. */
+  arquivada_em?: string | null;
 };
 
 /** Item datado do calendário editorial (itens de calendario_propostas). */
@@ -83,6 +89,8 @@ export type CampanhaParaFoto = {
   do_mes: boolean;
   /** Por que é (ou não é) a campanha do mês, em uma frase. */
   motivo: string;
+  /** 16/11/2026: arquivada (só vem na lista com incluir_arquivadas); nunca é a do mês. */
+  arquivada: boolean;
 };
 
 export type MesDeReferencia = { mes: string; hoje: string; inicio: string; fim: string };
@@ -164,16 +172,19 @@ export function itensDasPropostas(propostas: { id: string; itens: unknown }[]): 
  * Marca a campanha do mês pelo calendário (regra fixa, sem IA). Pontos:
  * acontece hoje (3), tem conteúdo no calendário deste mês (2), período dentro
  * do mês (1). Empate: mais conteúdos no mês, depois a que começa mais perto
- * de hoje, depois a mais nova. Encerrada nunca é a do mês.
+ * de hoje, depois a mais nova. Encerrada nunca é a do mês. Arquivada nunca é
+ * a do mês e só entra na lista com `incluirArquivadas` (no fim, marcada).
  */
 export function marcarCampanhaDoMes(
   linhas: LinhaCampanhaDaMesa[],
   itens: ItemDoCalendario[],
   agora: Date = new Date(),
+  opcoes: { incluirArquivadas?: boolean } = {},
 ): { mes: string; hoje: string; campanha_do_mes_id: string | null; campanhas: CampanhaParaFoto[] } {
   const ref = mesDeSaoPaulo(agora);
   const pontuadas = linhas
     .filter((l) => l && typeof l.id === "string" && l.id)
+    .filter((l) => opcoes.incluirArquivadas || !campanhaArquivada(l))
     .map((l) => {
       const daCampanha = itens.filter((i) => i.campanha_id === l.id || (!!l.proposta_id && i.proposta_id === l.proposta_id && !i.campanha_id));
       const datas = daCampanha.map((i) => i.data).sort();
@@ -189,8 +200,11 @@ export function marcarCampanhaDoMes(
       const periodoNoMes = sobrepoe(inicio, fim, ref.inicio, ref.fim);
       const status = limpo(l.status, 20) || "planejada";
       const encerrada = status === "encerrada";
-      const pontos = encerrada ? 0 : (hojeDentro ? 3 : 0) + (noMesItens.length ? 2 : 0) + (periodoNoMes ? 1 : 0);
-      const motivo = encerrada
+      const arquivada = campanhaArquivada(l);
+      const pontos = encerrada || arquivada ? 0 : (hojeDentro ? 3 : 0) + (noMesItens.length ? 2 : 0) + (periodoNoMes ? 1 : 0);
+      const motivo = arquivada
+        ? "Campanha arquivada."
+        : encerrada
         ? "Campanha encerrada."
         : hojeDentro
           ? `Acontece hoje (${diaMes(inicio)} a ${diaMes(fim)}).`
@@ -214,11 +228,12 @@ export function marcarCampanhaDoMes(
         identidade: normalizarIdentidadeDaCampanha(l.identidade),
         referencias_ids: listaDeTextos(l.referencias_ids, 12, 60),
         no_mes: periodoNoMes || noMesItens.length > 0,
-        acontecendo_hoje: hojeDentro && !encerrada,
+        acontecendo_hoje: hojeDentro && !encerrada && !arquivada,
         conteudos_no_mes: noMesItens.length,
         pautas_no_mes: listaDeTextos(noMesItens.sort((a, b) => (a.data < b.data ? -1 : 1)).map((i) => `${diaMes(i.data)} ${i.tema}`.trim()), 12, 180),
         do_mes: false,
         motivo,
+        arquivada,
       };
       const distancia = inicio ? Math.abs(Date.parse(`${inicio}T12:00:00Z`) - Date.parse(`${ref.hoje}T12:00:00Z`)) : Number.MAX_SAFE_INTEGER;
       return { campanha, pontos, distancia, criado: String(l.criado_em || "") };
@@ -231,10 +246,11 @@ export function marcarCampanhaDoMes(
   );
   const vencedora = ordem.length && ordem[0].pontos > 0 ? ordem[0].campanha : null;
   if (vencedora) vencedora.do_mes = true;
-  // Lista: a do mês primeiro, depois as do mês, depois as outras (mais nova antes); encerradas no fim.
+  // Lista: a do mês primeiro, depois as do mês, depois as outras (mais nova antes); encerradas e arquivadas no fim.
+  const peso = (c: CampanhaParaFoto) => (c.do_mes ? 0 : c.arquivada ? 4 : c.status === "encerrada" ? 3 : c.no_mes ? 1 : 2);
   const lista = ordem.map((x) => x.campanha).sort((a, b) => {
-    const pa = a.do_mes ? 0 : a.status === "encerrada" ? 3 : a.no_mes ? 1 : 2;
-    const pb = b.do_mes ? 0 : b.status === "encerrada" ? 3 : b.no_mes ? 1 : 2;
+    const pa = peso(a);
+    const pb = peso(b);
     return pa - pb;
   });
   return { mes: ref.mes, hoje: ref.hoje, campanha_do_mes_id: vencedora ? vencedora.id : null, campanhas: lista };
@@ -263,15 +279,21 @@ export function campanhaParaOContexto(c: CampanhaParaFoto, papel: "escolhida" | 
 /**
  * Lê as campanhas do cliente e o calendário do mês (chave de serviço). Tabela
  * ausente ou erro de leitura: lista vazia (a Mesa Foto segue sem campanha).
+ * Arquivadas saem da lista (e nunca são a do mês), a não ser com incluirArquivadas.
  */
-export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string, agora: Date = new Date(), marca: MarcaLeve | null = null) {
+export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string, agora: Date = new Date(), marca: MarcaLeve | null = null, opcoes: { incluirArquivadas?: boolean } = {}) {
   const ref = mesDeSaoPaulo(agora);
-  const [campanhas, propostas] = await Promise.all([
-    db.from("mesa_campanhas")
-      .select("id, nome, pedido, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade, referencias_ids, proposta_id, criado_em")
-      .eq("client_id", clientId)
-      .order("criado_em", { ascending: false })
-      .limit(40),
+  // 16/11/2026: o arquivo é filtrado no banco antes do limite (40 ativas; com incluirArquivadas,
+  // mais 40 arquivadas numa consulta própria). Sem a coluna ainda: todas são ativas.
+  const lerDoArquivo = (modo: ModoDoArquivo) =>
+    lerComFiltroDoArquivo<LinhaCampanhaDaMesa>((filtrar) =>
+      filtrar(db.from("mesa_campanhas").select(modo === "arquivadas" ? `${CAMPOS_DA_CAMPANHA}, arquivada_em` : CAMPOS_DA_CAMPANHA).eq("client_id", clientId))
+        .order(modo === "arquivadas" ? "arquivada_em" : "criado_em", { ascending: false })
+        .limit(40), modo)
+      .then((r) => r.linhas)
+      .catch((e) => (registrarFalha(`mesa-foto: leitura das campanhas (${modo}) falhou`, e, { client_id: clientId }), [] as LinhaCampanhaDaMesa[]));
+  const [ativas, propostas, arquivadas] = await Promise.all([
+    lerDoArquivo("ativas"),
     db.from("calendario_propostas")
       .select("id, itens, status, periodo_inicio, periodo_fim, project_id")
       .eq("client_id", clientId)
@@ -280,26 +302,28 @@ export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string,
       .gte("periodo_fim", ref.inicio)
       .order("periodo_inicio", { ascending: false })
       .limit(20),
+    opcoes.incluirArquivadas ? lerDoArquivo("arquivadas") : Promise.resolve([] as LinhaCampanhaDaMesa[]),
   ]);
-  const linhas = (campanhas.error ? [] : ((campanhas.data ?? []) as LinhaCampanhaDaMesa[])).filter((l) => campanhaDaMarca((l as { identidade?: unknown }).identidade, marca));
+  const linhas = ativas.concat(arquivadas)
+    .filter((l) => campanhaDaMarca((l as { identidade?: unknown }).identidade, marca));
   // Frente MC: o calendário do mês da marca (a proposta da Acerbi não define a campanha do mês da CME).
   const marcasDoMes = marca ? await marcasDoCliente(db, clientId) : [];
   const propostasDaMarca = ((propostas.data ?? []) as { id: string; itens: unknown; project_id?: string | null }[])
     .filter((p) => projetoDaMarcaAberta(p.project_id ?? null, marca, marcasDoMes));
   const itens = propostas.error ? [] : itensDasPropostas(propostasDaMarca);
-  return marcarCampanhaDoMes(linhas, itens, agora);
+  return marcarCampanhaDoMes(linhas, itens, agora, opcoes);
 }
 
 // ------------------------------------------------------------------ ação
 
 export function acoesDeCampanhas(f: FerramentasDaMesa) {
-  /** campanhas_listar { client_id } -> { mes, hoje, campanha_do_mes_id, campanhas } (sem IA). */
+  /** campanhas_listar { client_id, incluir_arquivadas? } -> { mes, hoje, campanha_do_mes_id, campanhas } (sem IA). */
   async function campanhasListar(ch: Chamador, corpo: Record<string, unknown>) {
     const clientId = typeof corpo.client_id === "string" && UUID.test(corpo.client_id) ? corpo.client_id : "";
     if (!clientId) throw new ErroDeRegra(400, "client_id_invalido", "client_id inválido.");
     await f.garantirAcesso(ch, clientId);
     const marca = await resolverMarca(f.servico(), clientId, { marca_id: corpo.marca_id }).catch((e) => (registrarFalha("mesa-foto: resolverMarca falhou", e), null));
-    const r = await lerCampanhasParaFoto(f.servico(), clientId, new Date(), marca);
+    const r = await lerCampanhasParaFoto(f.servico(), clientId, new Date(), marca, { incluirArquivadas: corpo.incluir_arquivadas === true });
     return f.json({ ...r, custo_usd: 0 });
   }
   return { campanhas_listar: campanhasListar } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>;

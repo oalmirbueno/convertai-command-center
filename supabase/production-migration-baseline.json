@@ -3121,6 +3121,14 @@
       "remote_name": "marcar_precisa_do_dono",
       "remote_statements_sha256": "067d1095724f56e122093c3c5baa1da36690d886782b132afec3134fccb3ecc4",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261116120000",
+      "path": "supabase/migrations/20261116120000_mesa_campanhas_arquivar.sql",
+      "local_sha256": "6127db13559161da458d10b663adc9b20618a9e1220bac3b377b98870df768e2",
+      "remote_name": "mesa_campanhas_arquivar",
+      "remote_statements_sha256": "7c40ff05843fda09855eff12bfe46c77fcf49359791bbbe5affeb7102aa594e3",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

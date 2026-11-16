@@ -377,6 +377,65 @@ Deno.test('ação da campanha: custo exige confirmar_custo, campos por ação e 
   assert(!acaoPermitida('mesa-ads', 'gerar_card'), 'gerar fora da fila continua fora');
 });
 
+Deno.test('ação da campanha: arquivar, desarquivar e periodo sem custo, mapeados para o agente-calendario', () => {
+  const base = { campanha_id: CLIENTE, idempotency_key: 'teste-123456' };
+  for (const a of ['arquivar', 'desarquivar', 'periodo'] as const) assert(!ACOES_COM_CUSTO.has(a), `${a} não tem custo`);
+  assertEquals(faltaNaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'arquivar' })), null);
+  assertEquals(faltaNaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'desarquivar' })), null);
+  const arq = corpoDaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'arquivar' }), CLIENTE);
+  assertEquals(arq, { funcao: 'agente-calendario', acao: 'campanha_arquivar', corpo: { campanha_id: CLIENTE, arquivar: true } });
+  const des = corpoDaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'desarquivar' }), CLIENTE);
+  assertEquals(des.corpo, { campanha_id: CLIENTE, arquivar: false });
+  const per = corpoDaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'periodo', periodo_inicio: '2026-11-20', periodo_fim: '2026-12-05' }), CLIENTE);
+  assertEquals(per, { funcao: 'agente-calendario', acao: 'campanha_periodo', corpo: { campanha_id: CLIENTE, periodo_inicio: '2026-11-20', periodo_fim: '2026-12-05' } });
+  for (const c of [arq, des, per]) assert(acaoPermitida(c.funcao, c.acao), c.acao);
+  // Período: sem datas, invertido ou longo é recusado antes da rede.
+  assertStringIncludes(faltaNaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'periodo' })) ?? '', 'periodo_inicio');
+  assertStringIncludes(faltaNaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'periodo', periodo_inicio: '2026-11-20', periodo_fim: '2026-11-19' })) ?? '', 'antes do início');
+  assertStringIncludes(faltaNaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'periodo', periodo_inicio: '2026-11-01', periodo_fim: '2027-01-02' })) ?? '', '62 dias');
+  assertEquals(faltaNaAcao(ENTRADA_DA_ACAO.parse({ ...base, acao: 'periodo', periodo_inicio: '2026-11-01', periodo_fim: '2027-01-01' })), null);
+  const schema = TOOL_MAP.get('aceleriq_mesa_campanha_acao')!.inputSchema as { properties: Record<string, { enum?: string[] }> };
+  for (const a of ['arquivar', 'desarquivar', 'periodo']) assert(schema.properties.acao.enum!.includes(a), a);
+  assert('periodo_inicio' in schema.properties && 'periodo_fim' in schema.properties);
+});
+
+Deno.test('campanhas: arquivadas ficam fora da lista padrão e de so_ativas; incluir_arquivadas mostra', async () => {
+  semConferirClienteNoTeste(true);
+  const banco = bancoFalso(() => ({ data: [] }));
+  usarBancoDeTeste(() => banco);
+  try {
+    const filtraArquivo = () => banco.chamadas.at(-1)!.filtros.some(([m, a]) => m === 'is' && a[0] === 'arquivada_em' && a[1] === null);
+    await campanhasDoMes({ client_id: CLIENTE }, adminCtx);
+    assert(filtraArquivo(), 'lista padrão sem arquivadas');
+    await campanhasDoMes({ client_id: CLIENTE, so_ativas: true }, adminCtx);
+    assert(filtraArquivo(), 'so_ativas sem arquivadas');
+    await campanhasDoMes({ client_id: CLIENTE, so_ativas: true, incluir_arquivadas: true }, adminCtx);
+    assert(filtraArquivo(), 'so_ativas vence incluir_arquivadas');
+    await campanhasDoMes({ client_id: CLIENTE, incluir_arquivadas: true }, adminCtx);
+    assert(!filtraArquivo(), 'incluir_arquivadas tira o filtro');
+    assert(banco.chamadas.at(-1)!.select.includes('arquivada_em'));
+  } finally {
+    usarBancoDeTeste(null);
+    semConferirClienteNoTeste(false);
+  }
+});
+
+Deno.test('campanhas: antes da migration (sem arquivada_em) a lista refaz sem o filtro e avisa', async () => {
+  semConferirClienteNoTeste(true);
+  const banco = bancoFalso((c) => (c.filtros.some(([m, a]) => m === 'is' && a[0] === 'arquivada_em')
+    ? { error: { code: '42703', message: 'column mesa_campanhas.arquivada_em does not exist' } }
+    : { data: [{ id: 'c1', nome: 'Natal', status: 'planejada' }] }));
+  usarBancoDeTeste(() => banco);
+  try {
+    const r = await campanhasDoMes({ client_id: CLIENTE }, adminCtx) as { itens: unknown[]; aviso: string | null };
+    assertEquals(r.itens.length, 1);
+    assertStringIncludes(r.aviso ?? '', 'arquivada_em');
+  } finally {
+    usarBancoDeTeste(null);
+    semConferirClienteNoTeste(false);
+  }
+});
+
 Deno.test('ação da campanha: sem confirmar_custo a ferramenta recusa antes de qualquer rede', async () => {
   const t = TOOL_MAP.get('aceleriq_mesa_campanha_acao')!;
   await assertRejects(() => t.handler({ campanha_id: CLIENTE, acao: 'mudanca_planejar', mensagem: 'x', idempotency_key: 'teste-123456' }, adminCtx), Error, 'confirmar_custo');
