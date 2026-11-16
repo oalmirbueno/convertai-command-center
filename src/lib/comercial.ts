@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { lerOrigemDoClique, type OrigemDoClique } from "../../supabase/functions/_shared/origem-clique";
 import { toBRDateKey } from "@/lib/dateBR";
 import { naConta, tabelaDoCrm } from "./comercial/escopo";
+import { montarHistorico, type Historico, type Movimento } from "./financeiro/historicoDoCaixa";
 
 /**
  * O Departamento Comercial da Aceleriq.
@@ -1595,4 +1596,50 @@ export function fichaDaEmpresa(
     ).length,
     mrrGanho: ganhos.reduce((soma, lead) => soma + lead.monthly_value, 0),
   };
+}
+
+/**
+ * Resultado mês a mês do Financeiro (16/11/2026): o que entrou, o que saiu, o lucro e o caixa no fim de
+ * cada mês, até o mês escolhido. Mesmas réguas do "Entrou no mês" e do "Saldo em caixa".
+ */
+export async function historicoDoCaixa(periodo: string, quantos = 12): Promise<Historico> {
+  type Consulta = PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  const semTipo = supabase as unknown as { from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => Consulta } } };
+  const [ajuste, cobrancas, parcelas, despesas, produto] = await Promise.all([
+    supabase.from("financial_settings").select("opening_balance").eq("settings_key", "default").maybeSingle(),
+    supabase.from("billing").select("amount, paid_amount, status, type, currency, paid_date, due_date").in("status", ["paid", "partial"]),
+    supabase.from("payment_installments").select("amount, paid_amount, status, paid_date, due_date").in("status", ["paid", "partial"]),
+    supabase.from("expenses").select("amount, category, paid_date, due_date").eq("status", "paid"),
+    semTipo.from("produto_cobrancas").select("valor, valor_liquido, pago_em").eq("estado", "paga"),
+  ]);
+  const erro = ajuste.error || cobrancas.error || parcelas.error || despesas.error || produto.error;
+  if (erro) throw new ErroDeLeitura("o histórico do Financeiro", erro);
+
+  type ComData = LinhaRecebida & { paid_date?: string | null; due_date?: string | null };
+  const entradas: Movimento[] = [];
+  const entradasDoCaixa: Movimento[] = [];
+  for (const c of (cobrancas.data || []) as ComData[]) {
+    if (c.type === "ads_recharge" || c.currency === "USD") continue;
+    const m = { dia: String(c.paid_date || c.due_date || ""), valor: recebidoDe(c) };
+    entradas.push(m);
+    entradasDoCaixa.push(m);
+  }
+  for (const p of (parcelas.data || []) as ComData[]) {
+    const m = { dia: String(p.paid_date || p.due_date || ""), valor: recebidoDe(p) };
+    entradas.push(m);
+    entradasDoCaixa.push(m);
+  }
+  for (const c of (produto.data || []) as Array<{ valor: unknown; valor_liquido: unknown; pago_em: string | null }>) {
+    const dia = diaEmSaoPaulo(c.pago_em) || "";
+    entradas.push({ dia, valor: numero(c.valor) });
+    entradasDoCaixa.push({ dia, valor: numero(c.valor_liquido ?? c.valor) });
+  }
+  const saidas: Movimento[] = [];
+  for (const d of (despesas.data || []) as Array<{ amount: unknown; category: unknown; paid_date: string | null; due_date: string | null }>) {
+    if (ehAporteDeInvestidor(d.category)) continue;
+    saidas.push({ dia: String(d.paid_date || d.due_date || ""), valor: numero(d.amount) });
+  }
+  const abertura = numero((ajuste.data as { opening_balance?: unknown } | null)?.opening_balance);
+  const saldoHoje = abertura + entradasDoCaixa.reduce((s, m) => s + m.valor, 0) - saidas.reduce((s, m) => s + m.valor, 0);
+  return montarHistorico({ entradas, entradasDoCaixa, saidas, saldoHoje, ate: periodo.slice(0, 7), quantos });
 }

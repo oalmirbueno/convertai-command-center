@@ -15,6 +15,7 @@ import { centavos, intencaoPorPalavras, parecerRecorrente, valoresNoTexto, type 
 
 export const OPCOES_DA_INTENCAO: Record<IntencaoDoCFO, string> = {
   saude: "quer saber como está o financeiro da agência hoje: caixa, saúde, resumo geral",
+  historico: "quer saber o que já aconteceu: lucro de um mês, quanto sobrou, quanto entrou ou saiu, comparar meses, melhor ou pior mês",
   projecao: "quer a projeção dos próximos meses: quanto vai entrar, sair e sobrar",
   posso_gastar: "pergunta se pode gastar, comprar, contratar ou assinar algo (com ou sem valor)",
   onde_cortar: "quer saber onde cortar custos ou como economizar",

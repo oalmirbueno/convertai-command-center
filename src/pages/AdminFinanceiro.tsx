@@ -49,6 +49,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 import { createBilling } from "@/lib/createBilling";
 import { saldoDaCobranca } from "@/lib/clientes/situacaoDaCobranca";
+import ResultadoMesAMes, { nomeDoMes, useHistoricoDoCaixa } from "@/components/finance/ResultadoMesAMes";
 import { fmtMoeda, moedaDe } from "@/lib/freela/freelaLib";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -235,6 +236,8 @@ function LegacyFinanceiro() {
     enabled: isAdmin,
   });
   const { data: projectPayments } = paymentsQuery;
+  // Pagou, desfez ou lançou: o lucro do mês e o histórico releem junto com as cobranças (a versão entra na chave).
+  const versaoDoCaixa = `${billingQuery.dataUpdatedAt || 0}-${paymentsQuery.dataUpdatedAt || 0}`;
   // Extras mensais ativos dos clientes (client_extras): entram no resumo das mensalidades.
   const { data: extrasPorMes = 0 } = useQuery({
     queryKey: ["extras-mensais-ativos"],
@@ -290,7 +293,7 @@ function LegacyFinanceiro() {
 
   const [newBillingOpen, setNewBillingOpen] = useState(false);
   // v4 C2: a visão geral em três abas (cobranças, o mês, receita) no lugar de dez blocos empilhados.
-  const [visaoDoMes, setVisaoDoMes] = useState<"cobrancas" | "mes" | "receita">("cobrancas");
+  const [visaoDoMes, setVisaoDoMes] = useState<"cobrancas" | "mes" | "historico" | "receita">("cobrancas");
   const [creatingBilling, setCreatingBilling] = useState(false);
   const creatingBillingRef = useRef(false);
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
@@ -979,6 +982,9 @@ function LegacyFinanceiro() {
     : brandFilter === "all"
     ? duasPartes("Planos", showMonthly ? receivedTotal : 0, "Projetos", contaProjeto ? indivPaid : 0)
     : recSub;
+  const periodoDoMes = `${selYear}-${String(selMonth + 1).padStart(2, "0")}-01`;
+  const historicoDoMes = useHistoricoDoCaixa(periodoDoMes, versaoDoCaixa);
+  const mesDoHistorico = (Array.isArray(historicoDoMes.data?.meses) ? historicoDoMes.data.meses : []).find((m) => m.mes === periodoDoMes.slice(0, 7));
   const numeros: { rotulo: string; valor: string; sub?: string; icone: ReactNode; cor: string; ajuda?: string }[] = [
     {
       rotulo: "Saldo em caixa",
@@ -991,6 +997,20 @@ function LegacyFinanceiro() {
     { rotulo: `Recebido ${noPeriodo}`, valor: fmt(receivedVal), sub: receivedBreakdown, icone: <TrendingUp className="h-3.5 w-3.5" />, cor: "text-success" },
     { rotulo: `A receber ${noPeriodo}`, valor: fmt(pendingVal), sub: subLabel, icone: <CreditCard className="h-3.5 w-3.5" />, cor: "text-warning" },
     { rotulo: "Atrasado", valor: fmt(overdueVal), sub: ovSub, icone: <CreditCard className="h-3.5 w-3.5" />, cor: "text-destructive" },
+    ...(periodFilter === "month" && origem !== "freela" && mesDoHistorico ? [{
+      rotulo: `Lucro de ${nomeDoMes(mesDoHistorico.mes)}`,
+      valor: fmt(mesDoHistorico.lucro),
+      sub: `entrou ${fmt(mesDoHistorico.entrou)} · saiu ${fmt(mesDoHistorico.saiu)}`,
+      icone: <TrendingUp className="h-3.5 w-3.5" />,
+      cor: mesDoHistorico.lucro < 0 ? "text-destructive" : "text-success",
+      ajuda: "O que entrou no mês menos as despesas pagas no mês. Veja Mês a mês para comparar.",
+    }, ...(isCurrentMonthSelected ? [] : [{
+      rotulo: `Caixa no fim de ${nomeDoMes(mesDoHistorico.mes)}`,
+      valor: fmt(mesDoHistorico.caixaNoFim),
+      sub: "quanto ficou no caixa",
+      icone: <DollarSign className="h-3.5 w-3.5" />,
+      cor: "text-primary",
+    }])] : []),
     ...(periodFilter === "month" && origem !== "freela" ? [{
       rotulo: "Receita esperada",
       valor: fmt((showMonthly ? expectedMonthlyRevenue : 0) + (showIndiv ? indivPendingMonth : 0)),
@@ -1491,6 +1511,7 @@ function LegacyFinanceiro() {
               tabs={[
                 { value: "cobrancas", label: "Cobranças", count: allPending.length || undefined },
                 { value: "mes", label: "Divisão do mês" },
+                { value: "historico", label: "Mês a mês" },
                 { value: "receita", label: "Receita" },
               ]}
             />
@@ -1527,6 +1548,8 @@ function LegacyFinanceiro() {
               </div>
             )}
 
+
+            {visaoDoMes === "historico" && <ResultadoMesAMes periodo={periodoDoMes} versao={versaoDoCaixa} ehMesCorrente={isCurrentMonthSelected} />}
 
             {visaoDoMes === "cobrancas" && (primeiraCarga ? (
               <Carregando forma="lista" linhas={5} rotulo="Carregando cobranças" />
