@@ -1,3 +1,4 @@
+import { lerComFiltroDoArquivo } from "../../../supabase/functions/_shared/arquivo-da-campanha";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -130,15 +131,13 @@ function Sugestao({ s, aoDecidir }: { s: SugestaoDaPonte; aoDecidir?: (aceitar: 
 
 type CampanhaDoCliente = { id: string; nome: string; status: string; periodo_inicio: string | null; periodo_fim: string | null };
 
-async function lerCampanhasDoCliente(clienteId: string): Promise<CampanhaDoCliente[]> {
-  const { data, error } = await (supabase as any)
-    .from("mesa_campanhas")
-    .select("id, nome, status, periodo_inicio, periodo_fim")
-    .eq("client_id", clienteId)
-    .order("atualizado_em", { ascending: false })
-    .limit(60);
-  if (error) throw error;
-  return (data || []) as CampanhaDoCliente[];
+/** 16/11/2026: só as não arquivadas, filtradas no banco antes do limite (sem a coluna ainda: todas). */
+export async function lerCampanhasDoCliente(clienteId: string): Promise<CampanhaDoCliente[]> {
+  const { linhas } = await lerComFiltroDoArquivo<CampanhaDoCliente>((filtrar) =>
+    filtrar((supabase as any).from("mesa_campanhas").select("id, nome, status, periodo_inicio, periodo_fim").eq("client_id", clienteId))
+      .order("atualizado_em", { ascending: false })
+      .limit(60));
+  return linhas;
 }
 
 function JanelaDeLigar({ aberta, clienteId, onFechar, onEscolher }: { aberta: boolean; clienteId: string; onFechar: () => void; onEscolher: (id: string) => Promise<void> }) {

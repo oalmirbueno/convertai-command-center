@@ -17,7 +17,7 @@ import CampanhaDetalhe, { SeloDoEstado } from "./CampanhaDetalhe";
 import { SeloNoCanvas } from "./CampanhaCanvas";
 import CampanhaNova from "./CampanhaNova";
 import CampanhaAgente, { type RascunhoParaOAgente } from "./CampanhaAgente";
-import { chaves, lerCampanhas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
+import { chaves, lerCampanhas, lerCampanhasArquivadas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
 import { chavesDaCampanha, conteudosDaCampanha, lerContagemDosConteudos, usePedidoDaCampanha } from "./campanhasApi";
 import { tirarSementeDaCampanha, type SementeDaCampanha } from "./sementeDaCampanha";
 import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -287,12 +287,23 @@ export default function AbaCampanhas({
 
   // Frente AE: com duas marcas (Acerbi e CME), só as campanhas da marca aberta.
   const { marca } = useMarcaDaMesa();
-  const daMarca = (campanhas.data || []).filter((c) => campanhaDaMarcaNaTela(c.identidade, marca));
   // 16/11/2026: a lista padrão não mostra as arquivadas; a aba Arquivadas mostra só elas.
+  // Cada uma é uma consulta própria, filtrada no banco antes do limite (60 ativas, 60 arquivadas).
   const [filtro, setFiltro] = useEstadoDaTela<FiltroDoArquivo>(`mesa:campanhas:filtro-arquivo:${clientId}`, "ativas");
+  const daMarcaAtivas = (campanhas.data || []).filter((c) => campanhaDaMarcaNaTela(c.identidade, marca));
+  // A aberta pode ser uma arquivada (link direto): lê as arquivadas também quando ela não está nas ativas.
+  const abertaForaDasAtivas = !nova && !!idLocal && !!campanhas.data && !daMarcaAtivas.some((c) => c.id === idLocal);
+  const arquivadasQ = useQuery({
+    queryKey: chaves.campanhasArquivadas(clientId),
+    enabled: filtro === "arquivadas" || abertaForaDasAtivas,
+    queryFn: () => lerCampanhasArquivadas(clientId),
+  });
+  const daMarcaArquivadas = (arquivadasQ.data || []).filter((c) => campanhaDaMarcaNaTela(c.identidade, marca));
+  const daMarca = daMarcaAtivas.concat(daMarcaArquivadas.filter((a) => !daMarcaAtivas.some((c) => c.id === a.id)));
   const { ativas: listaAtiva, arquivadas: listaArquivada } = separarPorArquivo(daMarca);
   const lista = listaAtiva;
   const listaVisivel = filtro === "arquivadas" ? listaArquivada : listaAtiva;
+  const leituraDaLista = filtro === "arquivadas" ? arquivadasQ : campanhas;
   const { desarquivar, indo: desarquivando } = useDesarquivar();
   const idsDasPropostas = listaVisivel.map((c) => c.proposta_id || "").filter(Boolean).sort();
   const contagem = useQuery({
@@ -386,15 +397,15 @@ export default function AbaCampanhas({
         <FiltroDoArquivoDaLista valor={filtro} onMudar={setFiltro} arquivadas={listaArquivada.length} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
-        {campanhas.isLoading && (
+        {leituraDaLista.isLoading && (
           <div className="space-y-1.5 p-1">
             <div className="h-12 animate-pulse rounded-lg bg-muted" />
             <div className="h-12 animate-pulse rounded-lg bg-muted" />
             <div className="h-12 animate-pulse rounded-lg bg-muted" />
           </div>
         )}
-        {campanhas.isError && <AvisoDeErro erro={campanhas.error} />}
-        {campanhas.isSuccess && listaVisivel.length === 0 && (
+        {leituraDaLista.isError && <AvisoDeErro erro={leituraDaLista.error} />}
+        {leituraDaLista.isSuccess && listaVisivel.length === 0 && (
           <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">{filtro === "arquivadas" ? "Nenhuma campanha arquivada." : "Nenhuma campanha ainda."}</p>
         )}
         <ul className="space-y-0.5">
@@ -420,7 +431,7 @@ export default function AbaCampanhas({
       <div className="flex min-w-0 items-center">
         <Select value={escolhida ? escolhida.id : ""} onValueChange={(v) => abrir(v)}>
           <SelectTrigger className="mr-2 h-9 min-w-0 flex-1 text-[13px]" aria-label="Campanha aberta">
-            <SelectValue placeholder={campanhas.isLoading ? "Lendo campanhas…" : listaVisivel.length ? "Escolha uma campanha" : filtro === "arquivadas" ? "Nenhuma campanha arquivada" : "Nenhuma campanha ainda"} />
+            <SelectValue placeholder={leituraDaLista.isLoading ? "Lendo campanhas…" : listaVisivel.length ? "Escolha uma campanha" : filtro === "arquivadas" ? "Nenhuma campanha arquivada" : "Nenhuma campanha ainda"} />
           </SelectTrigger>
           <SelectContent>
             {doSeletor.map((c) => (

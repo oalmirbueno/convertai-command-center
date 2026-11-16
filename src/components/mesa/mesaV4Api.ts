@@ -1,4 +1,5 @@
 import type { DirecaoDeVideoDaPauta } from "../../../supabase/functions/_shared/video-da-pauta";
+import { lerComFiltroDoArquivo, type ModoDoArquivo } from "../../../supabase/functions/_shared/arquivo-da-campanha";
 import { useEffect, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -265,6 +266,8 @@ export const chaves = {
   proposta: (id: string) => ["mesa", "proposta-v4", id] as const,
   hypes: (clientId: string) => ["mesa", "hypes", clientId] as const,
   campanhas: (clientId: string) => ["mesa", "campanhas", clientId] as const,
+  /** Sob a chave das campanhas: invalidar a lista também relê as arquivadas. */
+  campanhasArquivadas: (clientId: string) => ["mesa", "campanhas", clientId, "arquivadas"] as const,
   projetosSocial: (clientId: string) => ["mesa", "projetos-social", clientId] as const,
 };
 
@@ -425,16 +428,23 @@ export async function lerHypes(clientId: string): Promise<HypesDaSemana | null> 
   return { ...linha, itens: Array.isArray(linha.itens) ? linha.itens : [] } as HypesDaSemana;
 }
 
-export async function lerCampanhas(clientId: string): Promise<Campanha[]> {
-  const { data, error } = await (supabase as any)
-    .from("mesa_campanhas")
-    .select("*")
-    .eq("client_id", clientId)
-    .order("criado_em", { ascending: false })
-    .limit(60);
-  if (error) throw error;
-  return (data || []) as Campanha[];
+/**
+ * 16/11/2026: as campanhas do cliente, sem as arquivadas (filtro no banco,
+ * antes do limite). `modo: "arquivadas"` lê só as arquivadas, com o limite
+ * delas. Antes da migration do arquivo, refaz sem o filtro (ou [] nas arquivadas).
+ */
+export async function lerCampanhas(clientId: string, modo: ModoDoArquivo = "ativas"): Promise<Campanha[]> {
+  const { linhas } = await lerComFiltroDoArquivo<Campanha>(
+    (filtrar) =>
+      filtrar((supabase as any).from("mesa_campanhas").select("*").eq("client_id", clientId))
+        .order(modo === "arquivadas" ? "arquivada_em" : "criado_em", { ascending: false })
+        .limit(60),
+    modo,
+  );
+  return linhas;
 }
+
+export const lerCampanhasArquivadas = (clientId: string) => lerCampanhas(clientId, "arquivadas");
 
 export async function salvarReferenciasDaCampanha(id: string, ids: string[]): Promise<void> {
   const { error } = await (supabase as any).from("mesa_campanhas").update({ referencias_ids: ids }).eq("id", id);

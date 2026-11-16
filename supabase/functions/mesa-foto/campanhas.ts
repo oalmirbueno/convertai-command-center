@@ -27,7 +27,9 @@ import type { Chamador, FerramentasDaMesa } from "./ferramentas.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // 16/11/2026: campanha arquivada sai da lista e nunca é a do mês.
-import { campanhaArquivada, faltaColunaDoArquivo } from "../_shared/arquivo-da-campanha.ts";
+import { campanhaArquivada, lerComFiltroDoArquivo, type ModoDoArquivo } from "../_shared/arquivo-da-campanha.ts";
+
+const CAMPOS_DA_CAMPANHA = "id, nome, pedido, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade, referencias_ids, proposta_id, criado_em";
 
 // ------------------------------------------------------------------ tipos
 
@@ -275,37 +277,23 @@ export function campanhaParaOContexto(c: CampanhaParaFoto, papel: "escolhida" | 
 // ------------------------------------------------------------------ banco
 
 /**
- * Ids das campanhas arquivadas do cliente, lidos à parte: antes da migration
- * 20261116120000 a coluna não existe e a leitura principal não pode cair.
- * Erro aqui vira "nenhuma arquivada" (a lista segue como antes).
- */
-export async function idsArquivadosDoCliente(db: SupabaseClient, clientId: string): Promise<Set<string>> {
-  try {
-    const { data, error } = await db.from("mesa_campanhas").select("id, arquivada_em").eq("client_id", clientId).not("arquivada_em", "is", null).limit(500);
-    if (error) {
-      if (!faltaColunaDoArquivo(error)) registrarFalha("mesa-foto: leitura das campanhas arquivadas falhou", error, { client_id: clientId });
-      return new Set();
-    }
-    return new Set(((data ?? []) as { id: string }[]).map((l) => l.id));
-  } catch (e) {
-    registrarFalha("mesa-foto: leitura das campanhas arquivadas falhou", e, { client_id: clientId });
-    return new Set();
-  }
-}
-
-/**
  * Lê as campanhas do cliente e o calendário do mês (chave de serviço). Tabela
  * ausente ou erro de leitura: lista vazia (a Mesa Foto segue sem campanha).
  * Arquivadas saem da lista (e nunca são a do mês), a não ser com incluirArquivadas.
  */
 export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string, agora: Date = new Date(), marca: MarcaLeve | null = null, opcoes: { incluirArquivadas?: boolean } = {}) {
   const ref = mesDeSaoPaulo(agora);
-  const [campanhas, propostas, arquivadas] = await Promise.all([
-    db.from("mesa_campanhas")
-      .select("id, nome, pedido, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade, referencias_ids, proposta_id, criado_em")
-      .eq("client_id", clientId)
-      .order("criado_em", { ascending: false })
-      .limit(40),
+  // 16/11/2026: o arquivo é filtrado no banco antes do limite (40 ativas; com incluirArquivadas,
+  // mais 40 arquivadas numa consulta própria). Sem a coluna ainda: todas são ativas.
+  const lerDoArquivo = (modo: ModoDoArquivo) =>
+    lerComFiltroDoArquivo<LinhaCampanhaDaMesa>((filtrar) =>
+      filtrar(db.from("mesa_campanhas").select(modo === "arquivadas" ? `${CAMPOS_DA_CAMPANHA}, arquivada_em` : CAMPOS_DA_CAMPANHA).eq("client_id", clientId))
+        .order(modo === "arquivadas" ? "arquivada_em" : "criado_em", { ascending: false })
+        .limit(40), modo)
+      .then((r) => r.linhas)
+      .catch((e) => (registrarFalha(`mesa-foto: leitura das campanhas (${modo}) falhou`, e, { client_id: clientId }), [] as LinhaCampanhaDaMesa[]));
+  const [ativas, propostas, arquivadas] = await Promise.all([
+    lerDoArquivo("ativas"),
     db.from("calendario_propostas")
       .select("id, itens, status, periodo_inicio, periodo_fim, project_id")
       .eq("client_id", clientId)
@@ -314,11 +302,10 @@ export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string,
       .gte("periodo_fim", ref.inicio)
       .order("periodo_inicio", { ascending: false })
       .limit(20),
-    idsArquivadosDoCliente(db, clientId),
+    opcoes.incluirArquivadas ? lerDoArquivo("arquivadas") : Promise.resolve([] as LinhaCampanhaDaMesa[]),
   ]);
-  const linhas = (campanhas.error ? [] : ((campanhas.data ?? []) as LinhaCampanhaDaMesa[]))
-    .filter((l) => campanhaDaMarca((l as { identidade?: unknown }).identidade, marca))
-    .map((l) => (arquivadas.has(l.id) ? { ...l, arquivada_em: l.arquivada_em || "arquivada" } : l));
+  const linhas = ativas.concat(arquivadas)
+    .filter((l) => campanhaDaMarca((l as { identidade?: unknown }).identidade, marca));
   // Frente MC: o calendário do mês da marca (a proposta da Acerbi não define a campanha do mês da CME).
   const marcasDoMes = marca ? await marcasDoCliente(db, clientId) : [];
   const propostasDaMarca = ((propostas.data ?? []) as { id: string; itens: unknown; project_id?: string | null }[])

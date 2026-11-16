@@ -70,3 +70,35 @@ export function temLinhaDoTempo(briefing: unknown): boolean {
 export function faltaColunaDoArquivo(e: { code?: string; message?: string } | null | undefined): boolean {
   return !!e && (e.code === "42703" || e.code === "PGRST204" || /arquivada_(em|por)/.test(String(e.message ?? "")));
 }
+
+export type ModoDoArquivo = "ativas" | "arquivadas";
+
+type RespostaDaLeitura = { data: unknown; error: { code?: string; message?: string } | null };
+// deno-lint-ignore no-explicit-any
+type Consulta = any;
+
+/**
+ * Lê campanhas com o filtro do arquivo NO BANCO, antes do order/limit (a
+ * página de 60 ou 40 é só de ativas, ou só de arquivadas). A `consulta`
+ * recebe `filtrar` e deve aplicá-lo logo depois dos filtros do cliente:
+ *
+ *   lerComFiltroDoArquivo((filtrar) => filtrar(db.from("mesa_campanhas").select("*").eq("client_id", id)).order(...).limit(60))
+ *
+ * Antes da migration 20261116120000 (coluna ausente, 42703/PGRST204):
+ * ativas refaz sem o filtro (todas são ativas); arquivadas devolve [].
+ */
+export async function lerComFiltroDoArquivo<T>(
+  consulta: (filtrar: (q: Consulta) => Consulta) => PromiseLike<RespostaDaLeitura>,
+  modo: ModoDoArquivo = "ativas",
+): Promise<{ linhas: T[]; semColuna: boolean }> {
+  const filtro = modo === "arquivadas"
+    ? (q: Consulta) => q.not("arquivada_em", "is", null)
+    : (q: Consulta) => q.is("arquivada_em", null);
+  const r = await consulta(filtro);
+  if (!r.error) return { linhas: ((r.data ?? []) as T[]), semColuna: false };
+  if (!faltaColunaDoArquivo(r.error)) throw r.error;
+  if (modo === "arquivadas") return { linhas: [], semColuna: true };
+  const sem = await consulta((q: Consulta) => q);
+  if (sem.error) throw sem.error;
+  return { linhas: ((sem.data ?? []) as T[]).filter((c) => !campanhaArquivada(c as { arquivada_em?: string | null })), semColuna: true };
+}
