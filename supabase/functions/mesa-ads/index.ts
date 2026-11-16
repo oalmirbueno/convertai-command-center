@@ -115,6 +115,7 @@
 
 import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import type { FonteDeConsulta } from "../_shared/consultas-do-agente.ts";
+import { lerComFiltroDoArquivo } from "../_shared/arquivo-da-campanha.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   carregarModelo,
@@ -1347,8 +1348,11 @@ async function montarContextoAds(
     servico.from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE).eq("ativa", true)
       .order("criado_em", { ascending: false }).limit(40),
     // Campanhas do mês da Mesa principal (as que valem neste mês ou sem período).
-    servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade")
-      .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(24),
+    // 16/11/2026: arquivadas ficam fora, no banco e antes do limite (sem a coluna ainda: refaz sem o filtro).
+    lerComFiltroDoArquivo<CampanhaDoMes & { identidade?: unknown }>((filtrar) =>
+      filtrar(servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade")
+        .eq("client_id", clientId).neq("status", "encerrada")).order("criado_em", { ascending: false }).limit(24))
+      .then((r) => ({ data: r.linhas, error: null }), (e) => (registrarFalha("mesa-ads: leitura das campanhas da Mesa falhou", e), { data: null, error: e })),
     // Brief respondido pelo cliente (formulário): produtos, preços e diferenciais costumam estar aqui.
     // Frente SYNC: com a marca de cada briefing (a CME não lê o da Acerbi; filtro logo abaixo).
     servico.from("briefings").select("responses, submitted, created_at, marca_id").eq("client_id", clientId)

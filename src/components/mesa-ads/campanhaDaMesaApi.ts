@@ -1,3 +1,4 @@
+import { lerComFiltroDoArquivo } from "../../../supabase/functions/_shared/arquivo-da-campanha";
 import { supabase } from "@/integrations/supabase/client";
 import { arteRapidaDa } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import { faseDaPeca, rotuloDaFase, type FaseDaCampanha } from "@/components/mesa/regrasDaCampanha";
@@ -217,7 +218,9 @@ export async function lerPecasDaCampanhaMesa(clientId: string, campanhaId: strin
 /** As campanhas do cliente com peças de arte prontas (o seletor "Puxar de uma campanha"). */
 export async function lerCampanhasComPecas(clientId: string): Promise<CampanhaComPecas[]> {
   const [campanhas, trabalhos] = await Promise.all([
-    sb().from("mesa_campanhas").select("id, nome, criado_em").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(60),
+    // 16/11/2026: arquivadas ficam fora, filtradas no banco antes do limite (sem a coluna ainda: todas).
+    lerComFiltroDoArquivo<{ id: string; nome: string }>((filtrar) =>
+      filtrar(sb().from("mesa_campanhas").select("id, nome, criado_em").eq("client_id", clientId)).order("criado_em", { ascending: false }).limit(60)),
     sb()
       .from("estudio_trabalhos")
       .select("id, direcao, cards")
@@ -226,9 +229,8 @@ export async function lerCampanhasComPecas(clientId: string): Promise<CampanhaCo
       .order("atualizado_em", { ascending: false })
       .limit(300),
   ]);
-  if (campanhas.error) throw campanhas.error;
   if (trabalhos.error) throw trabalhos.error;
-  return contarProntasPorCampanha((campanhas.data || []) as { id: string; nome: string }[], (trabalhos.data || []) as TrabalhoLido[]);
+  return contarProntasPorCampanha(campanhas.linhas, (trabalhos.data || []) as TrabalhoLido[]);
 }
 
 /** Função pura: as campanhas com ao menos uma peça pronta e quantas. */

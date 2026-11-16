@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, Megaphone, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Sparkles, Type } from "lucide-react";
+import { ArchiveRestore, Copy, Loader2, Megaphone, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Sparkles, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
@@ -17,13 +17,16 @@ import CampanhaDetalhe, { SeloDoEstado } from "./CampanhaDetalhe";
 import { SeloNoCanvas } from "./CampanhaCanvas";
 import CampanhaNova from "./CampanhaNova";
 import CampanhaAgente, { type RascunhoParaOAgente } from "./CampanhaAgente";
-import { chaves, lerCampanhas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
+import { chaves, lerCampanhas, lerCampanhasArquivadas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
 import { chavesDaCampanha, conteudosDaCampanha, lerContagemDosConteudos, usePedidoDaCampanha } from "./campanhasApi";
 import { tirarSementeDaCampanha, type SementeDaCampanha } from "./sementeDaCampanha";
 import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao } from "@/components/sistema/estilos";
 import { chavesDaCampanhaCompleta, lerTrabalhosDasCampanhas } from "./campanhasApi";
 import { moldeDaCampanha, progressoDaCampanha, prontasPorCampanha, type MoldeDaCampanha } from "./regrasDaCampanha";
+// 16/11/2026: arquivadas saem da lista padrão e ficam na aba Arquivadas, com Desarquivar.
+import { separarPorArquivo, type FiltroDoArquivo } from "./arquivoDaCampanha";
+import { useDesarquivar } from "./CampanhaArquivo";
 // Frente IDV (30/09): o criador de nomes da Mesa Identidade também dá nome de campanha (só baixa quando abre).
 const NamingDaCampanha = lazy(() => import("@/components/mesa-identidade/NamingDaCampanha"));
 
@@ -58,6 +61,8 @@ function ItemDaLista({
   onAbrir,
   progresso = null,
   onDuplicar,
+  onDesarquivar,
+  desarquivando = false,
 }: {
   campanha: Campanha;
   conteudos: number | null;
@@ -67,6 +72,9 @@ function ItemDaLista({
   progresso?: { prontas: number; total: number } | null;
   /** 22/10/2026: "Nova campanha a partir desta" (a estrutura, com outro tema). */
   onDuplicar?: () => void;
+  /** 16/11/2026: na aba Arquivadas, volta a campanha para a lista. */
+  onDesarquivar?: () => void;
+  desarquivando?: boolean;
 }) {
   return (
     <div className={`group flex w-full min-w-0 items-center rounded-lg transition-colors ${ativa ? "bg-primary/10" : "hover:bg-muted"}`}>
@@ -103,6 +111,35 @@ function ItemDaLista({
         <Copy className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
     )}
+    {onDesarquivar && (
+      <button type="button" className={`${botao.icone} mr-1`} onClick={onDesarquivar} disabled={desarquivando} aria-label={`Desarquivar ${campanha.nome}`} title="Desarquivar (volta para a lista)">
+        {desarquivando ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <ArchiveRestore className="h-3.5 w-3.5" aria-hidden="true" />}
+      </button>
+    )}
+    </div>
+  );
+}
+
+/** 16/11/2026: Ativas | Arquivadas (a contagem só aparece quando há arquivada). */
+function FiltroDoArquivoDaLista({ valor, onMudar, arquivadas }: { valor: FiltroDoArquivo; onMudar: (v: FiltroDoArquivo) => void; arquivadas: number }) {
+  const opcoes: { v: FiltroDoArquivo; rotulo: string }[] = [
+    { v: "ativas", rotulo: "Ativas" },
+    { v: "arquivadas", rotulo: arquivadas ? `Arquivadas (${arquivadas})` : "Arquivadas" },
+  ];
+  return (
+    <div role="tablist" aria-label="Filtro das campanhas" className="flex min-w-0 items-center rounded-lg bg-muted p-0.5">
+      {opcoes.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          role="tab"
+          aria-selected={valor === o.v}
+          onClick={() => onMudar(o.v)}
+          className={juntar("min-w-0 flex-1 truncate rounded-md px-2 py-1 text-[12px] font-medium transition-colors", valor === o.v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground", foco)}
+        >
+          {o.rotulo}
+        </button>
+      ))}
     </div>
   );
 }
@@ -250,8 +287,25 @@ export default function AbaCampanhas({
 
   // Frente AE: com duas marcas (Acerbi e CME), só as campanhas da marca aberta.
   const { marca } = useMarcaDaMesa();
-  const lista = (campanhas.data || []).filter((c) => campanhaDaMarcaNaTela(c.identidade, marca));
-  const idsDasPropostas = lista.map((c) => c.proposta_id || "").filter(Boolean).sort();
+  // 16/11/2026: a lista padrão não mostra as arquivadas; a aba Arquivadas mostra só elas.
+  // Cada uma é uma consulta própria, filtrada no banco antes do limite (60 ativas, 60 arquivadas).
+  const [filtro, setFiltro] = useEstadoDaTela<FiltroDoArquivo>(`mesa:campanhas:filtro-arquivo:${clientId}`, "ativas");
+  const daMarcaAtivas = (campanhas.data || []).filter((c) => campanhaDaMarcaNaTela(c.identidade, marca));
+  // A aberta pode ser uma arquivada (link direto): lê as arquivadas também quando ela não está nas ativas.
+  const abertaForaDasAtivas = !nova && !!idLocal && !!campanhas.data && !daMarcaAtivas.some((c) => c.id === idLocal);
+  const arquivadasQ = useQuery({
+    queryKey: chaves.campanhasArquivadas(clientId),
+    enabled: filtro === "arquivadas" || abertaForaDasAtivas,
+    queryFn: () => lerCampanhasArquivadas(clientId),
+  });
+  const daMarcaArquivadas = (arquivadasQ.data || []).filter((c) => campanhaDaMarcaNaTela(c.identidade, marca));
+  const daMarca = daMarcaAtivas.concat(daMarcaArquivadas.filter((a) => !daMarcaAtivas.some((c) => c.id === a.id)));
+  const { ativas: listaAtiva, arquivadas: listaArquivada } = separarPorArquivo(daMarca);
+  const lista = listaAtiva;
+  const listaVisivel = filtro === "arquivadas" ? listaArquivada : listaAtiva;
+  const leituraDaLista = filtro === "arquivadas" ? arquivadasQ : campanhas;
+  const { desarquivar, indo: desarquivando } = useDesarquivar();
+  const idsDasPropostas = listaVisivel.map((c) => c.proposta_id || "").filter(Boolean).sort();
   const contagem = useQuery({
     queryKey: chavesDaCampanha.contagem(clientId, idsDasPropostas),
     enabled: idsDasPropostas.length > 0,
@@ -272,7 +326,8 @@ export default function AbaCampanhas({
   useEffect(() => { setIdLocal(campanhaId); }, [campanhaId]);
   useEffect(() => { if (hypeIndice !== null) setNova(true); }, [hypeIndice]);
 
-  const escolhida = nova ? null : lista.find((c) => c.id === idLocal) || null;
+  // A aberta vem de todas (a arquivada também abre, com a faixa de Desarquivar).
+  const escolhida = nova ? null : daMarca.find((c) => c.id === idLocal) || null;
   // Andamento da campanha aberta, não de qualquer uma: o pedido de outra
   // campanha não acende nem apaga o botão desta.
   const andando = !!usePedidoDaCampanha(escolhida ? escolhida.id : null);
@@ -338,22 +393,29 @@ export default function AbaCampanhas({
           <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
+      <div className="shrink-0 px-2 pt-2">
+        <FiltroDoArquivoDaLista valor={filtro} onMudar={setFiltro} arquivadas={listaArquivada.length} />
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
-        {campanhas.isLoading && (
+        {leituraDaLista.isLoading && (
           <div className="space-y-1.5 p-1">
             <div className="h-12 animate-pulse rounded-lg bg-muted" />
             <div className="h-12 animate-pulse rounded-lg bg-muted" />
             <div className="h-12 animate-pulse rounded-lg bg-muted" />
           </div>
         )}
-        {campanhas.isError && <AvisoDeErro erro={campanhas.error} />}
-        {campanhas.isSuccess && lista.length === 0 && (
-          <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">Nenhuma campanha ainda.</p>
+        {leituraDaLista.isError && <AvisoDeErro erro={leituraDaLista.error} />}
+        {leituraDaLista.isSuccess && listaVisivel.length === 0 && (
+          <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">{filtro === "arquivadas" ? "Nenhuma campanha arquivada." : "Nenhuma campanha ainda."}</p>
         )}
         <ul className="space-y-0.5">
-          {lista.map((c) => (
+          {listaVisivel.map((c) => (
             <li key={c.id} className="min-w-0">
-              <ItemDaLista campanha={c} conteudos={conteudosDe(c)} ativa={!!escolhida && escolhida.id === c.id} onAbrir={() => abrir(c.id)} progresso={progressoDe(c)} onDuplicar={() => comecarNova(moldeDaCampanha(c))} />
+              {filtro === "arquivadas" ? (
+                <ItemDaLista campanha={c} conteudos={conteudosDe(c)} ativa={!!escolhida && escolhida.id === c.id} onAbrir={() => abrir(c.id)} onDesarquivar={() => void desarquivar(c)} desarquivando={desarquivando === c.id} />
+              ) : (
+                <ItemDaLista campanha={c} conteudos={conteudosDe(c)} ativa={!!escolhida && escolhida.id === c.id} onAbrir={() => abrir(c.id)} progresso={progressoDe(c)} onDuplicar={() => comecarNova(moldeDaCampanha(c))} />
+              )}
             </li>
           ))}
         </ul>
@@ -361,21 +423,26 @@ export default function AbaCampanhas({
     </nav>
   );
 
+  // No celular/tablet: o filtro Ativas | Arquivadas em cima do seletor (a aberta arquivada continua no seletor).
+  const doSeletor = escolhida && !listaVisivel.some((c) => c.id === escolhida.id) ? [escolhida].concat(listaVisivel) : listaVisivel;
   const seletor = (
-    <div className="mb-3 flex min-w-0 items-center">
-      <Select value={escolhida ? escolhida.id : ""} onValueChange={(v) => abrir(v)}>
-        <SelectTrigger className="mr-2 h-9 min-w-0 flex-1 text-[13px]" aria-label="Campanha aberta">
-          <SelectValue placeholder={campanhas.isLoading ? "Lendo campanhas…" : lista.length ? "Escolha uma campanha" : "Nenhuma campanha ainda"} />
-        </SelectTrigger>
-        <SelectContent>
-          {lista.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.nome} · {periodoCurto(c.periodo_inicio, c.periodo_fim)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {botaoNova}
+    <div className="mb-3 min-w-0 space-y-2">
+      <FiltroDoArquivoDaLista valor={filtro} onMudar={setFiltro} arquivadas={listaArquivada.length} />
+      <div className="flex min-w-0 items-center">
+        <Select value={escolhida ? escolhida.id : ""} onValueChange={(v) => abrir(v)}>
+          <SelectTrigger className="mr-2 h-9 min-w-0 flex-1 text-[13px]" aria-label="Campanha aberta">
+            <SelectValue placeholder={leituraDaLista.isLoading ? "Lendo campanhas…" : listaVisivel.length ? "Escolha uma campanha" : filtro === "arquivadas" ? "Nenhuma campanha arquivada" : "Nenhuma campanha ainda"} />
+          </SelectTrigger>
+          <SelectContent>
+            {doSeletor.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.nome} · {periodoCurto(c.periodo_inicio, c.periodo_fim)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {botaoNova}
+      </div>
     </div>
   );
 

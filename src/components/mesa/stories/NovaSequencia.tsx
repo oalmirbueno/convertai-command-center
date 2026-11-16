@@ -1,3 +1,4 @@
+import { campanhaArquivada } from "../../../../supabase/functions/_shared/arquivo-da-campanha";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Clapperboard, Flame, Megaphone, MessageCircleQuestion, Rocket, Sparkles, Star, Zap, type LucideIcon } from "lucide-react";
@@ -85,7 +86,7 @@ export default function NovaSequencia({
   );
   const mudar = (m: Partial<Pedido>) => setP({ ...p, ...m });
   const campanhas = useQuery({ queryKey: ["mesa", "campanhas", clientId], queryFn: () => lerCampanhas(clientId), enabled: !!clientId, staleTime: 60_000, retry: 1 });
-  const daMarca = useMemo(() => campanhasDaMarca(campanhas.data || [], marcaId), [campanhas.data, marcaId]);
+  const daMarca = useMemo(() => campanhasDaMarca((campanhas.data || []).filter((c) => !campanhaArquivada(c)), marcaId), [campanhas.data, marcaId]);
   const campanha = p.campanhaId ? daMarca.filter((c) => c.id === p.campanhaId)[0] || null : null;
   const novela = p.modelo === NOVELA;
   const estilo: EstiloDaImagem = p.estilo === "destaque" ? "destaque" : "natural";

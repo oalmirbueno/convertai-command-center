@@ -5,7 +5,7 @@ import { padraoPara, type ModeloIa } from "@/lib/mesa/api";
 import { juntar, texto, botao } from "@/components/sistema";
 import { BotaoComCusto } from "./Custo";
 import { useMarcaDaMesa, useMesa } from "./MesaContexto";
-import { chaves, lerCampanhas, lerProposta, type Campanha, type ItemProposto, type PropostaV4 } from "./mesaV4Api";
+import { chaves, lerCampanhas, lerCampanhasArquivadas, lerProposta, type Campanha, type ItemProposto, type PropostaV4 } from "./mesaV4Api";
 import {
   cancelarFilaDasPecas,
   chavesDaCampanhaCompleta,
@@ -93,7 +93,12 @@ export function depsDaCampanha(a: {
   const imagem = padraoPara(a.catalogo, "imagem");
   const campanhaAtual = async (id: string): Promise<Campanha> => {
     const lista = await a.qc.fetchQuery({ queryKey: chaves.campanhas(a.clientId), queryFn: () => lerCampanhas(a.clientId), staleTime: 0 });
-    const c = (lista || []).filter((x) => x.id === id)[0];
+    let c = (lista || []).filter((x) => x.id === id)[0];
+    // 16/11/2026: a lista padrão não traz as arquivadas; a aberta pode ser uma delas.
+    if (!c) {
+      const arquivadas = await a.qc.fetchQuery({ queryKey: chaves.campanhasArquivadas(a.clientId), queryFn: () => lerCampanhasArquivadas(a.clientId), staleTime: 0 });
+      c = (arquivadas || []).filter((x) => x.id === id)[0];
+    }
     if (!c) throw new Error("Campanha não encontrada.");
     return c;
   };

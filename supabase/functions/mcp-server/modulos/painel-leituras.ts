@@ -101,6 +101,25 @@ async function contagem(q: Promise<{ count: number | null; error: { message?: st
 
 const TAREFA_ABERTA = '("done","archived","cancelled")';
 
+/** Coluna que ainda não chegou ao banco (migration não aplicada). */
+const SEM_COLUNA = (e: unknown) => {
+  const x = (e ?? {}) as { code?: string; message?: string };
+  return x.code === '42703' || x.code === 'PGRST204' || /column .* does not exist/i.test(String(x.message ?? ''));
+};
+
+/**
+ * 16/11/2026: campanha arquivada (arquivada_em) sai das listas e do panorama. Antes da migration
+ * 20261116120000 a coluna não existe: a leitura refaz sem o filtro e avisa, nunca cai.
+ */
+async function semArquivadas<T>(comFiltro: () => Promise<T>, semFiltro: () => Promise<T>): Promise<{ valor: T; aviso: string | null }> {
+  try {
+    return { valor: await comFiltro(), aviso: null };
+  } catch (e) {
+    if (!SEM_COLUNA(e)) throw e;
+    return { valor: await semFiltro(), aviso: 'mesa_campanhas ainda não tem arquivada_em: as arquivadas não foram filtradas.' };
+  }
+}
+
 // ─── Panorama do cliente ────────────────────────────────────────
 
 export async function panoramaDoCliente(input: { client_id: string; detalhe?: string }, ctx: AuthContext) {
@@ -140,9 +159,12 @@ export async function panoramaDoCliente(input: { client_id: string; detalhe?: st
       return { abertas, atrasadas, proximas: proximas.linhas };
     },
     campanhas: async () => {
-      const { linhas } = await lerLinhas(b, 'mesa_campanhas', ['id', 'nome', 'status', 'periodo_inicio', 'periodo_fim', 'custo_usd'], (q) =>
-        q.eq('client_id', clientId).gte('periodo_fim', somarDias(hoje, -7)).order('periodo_inicio', { ascending: true }).limit(completo ? 20 : 5));
-      return linhas;
+      const ler = (filtrar: boolean) => lerLinhas(b, 'mesa_campanhas', ['id', 'nome', 'status', 'periodo_inicio', 'periodo_fim', 'custo_usd'], (q) => {
+        const x = q.eq('client_id', clientId);
+        return (filtrar ? x.is('arquivada_em', null) : x).gte('periodo_fim', somarDias(hoje, -7)).order('periodo_inicio', { ascending: true }).limit(completo ? 20 : 5);
+      });
+      const { valor } = await semArquivadas(() => ler(true), () => ler(false));
+      return valor.linhas;
     },
     estudio: async () => {
       const { linhas } = await lerLinhas(b, 'estudio_trabalhos', ['id', 'tipo', 'status', 'entrega_status', 'atualizado_em'], (q) =>
@@ -237,7 +259,15 @@ export async function panoramaDaCasa(input: { detalhe?: string }, ctx: AuthConte
       const mensal = linhas.reduce((a, l) => a + (Number(l.monthly_value) || 0), 0);
       return { abertos: linhas.length, por_etapa: porEtapa, valor_mensal_em_aberto: Math.round(mensal * 100) / 100 };
     },
-    campanhas: async () => ({ ativas: await contagem(b.from('mesa_campanhas').select('id', { count: 'exact', head: true }).gte('periodo_fim', hoje).lte('periodo_inicio', hoje), 'mesa_campanhas') }),
+    campanhas: async () => {
+      // 16/11/2026: arquivada não conta como ativa.
+      const ativas = (filtrar: boolean) => {
+        const q = b.from('mesa_campanhas').select('id', { count: 'exact', head: true });
+        return contagem((filtrar ? q.is('arquivada_em', null) : q).gte('periodo_fim', hoje).lte('periodo_inicio', hoje), 'mesa_campanhas');
+      };
+      const { valor } = await semArquivadas(() => ativas(true), () => ativas(false));
+      return { ativas: valor };
+    },
     estudio_fila: async () => {
       const { linhas } = await lerLinhas(b, 'estudio_fila', ['status'], (q) => q.gte('criado_em', desde(7)).limit(3000));
       return contarPor(linhas, 'status');
@@ -276,13 +306,13 @@ function faixa(input: EntradaDeLista, nomeDaLista: string) {
 }
 
 /** Campanhas da Mesa (Mês): lista enxuta ou uma campanha inteira, com o que está pendurado nela. */
-export async function campanhasDoMes(input: EntradaDeLista & { client_id: string; campanha_id?: string; so_ativas?: boolean }, ctx: AuthContext) {
+export async function campanhasDoMes(input: EntradaDeLista & { client_id: string; campanha_id?: string; so_ativas?: boolean; incluir_arquivadas?: boolean }, ctx: AuthContext) {
   const clientId = await conferirClienteDoPainel(input.client_id, ctx);
   const detalhe: Detalhe = input.campanha_id ? 'completo' : detalheDe(input.detalhe);
   const b = banco();
   if (input.campanha_id) {
     if (!isUuid(input.campanha_id)) throw new ErroDaFerramenta('entrada_invalida', 'campanha_id precisa ser um UUID.');
-    const { linhas } = await lerLinhas(b, 'mesa_campanhas', ['id', 'client_id', 'nome', 'pedido', 'objetivo', 'status', 'periodo_inicio', 'periodo_fim', 'conceito', 'identidade', 'briefing', 'imagens', 'plano_imagens', 'proposta_id', 'selo_id', 'custo_usd', 'criado_em', 'atualizado_em'], (q) =>
+    const { linhas } = await lerLinhas(b, 'mesa_campanhas', ['id', 'client_id', 'nome', 'pedido', 'objetivo', 'status', 'periodo_inicio', 'periodo_fim', 'conceito', 'identidade', 'briefing', 'imagens', 'plano_imagens', 'proposta_id', 'selo_id', 'custo_usd', 'criado_em', 'atualizado_em', 'arquivada_em'], (q) =>
       q.eq('id', input.campanha_id).eq('client_id', clientId).limit(1));
     const c = linhas[0];
     if (!c) throw new ErroDaFerramenta('nao_encontrado', 'Campanha não encontrada para este cliente.', 'Liste com aceleriq_mes_campanhas sem campanha_id.');
@@ -327,20 +357,28 @@ export async function campanhasDoMes(input: EntradaDeLista & { client_id: string
       },
       ...secoes,
       faltou,
-      acoes: 'Para mudar: aceleriq_mesa_campanha_acao (mudanca_planejar/confirmar, reorganizar, mercado, roteiro_video, trilha, pecas_para_ads) e aceleriq_mesa_campanha_salvar.',
+      acoes: 'Para mudar: aceleriq_mesa_campanha_acao (mudanca_planejar/confirmar, reorganizar, mercado, roteiro_video, trilha, pecas_para_ads, arquivar/desarquivar, periodo) e aceleriq_mesa_campanha_salvar.',
     };
   }
-  const { posicao, tamanho, ate } = faixa(input, `campanhas:${clientId}:${input.so_ativas ? 1 : 0}`);
+  // 16/11/2026: arquivadas ficam fora por padrão; so_ativas nunca as traz; incluir_arquivadas mostra (com arquivada_em).
+  const incluirArquivadas = input.incluir_arquivadas === true && !input.so_ativas;
+  const nomeDaLista = `campanhas:${clientId}:${input.so_ativas ? 1 : 0}${incluirArquivadas ? ':arq' : ''}`;
+  const { posicao, tamanho, ate } = faixa(input, nomeDaLista);
   const hoje = hojeSP();
-  const campos = detalhe === 'completo'
+  const campos = (detalhe === 'completo'
     ? ['id', 'nome', 'pedido', 'objetivo', 'status', 'periodo_inicio', 'periodo_fim', 'conceito', 'briefing', 'proposta_id', 'custo_usd', 'atualizado_em']
-    : ['id', 'nome', 'objetivo', 'status', 'periodo_inicio', 'periodo_fim', 'proposta_id', 'custo_usd', 'atualizado_em'];
-  const { linhas, aviso } = await lerLinhas(b, 'mesa_campanhas', campos, (q) => {
+    : ['id', 'nome', 'objetivo', 'status', 'periodo_inicio', 'periodo_fim', 'proposta_id', 'custo_usd', 'atualizado_em']).concat(incluirArquivadas ? ['arquivada_em'] : []);
+  const ler = (filtrar: boolean) => lerLinhas(b, 'mesa_campanhas', campos, (q) => {
     let x = q.eq('client_id', clientId);
+    if (filtrar) x = x.is('arquivada_em', null);
     if (input.so_ativas) x = x.gte('periodo_fim', hoje);
     return x.order('periodo_inicio', { ascending: false }).range(posicao, ate);
   });
-  return { client_id: clientId, detalhe, ...pagina(linhas.map((l) => ({ ...l, objetivo: detalhe === 'completo' ? l.objetivo : cortar(l.objetivo, 160) })), posicao, tamanho, `campanhas:${clientId}:${input.so_ativas ? 1 : 0}`), aviso };
+  const { valor: { linhas, aviso: avisoDaLeitura }, aviso: avisoDoArquivo } = incluirArquivadas
+    ? { valor: await ler(false), aviso: null }
+    : await semArquivadas(() => ler(true), () => ler(false));
+  const aviso = [avisoDaLeitura, avisoDoArquivo].filter(Boolean).join(' ') || null;
+  return { client_id: clientId, detalhe, ...pagina(linhas.map((l) => ({ ...l, objetivo: detalhe === 'completo' ? l.objetivo : cortar(l.objetivo, 160) })), posicao, tamanho, nomeDaLista), aviso };
 }
 
 /** Stories da Mesa: sequências (dia, objetivo) e, no completo, cada story. */

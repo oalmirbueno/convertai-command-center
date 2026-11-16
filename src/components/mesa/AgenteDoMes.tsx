@@ -1,3 +1,4 @@
+import { campanhaArquivada } from "../../../supabase/functions/_shared/arquivo-da-campanha";
 import { resumoDoRecibo } from "../../../supabase/functions/agente-calendario/resultado-da-agenda";
 import { caminhosDeImagemDosAnexos } from "@/lib/mesa/imagensDosAnexos";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -1009,7 +1010,7 @@ export default function AgenteDoMes({
 
   const porId: Record<string, PropostaV4> = {};
   (propostas.data || []).forEach((p) => { porId[p.id] = p; });
-  const campanhasAtivas = (campanhas.data || []).filter((c) => c.status !== "encerrada");
+  const campanhasAtivas = (campanhas.data || []).filter((c) => c.status !== "encerrada" && !campanhaArquivada(c));
   const campanhaEscolhida = campanhasAtivas.find((c) => c.id === campanhaId) || null;
   const listaDePlanos = planos.data || [];
   const planoDoMes = listaDePlanos.find((p) => p.mes === mes.slice(0, 7)) || null;
