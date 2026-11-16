@@ -320,7 +320,7 @@ Deno.test('executar: fora do escopo continua erro de protocolo; leitura audita e
 
 // ─── Ferramentas novas no catálogo ──────────────────────────────
 
-const NOVAS = ['aceleriq_guia', 'aceleriq_panorama_do_cliente', 'aceleriq_panorama_da_casa', 'aceleriq_mes_campanhas', 'aceleriq_mesa_stories', 'aceleriq_mesa_hype', 'aceleriq_mesa_templates', 'aceleriq_estudio_trabalhos', 'aceleriq_mesa_site', 'aceleriq_laboratorio', 'aceleriq_base_dos_agentes', 'aceleriq_membros', 'aceleriq_mcp_saude', 'aceleriq_mesa_campanha_acao'];
+const NOVAS = ['aceleriq_guia', 'aceleriq_panorama_do_cliente', 'aceleriq_panorama_da_casa', 'aceleriq_mes_campanhas', 'aceleriq_mesa_stories', 'aceleriq_mesa_hype', 'aceleriq_mesa_templates', 'aceleriq_estudio_trabalhos', 'aceleriq_estudio_erros', 'aceleriq_mesa_site', 'aceleriq_laboratorio', 'aceleriq_base_dos_agentes', 'aceleriq_membros', 'aceleriq_mcp_saude', 'aceleriq_mesa_campanha_acao'];
 
 Deno.test('catálogo 2.17: as ferramentas novas existem, sem nome repetido, e a versão subiu', () => {
   assertEquals(MCP_VERSION, '2.23.0');
