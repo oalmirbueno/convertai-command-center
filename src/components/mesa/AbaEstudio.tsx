@@ -107,6 +107,7 @@ import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "./ModeloDaCopyDoCont
 import { itemDaMarca } from "@/lib/mesa/marcas";
 import { arquivarDaFaixa, pautasParecidas, restaurarDaFaixa, tirarDaFila, type ArquivadaDaFaixa, type RecusadaDaFaixa } from "./arquivarDaFaixa";
 import ArquivadosDaFaixa, { chaveDosArquivados } from "./ArquivadosDaFaixa";
+import ErrosDoEstudio from "./ErrosDoEstudio";
 import AprovadasSemData, { chaveDasAprovadasSemData, JanelaDaAprovada, type AprovadaSemData } from "./AprovadasSemData";
 import AgendarDoEstudio from "./AgendarDoEstudio";
 import { entregarComModo, entregarVarias, prontaParaEntregar, resumoDoLote, type ModoDeEntrega, type ResultadoDaEntrega } from "@/lib/mesa/entregaComOpcoes";
@@ -2859,7 +2860,7 @@ export default function AbaEstudio({
       arquivar={{ onArquivar: (ids) => void arquivarPautas(ids), parecidas }}
       entregar={{ podeLiberar: podeRecarregar, prontas: prontasDaFaixa, onEntregar: (ids, modo, mostrar) => void entregarPautas(ids, modo, mostrar), ocupado: entregandoLote }}
       inicio={modoDoEstudio}
-      extra={<><AprovadasSemData /><ArquivadosDaFaixa onMudou={relerDepoisDeArquivar} /></>}
+      extra={<><ErrosDoEstudio /><AprovadasSemData /><ArquivadosDaFaixa onMudou={relerDepoisDeArquivar} /></>}
     />
   );
 
