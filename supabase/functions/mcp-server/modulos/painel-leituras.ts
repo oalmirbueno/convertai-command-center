@@ -17,6 +17,7 @@ import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts'
 import { exigirClienteExistente } from '../../_shared/mcp-client-id-guard.ts';
 import { comNovaTentativa, comPrazo, ErroDaFerramenta, explicarErro } from './robustez.ts';
 import { cortar, detalheDe, escolher, lerCursor, lerLinhas, pagina, tamanhoDaPagina, type Detalhe } from './leitura-enxuta.ts';
+import { lerErrosDoEstudio } from './estudio-erros-regras.ts';
 
 type Objeto = Record<string, unknown>;
 // deno-lint-ignore no-explicit-any
@@ -289,8 +290,9 @@ export async function panoramaDaCasa(input: { detalhe?: string }, ctx: AuthConte
     gerado_em: new Date().toISOString(),
     detalhe: completo ? 'completo' : 'enxuto',
     ...secoes,
+    estudio_fila_detalhe: 'detalhe: aceleriq_estudio_erros (quais deram erro, o motivo e se já foram resolvidos depois)',
     faltou,
-    proximas_ferramentas: ['aceleriq_operator_board (Execução)', 'aceleriq_list_opportunities (CRM)', 'aceleriq_get_finance_dashboard (financeiro)', 'aceleriq_panorama_do_cliente'],
+    proximas_ferramentas: ['aceleriq_operator_board (Execução)', 'aceleriq_estudio_erros (erros da fila do Estúdio)','aceleriq_list_opportunities (CRM)', 'aceleriq_get_finance_dashboard (financeiro)', 'aceleriq_panorama_do_cliente'],
     ms: Date.now() - inicio,
   };
 }
@@ -487,6 +489,31 @@ export async function trabalhosDoEstudio(input: EntradaDeLista & { client_id: st
     return { ...resto, legenda: cortar(t.legenda, 200), laminas: cards.length, laminas_com_arte: comArte };
   });
   return { client_id: clientId, detalhe, ...pagina(itens, posicao, tamanho, nome), aviso };
+}
+
+/**
+ * Erros do Estúdio (16/11/2026): as lâminas da fila que deram erro na janela, com o motivo em pt-BR,
+ * a peça, se outra rodada do mesmo trabalho já deu certo (resolvido_depois) e se a linha é órfã.
+ * Sem client_id: a casa inteira (credencial sem restrição).
+ */
+export async function errosDoEstudio(input: { client_id?: string; dias?: number; limite?: number; so_pendentes?: boolean; detalhe?: string }, ctx: AuthContext) {
+  const clientId = input.client_id ? await conferirClienteDoPainel(input.client_id, ctx) : null;
+  if (!clientId) exigirCasaInteira(ctx);
+  const completo = detalheDe(input.detalhe) === 'completo';
+  const r = await lerErrosDoEstudio(banco(), { clientId, dias: input.dias, limite: input.limite });
+  const filtrados = input.so_pendentes ? r.itens.filter((i) => !i.resolvido_depois) : r.itens;
+  const itens = completo ? filtrados : filtrados.map(({ erro_original: _o, concluido_em: _c, max_tentativas: _m, motivo_orfao, ...resto }) => ({ ...resto, ...(motivo_orfao ? { motivo_orfao } : {}) }));
+  return {
+    client_id: clientId,
+    desde: r.desde,
+    dias: r.dias,
+    detalhe: completo ? 'completo' : 'enxuto',
+    resumo: r.resumo,
+    itens,
+    mais: r.mais,
+    ...(r.mais ? { dica: 'Há mais erros na janela: aumente `limite` (até 100) ou encurte `dias`.' } : {}),
+    observacao: 'resolvido_depois = outra rodada do mesmo trabalho terminou como feito depois do erro. Só leitura: para gerar de novo, use a tela do Estúdio.',
+  };
 }
 
 /** Mesa Site: os sites (lista) ou um site com versões, edições e formulário. */

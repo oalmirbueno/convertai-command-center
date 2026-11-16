@@ -20,6 +20,7 @@ import { MCP_VERSION } from '../../_shared/mcp-release.ts';
 import {
   baseDosAgentes,
   campanhasDoMes,
+  errosDoEstudio,
   hypeDoMes,
   laboratorio,
   membros,
@@ -115,7 +116,7 @@ const panoramaDaCasaTool = leitura(
   {
     name: 'aceleriq_panorama_da_casa',
     title: 'Panorama da casa numa chamada',
-    description: 'Visão do dia da agência inteira numa chamada: clientes, tarefas abertas/atrasadas/de hoje, Execução (aprovações 30 dias e runs 24 h por situação), funil comercial por etapa e valor mensal em aberto, campanhas ativas, fila do Estúdio, pedidos de clientes e Laboratório (saldo e execuções). Só credencial sem restrição de cliente. Guardado por 30 s.',
+    description: 'Visão do dia da agência inteira numa chamada: clientes, tarefas abertas/atrasadas/de hoje, Execução (aprovações 30 dias e runs 24 h por situação), funil comercial por etapa e valor mensal em aberto, campanhas ativas, fila do Estúdio (detalhe dos erros: aceleriq_estudio_erros), pedidos de clientes e Laboratório (saldo e execuções). Só credencial sem restrição de cliente. Guardado por 30 s.',
     scopes: LEITURA_GERAL,
     cacheSeg: 30,
   },
@@ -209,6 +210,40 @@ const estudioTool = leitura(
     required: ['client_id'],
   },
   (i, ctx) => trabalhosDoEstudio(i, ctx),
+);
+
+/** Acima do teto vira o teto (e abaixo de 1 vira 1): acomoda em vez de recusar, como os limites do mcp-tools. */
+const ACOMODAR = (max: number) => z.preprocess((v) => {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(Math.max(Math.floor(n), 1), max) : v;
+}, z.number().int().optional());
+
+const estudioErrosTool = leitura(
+  {
+    name: 'aceleriq_estudio_erros',
+    title: 'Estúdio: erros da fila de geração',
+    description: 'As lâminas da fila do Estúdio que deram erro nos últimos N dias (padrão 7, a mesma janela do estudio_fila do panorama da casa): cliente, peça (trabalho_id e título curto), lâmina, etapa, código e o motivo em pt-BR simples, quando foi, `resolvido_depois` (outra rodada do mesmo trabalho terminou como feito depois) e `orfao` (sem cliente ou trabalho inexistente). Sem client_id lista a casa inteira (credencial sem restrição). so_pendentes=true tira os já resolvidos. Só leitura; completo traz o texto original do gerador. Guardado por 30 s.',
+    scopes: LEITURA_EDITORIAL,
+    cacheSeg: 30,
+  },
+  z.object({
+    client_id: UUID.optional(),
+    dias: ACOMODAR(30),
+    limite: ACOMODAR(100),
+    so_pendentes: z.boolean().optional(),
+    detalhe: DETALHE,
+  }).strict(),
+  {
+    properties: {
+      client_id: J_UUID('Cliente (opcional; sem ele, a casa inteira).'),
+      dias: { type: 'integer', minimum: 1, maximum: 30, description: 'Janela em dias (padrão 7).' },
+      limite: { type: 'integer', minimum: 1, maximum: 100, description: 'Quantos erros no máximo (padrão 50, mais recentes primeiro).' },
+      so_pendentes: { type: 'boolean', description: 'Só os que ainda não foram resolvidos por outra rodada.' },
+      detalhe: J_DETALHE,
+    },
+  },
+  (i, ctx) => errosDoEstudio(i, ctx),
 );
 
 const siteTool = leitura(
@@ -487,6 +522,7 @@ export const FERRAMENTAS_DO_PAINEL_INTEIRO: readonly ToolDefinition[] = [
   hypeTool,
   templatesTool,
   estudioTool,
+  estudioErrosTool,
   siteTool,
   laboratorioTool,
   baseTool,

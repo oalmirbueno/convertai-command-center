@@ -254,6 +254,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_dia_prioritario',
     'aceleriq_dia_prioritario_registrar',
     'aceleriq_editar_legenda_publicacao',
+    'aceleriq_estudio_erros',
     'aceleriq_estudio_trabalhos',
     'aceleriq_fetch',
     'aceleriq_finalize_file_upload',
@@ -1392,7 +1393,7 @@ Deno.test('2.28: as três ferramentas estão no catálogo, na versão certa e co
     agora: new Date('2026-11-14T12:00:00Z'),
   });
   assertEquals(d.toolCount, TOOLS.length);
-  assertEquals(TOOLS.length, 195);
+  assertEquals(TOOLS.length, 196);
 });
 
 Deno.test('revisão interna: escrita com mesas:write, cliente no escopo, RPC na ponte e schema fechado', async () => {
