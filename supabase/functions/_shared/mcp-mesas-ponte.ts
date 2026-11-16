@@ -40,6 +40,8 @@ export const ACOES_DA_PONTE = {
     // confere acesso, custo e protege peça aprovada/publicada).
     'campanha_mudanca_planejar', 'campanha_mudanca_confirmar', 'campanha_mudanca_desfazer', 'campanha_versao_voltar',
     'campanha_reorganizar', 'campanha_mercado', 'campanha_roteiro_video', 'campanha_trilha',
+    // 16/11/2026: arquivar/desarquivar e editar o período (sem IA, sem custo).
+    'campanha_arquivar', 'campanha_periodo',
   ],
   'mesa-ads': ['briefing_salvar', 'oferta_salvar', 'oferta_do_contexto', 'plano_gerar', 'criativos_produzir', 'pacote_enviar', 'criativos_da_campanha_mesa'],
   'estudio-arte': ['entregar', 'enfileirar'],

@@ -251,6 +251,9 @@ export interface Campanha {
   briefing?: Partial<BriefingDaCampanha> | null;
   imagens?: ImagemDaCampanha[] | null;
   plano_imagens?: PlanoDeImagens | null;
+  /** 16/11/2026: arquivada (migration 20261116120000); ausente antes do SQL. O status não muda. */
+  arquivada_em?: string | null;
+  arquivada_por?: string | null;
 }
 
 // ------------------------------------------------------------------ chaves

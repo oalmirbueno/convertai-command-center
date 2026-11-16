@@ -1,3 +1,4 @@
+import { campanhaArquivada } from "../../../supabase/functions/_shared/arquivo-da-campanha";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarCheck2, CalendarSearch, ExternalLink, Plus, Zap } from "lucide-react";
@@ -74,7 +75,7 @@ export default function MesConteudoRapido({
   const [resultado, setResultado] = useState<Resultado | null>(null);
 
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), enabled: aberto, queryFn: () => lerCampanhas(clientId) });
-  const ativas = (campanhas.data || []).filter((c) => c.status !== "encerrada");
+  const ativas = (campanhas.data || []).filter((c) => c.status !== "encerrada" && !campanhaArquivada(c));
 
   const recomecar = () => {
     setResultado(null);

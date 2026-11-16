@@ -46,6 +46,7 @@ import CampanhaLinhaDoTempo from "./CampanhaLinhaDoTempo";
 import CampanhaStories from "./CampanhaStories";
 import CampanhaVideos from "./CampanhaVideos";
 import { BotaoDoCanvas, useTempoRealDaCampanha } from "./CampanhaCanvas";
+import MenuDaCampanha, { FaixaDeArquivada } from "./CampanhaArquivo";
 import { trilhaSugeridaDaCampanha } from "./trilhaDaCampanhaApi";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
@@ -384,8 +385,12 @@ export default function CampanhaDetalhe({
               <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
+          {/* 16/11/2026: Editar período e Arquivar campanha (sem IA). */}
+          <MenuDaCampanha campanha={campanha} />
         </div>
       </header>
+
+      <FaixaDeArquivada campanha={campanha} />
 
       {/* Frente AE: a campanha ligada às mesas (usar nas mesas, levar para, tipo e a base). */}
       <CampanhaNasMesas campanha={campanha} />
