@@ -70,10 +70,28 @@ async function getWritableProject(projectId: string, ctx: WriteCtx) {
 // We only match successful prior calls with the same tool + principal +
 // idempotency_key, within the TTL window, and recover __result_ref. API keys
 // use key_id; OAuth uses the sanitized __principal metadata.
+/**
+ * Filtro do replay em sanitized_input. `escopo` (ex.: { client_id }) prende a
+ * chave a um recurso: a mesma idempotency_key em outro cliente não casa.
+ * O input auditado guarda os campos crus, então o escopo usa os mesmos nomes.
+ */
+export function filtroDeIdempotencia(
+  principal: string | null | undefined,
+  idempotencyKey: string,
+  escopo?: Record<string, string>,
+): Record<string, unknown> {
+  return {
+    ...(escopo || {}),
+    ...(principal ? { __principal: principal } : {}),
+    idempotency_key: idempotencyKey,
+  };
+}
+
 export async function findIdempotentResult(
   toolName: string,
   keyId: string,
   idempotencyKey: string,
+  escopo?: Record<string, string>,
 ): Promise<{
   correlationId: string;
   resultRef: string | null;
@@ -90,9 +108,7 @@ export async function findIdempotentResult(
   query = principal.keyId
     ? query.eq('key_id', principal.keyId)
     : query.is('key_id', null);
-  const auditMatch = principal.principal
-    ? { __principal: principal.principal, idempotency_key: idempotencyKey }
-    : { idempotency_key: idempotencyKey };
+  const auditMatch = filtroDeIdempotencia(principal.principal, idempotencyKey, escopo);
   const { data, error } = await query
     .contains('sanitized_input', auditMatch as any)
     .order('created_at', { ascending: false })
