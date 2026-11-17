@@ -383,6 +383,9 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_marcar_precisa_de_voce: 'mesas:write',
   aceleriq_listar_precisa_de_voce: 'clients:read',
   aceleriq_perfis_instagram_gravar: 'clients:write',
+  // MCP 2.29 (17/11/2026): listar e arquivar Referências e Concorrentes.
+  aceleriq_perfis_instagram_listar: 'clients:read',
+  aceleriq_perfis_instagram_arquivar: 'clients:write',
   aceleriq_list_opportunities: 'commercial:read',
   aceleriq_get_opportunity: 'commercial:read',
   aceleriq_list_commercial_activities: 'commercial:read',

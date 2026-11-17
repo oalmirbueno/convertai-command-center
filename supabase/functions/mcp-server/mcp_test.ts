@@ -352,7 +352,9 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_operator_request_approval',
     'aceleriq_panorama_da_casa',
     'aceleriq_panorama_do_cliente',
+    'aceleriq_perfis_instagram_arquivar',
     'aceleriq_perfis_instagram_gravar',
+    'aceleriq_perfis_instagram_listar',
     'aceleriq_prepare_file_upload',
     'aceleriq_reagendar_publicacao',
     'aceleriq_register_dossier_progress',
@@ -1378,9 +1380,8 @@ Deno.test('ajustar formato aprovado: ferramenta no catálogo, escopo editorial:w
 
 // ─── MCP 2.28.0 (14/11/2026): revisão interna, caixa Precisa de você e pedido ao dono ───
 
-Deno.test('2.28: as três ferramentas estão no catálogo, na versão certa e contadas na descoberta', async () => {
+Deno.test('2.28: as três ferramentas estão no catálogo e contadas na descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.28.0');
   const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
   for (const nome of ['aceleriq_revisar_trabalho_interno', 'aceleriq_listar_precisa_de_voce', 'aceleriq_marcar_precisa_de_voce']) {
     assert(TOOL_MAP.get(nome), `${nome} no catálogo`);
@@ -1393,7 +1394,6 @@ Deno.test('2.28: as três ferramentas estão no catálogo, na versão certa e co
     agora: new Date('2026-11-14T12:00:00Z'),
   });
   assertEquals(d.toolCount, TOOLS.length);
-  assertEquals(TOOLS.length, 196);
 });
 
 Deno.test('revisão interna: escrita com mesas:write, cliente no escopo, RPC na ponte e schema fechado', async () => {
@@ -1497,4 +1497,290 @@ Deno.test('marcar para o dono: escrita sem vínculo obrigatório, sem ação esc
   assert(!canInvoke(readCtx, tool));
   assert(canInvoke(writeCtx, tool));
   assert(canUseToolWithDataScope(restrictedCtx, tool));
+});
+
+// ─── MCP 2.29.0 (17/11/2026): listar e arquivar Referências e Concorrentes ───
+
+type FiltroDePerfil = { op: 'eq' | 'is' | 'not_is'; coluna: string; valor: unknown };
+
+/** Banco de mentira para perfis: select/eq/is/limit/maybeSingle e update com select. Guarda os updates. */
+function bancoDePerfis(
+  linhas: Record<string, unknown>[],
+  perfis = [{ id: '00000000-0000-4000-8000-0000000000aa', deleted_at: null }],
+  antesDoUpdate?: () => void,
+) {
+  const updates: Array<{ valores: Record<string, unknown>; filtros: FiltroDePerfil[] }> = [];
+  const passa = (l: Record<string, unknown>, filtros: FiltroDePerfil[]) =>
+    filtros.every((f) => f.op === 'eq' ? l[f.coluna] === f.valor
+      : f.op === 'is' ? (l[f.coluna] ?? null) === f.valor
+      : (l[f.coluna] ?? null) !== f.valor);
+  return {
+    updates,
+    from(tabela: string) {
+      const filtros: FiltroDePerfil[] = [];
+      let valores: Record<string, unknown> | null = null;
+      const fonte = () => tabela === 'profiles' ? perfis as Record<string, unknown>[] : linhas;
+      const resolver = () => {
+        if (valores) {
+          antesDoUpdate?.();
+          const alvo = fonte().filter((l) => passa(l, filtros));
+          for (const l of alvo) Object.assign(l, valores);
+          updates.push({ valores, filtros: [...filtros] });
+          return { data: alvo.map((l) => ({ ...l })), error: null };
+        }
+        return { data: fonte().filter((l) => passa(l, filtros)).map((l) => ({ ...l })), error: null };
+      };
+      const q: Record<string, unknown> = {};
+      q.select = () => q;
+      q.limit = () => q;
+      q.order = () => q;
+      q.eq = (coluna: string, valor: unknown) => { filtros.push({ op: 'eq', coluna, valor }); return q; };
+      q.is = (coluna: string, valor: unknown) => { filtros.push({ op: 'is', coluna, valor }); return q; };
+      q.not = (coluna: string, _op: 'is', valor: unknown) => { filtros.push({ op: 'not_is', coluna, valor }); return q; };
+      q.update = (v: Record<string, unknown>) => { valores = v; return q; };
+      q.maybeSingle = () => Promise.resolve(resolver()).then((r) => ({ data: r.data[0] ?? null, error: null }));
+      q.then = (ok: (r: unknown) => unknown, falha?: (e: unknown) => unknown) => Promise.resolve(resolver()).then(ok, falha);
+      return q;
+    },
+  };
+}
+
+const PERFIS_CLIENTE_A = '00000000-0000-4000-8000-0000000000aa';
+const PERFIS_CLIENTE_B = '00000000-0000-4000-8000-0000000000bb';
+const perfilDeTeste = (id: string, extra: Record<string, unknown> = {}) => ({
+  id, client_id: PERFIS_CLIENTE_A, papel: 'referencia', handle: `h${id.slice(-2)}`, nome: null, seguidores: null,
+  monitorar: false, criado_em: '2026-11-01T10:00:00Z', atualizado_em: '2026-11-01T10:00:00Z', arquivado_em: null, ...extra,
+});
+const idDePerfil = (n: number) => `11111111-1111-4111-8111-1111111111${String(n).padStart(2, '0')}`;
+const ctxDoClienteA: AuthContext = {
+  ...writeCtx,
+  dataScope: { ...writeCtx.dataScope, unrestricted: false, clientIds: [PERFIS_CLIENTE_A] },
+};
+
+Deno.test('2.29: versão, as duas ferramentas novas no catálogo, no guia e contadas na descoberta', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  assertEquals(MCP_VERSION, '2.29.0');
+  const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
+  const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
+  for (const nome of ['aceleriq_perfis_instagram_listar', 'aceleriq_perfis_instagram_arquivar', 'aceleriq_perfis_instagram_gravar']) {
+    assert(TOOL_MAP.get(nome), `${nome} no catálogo`);
+    assert(FERRAMENTAS_POR_AREA.mesa.includes(nome), `${nome} na mesa do guia`);
+  }
+  assert(REGRAS_DE_ACAO.join(' ').includes('aceleriq_perfis_instagram_arquivar'));
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-11-17T12:00:00Z'),
+  });
+  assertEquals(d.toolCount, TOOLS.length);
+  assertEquals(TOOLS.length, 198);
+});
+
+Deno.test('perfis listar: só leitura com clients:read, schema fechado e papel no singular ou plural', async () => {
+  const { listarPerfisSchema } = await import('./modulos/workspace-e-perfis.ts');
+  const tool = TOOL_MAP.get('aceleriq_perfis_instagram_listar')!;
+  assert(tool.scopes.includes('clients:read'));
+  assertEquals(tool.annotations?.readOnlyHint, true);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  assert(canInvoke(readCtx, tool));
+  assert(!canInvoke(emptyCtx, tool));
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals(schema.required, ['client_id']);
+  assertEquals(schema.properties.papel.enum, ['referencias', 'concorrentes', 'referencia', 'concorrente']);
+  const base = { client_id: PERFIS_CLIENTE_A };
+  assert(listarPerfisSchema.safeParse(base).success);
+  for (const papel of ['referencias', 'concorrentes', 'referencia', 'concorrente']) {
+    assert(listarPerfisSchema.safeParse({ ...base, papel, incluir_arquivados: false }).success, papel);
+  }
+  assert(!listarPerfisSchema.safeParse({}).success);
+  assert(!listarPerfisSchema.safeParse({ ...base, papel: 'amigos' }).success);
+  assert(!listarPerfisSchema.safeParse({ ...base, arquivar: true }).success, 'leitura não aceita ação');
+});
+
+Deno.test('perfis listar: abas com contagem, arquivados depois e recusa de cliente fora do escopo', async () => {
+  const { listarPerfisDoInstagram } = await import('./modulos/workspace-e-perfis.ts');
+  const linhas = [
+    perfilDeTeste(idDePerfil(1)),
+    perfilDeTeste(idDePerfil(2), { arquivado_em: '2026-11-10T00:00:00Z' }),
+    perfilDeTeste(idDePerfil(3), { papel: 'concorrente', monitorar: true }),
+    perfilDeTeste(idDePerfil(4), { client_id: PERFIS_CLIENTE_B }),
+  ];
+  const banco = bancoDePerfis(linhas);
+  const r = await listarPerfisDoInstagram({ client_id: PERFIS_CLIENTE_A }, ctxDoClienteA, banco as never);
+  assertEquals(r.referencias!.perfis.map((p) => [p.id, p.status]), [[idDePerfil(1), 'ativo'], [idDePerfil(2), 'arquivado']]);
+  assertEquals(r.referencias!.perfis[0].handle, '@h01');
+  assertEquals([r.referencias!.ativos, r.referencias!.limite, r.referencias!.vagas], [1, 6, 5]);
+  assertEquals(r.concorrentes!.perfis.map((p) => p.id), [idDePerfil(3)]);
+  assert(!JSON.stringify(r).includes(idDePerfil(4)), 'não mostra perfil de outro cliente');
+  const so = await listarPerfisDoInstagram({ client_id: PERFIS_CLIENTE_A, papel: 'concorrentes', incluir_arquivados: false }, ctxDoClienteA, banco as never);
+  assertEquals(Object.keys(so).filter((k) => k === 'referencias' || k === 'concorrentes'), ['concorrentes']);
+  await assertRejects(
+    () => listarPerfisDoInstagram({ client_id: PERFIS_CLIENTE_B }, ctxDoClienteA, banco as never),
+    Error,
+    'outside this MCP principal data scope',
+  );
+});
+
+Deno.test('perfis arquivar: escrita com clients:write e schema fechado (perfil_id ou handle com papel)', async () => {
+  const { arquivarPerfilSchema } = await import('./modulos/workspace-e-perfis.ts');
+  const tool = TOOL_MAP.get('aceleriq_perfis_instagram_arquivar')!;
+  assert(tool.scopes.includes('clients:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(writeCtx, tool));
+  assert(tool.description.includes('Não apaga nada'));
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals(schema.required, ['client_id']);
+  assert(!('confirmar' in schema.properties), 'sem confirmar');
+  const base = { client_id: PERFIS_CLIENTE_A };
+  assert(arquivarPerfilSchema.safeParse({ ...base, perfil_id: idDePerfil(1) }).success);
+  assert(arquivarPerfilSchema.safeParse({ ...base, handle: 'https://instagram.com/fulano', papel: 'concorrentes' }).success);
+  assert(arquivarPerfilSchema.safeParse({ ...base, handle: '@fulano', papel: 'referencia', idempotency_key: 'arquivar-0001' }).success);
+  assert(!arquivarPerfilSchema.safeParse(base).success, 'sem perfil_id nem handle');
+  assert(!arquivarPerfilSchema.safeParse({ ...base, handle: '@fulano' }).success, 'handle sem papel');
+  assert(!arquivarPerfilSchema.safeParse({ ...base, perfil_id: idDePerfil(1), handle: '@fulano', papel: 'referencia' }).success);
+  assert(!arquivarPerfilSchema.safeParse({ ...base, perfil_id: 'nao-uuid' }).success);
+  assert(!arquivarPerfilSchema.safeParse({ ...base, perfil_id: idDePerfil(1), idempotency_key: 'curta' }).success);
+  assert(!arquivarPerfilSchema.safeParse({ ...base, perfil_id: idDePerfil(1), apagar: true }).success, 'campo a mais não passa');
+});
+
+Deno.test('perfis arquivar: igual à tela, idempotente, por handle e sem tocar em outro cliente', async () => {
+  const { arquivarPerfilDoInstagram } = await import('./modulos/workspace-e-perfis.ts');
+  const linhas = [
+    perfilDeTeste(idDePerfil(1), { monitorar: true }),
+    perfilDeTeste(idDePerfil(2), { handle: 'fulano', papel: 'concorrente' }),
+    perfilDeTeste(idDePerfil(3), { client_id: PERFIS_CLIENTE_B }),
+    perfilDeTeste(idDePerfil(4), { handle: 'antigo', arquivado_em: '2026-11-05T00:00:00Z' }),
+  ];
+  const banco = bancoDePerfis(linhas);
+
+  const r = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(1) }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(r.ok, true);
+  assertEquals(r.ja_estava_arquivado, false);
+  assertEquals(r.perfil.status, 'arquivado');
+  assertEquals(r.perfil.monitorar, false);
+  assertEquals([r.aba, r.ativos, r.limite, r.vagas], ['referencias', 0, 6, 6]);
+  assertEquals(banco.updates.length, 1);
+  assertEquals(banco.updates[0].valores.arquivado_por, writeCtx.dataScope.principalUserId);
+  assertEquals(banco.updates[0].valores.monitorar, false);
+  assert(banco.updates[0].filtros.some((f) => f.coluna === 'client_id' && f.valor === PERFIS_CLIENTE_A), 'update preso ao cliente');
+  assertEquals(linhas.length, 4, 'nada apagado');
+
+  const de_novo = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(1) }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(de_novo.ja_estava_arquivado, true);
+  assertEquals(banco.updates.length, 1, 'já arquivado não muda nada');
+
+  const porHandle = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, handle: 'https://www.instagram.com/Fulano/', papel: 'concorrentes' }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(porHandle.perfil.id, idDePerfil(2));
+  assertEquals(porHandle.aba, 'concorrentes');
+
+  const soArquivado = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, handle: '@antigo', papel: 'referencias' }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(soArquivado.ja_estava_arquivado, true);
+
+  await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, handle: '@ninguem', papel: 'referencias' }, writeCtx, banco as never),
+    Error,
+    '@ninguem não está em Referências',
+  );
+  // Perfil de outro cliente: o mesmo erro de id inexistente, sem update e sem vazar dado.
+  const antes = banco.updates.length;
+  const erroDeOutro = await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(3) }, writeCtx, banco as never),
+    Error,
+  );
+  const erroInexistente = await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(99) }, writeCtx, banco as never),
+    Error,
+  );
+  assertEquals(erroDeOutro.message, erroInexistente.message);
+  assertEquals(erroDeOutro.message, 'Perfil não encontrado para este cliente.');
+  assertEquals(banco.updates.length, antes);
+  assertEquals(linhas[2].arquivado_em, null);
+  // Credencial presa ao cliente A não arquiva no cliente B.
+  await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_B, perfil_id: idDePerfil(3) }, ctxDoClienteA, banco as never),
+    Error,
+    'outside this MCP principal data scope',
+  );
+});
+
+Deno.test('perfis arquivar: corrida no update relê o perfil e devolve a linha arquivada', async () => {
+  const { arquivarPerfilDoInstagram } = await import('./modulos/workspace-e-perfis.ts');
+  const outraChamada = '2026-11-17T09:00:00Z';
+  const linhas = [perfilDeTeste(idDePerfil(1), { monitorar: true })];
+  // Outra chamada arquiva entre a leitura e o update: o update (is arquivado_em null) não devolve linha.
+  const banco = bancoDePerfis(linhas, undefined, () => {
+    Object.assign(linhas[0], { arquivado_em: outraChamada, monitorar: false });
+  });
+  const r = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(1) }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(r.ja_estava_arquivado, true);
+  assertEquals(r.perfil.status, 'arquivado', 'não devolve a linha ativa antiga');
+  assertEquals(r.perfil.arquivado_em, outraChamada);
+  assertEquals(r.perfil.monitorar, false);
+  assertEquals([r.ativos, r.vagas], [0, 6]);
+
+  // Se a releitura não acha o perfil, erro claro.
+  const sumiu = [perfilDeTeste(idDePerfil(2))];
+  const bancoSumiu = bancoDePerfis(sumiu, undefined, () => { sumiu.splice(0, 1); });
+  await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(2) }, writeCtx, bancoSumiu as never),
+    Error,
+    'não foi encontrado de novo',
+  );
+});
+
+Deno.test('perfis: idempotency_key de gravar e arquivar vale por cliente', async () => {
+  const { escopoDaChaveDoCliente } = await import('./modulos/perfis-listar-arquivar.ts');
+  const { filtroDeIdempotencia } = await import('../_shared/mcp-write-services.ts');
+  const chave = 'arquivar-0001';
+  const deA = filtroDeIdempotencia('oauth:pessoa', chave, escopoDaChaveDoCliente(PERFIS_CLIENTE_A));
+  const deB = filtroDeIdempotencia('oauth:pessoa', chave, escopoDaChaveDoCliente(PERFIS_CLIENTE_B));
+  assertEquals(deA, { client_id: PERFIS_CLIENTE_A, __principal: 'oauth:pessoa', idempotency_key: chave });
+  assert(JSON.stringify(deA) !== JSON.stringify(deB), 'mesma chave em outro cliente não casa');
+  // O input auditado guarda client_id e idempotency_key crus: o replay do cliente A casa só com A.
+  const auditadoDeA = { client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(1), idempotency_key: chave, __principal: 'oauth:pessoa' };
+  const casa = (filtro: Record<string, unknown>) => Object.entries(filtro).every(([k, v]) => (auditadoDeA as Record<string, unknown>)[k] === v);
+  assert(casa(deA));
+  assert(!casa(deB));
+  // Sem escopo, as outras ferramentas seguem como antes.
+  assertEquals(filtroDeIdempotencia(null, chave), { idempotency_key: chave });
+});
+
+Deno.test('perfis listar e arquivar: muitos arquivados não escondem o ativo', async () => {
+  const { listarPerfisDoInstagram, arquivarPerfilDoInstagram } = await import('./modulos/workspace-e-perfis.ts');
+  const linhas = [
+    ...Array.from({ length: 60 }, (_, i) => perfilDeTeste(`22222222-2222-4222-8222-2222222222${String(i).padStart(2, '0')}`, {
+      handle: 'repetido', arquivado_em: `2026-10-${String(1 + (i % 28)).padStart(2, '0')}T00:00:00Z`,
+    })),
+    perfilDeTeste(idDePerfil(1), { handle: 'repetido' }),
+  ];
+  const banco = bancoDePerfis(linhas);
+  const lista = await listarPerfisDoInstagram({ client_id: PERFIS_CLIENTE_A, papel: 'referencias' }, ctxDoClienteA, banco as never);
+  assertEquals(lista.referencias!.perfis[0].id, idDePerfil(1));
+  assertEquals(lista.referencias!.ativos, 1);
+  assertEquals(lista.referencias!.perfis.length, 61);
+  const r = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, handle: '@repetido', papel: 'referencias' }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(r.ja_estava_arquivado, false);
+  assertEquals(r.perfil.id, idDePerfil(1));
+});
+
+Deno.test('perfis gravar: idempotency_key opcional, mesmo schema fechado de antes', async () => {
+  const { gravarPerfisSchema } = await import('./modulos/workspace-e-perfis.ts');
+  const tool = TOOL_MAP.get('aceleriq_perfis_instagram_gravar')!;
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals(schema.required, ['client_id']);
+  assert('idempotency_key' in schema.properties);
+  const base = { client_id: PERFIS_CLIENTE_A, referencias: ['@fulano'] };
+  assert(gravarPerfisSchema.safeParse(base).success, 'sem a chave continua valendo');
+  assert(gravarPerfisSchema.safeParse({ ...base, idempotency_key: 'perfis-0001' }).success);
+  assert(!gravarPerfisSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!gravarPerfisSchema.safeParse({ ...base, idempotency_key: 'x'.repeat(121) }).success);
+  assert(!gravarPerfisSchema.safeParse({ client_id: PERFIS_CLIENTE_A, idempotency_key: 'perfis-0001' }).success, 'a chave sozinha não basta');
+  assert(!gravarPerfisSchema.safeParse({ ...base, extra: 1 }).success);
 });

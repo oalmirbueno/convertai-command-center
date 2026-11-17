@@ -12,4 +12,5 @@
 // 2.27.0 (14/11/2026): aceleriq_editar_legenda_publicacao e aceleriq_ajustar_formato_publicacao (legenda e formato de conteúdo aprovado sem criar revisão, com auditoria).
 // 2.28.0 (14/11/2026): aceleriq_revisar_trabalho_interno (revisão interna da peça, sem tocar na aprovação do cliente), aceleriq_listar_precisa_de_voce (a caixa Precisa de você, só leitura) e aceleriq_marcar_precisa_de_voce (pedido ao dono sem vínculo de execução).
 // 2.28.0 (16/11/2026, mesma versao): aceleriq_estudio_erros (erros da fila do Estudio com motivo, resolvido_depois e orfao) e a dica no estudio_fila do panorama da casa.
-export const MCP_VERSION = '2.28.0';
+// 2.29.0 (17/11/2026): aceleriq_perfis_instagram_listar (Referências e Concorrentes por aba, com ativos, limite e vagas, só leitura), aceleriq_perfis_instagram_arquivar (igual ao botão da tela, sem apagar nada, idempotente) e idempotency_key opcional em aceleriq_perfis_instagram_gravar.
+export const MCP_VERSION = '2.29.0';

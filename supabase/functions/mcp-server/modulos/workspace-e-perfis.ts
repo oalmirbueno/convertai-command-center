@@ -1,6 +1,6 @@
 /**
- * MCP: mover e criar arquivo no Workspace, e gravar Referências e Concorrentes
- * em Mesa > Contexto > Perfis do Instagram.
+ * MCP: mover e criar arquivo no Workspace, e gravar, listar e arquivar
+ * Referências e Concorrentes em Mesa > Contexto > Perfis do Instagram.
  *
  * O movimento entre Em Arquivos e uma pasta do Workspace usa a mesma ordem do
  * painel (copia o blob, grava o nó, só então tira da origem).
@@ -36,8 +36,23 @@ import {
   type PortasDoMovimento,
 } from './workspace-mover.ts';
 import { planejarPerfis } from './perfis-gravar.ts';
+import {
+  ABA_DO_PAPEL,
+  COLUNAS_DO_PERFIL,
+  PAPEIS_ACEITOS,
+  contagemDoPapel,
+  decidirArquivamento,
+  escopoDaChaveDoCliente,
+  montarListaPorAba,
+  normalizarPedidoDeArquivar,
+  papelDoPedido,
+  perfilParaLista,
+  type LinhaDePerfil,
+  type PedidoDeArquivar,
+} from './perfis-listar-arquivar.ts';
 
 const ESCRITA = { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false };
+const LEITURA_DOS_PERFIS = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false };
 const UUID = z.string().uuid();
 const COLUNAS_DO_NO = 'id, parent_id, scope, client_id, kind, name, mime, size_bytes, storage_path, sent_for_approval_file_id';
 
@@ -314,6 +329,7 @@ export const gravarPerfisSchema = z.object({
   client_id: UUID,
   referencias: z.array(z.string().trim().min(1).max(200)).max(6).optional(),
   concorrentes: z.array(z.string().trim().min(1).max(200)).max(6).optional(),
+  idempotency_key: z.string().trim().min(8).max(120).optional(),
 }).strict().refine(
   (valor) => (valor.referencias?.length || 0) + (valor.concorrentes?.length || 0) > 0,
   { message: 'Informe ao menos um perfil em referencias ou concorrentes.' },
@@ -327,6 +343,20 @@ export async function gravarPerfisDoInstagram(
   exigirCliente(ctx as AuthContext, input.client_id);
   const { data: cliente } = await banco.from('profiles').select('id').eq('id', input.client_id).is('deleted_at', null).maybeSingle();
   if (!cliente) throw new Error('client_id não existe (confira em aceleriq_list_clients).');
+  if (!input.idempotency_key) return await gravarPerfisDoCliente(input, ctx, banco);
+  // Com a chave, repetir o pedido não grava de novo: devolve o replay da primeira vez.
+  // A chave vale por cliente: a mesma chave em outro cliente não devolve o replay deste.
+  return await umaVez('aceleriq_perfis_instagram_gravar', ctx as AuthContext, input.idempotency_key, async () => {
+    const resultado = await gravarPerfisDoCliente(input, ctx, banco);
+    return { ref: `cliente_perfis_instagram:${input.client_id}`, resultado };
+  }, escopoDaChaveDoCliente(input.client_id));
+}
+
+async function gravarPerfisDoCliente(
+  input: z.infer<typeof gravarPerfisSchema>,
+  ctx: Pick<AuthContext, 'dataScope'>,
+  banco: SupabaseClient,
+) {
   const atuais = await banco.from('cliente_perfis_instagram').select('id, papel, handle')
     .eq('client_id', input.client_id).is('arquivado_em', null);
   if (atuais.error) throw new Error(atuais.error.message);
@@ -427,12 +457,222 @@ const perfisTool: ToolDefinition = {
       client_id: { type: 'string', format: 'uuid' },
       referencias: { type: 'array', maxItems: 6, items: { type: 'string' }, description: 'Perfis de referência (@ ou link do Instagram).' },
       concorrentes: { type: 'array', maxItems: 6, items: { type: 'string' }, description: 'Concorrentes (@ ou link do Instagram).' },
+      idempotency_key: { type: 'string', description: 'Opcional. Chave estável de 8 a 120 caracteres. Repetir com a mesma chave não grava de novo.' },
     },
   },
   handler: async (input, ctx) => {
     const parsed = gravarPerfisSchema.safeParse(input ?? {});
     if (!parsed.success) throw erroDeEntrada(parsed.error);
     return await gravarPerfisDoInstagram(parsed.data, ctx);
+  },
+};
+
+const ONDE_DOS_PERFIS = 'Mesa > Contexto > Perfis do Instagram';
+const TABELA_DOS_PERFIS = 'cliente_perfis_instagram';
+
+async function exigirClienteExistente(banco: SupabaseClient, clientId: string) {
+  const { data: cliente } = await banco.from('profiles').select('id').eq('id', clientId).is('deleted_at', null).maybeSingle();
+  if (!cliente) throw new Error('client_id não existe (confira em aceleriq_list_clients).');
+}
+
+/** Teto de cada leitura (ativos ou arquivados). O limite da tela é 6 ativos por aba. */
+const LIMITE_DE_LEITURA_DOS_PERFIS = 200;
+
+/**
+ * Linhas que casam com o pedido de arquivar. Por handle, busca o ativo primeiro
+ * e só sem ativo busca o arquivado mais recente: arquivados antigos não escondem o ativo.
+ */
+async function linhasDoPedidoDeArquivar(
+  banco: SupabaseClient,
+  clientId: string,
+  pedido: PedidoDeArquivar,
+): Promise<LinhaDePerfil[]> {
+  const base = () => banco.from(TABELA_DOS_PERFIS).select(COLUNAS_DO_PERFIL).eq('client_id', clientId);
+  if (pedido.por === 'id') {
+    const { data, error } = await base().eq('id', pedido.perfil_id).limit(1);
+    if (error) throw new Error(error.message);
+    return (data || []) as LinhaDePerfil[];
+  }
+  const doHandle = () => base().eq('handle', pedido.handle).eq('papel', pedido.papel);
+  const ativo = await doHandle().is('arquivado_em', null).limit(1);
+  if (ativo.error) throw new Error(ativo.error.message);
+  if ((ativo.data || []).length > 0) return ativo.data as LinhaDePerfil[];
+  const arquivado = await doHandle().not('arquivado_em', 'is', null)
+    .order('arquivado_em', { ascending: false }).limit(1);
+  if (arquivado.error) throw new Error(arquivado.error.message);
+  return (arquivado.data || []) as LinhaDePerfil[];
+}
+
+/** Releitura depois de um update sem linha (corrida): devolve o perfil como está agora. */
+export async function relerPerfilArquivado(banco: SupabaseClient, clientId: string, perfilId: string): Promise<LinhaDePerfil> {
+  const { data, error } = await banco.from(TABELA_DOS_PERFIS).select(COLUNAS_DO_PERFIL)
+    .eq('id', perfilId).eq('client_id', clientId).maybeSingle();
+  if (error) throw new Error(error.message);
+  const linha = data as LinhaDePerfil | null;
+  if (!linha || linha.client_id !== clientId) {
+    throw new Error('O perfil mudou durante o arquivamento e não foi encontrado de novo. Confira com aceleriq_perfis_instagram_listar.');
+  }
+  return linha;
+}
+
+export const listarPerfisSchema = z.object({
+  client_id: UUID,
+  papel: z.enum(PAPEIS_ACEITOS).optional(),
+  incluir_arquivados: z.boolean().optional(),
+}).strict();
+
+export async function listarPerfisDoInstagram(
+  input: z.infer<typeof listarPerfisSchema>,
+  ctx: Pick<AuthContext, 'dataScope'>,
+  banco: SupabaseClient = db(),
+) {
+  exigirCliente(ctx as AuthContext, input.client_id);
+  await exigirClienteExistente(banco, input.client_id);
+  const papel = input.papel ? papelDoPedido(input.papel) : null;
+  const incluirArquivados = input.incluir_arquivados !== false;
+  // Ativos e arquivados em consultas separadas: muitos arquivados nunca escondem um ativo.
+  const base = () => {
+    const q = banco.from(TABELA_DOS_PERFIS).select(COLUNAS_DO_PERFIL).eq('client_id', input.client_id);
+    return papel ? q.eq('papel', papel) : q;
+  };
+  const ativos = await base().is('arquivado_em', null).limit(LIMITE_DE_LEITURA_DOS_PERFIS);
+  if (ativos.error) throw new Error(ativos.error.message);
+  let arquivados: LinhaDePerfil[] = [];
+  if (incluirArquivados) {
+    const lidos = await base().not('arquivado_em', 'is', null)
+      .order('arquivado_em', { ascending: false }).limit(LIMITE_DE_LEITURA_DOS_PERFIS);
+    if (lidos.error) throw new Error(lidos.error.message);
+    arquivados = (lidos.data || []) as LinhaDePerfil[];
+  }
+  const linhas = [...((ativos.data || []) as LinhaDePerfil[]), ...arquivados]
+    .filter((l) => l.client_id === input.client_id);
+  return {
+    client_id: input.client_id,
+    onde: ONDE_DOS_PERFIS,
+    incluir_arquivados: incluirArquivados,
+    ...montarListaPorAba(linhas, { papel, incluirArquivados }),
+  };
+}
+
+export const arquivarPerfilSchema = z.object({
+  client_id: UUID,
+  perfil_id: UUID.optional(),
+  handle: z.string().trim().min(1).max(200).optional(),
+  papel: z.enum(PAPEIS_ACEITOS).optional(),
+  idempotency_key: z.string().trim().min(8).max(120).optional(),
+}).strict().superRefine((valor, contexto) => {
+  const pedido = normalizarPedidoDeArquivar(valor);
+  if (!pedido.ok) contexto.addIssue({ code: z.ZodIssueCode.custom, message: pedido.erro });
+});
+
+/** Igual ao arquivar da tela (perfis-instagram): marca arquivado_em, arquivado_por e desliga o monitoramento. Não apaga nada. */
+export async function arquivarPerfilDoInstagram(
+  input: z.infer<typeof arquivarPerfilSchema>,
+  ctx: AuthContext,
+  banco: SupabaseClient = db(),
+) {
+  exigirCliente(ctx, input.client_id);
+  await exigirClienteExistente(banco, input.client_id);
+  const normalizado = normalizarPedidoDeArquivar(input);
+  if (!normalizado.ok) throw new Error(normalizado.erro);
+  const pedido = normalizado.pedido;
+  const decisao = decidirArquivamento(input.client_id, await linhasDoPedidoDeArquivar(banco, input.client_id, pedido), pedido);
+  if (decisao.acao === 'erro') throw new Error(decisao.erro);
+
+  const executar = async () => {
+    let perfil = decisao.perfil;
+    let jaEstava = decisao.acao === 'ja_arquivado';
+    if (!jaEstava) {
+      const feito = await banco.from(TABELA_DOS_PERFIS)
+        .update({ arquivado_em: new Date().toISOString(), arquivado_por: ctx.dataScope.principalUserId, monitorar: false })
+        .eq('id', perfil.id).eq('client_id', input.client_id).is('arquivado_em', null)
+        .select(COLUNAS_DO_PERFIL);
+      if (feito.error) throw new Error(feito.error.message || 'Não foi possível arquivar o perfil.');
+      const linha = ((feito.data || []) as LinhaDePerfil[])[0];
+      if (linha) perfil = linha;
+      else {
+        // Sem linha: outra chamada arquivou entre a leitura e o update. Relê para devolver o estado real.
+        perfil = await relerPerfilArquivado(banco, input.client_id, perfil.id);
+        jaEstava = Boolean(perfil.arquivado_em);
+      }
+    }
+    const papel = papelDoPedido(perfil.papel) ?? 'referencia';
+    const ativos = await banco.from(TABELA_DOS_PERFIS).select(COLUNAS_DO_PERFIL)
+      .eq('client_id', input.client_id).eq('papel', papel).is('arquivado_em', null).limit(50);
+    if (ativos.error) throw new Error(ativos.error.message);
+    return {
+      ref: `cliente_perfis_instagram:${perfil.id}`,
+      resultado: {
+        onde: ONDE_DOS_PERFIS,
+        ja_estava_arquivado: jaEstava,
+        perfil: perfilParaLista(perfil),
+        aba: ABA_DO_PAPEL[papel],
+        ...contagemDoPapel((ativos.data || []) as LinhaDePerfil[], papel),
+      },
+    };
+  };
+
+  if (input.idempotency_key) {
+    return await umaVez('aceleriq_perfis_instagram_arquivar', ctx, input.idempotency_key, executar, escopoDaChaveDoCliente(input.client_id));
+  }
+  const { ref, resultado } = await executar();
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = ref;
+  return { ok: true, ...resultado };
+}
+
+const PAPEL_NO_SCHEMA = {
+  type: 'string',
+  enum: [...PAPEIS_ACEITOS],
+  description: 'referencias ou concorrentes (aceita também referencia ou concorrente).',
+};
+
+const listarPerfisTool: ToolDefinition = {
+  name: 'aceleriq_perfis_instagram_listar',
+  title: 'Listar Referências e Concorrentes',
+  description:
+    'Só leitura. Lista os perfis de Mesa > Contexto > Perfis do Instagram por aba (referencias e concorrentes): id, handle com @, nome, seguidores, status (ativo ou arquivado), criado_em, atualizado_em, arquivado_em e monitorar. Ativos primeiro, depois os arquivados (o mais recente primeiro). Cada aba traz ativos, limite (6) e vagas. Filtros: papel e incluir_arquivados (padrão true). Exige clients:read e o cliente no escopo.',
+  scopes: ['clients:read'],
+  annotations: LEITURA_DOS_PERFIS,
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['client_id'],
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      papel: { ...PAPEL_NO_SCHEMA, description: 'Opcional. Só uma aba: referencias ou concorrentes (aceita também referencia ou concorrente).' },
+      incluir_arquivados: { type: 'boolean', description: 'Padrão true. false traz só os ativos.' },
+    },
+  },
+  handler: async (input, ctx) => {
+    const parsed = listarPerfisSchema.safeParse(input ?? {});
+    if (!parsed.success) throw erroDeEntrada(parsed.error);
+    return await listarPerfisDoInstagram(parsed.data, ctx);
+  },
+};
+
+const arquivarPerfilTool: ToolDefinition = {
+  name: 'aceleriq_perfis_instagram_arquivar',
+  title: 'Arquivar Referência ou Concorrente',
+  description:
+    'Arquiva um perfil de Mesa > Contexto > Perfis do Instagram, igual ao botão da tela: marca arquivado, desliga o monitoramento e libera a vaga. Não apaga nada (posts e leituras ficam). Informe perfil_id, ou handle (@ ou link) com papel. Se já estava arquivado, devolve ok com ja_estava_arquivado true sem mudar nada. Devolve o perfil e ativos, limite e vagas da aba. idempotency_key é opcional. Exige clients:write e o cliente no escopo.',
+  scopes: ['clients:write'],
+  annotations: ESCRITA,
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['client_id'],
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      perfil_id: { type: 'string', format: 'uuid', description: 'Id do perfil (veja aceleriq_perfis_instagram_listar). Use este ou handle.' },
+      handle: { type: 'string', description: '@ ou link do perfil. Exige papel.' },
+      papel: { ...PAPEL_NO_SCHEMA, description: 'Obrigatório com handle: referencias ou concorrentes (aceita também referencia ou concorrente).' },
+      idempotency_key: { type: 'string', description: 'Opcional. Chave estável de 8 a 120 caracteres. Repetir não arquiva de novo.' },
+    },
+  },
+  handler: async (input, ctx) => {
+    const parsed = arquivarPerfilSchema.safeParse(input ?? {});
+    if (!parsed.success) throw erroDeEntrada(parsed.error);
+    return await arquivarPerfilDoInstagram(parsed.data, ctx);
   },
 };
 
@@ -583,4 +823,12 @@ const retirarTool: ToolDefinition = {
   },
 };
 
-export const FERRAMENTAS_DE_WORKSPACE_E_PERFIS: readonly ToolDefinition[] = [moverTool, criarTool, perfisTool, linkTool, retirarTool];
+export const FERRAMENTAS_DE_WORKSPACE_E_PERFIS: readonly ToolDefinition[] = [
+  moverTool,
+  criarTool,
+  perfisTool,
+  listarPerfisTool,
+  arquivarPerfilTool,
+  linkTool,
+  retirarTool,
+];
