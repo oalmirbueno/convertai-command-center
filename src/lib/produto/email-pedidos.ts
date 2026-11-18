@@ -150,7 +150,10 @@ export async function extrasDeEmailDoCliente(clientId: string): Promise<Array<{ 
 export const mudarPedido =(pedidoId: string, estado: "aguardando_pagamento" | "concluido" | "cancelado" | "reabrir", nota?: string) =>
   rpc<{ pedido: unknown }>("produto_email_pedido_mudar", { _pedido: pedidoId, _estado: estado, _nota: nota || null }).then((d) => lerPedido(d.pedido));
 
-export const salvarIntegracao = (dominioId: string, dados: Partial<{ cloudflare_zona_id: string; zoho_org_id: string; zoho_dc: string; zoho_admin: string; zoho_plano: string }>) =>
+/** De quem é a caixa no correio (nulo = ninguém). */
+export const atribuirCaixa = (caixaId: string, membroId: string | null) => rpc<unknown>("produto_email_caixa_atribuir", { _caixa: caixaId, _membro: membroId });
+
+export const salvarIntegracao = (dominioId: string, dados: Partial<{ cloudflare_zona_id: string; zoho_org_id: string; zoho_dc: string; zoho_admin: string; zoho_plano: string; dominio_vence_em: string; provedor_vence_em: string; provedor_custo_mensal: string; correio_provedor: string; correio_ligado: boolean }>) =>
   rpc<unknown>("produto_email_dominio_atualizar", { _dominio_id: dominioId, _dados: dados });
 
 // ------------------------------------------------------------------ a função produto-email

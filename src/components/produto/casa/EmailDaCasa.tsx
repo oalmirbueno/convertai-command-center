@@ -38,7 +38,7 @@ import ChecagemDoDominio from "../ChecagemDoDominio";
 import { chaveDasContas } from "./ContasDaCasa";
 import EntradasDeEmail from "./EntradasDeEmail";
 import IntegracaoDoDominio from "./IntegracaoDoDominio";
-import type { DominioComIntegracao } from "@/lib/produto/email-pedidos";
+import { atribuirCaixa, type DominioComIntegracao } from "@/lib/produto/email-pedidos";
 
 const ESTADOS: EstadoDoDominio[] = ["levantamento", "preparando", "virada", "concluido", "pausado"];
 const PROVEDORES: ProvedorDeEmail[] = ["zoho", "google", "microsoft", "outro"];
@@ -145,7 +145,7 @@ export default function EmailDaCasa() {
             {dominio.observacao && <p className={juntar(texto.corpo, "mt-2 whitespace-pre-wrap")}>{dominio.observacao}</p>}
           </Secao>
           <PassoAPasso etapas={etapas.filter((e) => e.dominio_id === dominio.id)} aoMudar={reler} />
-          <CaixasDaCasa dominio={dominio} caixas={caixas.filter((c) => c.dominio_id === dominio.id)} aoMudar={reler} />
+          <CaixasDaCasa dominio={dominio} caixas={caixas.filter((c) => c.dominio_id === dominio.id)} equipe={((contas.data || []).filter((c) => c.id === dominio.conta_id)[0] || { equipe: [] }).equipe} aoMudar={reler} />
           <IntegracaoDoDominio key={`integracao-${dominio.id}`} dominio={dominio as DominioComIntegracao} aoMudar={reler} />
           <Registros dominio={dominio} />
           <ChecagemDoDominio dominio={dominio} detalhado aoConferir={() => void reler()} />
@@ -232,7 +232,15 @@ function PassoAPasso({ etapas, aoMudar }: { etapas: EtapaDaMigracao[]; aoMudar: 
   );
 }
 
-function CaixasDaCasa({ dominio, caixas, aoMudar }: { dominio: DominioDeEmail; caixas: CaixaDeEmail[]; aoMudar: () => Promise<unknown> }) {
+function CaixasDaCasa({ dominio, caixas, equipe, aoMudar }: { dominio: DominioDeEmail; caixas: CaixaDeEmail[]; equipe: Array<{ id: string; nome: string; email: string }>; aoMudar: () => Promise<unknown> }) {
+  const atribuir = async (c: CaixaDeEmail, membro: string) => {
+    try {
+      await atribuirCaixa(c.id, membro || null);
+      await aoMudar();
+    } catch (e) {
+      toast.error(fraseDoErro(e));
+    }
+  };
   const [nova, setNova] = useState({ usuario: "", pessoa: "", tipo: "caixa" as CaixaDeEmail["tipo"], tamanho: "" });
   const [salvando, setSalvando] = useState(false);
   const criar = async () => {
@@ -258,7 +266,7 @@ function CaixasDaCasa({ dominio, caixas, aoMudar }: { dominio: DominioDeEmail; c
     }
   };
   return (
-    <Secao titulo="Caixas" descricao={`${caixas.length}`} ajuda="Cadastre cada caixa que existe hoje e acompanhe: criada no provedor novo, copiando o histórico, ativa. O cliente vê a lista e a situação; a senha nunca passa por aqui.">
+    <Secao titulo="Caixas" descricao={`${caixas.length}`} ajuda="Cadastre cada caixa que existe hoje e acompanhe: criada no provedor novo, copiando o histórico, ativa. Diga de quem é cada caixa: no correio, a pessoa vê a dela e quem administra a empresa vê todas. O cliente vê a lista e a situação; a senha nunca passa por aqui.">
       {caixas.length > 0 && (
         <ul className={juntar(lista.aberta, lista.divisoria, "mb-3")} data-caixas-da-casa="">
           {caixas.map((c) => (
@@ -267,6 +275,12 @@ function CaixasDaCasa({ dominio, caixas, aoMudar }: { dominio: DominioDeEmail; c
                 <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.endereco}</span>
                 <span className={juntar(texto.auxiliar, "block truncate")}>{[c.pessoa, c.tipo !== "caixa" ? c.tipo : "", c.tamanho_origem ? `${c.tamanho_origem} hoje` : ""].filter(Boolean).join(" · ") || "Sem responsável"}</span>
               </span>
+              {c.tipo === "caixa" && equipe.length > 0 && (
+                <select value={(c as CaixaDeEmail & { membro_id?: string | null }).membro_id || ""} onChange={(e) => void atribuir(c, e.target.value)} className={juntar(campo, "ml-2 h-8 w-auto max-w-[150px] text-[12px]")} aria-label={`De quem é ${c.endereco}`} title="De quem é a caixa no correio" data-dono-da-caixa="">
+                  <option value="">Sem pessoa</option>
+                  {equipe.map((m) => <option key={m.id} value={m.id}>{m.nome || m.email}</option>)}
+                </select>
+              )}
               <select value={c.estado} onChange={(e) => void mudarEstado(c, e.target.value as CaixaDeEmail["estado"])} className={juntar(campo, "ml-2 h-8 w-auto text-[12px]")} aria-label={`Situação de ${c.endereco}`}>
                 {ESTADOS_DA_CAIXA.map((e) => <option key={e} value={e}>{ROTULO_DA_CAIXA[e]}</option>)}
               </select>

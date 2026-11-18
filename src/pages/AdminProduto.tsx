@@ -1,12 +1,13 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Building2, ExternalLink, Inbox, Mail, Tags, Wallet } from "lucide-react";
+import { Building2, ExternalLink, HeartPulse, Inbox, Mail, Tags, Wallet } from "lucide-react";
 import { CabecalhoDePagina, Carregando, Etapas, botao, juntar } from "@/components/sistema";
 import ContasDaCasa from "@/components/produto/casa/ContasDaCasa";
 
 const EmailDaCasa = lazy(() => import("@/components/produto/casa/EmailDaCasa"));
 const PrecosDoProduto = lazy(() => import("@/components/produto/casa/PrecosDoProduto"));
 const FaturamentoDoProduto = lazy(() => import("@/components/produto/casa/FaturamentoDoProduto"));
+const CentralDeEmail = lazy(() => import("@/components/produto/casa/CentralDeEmail"));
 const CaixaDaAceleriq = lazy(() => import("@/components/produto/casa/CaixaDaAceleriq"));
 
 /**
@@ -15,11 +16,12 @@ const CaixaDaAceleriq = lazy(() => import("@/components/produto/casa/CaixaDaAcel
  * faturamento com os custos. O produto em si abre em /app.
  */
 
-type Area = "empresas" | "email" | "caixa" | "precos" | "faturamento";
+type Area = "empresas" | "central" | "email" | "caixa" | "precos" | "faturamento";
 
 const AREAS: Array<{ valor: Area; rotulo: string; icone: ReactNode }> = [
   { valor: "empresas", rotulo: "Empresas", icone: <Building2 className="h-4 w-4" /> },
-  { valor: "email", rotulo: "E-mail", icone: <Mail className="h-4 w-4" /> },
+  { valor: "central", rotulo: "Central de e-mail", icone: <HeartPulse className="h-4 w-4" /> },
+  { valor: "email", rotulo: "Entradas e migrações", icone: <Mail className="h-4 w-4" /> },
   { valor: "caixa", rotulo: "Caixa da Aceleriq", icone: <Inbox className="h-4 w-4" /> },
   { valor: "precos", rotulo: "Preços", icone: <Tags className="h-4 w-4" /> },
   { valor: "faturamento", rotulo: "Faturamento", icone: <Wallet className="h-4 w-4" /> },
@@ -28,6 +30,7 @@ const AREAS: Array<{ valor: Area; rotulo: string; icone: ReactNode }> = [
 const AJUDA: Record<Area, string> = {
   empresas: "Quem usa o produto: situação, plano, usuários e mensalidade. Abra uma empresa para ajustar o que foi contratado, convidar pessoas e cobrar.",
   email: "O e-mail profissional numa rota só: as entradas (pedidos) com o marcar como pago e, embaixo, a migração de cada empresa (domínio, passo a passo, caixas, integração com Cloudflare e Zoho e a conferência do DNS).",
+  central: "A saúde do e-mail de cada cliente: pagamento, vencimento do domínio e do plano, DNS, limite de caixas e pedidos parados. Do mais urgente para o mais tranquilo.",
   caixa: "A caixa de e-mail oficial da Aceleriq dentro do painel, com o Zoho por trás. Desligada até o dono decidir: ligar pede o plano pago do Zoho.",
   precos: "Planos, preços do e-mail, prazos de teste e de atraso, os custos da casa e a chave que liga a cobrança no cartão.",
   faturamento: "Quanto o produto fatura por mês, o que está em atraso e quanto custa entregar. A mesma leitura aparece no Financeiro.",
@@ -57,6 +60,7 @@ export default function AdminProduto() {
       />
       {area === "empresas" && <ContasDaCasa />}
       <Suspense fallback={<Carregando linhas={5} />}>
+        {area === "central" && <CentralDeEmail />}
         {area === "email" && <EmailDaCasa />}
         {area === "caixa" && <CaixaDaAceleriq />}
         {area === "precos" && <PrecosDoProduto />}

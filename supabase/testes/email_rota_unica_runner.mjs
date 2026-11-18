@@ -30,7 +30,7 @@ CREATE FUNCTION public.has_role(_u uuid, _r public.app_role) RETURNS boolean LAN
 CREATE TABLE public.profiles (id uuid PRIMARY KEY, company_name text, full_name text, email text);
 CREATE TABLE public.notifications (id bigserial PRIMARY KEY, user_id uuid, message text, notification_type text, link text);
 CREATE TABLE public.client_extras (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), client_id uuid NOT NULL, nome text NOT NULL,
-  categoria text NOT NULL, cobranca text NOT NULL, valor numeric NOT NULL DEFAULT 0, status text NOT NULL DEFAULT 'ativo');
+  categoria text NOT NULL, cobranca text NOT NULL, valor numeric NOT NULL DEFAULT 0, status text NOT NULL DEFAULT 'ativo', created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE public.billing (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), client_id uuid NOT NULL, type text NOT NULL,
   amount numeric NOT NULL, status text NOT NULL DEFAULT 'pending', due_date date NOT NULL, paid_date date, paid_amount numeric,
   description text, extra_id uuid, created_at timestamptz NOT NULL DEFAULT now());
@@ -54,6 +54,17 @@ for (const vez of ['Aplicada', 'Reaplicada (idempotente)']) {
     console.log(vez, NOVA);
   } catch (e) {
     console.error('Erro na migration', e.message, e.where, e.position);
+    process.exit(1);
+  }
+}
+
+const CENTRAL = 'supabase/migrations/20261118190000_produto_email_central_e_correio.sql';
+for (const vez of ['Aplicada', 'Reaplicada (idempotente)']) {
+  try {
+    await db.exec(readFileSync(CENTRAL, 'utf8'));
+    console.log(vez, CENTRAL);
+  } catch (e) {
+    console.error('Erro na migration da central', e.message, e.where, e.position);
     process.exit(1);
   }
 }
@@ -220,6 +231,58 @@ await db.query(`UPDATE public.produto_cobrancas SET estado = 'paga', pago_em = n
 conferir('Asaas pago anda o pedido', (await um(`SELECT estado || ':' || forma_pagamento FROM public.produto_email_pedidos WHERE id = $1`, [r.pedido.id])) === 'em_andamento:asaas');
 conferir('conclusão leva o domínio a concluído', !!(await um(`SELECT public.produto_email_pedido_mudar($1, 'concluido')`, [r.pedido.id]))
   && (await um(`SELECT estado FROM public.produto_email_dominios WHERE conta_id = $1`, [D])) === 'concluido');
+
+// 12. Central e correio (20261118190000): caixa por usuário, master, vencimentos e a leitura da casa.
+await como('service_role', null);
+const VEND = '00000000-0000-4000-8000-0000000000a2';
+await db.query(`INSERT INTO auth.users (id, email) VALUES ($1, 'vendas@empresa-a.com.br')`, [VEND]);
+const membroVend = await um(`INSERT INTO public.produto_membros (conta_id, user_id, email, papel, estado) VALUES ($1, $2, 'vendas@empresa-a.com.br', 'usuario', 'ativo') RETURNING id`, [A, VEND]);
+const dominioA = await um(`SELECT id FROM public.produto_email_dominios WHERE conta_id = $1`, [A]);
+const cxVend = (await um(`SELECT public.produto_email_caixa_salvar($1, 'vendas', 'Vendas', null, 'ativa')`, [dominioA])).caixa_id;
+const cxFin = (await um(`SELECT public.produto_email_caixa_salvar($1, 'financeiro', 'Financeiro', null, 'ativa')`, [dominioA])).caixa_id;
+const cxApelido = (await um(`SELECT public.produto_email_caixa_salvar($1, 'contato', '', 'apelido', 'ativa')`, [dominioA])).caixa_id;
+await como('authenticated', VEND);
+r = await um(`SELECT public.produto_email_minhas_caixas()`);
+conferir('usuário vê só a caixa do próprio endereço', r.master === false && r.caixas.length === 1 && r.caixas[0].endereco === 'vendas@empresa-a.com.br' && r.caixas[0].minha === true, JSON.stringify(r));
+conferir('correio nasce desligado', r.caixas[0].ligado === false && r.caixas[0].provedor === 'nenhum');
+conferir('usuário não atribui caixa', /administra/.test(await recusa(`SELECT public.produto_email_caixa_atribuir($1, $2)`, [cxFin, membroVend]) || ''));
+conferir('usuário não se torna master', /administra/.test(await recusa(`SELECT public.produto_email_master_definir($1, true)`, [membroVend]) || ''));
+await como('authenticated', ADMIN_A);
+r = await um(`SELECT public.produto_email_minhas_caixas()`);
+conferir('quem administra é master e vê todas (sem apelido)', r.master === true && r.caixas.length === 2);
+await um(`SELECT public.produto_email_caixa_atribuir($1, $2)`, [cxFin, membroVend]);
+conferir('apelido não tem caixa de entrada', /Apelido/.test(await recusa(`SELECT public.produto_email_caixa_atribuir($1, $2)`, [cxApelido, membroVend]) || ''));
+await como('authenticated', ADMIN_B);
+conferir('outra empresa não atribui caixa da A', /administra/.test(await recusa(`SELECT public.produto_email_caixa_atribuir($1, null)`, [cxVend]) || ''));
+await como('authenticated', VEND);
+r = await um(`SELECT public.produto_email_minhas_caixas()`);
+conferir('caixa atribuída aparece para a pessoa', r.caixas.length === 2);
+await como('service_role', null);
+conferir('pode abrir: dono da caixa sim', (await um(`SELECT public.produto_email_pode_abrir($1, $2)`, [cxFin, VEND])) === true);
+conferir('pode abrir: outra empresa não', (await um(`SELECT public.produto_email_pode_abrir($1, $2)`, [cxFin, ADMIN_B])) === false);
+await um(`SELECT public.produto_email_caixa_atribuir($1, null)`, [cxFin]);
+conferir('pode abrir: sem atribuição, usuário comum não', (await um(`SELECT public.produto_email_pode_abrir($1, $2)`, [cxFin, VEND])) === false);
+await como('authenticated', ADMIN_A);
+await um(`SELECT public.produto_email_master_definir($1, true)`, [membroVend]);
+await como('service_role', null);
+conferir('pode abrir: master sim', (await um(`SELECT public.produto_email_pode_abrir($1, $2)`, [cxFin, VEND])) === true);
+conferir('segredo da caixa vai para o Vault', (await um(`SELECT public.produto_email_guardar_segredo_da_caixa($1, 'senha-de-app')`, [cxVend])) === true
+  && (await um(`SELECT public.produto_email_ler_segredo_da_caixa($1)`, [cxVend])) === 'senha-de-app'
+  && (await um(`SELECT tem_segredo FROM public.produto_email_caixas WHERE id = $1`, [cxVend])) === true);
+conferir('correio ligado sem provedor recusa', !!(await recusa(`SELECT public.produto_email_dominio_atualizar($1, '{"correio_ligado":true}'::jsonb)`, [dominioA])));
+r = await um(`SELECT public.produto_email_dominio_atualizar($1, '{"correio_provedor":"migadu","correio_ligado":true,"dominio_vence_em":"2027-03-10","provedor_vence_em":"2026-12-01","provedor_custo_mensal":"9.50"}'::jsonb, $2)`, [dominioA, DONO]);
+await como('authenticated', VEND);
+r = await um(`SELECT public.produto_email_minhas_caixas()`);
+conferir('com provedor e segredo, a caixa fica ligada', r.caixas.find((c) => c.endereco === 'vendas@empresa-a.com.br').ligado === true && r.caixas.find((c) => c.endereco === 'financeiro@empresa-a.com.br').ligado === false);
+conferir('usuário não lê a central', /administração/.test(await recusa(`SELECT public.produto_email_central()`) || ''));
+conferir('nem o master lê o segredo', /servidor/.test(await recusa(`SELECT public.produto_email_ler_segredo_da_caixa($1)`, [cxVend]) || ''));
+await como('authenticated', DONO);
+r = await um(`SELECT public.produto_email_central()`);
+const linhaA = r.find((l) => l.conta_id === A);
+const linhaB = r.find((l) => l.conta_id === B);
+conferir('central: uma linha por empresa com e-mail', r.length >= 4 && linhaA && linhaB, String(r.length));
+conferir('central: caixas, apelidos, sem dono e vencimentos', linhaA.caixas === 2 && linhaA.apelidos === 1 && linhaA.caixas_sem_dono === 2 && linhaA.dominios[0].dominio_vence_em === '2027-03-10' && linhaA.dominios[0].provedor_vence_em === '2026-12-01' && Number(linhaA.dominios[0].provedor_custo_mensal) === 9.5 && linhaA.dominios[0].etapas_total === 8, JSON.stringify(linhaA).slice(0, 400));
+conferir('central: cliente da Aceleriq mostra a cobrança do extra', linhaB.cobranca && linhaB.cobranca.por === 'extra', JSON.stringify(linhaB.cobranca));
 
 for (const [i, x] of resultados.entries()) console.log(x.ok ? 'OK  ' : 'FAIL', i + 1, x.teste, x.ok ? '' : x.detalhe);
 console.log(`${resultados.filter((x) => x.ok).length}/${resultados.length} passaram`);
