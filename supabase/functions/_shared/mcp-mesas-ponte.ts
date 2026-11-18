@@ -75,6 +75,8 @@ export const RPCS_DA_PONTE = [
   // MCP 2.28: revisão interna da peça e pedido ao dono. Nenhuma das duas aprova pelo cliente, agenda ou publica.
   'revisar_trabalho_interno',
   'marcar_precisa_do_dono',
+  // MCP 2.30: cria a publicação planejada (sem data) de post já aprovado. O banco confere aprovação, conta e projeto; não agenda nem publica.
+  'save_editorial_post',
 ] as const;
 export type RpcDaPonte = (typeof RPCS_DA_PONTE)[number];
 

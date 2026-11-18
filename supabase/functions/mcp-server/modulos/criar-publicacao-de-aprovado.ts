@@ -1,0 +1,359 @@
+/**
+ * MCP 2.30.0 (18/11/2026): cria a publicação planejada (sem data) de um post
+ * da Agenda que o cliente JÁ aprovou e que ainda não tem publicação.
+ *
+ * Caso real: posts com production_status 'ready', arquivo principal aprovado
+ * pelo cliente e approval_fingerprint gravado, mas sem nenhuma linha em
+ * editorial_publications. Sem publication_id, aceleriq_reagendar_publicacao
+ * não tem o que agendar. Esta tool cria a linha e para aí: o agendamento é o
+ * passo seguinte, pelo reagendar (com expected_version).
+ *
+ * Mesma regra do painel (estudio-arte/agenda-da-entrega.ts, confirmarComPerfis):
+ * a escrita vai por save_editorial_post com o JWT da pessoa (o banco roteia
+ * para save_approved_editorial_post_unlocked e confere acesso, projeto, conta e
+ * o fingerprint da aprovação) e o payload sai de payloadComPerfis, com
+ * quando=null e assetFileIds=null: sem data, sem delivery_mode e sem lâminas,
+ * o banco só cria a publicação planejada. Nada agenda, nada publica.
+ *
+ * save_editorial_post recebe o array COMPLETO de publicações (o que faltar é
+ * cancelado). Por isso, se o post já tem qualquer publicação viva, a RPC não
+ * é chamada: devolve a existente (ja_existia=true). Só cancelada: recusa
+ * (reabrir é ação humana na Agenda, igual ao reagendar).
+ */
+
+import { z } from 'https://esm.sh/zod@3.23.8';
+import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
+import type { AuthContext } from '../../_shared/mcp-auth.ts';
+import { DataScopeError } from '../../_shared/mcp-auth.ts';
+import { dataScopeAllowsClient } from '../../_shared/mcp-security.ts';
+import { db } from '../../_shared/aceleriq-read-services.ts';
+import { rpcComoPessoa, umaVez } from '../../_shared/mcp-mesas-acoes.ts';
+import { payloadComPerfis, uuidEstavel, type PostExistente } from '../../estudio-arte/modulos/entrega-na-agenda.ts';
+
+const UUID = z.string().uuid();
+const ESCRITA = { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false };
+const NOME = 'aceleriq_criar_publicacao_de_aprovado';
+
+/** Onde a peça pode sair pela Agenda (o mesmo de PLATAFORMAS_DA_PECA do painel). meta_ads nunca. */
+export const PLATAFORMAS_DA_PUBLICACAO = ['instagram', 'facebook'] as const;
+
+export const criarPublicacaoSchema = z.object({
+  post_id: UUID,
+  external_account_id: UUID,
+  confirmar: z.literal(true),
+  idempotency_key: z.string().trim().min(8).max(120),
+}).strict();
+
+export type PedidoDeCriarPublicacao = z.infer<typeof criarPublicacaoSchema>;
+
+// ------------------------------------------------------------------ regras puras
+
+export interface ArquivoDaAprovacao {
+  id: string;
+  parent_file_id: string | null;
+  archived_at: string | null;
+  status: string | null;
+  agency_approval_status: string | null;
+  locked_at: string | null;
+  visibility: string | null;
+  approval_status: string | null;
+  client_decided_at: string | null;
+}
+
+/**
+ * Aprovação real do cliente: a regra de arquivoAprovado do painel
+ * (editorial_file_is_publishable: raiz, não arquivada, pronta, aprovada pela
+ * agência e travada) e, além dela, a decisão do cliente gravada
+ * (approval_status 'approved' com client_decided_at). Arquivo só
+ * compartilhado (client_shared) sem decisão do cliente não passa aqui.
+ */
+export function aprovadoPeloCliente(f: ArquivoDaAprovacao | null): boolean {
+  if (!f || f.parent_file_id || f.archived_at) return false;
+  if ((f.status || 'ready') !== 'ready' || f.agency_approval_status !== 'approved' || !f.locked_at) return false;
+  return f.approval_status === 'approved' && !!f.client_decided_at;
+}
+
+export interface ContaExterna {
+  id: string;
+  client_id: string;
+  platform: string;
+  status: string;
+}
+
+/** Conta onde a publicação pode nascer: ativa, do cliente do post, Instagram ou Facebook e ligada ao projeto. */
+export function problemaNaConta(
+  conta: ContaExterna | null,
+  clientId: string,
+  ligadaAoProjeto: boolean,
+): string | null {
+  // Conta de outro cliente responde igual à inexistente: não vaza o outro cliente.
+  if (!conta || conta.client_id !== clientId) return 'Conta não encontrada para o cliente deste post.';
+  if (!(PLATAFORMAS_DA_PUBLICACAO as readonly string[]).includes(conta.platform)) {
+    return `A conta é ${conta.platform}: publicação da Agenda só sai em Instagram ou Facebook.`;
+  }
+  if (conta.status !== 'active') return 'A conta não está ativa. Reconecte ou ative a conta na Agenda.';
+  if (!ligadaAoProjeto) return 'A conta não está ligada ao projeto deste post. Ligue a conta ao projeto na Agenda.';
+  return null;
+}
+
+/** Sementes estáveis: o mesmo post + conta gera sempre a mesma mutação e a mesma chave da publicação. */
+export function sementesDaCriacao(postId: string, contaId: string) {
+  return {
+    trabalhoId: `mcp-criar-publicacao:${postId}`,
+    mutacao: `mcp-criar-publicacao-mutacao:${postId}:${contaId}`,
+  };
+}
+
+/**
+ * Payload do save_editorial_post: o de payloadComPerfis (o mesmo do painel)
+ * com quando=null e assetFileIds=null, uma publicação planejada para a conta.
+ * O scheduled_at nulo sai do payload: o banco lê ausente igual a nulo e a
+ * ferramenta nunca manda data.
+ */
+export async function payloadDaCriacao(
+  post: PostExistente,
+  conta: Pick<ContaExterna, 'id' | 'platform'>,
+): Promise<{ payload: Record<string, unknown>; mutationId: string }> {
+  const sementes = sementesDaCriacao(post.id, conta.id);
+  const mutationId = await uuidEstavel(sementes.mutacao);
+  const bruto = await payloadComPerfis({ ...post, publications: [] }, {
+    trabalhoId: sementes.trabalhoId,
+    rodada: 1,
+    perfis: [{ id: conta.id, platform: conta.platform === 'facebook' ? 'facebook' : 'instagram', automatico: false }],
+    quando: null,
+    mutationId,
+    assetFileIds: null,
+  });
+  const publicacoes = (bruto.publications as Record<string, unknown>[]).map((p) => {
+    const { scheduled_at: _semData, delivery_mode: _semModo, asset_file_ids: _semLaminas, ...resto } = p;
+    return resto;
+  });
+  return { payload: { ...bruto, publications: publicacoes }, mutationId };
+}
+
+/** Erro do banco em frase de gente (subconjunto de traduzirErroDaAgenda do painel). */
+export function traduzirErroDaCriacao(bruto: unknown): string {
+  const m = String((bruto as { message?: string })?.message || bruto || '');
+  if (/approved editorial copy is immutable|create a revision/i.test(m)) {
+    return 'A aprovação do cliente não bate mais com o post (o conteúdo mudou depois de aprovado). Peça a revisão na Agenda.';
+  }
+  if (/refresh before saving|post changed/i.test(m)) return 'O post mudou na Agenda enquanto isso. Leia de novo e repita.';
+  if (/client access denied|access denied/i.test(m)) return 'A pessoa conectada não tem permissão na Agenda deste cliente.';
+  if (/not linked to the project|account is inactive/i.test(m)) return 'A conta não está ativa ou não está ligada ao projeto deste post.';
+  if (/cancelled publication stays cancelled/i.test(m)) {
+    return 'Esta conta foi cancelada de propósito numa versão anterior do post. Um admin ou gestor marca a conta de novo na Agenda.';
+  }
+  if (/media is unavailable|outside the project|already linked to another content/i.test(m)) {
+    return 'O arquivo aprovado não está disponível para este post na Agenda.';
+  }
+  if (/failed or published publications cannot be edited/i.test(m)) return 'O post já tem publicação que saiu ou falhou. Mude pela Agenda.';
+  if (/idempotency key was reused|mutation id was reused/i.test(m)) {
+    return 'A Agenda já registrou outra versão deste pedido. Leia o post e confira a publicação antes de repetir.';
+  }
+  return m ? `A Agenda recusou: ${m.slice(0, 240)}` : 'A Agenda não respondeu. Tente de novo.';
+}
+
+// ------------------------------------------------------------------ dependências (o teste troca)
+
+type Resultado = { data: unknown; error: { message: string } | null };
+// deno-lint-ignore no-explicit-any
+type Consulta = any;
+
+export interface DependenciasDaCriacao {
+  /** Chave de serviço: só leitura. */
+  banco: { from(tabela: string): Consulta };
+  /** Escrita como a pessoa conectada (auth.uid() = ela). */
+  rpc: (nome: 'save_editorial_post', args: Record<string, unknown>, ctx: AuthContext) => Promise<unknown>;
+  umaVez: typeof umaVez;
+}
+
+function dependenciasPadrao(): DependenciasDaCriacao {
+  return { banco: db(), rpc: rpcComoPessoa, umaVez };
+}
+
+function lido<T>(r: Resultado, oque: string): T {
+  if (r.error) throw new Error(`Não foi possível ler ${oque} agora. Tente de novo.`);
+  return r.data as T;
+}
+
+type PublicacaoLida = { id: string; version: number; status: string; platform: string; external_account_id: string | null };
+
+const paraResposta = (p: PublicacaoLida) => ({
+  id: p.id,
+  version: p.version,
+  status: p.status,
+  external_account_id: p.external_account_id,
+  platform: p.platform,
+});
+
+const proximoPasso = (p: PublicacaoLida) =>
+  `Para agendar, chame aceleriq_reagendar_publicacao com publication_id ${p.id} e expected_version ${p.version} (scheduled_at com fuso, confirmar=true e uma idempotency_key nova). Esta ferramenta não agenda nem publica.`;
+
+// ------------------------------------------------------------------ handler
+
+export async function criarPublicacaoDeAprovado(
+  input: PedidoDeCriarPublicacao,
+  ctx: AuthContext,
+  deps: DependenciasDaCriacao = dependenciasPadrao(),
+): Promise<Record<string, unknown>> {
+  const { banco } = deps;
+  const post = lido<(Omit<PostExistente, 'internal' | 'publications'>) | null>(
+    await banco.from('editorial_posts')
+      .select('id, version, client_id, project_id, primary_file_id, title, content_type, objective, default_caption, production_status, archived_at')
+      .eq('id', input.post_id)
+      .maybeSingle(),
+    'o post da Agenda',
+  );
+  if (!post) throw new Error('Post não encontrado na Agenda.');
+  // Fronteira do cliente antes de qualquer outra resposta ou escrita.
+  if (!dataScopeAllowsClient(ctx.dataScope, post.client_id)) {
+    throw new DataScopeError('resource is outside this MCP principal data scope');
+  }
+  if (post.archived_at) {
+    throw new Error('Post arquivado na Agenda: não nasce publicação nele. Use o post atual do conteúdo (a revisão mais nova).');
+  }
+
+  const [internoRes, pubsRes, arquivoRes] = await Promise.all([
+    banco.from('editorial_post_internal')
+      .select('post_id, idempotency_key, task_id, responsible_id, internal_notes, revision_of_post_id, approval_fingerprint')
+      .eq('post_id', post.id)
+      .maybeSingle(),
+    banco.from('editorial_publications')
+      .select('id, version, status, platform, external_account_id')
+      .eq('post_id', post.id),
+    post.primary_file_id
+      ? banco.from('files')
+        .select('id, parent_file_id, archived_at, status, agency_approval_status, locked_at, visibility, approval_status, client_decided_at')
+        .eq('id', post.primary_file_id)
+        .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  const interno = lido<(PostExistente['internal'] & { approval_fingerprint: string | null }) | null>(internoRes, 'o estado interno do post');
+  const pubs = lido<PublicacaoLida[] | null>(pubsRes, 'as publicações do post') ?? [];
+  const arquivo = lido<ArquivoDaAprovacao | null>(arquivoRes, 'o arquivo principal do post');
+
+  // Aprovação real: a mesma do painel. O banco ainda confere o fingerprint
+  // contra editorial_compute_approval_fingerprint (a função não abre para a
+  // chave de serviço); se não bater, a recusa volta traduzida.
+  if (post.production_status !== 'ready' || !aprovadoPeloCliente(arquivo) || !interno?.approval_fingerprint) {
+    throw new Error('Post sem aprovação do cliente: o arquivo principal precisa estar aprovado pelo cliente e o post pronto na Agenda. Esta ferramenta não aprova.');
+  }
+
+  const vivas = pubs.filter((p) => p.status !== 'cancelled');
+  if (vivas.length) {
+    const daConta = vivas.find((p) => p.external_account_id === input.external_account_id);
+    const principal = daConta || vivas[0];
+    return {
+      ok: true,
+      ja_existia: true,
+      publicacao: paraResposta(principal),
+      ...(vivas.length > 1 ? { publicacoes: vivas.map(paraResposta) } : {}),
+      ...(daConta ? {} : {
+        aviso: 'O post já tem publicação em outra conta. Nada foi criado: acrescentar conta a um post aprovado é pela Agenda.',
+      }),
+      post_id: post.id,
+      client_id: post.client_id,
+      proximo_passo: proximoPasso(principal),
+    };
+  }
+  if (pubs.length) {
+    throw new Error('O post só tem publicação cancelada. Cancelada não reabre por agente: um admin ou gestor marca a conta de novo na Agenda.');
+  }
+
+  const [contaRes, ligacaoRes] = await Promise.all([
+    banco.from('external_accounts')
+      .select('id, client_id, platform, status')
+      .eq('id', input.external_account_id)
+      .maybeSingle(),
+    banco.from('project_external_accounts')
+      .select('external_account_id')
+      .eq('project_id', post.project_id)
+      .eq('external_account_id', input.external_account_id)
+      .eq('client_id', post.client_id),
+  ]);
+  const conta = lido<ContaExterna | null>(contaRes, 'a conta');
+  const ligacoes = lido<unknown[] | null>(ligacaoRes, 'as contas do projeto') ?? [];
+  const problema = problemaNaConta(conta, post.client_id, ligacoes.length > 0);
+  if (problema) throw new Error(problema);
+
+  const postParaSalvar: PostExistente = {
+    ...post,
+    internal: interno
+      ? {
+        idempotency_key: interno.idempotency_key,
+        task_id: interno.task_id,
+        responsible_id: interno.responsible_id,
+        internal_notes: interno.internal_notes,
+        revision_of_post_id: interno.revision_of_post_id,
+      }
+      : null,
+    publications: [],
+  };
+  const { payload } = await payloadDaCriacao(postParaSalvar, conta!);
+
+  return await deps.umaVez(NOME, ctx, input.idempotency_key, async () => {
+    if (ctx.resultRefHolder) ctx.resultRefHolder.value = `editorial_posts:${post.id}`;
+    try {
+      await deps.rpc('save_editorial_post', { p_payload: payload, p_expected_version: post.version }, ctx);
+    } catch (e) {
+      throw new Error(`mesa:rpc_recusada ${traduzirErroDaCriacao(e)}`);
+    }
+    const relidas = lido<PublicacaoLida[] | null>(
+      await banco.from('editorial_publications')
+        .select('id, version, status, platform, external_account_id')
+        .eq('post_id', post.id)
+        .eq('external_account_id', input.external_account_id),
+      'a publicação criada',
+    ) ?? [];
+    const criada = relidas.find((p) => p.status !== 'cancelled') || null;
+    if (!criada) {
+      return {
+        ref: `editorial_posts:${post.id}`,
+        resultado: {
+          ja_existia: false,
+          publicacao: null,
+          post_id: post.id,
+          client_id: post.client_id,
+          aviso: 'A Agenda aceitou, mas a publicação não apareceu na releitura. Leia o post com aceleriq_list_editorial_calendar antes de repetir.',
+        },
+      };
+    }
+    return {
+      ref: `editorial_publications:${criada.id}`,
+      resultado: {
+        ja_existia: false,
+        publicacao: paraResposta(criada),
+        post_id: post.id,
+        client_id: post.client_id,
+        proximo_passo: proximoPasso(criada),
+      },
+    };
+  }, { post_id: input.post_id, external_account_id: input.external_account_id });
+}
+
+const tool: ToolDefinition = {
+  name: NOME,
+  title: 'Criar publicação de post aprovado',
+  description:
+    'Cria a publicação planejada, sem data, de um post da Agenda já aprovado pelo cliente que ainda não tem publicação (o caso de peça aprovada sem publication_id), na conta pedida (external_account_id: Instagram ou Facebook ativo, do cliente e ligado ao projeto do post). Usa o mesmo caminho do painel (save_editorial_post como a pessoa conectada). Não aprova, não agenda e não publica. Se o post já tem publicação viva, não cria nada e devolve a existente (ja_existia true); só cancelada recusa (reabrir é ação humana na Agenda). Devolve publicacao {id, version, status, external_account_id, platform} e proximo_passo: agendar com aceleriq_reagendar_publicacao (publication_id e expected_version=version). Exige confirmar=true, idempotency_key, editorial:write e o cliente no escopo.',
+  scopes: ['editorial:write'],
+  annotations: ESCRITA,
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['post_id', 'external_account_id', 'confirmar', 'idempotency_key'],
+    properties: {
+      post_id: { type: 'string', format: 'uuid', description: 'id do post da Agenda (editorial_posts.id).' },
+      external_account_id: { type: 'string', format: 'uuid', description: 'Conta do Instagram ou página do Facebook do cliente, ligada ao projeto do post.' },
+      confirmar: { type: 'boolean', const: true, description: 'Tem que ser true: cria a publicação que o cliente pode ver na Agenda.' },
+      idempotency_key: { type: 'string', description: 'Chave estável de 8 a 120 caracteres. Repetir não cria de novo.' },
+    },
+  },
+  handler: async (input, ctx) => {
+    const parsed = criarPublicacaoSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
+    return await criarPublicacaoDeAprovado(parsed.data, ctx);
+  },
+};
+
+export const FERRAMENTA_DE_CRIAR_PUBLICACAO: readonly ToolDefinition[] = [tool];
