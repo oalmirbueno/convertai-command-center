@@ -35,6 +35,7 @@ import { appPublicUrl } from "@/lib/publicUrl";
 
 /* ─── Config ──────────────────────────────────────────────── */
 const MCP_URL = MCP_SERVER_URL;
+import GuiaDeConexaoMcp from "@/components/admin/GuiaDeConexaoMcp";
 const PRM_URL = MCP_OAUTH_METADATA_URL;
 const CONNECT_URL = appPublicUrl("/conectar-mcp");
 
@@ -369,7 +370,9 @@ export default function MCPManager() {
     muted: "bg-muted text-muted-foreground",
   };
 
-  const novaConexao = () => { setAgentPreset(null); setShowCreate(true); };
+  const [acessoCompleto, setAcessoCompleto] = useState(false);
+  const novaConexao = () => { setAgentPreset(null); setAcessoCompleto(false); setShowCreate(true); };
+  const gerarAcessoCompleto = () => { setAgentPreset(null); setAcessoCompleto(true); setShowCreate(true); };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -454,8 +457,22 @@ export default function MCPManager() {
         {/* ── Conectar ── */}
         <TabsContent value="connect" className="mt-5 space-y-6">
           <Secao
+            titulo="Conectar qualquer IA"
+            descricao="Um servidor central: ler, executar e fazer tudo no painel"
+            ajuda="Funciona com Claude, Codex, Cursor, Grok, Hermes, Paperclip, n8n e qualquer cliente MCP. Gere a chave em Gerar acesso completo e escolha Streamable HTTP (URL e cabeçalho) ou STDIO (comando npx no computador). ChatGPT prefere OAuth: só a URL, sem chave."
+            acao={
+              <button type="button" className={botao.primario} onClick={gerarAcessoCompleto} data-gerar-acesso-completo="">
+                <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Gerar acesso completo
+              </button>
+            }
+          >
+            <GuiaDeConexaoMcp url={MCP_URL} />
+          </Secao>
+
+          <Secao
             titulo="Endereços"
-            ajuda="ChatGPT Work usa OAuth: cadastre a URL MCP, escolha OAuth e aguarde a tela de login do Aceleriq. Não cole token manual no ChatGPT Work."
+            ajuda="ChatGPT Work usa OAuth: cadastre a URL MCP, escolha OAuth e aguarde a tela de login do Aceleriq. Não cole token manual no ChatGPT Work. Sem login, o servidor responde 401 com WWW-Authenticate (Bearer resource_metadata) e o PRM público responde JSON: é o que os clientes usam para achar o OAuth sozinhos."
+            divisoria
             acao={
               <a href="/conectar-mcp" target="_blank" rel="noreferrer" className={botao.secundario}>
                 <ExternalLink className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Guia público
@@ -482,18 +499,6 @@ export default function MCPManager() {
             </ul>
           </Secao>
 
-          <Secao
-            titulo="Diagnóstico OAuth externo"
-            ajuda="O endpoint segue o formato esperado por clientes externos que partem da URL MCP e fazem o discovery OAuth sozinhos."
-            divisoria
-          >
-            <dl className="divide-y divide-border sm:max-w-xl">
-              <Row label="401 sem autenticação" value={<span className={juntar(etiqueta, "bg-primary/15 text-primary")}>Obrigatório</span>} />
-              <Row label="WWW-Authenticate" value={<code>Bearer resource_metadata</code>} />
-              <Row label="Expose headers" value={<code>WWW-Authenticate</code>} />
-              <Row label="PRM público" value={<span className={juntar(etiqueta, "bg-primary/15 text-primary")}>JSON 200</span>} />
-            </dl>
-          </Secao>
 
           <Secao titulo="Agentes" descricao={`${AGENTS.length} modelos de conexão`} divisoria>
             <ul className="divide-y divide-border border-y border-border">
@@ -693,9 +698,9 @@ export default function MCPManager() {
       {/* ── Create dialog ─────────────────────────────────── */}
       <CreateCredentialDialog
         open={showCreate}
-        onOpenChange={o => { setShowCreate(o); if (!o) setAgentPreset(null); }}
+        onOpenChange={o => { setShowCreate(o); if (!o) { setAgentPreset(null); setAcessoCompleto(false); } }}
         onCreate={createCredential}
-        preset={agentPreset ? { name: agentPreset.defaultName, scopes: agentPreset.defaultScopes, expiresAt: null } : null}
+        preset={agentPreset ? { name: agentPreset.defaultName, scopes: agentPreset.defaultScopes, expiresAt: null } : acessoCompleto ? { name: "Agente · acesso completo", scopes: SCOPES.map((x) => x.id), expiresAt: null } : null}
         agent={agentPreset}
       />
 
@@ -738,25 +743,13 @@ export default function MCPManager() {
             </div>
             <div className="min-w-0">
               <div className="mb-1.5 flex min-w-0 items-center">
-                <p className={juntar(texto.rotulo, "min-w-0 flex-1")}>1. Endereço do servidor</p>
-                <button type="button" className={botao.discreto} onClick={() => copyText(MCP_URL, "Endereço copiado")}>
-                  <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar endereço
-                </button>
-              </div>
-              <div className={juntar(superficie.poco, "break-all px-3 py-2 font-mono text-[12px] leading-5")}>{MCP_URL}</div>
-              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">Cole no campo de URL do app (no Paperclip, "Connect your own MCP server").</p>
-            </div>
-            <div className="min-w-0">
-              <div className="mb-1.5 flex min-w-0 items-center">
-                <p className={juntar(texto.rotulo, "min-w-0 flex-1")}>2. Token completo</p>
+                <p className={juntar(texto.rotulo, "min-w-0 flex-1")}>Como colar na IA</p>
                 <button type="button" className={botao.discreto} onClick={() => setTokenRevealed(v => !v)}>
-                  {tokenRevealed ? <><EyeOff className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Ocultar</> : <><Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Revelar</>}
+                  {tokenRevealed ? <><EyeOff className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Ocultar chave</> : <><Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Revelar chave</>}
                 </button>
               </div>
-              <div className={juntar(superficie.poco, "break-all px-3 py-2 font-mono text-[12px] leading-5")}>
-                {tokenRevealed ? issuedToken : "•".repeat(48)}
-              </div>
-              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">Cole no campo "App key" (ou "Bearer token"), sem escrever "Bearer". Na conexão, escolha a opção para toda a organização, nunca "sem login".</p>
+              <GuiaDeConexaoMcp url={MCP_URL} chave={issuedToken} esconderChave={!tokenRevealed} />
+              <p className="mt-2 text-[12px] leading-5 text-muted-foreground">Os botões de copiar levam a chave inteira, mesmo escondida. No Paperclip e em apps com "App key", cole só a chave, sem escrever "Bearer", e escolha a opção para toda a organização, nunca "sem login".</p>
             </div>
             <p className="flex items-start text-[12px] leading-5 text-muted-foreground">
               <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />

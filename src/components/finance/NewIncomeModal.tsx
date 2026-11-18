@@ -18,6 +18,20 @@ import {
   splitAmount,
 } from "@/lib/paymentInstallments";
 import { somarMeses } from "@/lib/extrasDoCliente";
+import { fraseDoErro } from "@/lib/produto/api";
+import {
+  avisoDoCrmLigado,
+  conferirCrm,
+  erroDeCrmRepetido,
+  formInicialDoCrm,
+  lerCrmECadastro,
+  lerPlanosDoCrm,
+  ligarCrmPeloPlano,
+  numerosDoCrm,
+  type FormDoCrm,
+  type PlanoDoCrm,
+} from "@/lib/crmPeloPlano";
+import CamposDoCrm from "@/components/clientes/CamposDoCrm";
 import { compensateNewIncome } from "@/lib/newIncomeCompensation";
 import { CampoDeFormulario, GrupoDeCampos, SeletorCompacto, botao, campo, campoTexto, juntar, superficie, texto } from "@/components/sistema";
 
@@ -74,11 +88,46 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   const [temAfiliado, setTemAfiliado] = useState(false);
   const [afiliadoNome, setAfiliadoNome] = useState("");
   const [afiliadoPct, setAfiliadoPct] = useState("");
+  // CRM que entra junto (18/11): vira um extra "crm" mensal do cliente, por usuário, e libera quando a cobrança é paga.
+  const [temCrm, setTemCrm] = useState(false);
+  const [crmPlanos, setCrmPlanos] = useState<PlanoDoCrm[]>([]);
+  const [crmForm, setCrmForm] = useState<FormDoCrm | null>(null);
+  const [crmDepoisDaEntrega, setCrmDepoisDaEntrega] = useState(false);
+  const [crmPrimeiraPaga, setCrmPrimeiraPaga] = useState(false);
+  const [crmBloqueio, setCrmBloqueio] = useState<string | null>(null);
+  const [crmConferindo, setCrmConferindo] = useState(false);
 
   const selectedClient = useMemo(
     () => (clients || []).find((c: any) => c.id === clientId),
     [clients, clientId]
   );
+
+  // Só quando o dono marca "Tem CRM": os planos e se o cliente já tem CRM (vivo ou pago no cartão).
+  useEffect(() => {
+    if (!temCrm || !clientId) return;
+    let cancelado = false;
+    setCrmConferindo(true);
+    setCrmBloqueio(null);
+    (async () => {
+      try {
+        const [planos, vivo, doCliente] = await Promise.all([
+          lerPlanosDoCrm(),
+          (supabase as any).from("client_extras").select("id").eq("client_id", clientId).eq("categoria", "crm").neq("status", "encerrado").limit(1),
+          lerCrmECadastro(clientId).catch(() => ({ crm: null, loginDoPainel: null })),
+        ]);
+        if (cancelado) return;
+        setCrmPlanos(planos);
+        setCrmForm((f) => f ?? formInicialDoCrm(planos));
+        if ((vivo.data ?? []).length > 0) setCrmBloqueio("Este cliente já tem CRM. Veja na ficha do cliente, em Extras e produtos.");
+        else if (doCliente.crm?.assinatura_no_cartao) setCrmBloqueio("Esta empresa já paga o CRM no cartão. Não crie outro, para não cobrar duas vezes.");
+      } catch {
+        if (!cancelado) setCrmBloqueio("Não consegui conferir o CRM deste cliente. Tente de novo.");
+      } finally {
+        if (!cancelado) setCrmConferindo(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [temCrm, clientId]);
   const normalizedPreviewTotal = useMemo(() => {
     try {
       return normalizeMoney(Number(totalValue));
@@ -130,6 +179,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     setTemSuporte(false); setSuporteValor(""); setSuporteDepoisDaEntrega(true);
     setSuporteInicio(somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
     setTemAfiliado(false); setAfiliadoNome(""); setAfiliadoPct("");
+    setTemCrm(false); setCrmForm(null); setCrmDepoisDaEntrega(false); setCrmPrimeiraPaga(false); setCrmBloqueio(null);
   };
   const numeroBR = lerValorBR;
 
@@ -149,6 +199,13 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     if (temSuporte && !suporteDepoisDaEntrega && !suporteInicio) return toast.error("Informe quando o suporte começa");
     if (temSuporte && temAfiliado && (afiliadoNome.trim().length < 2 || !(numeroBR(afiliadoPct) > 0) || numeroBR(afiliadoPct) > 100)) {
       return toast.error("Informe o nome de quem indicou e o percentual (até 100%)");
+    }
+    const crmNumeros = crmForm ? numerosDoCrm(crmForm) : { usuarios: 0, valor: 0 };
+    if (temCrm) {
+      if (crmConferindo || !crmForm) return toast.error("Espere conferir o CRM do cliente");
+      if (crmBloqueio) return toast.error(crmBloqueio);
+      const faltaCrm = conferirCrm({ planoId: crmForm.planoId, usuarios: crmNumeros.usuarios, valor: crmNumeros.valor, email: crmForm.email, emailObrigatorio: true, loginDoPainel: selectedClient?.email ?? null });
+      if (faltaCrm) return toast.error(faltaCrm);
     }
 
     setSaving(true);
@@ -329,6 +386,34 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         }
       }
 
+      // CRM: vira o extra "crm" mensal do cliente e a conta do CRM é ligada a ele. Se falhar, a entrada fica.
+      if (temCrm && crmForm) {
+        const inicioDoCrm = format(new Date(), "yyyy-MM-dd");
+        const { data: extraCrm, error: crmError } = await (supabase as any).rpc("extra_salvar", {
+          _dados: {
+            client_id: clientId,
+            nome: "CRM",
+            categoria: "crm",
+            cobranca: "mensal",
+            valor: crmNumeros.valor,
+            inicio: crmDepoisDaEntrega ? null : inicioDoCrm,
+            primeira_paga: !crmDepoisDaEntrega && crmPrimeiraPaga,
+            primeira_paga_em: !crmDepoisDaEntrega && crmPrimeiraPaga ? inicioDoCrm : null,
+          },
+        });
+        if (crmError || !extraCrm?.id) {
+          console.warn("Falha ao criar o CRM", crmError);
+          toast.warning(erroDeCrmRepetido(crmError) || "Entrada salva, mas o CRM não. Adicione na ficha do cliente, em Extras e produtos.");
+        } else {
+          try {
+            const r = await ligarCrmPeloPlano({ extraId: String(extraCrm.id), planoId: crmForm.planoId, usuarios: crmNumeros.usuarios, email: crmForm.email, nome: crmForm.nome });
+            toast.success(avisoDoCrmLigado(r, crmForm.email));
+          } catch (e) {
+            toast.warning(`Entrada salva e o CRM ficou em Extras e produtos, mas não ligou: ${fraseDoErro(e)} Termine na ficha do cliente, em Extras e produtos.`);
+          }
+        }
+      }
+
       toast.success("Entrada avulsa registrada");
       await Promise.allSettled([
         qc.invalidateQueries({ queryKey: ["all-project-payments-finance"] }),
@@ -338,6 +423,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         qc.invalidateQueries({ queryKey: ["expenses"] }),
         qc.invalidateQueries({ queryKey: ["billing"] }),
         qc.invalidateQueries({ queryKey: ["extras-do-cliente", clientId] }),
+        qc.invalidateQueries({ queryKey: ["crm-do-cliente", clientId] }),
         qc.invalidateQueries({ queryKey: ["extras-mensais-ativos"] }),
         qc.refetchQueries({ queryKey: ["all-project-payments-finance"] }),
       ]);
@@ -585,6 +671,36 @@ export default function NewIncomeModal({ open, onClose }: Props) {
                     </CampoDeFormulario>
                   </>
                 )}
+              </>
+            )}
+
+            <label className="flex min-w-0 cursor-pointer items-center sm:col-span-full">
+              <input type="checkbox" checked={temCrm} disabled={!clientId} onChange={(e) => setTemCrm(e.target.checked)} className="mr-2.5 h-4 w-4 shrink-0 accent-primary" data-tem-crm="" />
+              <span className="min-w-0 flex-1">
+                <span className={juntar(texto.corpo, "block font-medium")}>Tem CRM</span>
+                <span className={juntar(texto.auxiliar, "block truncate")}>{clientId ? "Por usuário, todo mês. Libera quando a cobrança for paga." : "Escolha o cliente primeiro."}</span>
+              </span>
+            </label>
+            {temCrm && (crmConferindo || !crmForm) && !crmBloqueio && <p className={juntar(texto.auxiliar, "sm:col-span-full")}>Conferindo o CRM do cliente…</p>}
+            {temCrm && crmBloqueio && <p className={juntar(texto.auxiliar, "text-warning sm:col-span-full")} data-crm-bloqueio="">{crmBloqueio}</p>}
+            {temCrm && crmForm && !crmConferindo && !crmBloqueio && (
+              <>
+                <CamposDoCrm planos={crmPlanos} form={crmForm} aoMudar={setCrmForm} emailObrigatorio />
+                <div className="min-w-0">
+                  <p className={juntar(texto.rotulo, "mb-1.5")}>Começa</p>
+                  <SeletorCompacto opcoes={[{ valor: "agora", rotulo: "Agora" }, { valor: "entrega", rotulo: "Depois da entrega" }]} valor={crmDepoisDaEntrega ? "entrega" : "agora"} onEscolher={(v) => setCrmDepoisDaEntrega(v === "entrega")} rotulo="Quando o CRM começa" larguraTotal />
+                </div>
+                {!crmDepoisDaEntrega && (
+                  <div className="min-w-0">
+                    <p className={juntar(texto.rotulo, "mb-1.5")}>A primeira mensalidade</p>
+                    <SeletorCompacto opcoes={[{ valor: "nao", rotulo: "Vai pagar" }, { valor: "sim", rotulo: "Já pagou" }]} valor={crmPrimeiraPaga ? "sim" : "nao"} onEscolher={(v) => setCrmPrimeiraPaga(v === "sim")} rotulo="A primeira mensalidade do CRM" larguraTotal />
+                  </div>
+                )}
+                <p className={juntar(texto.auxiliar, "sm:col-span-full")}>
+                  {crmDepoisDaEntrega
+                    ? "Fica guardado sem cobrar. Quando entregar, use \"Começar a cobrar\" na ficha do cliente; o acesso libera quando a cobrança for paga."
+                    : crmPrimeiraPaga ? "Já pagou: o acesso ao CRM libera ao salvar." : "O acesso ao CRM libera quando você marcar a cobrança como paga."}
+                </p>
               </>
             )}
           </GrupoDeCampos>

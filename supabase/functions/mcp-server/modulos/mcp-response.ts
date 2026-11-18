@@ -16,9 +16,16 @@ export const MCP_SUPPORTED_PROTOCOL_VERSIONS = new Set([
   '2025-03-26',
 ]);
 
+// 18/11/2026: o próprio painel (aceleriq.online) ficava de fora e a tela de API mostrava "Failed to fetch"
+// (servidor e Segundo Cérebro "Offline", Testar conexão sem resposta). Clientes nativos (Claude Code,
+// Codex, Hermes, n8n, mcp-remote) não mandam Origin e sempre passaram.
 export const DEFAULT_MCP_ALLOWED_ORIGINS = [
   'https://chatgpt.com',
   'https://chat.openai.com',
+  'https://aceleriq.online',
+  'https://www.aceleriq.online',
+  'https://crm.aceleriq.online',
+  'https://claude.ai',
 ] as const;
 
 export type JsonRpcId = string | number | null;

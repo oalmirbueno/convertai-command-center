@@ -75,6 +75,10 @@ export interface EstadoDoProduto {
     atrasada_desde: string | null;
     acesso_ate: string | null;
     visibilidade: "todos" | "proprios";
+    /** assinatura: paga no cartão pelo checkout; plano: cobrado no plano do cliente da Aceleriq. */
+    cobranca_por: "assinatura" | "plano";
+    /** A empresa também é cliente da Aceleriq e tem painel (com login geral próprio). */
+    tem_painel: boolean;
     aparencia: AparenciaDaEmpresa;
     perfil: PerfilDaEmpresa;
     documento: string | null;
@@ -97,6 +101,8 @@ export interface EstadoDoProduto {
   maquina_no_mes: number;
   assinatura: AssinaturaDaConta | null;
   convite: { conta: string; papel: PapelNaConta } | null;
+  /** Para quem entrou com o login geral do painel e não é usuário do CRM: a empresa tem CRM. */
+  crm_da_empresa: { nome: string } | null;
 }
 
 export interface PlanoDoProduto {
@@ -163,6 +169,8 @@ function lerEstado(d: any): EstadoDoProduto {
       ? {
           ...conta,
           usuarios_contratados: numero(conta.usuarios_contratados),
+          cobranca_por: conta.cobranca_por === "plano" ? "plano" : "assinatura",
+          tem_painel: conta.tem_painel === true,
           email_caixas_contratadas: numero(conta.email_caixas_contratadas),
           aparencia: lerAparencia(conta.aparencia),
           perfil: lerPerfil(conta.perfil),
@@ -204,6 +212,7 @@ function lerEstado(d: any): EstadoDoProduto {
         }
       : null,
     convite: d && d.convite ? d.convite : null,
+    crm_da_empresa: d && d.crm_da_empresa && typeof d.crm_da_empresa === "object" ? { nome: String(d.crm_da_empresa.nome || "") } : null,
   };
 }
 
@@ -708,6 +717,9 @@ export const casa = {
   testarAsaas: () => chamar<{ ok: boolean; ambiente?: string; link?: string; expira_em?: string; etapa?: string; mensagem?: string }>({ acao: "admin_testar_asaas" }),
   gerarCheckout: (contaId: string) => chamar<{ link?: string; atualizado?: boolean; agendado?: boolean; valor?: number }>({ acao: "admin_gerar_checkout", conta_id: contaId }),
   cobrarMigracao: (contaId: string, valor?: number) => chamar<{ link: string | null; valor: number }>({ acao: "admin_cobrar_migracao", conta_id: contaId, valor }),
+  /** Liga o CRM ao extra "crm" do cliente da Aceleriq (cobrado no plano). E-mail e nome de quem vai administrar o CRM. */
+  crmPeloPlano: (p: { extra_id: string; email: string; nome?: string }) =>
+    chamar<{ conta_id: string; membro_id: string | null; estado: string; acesso_ate: string | null; liberada: boolean; convite_enviado: boolean }>({ acao: "admin_crm_pelo_plano", ...p }),
   async salvarConta(id: string, dados: Record<string, unknown>): Promise<void> {
     const { error } = await db.from("produto_contas").update({ ...dados, atualizado_em: new Date().toISOString() }).eq("id", id);
     if (error) throw error;
@@ -815,6 +827,9 @@ export function avisoDaConta(e: EstadoDoProduto, agora = Date.now()): { tom: "in
     return e.liberada
       ? { tom: "alerta", texto: "A mensalidade venceu. O acesso continua por poucos dias.", acao: admin ? "Regularizar" : null }
       : { tom: "perigo", texto: "O acesso foi pausado por falta de pagamento.", acao: admin ? "Regularizar" : null };
+  }
+  if (c.cobranca_por === "plano" && !e.liberada) {
+    return { tom: "perigo", texto: c.acesso_ate ? "O CRM está pausado até o pagamento do mês no plano da Aceleriq." : "O CRM é liberado assim que o pagamento no plano da Aceleriq for confirmado.", acao: null };
   }
   if (c.estado === "suspensa") return { tom: "perigo", texto: "O acesso da empresa está suspenso.", acao: null };
   if (c.estado === "cancelada") {

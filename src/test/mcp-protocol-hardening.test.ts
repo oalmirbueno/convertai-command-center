@@ -35,6 +35,9 @@ describe('canonical MCP transport hardening', () => {
     expect(allowed.has('*')).toBe(false);
     expect(isMcpOriginAllowed(request(), allowed)).toBe(true);
     expect(isMcpOriginAllowed(request('https://chatgpt.com'), allowed)).toBe(true);
+    // 18/11: o próprio painel conversa com o servidor (status, Testar conexão).
+    expect(isMcpOriginAllowed(request('https://aceleriq.online'), allowed)).toBe(true);
+    expect(isMcpOriginAllowed(request('https://aceleriq.online.evil.example'), allowed)).toBe(false);
     expect(isMcpOriginAllowed(request('https://same.example', 'https://same.example/mcp'), allowed)).toBe(true);
     expect(isMcpOriginAllowed(request('https://evil.example'), allowed)).toBe(false);
     expect(isMcpOriginAllowed(request('null'), allowed)).toBe(false);
