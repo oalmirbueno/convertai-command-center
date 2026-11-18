@@ -140,21 +140,38 @@ async function registrar(contaId: string | null, ator: string | null, acao: stri
  * entra; para quem tem, o link entra direto. Nos dois casos a pessoa cai no
  * produto e o banco a coloca na empresa pelo e-mail confirmado.
  */
+/**
+ * O link que entra no CRM: para quem ainda não tem login, o convite (cria o acesso e pede a senha na
+ * primeira entrada); para quem já tem, um link de entrada que abre a troca de senha. Vale uma vez.
+ */
+async function gerarLinkDeAcesso(email: string): Promise<string | null> {
+  const convite = await servico().auth.admin.generateLink({ type: "invite", email, options: { redirectTo: `${app()}/app/bem-vindo` } });
+  if (convite.data && convite.data.properties && convite.data.properties.action_link) return convite.data.properties.action_link;
+  const entrada = await servico().auth.admin.generateLink({ type: "magiclink", email, options: { redirectTo: `${app()}/app?nova_senha=1` } });
+  if (entrada.data && entrada.data.properties && entrada.data.properties.action_link) return entrada.data.properties.action_link;
+  return null;
+}
+
+/** O link de acesso para copiar e mandar por WhatsApp: não depende do e-mail sair. */
+async function linkDeAcesso(ch: Chamador, corpo: Record<string, unknown>) {
+  const id = uuidDe(corpo.membro_id, "membro");
+  const { data: m } = await servico().from("produto_membros").select("conta_id, email, estado").eq("id", id).maybeSingle();
+  const membro = m as { conta_id?: string; email?: string; estado?: string } | null;
+  const contaDoMembro = (membro && membro.conta_id) || "";
+  if (!contaDoMembro || !(ch.dono || (ch.adminDaConta && ch.contaId === contaDoMembro))) throw new ErroHttp(403, "sem_permissao", "Só quem administra a empresa gera o link de acesso.");
+  if (!membro || !membro.email || membro.estado === "removido") throw new ErroHttp(404, "sem_pessoa", "Essa pessoa não está mais na empresa.");
+  const link = await gerarLinkDeAcesso(membro.email);
+  if (!link) throw new ErroHttp(502, "sem_link", "Não foi possível gerar o link agora. Tente de novo.");
+  await registrar(contaDoMembro, ch.userId, "link_de_acesso", { membro: id });
+  return json({ link, email: membro.email });
+}
+
 async function enviarConvite(membroId: string, quemConvidou: string | null): Promise<boolean> {
   const { data: m } = await servico().from("produto_membros").select("id, conta_id, email, nome, papel, estado").eq("id", membroId).maybeSingle();
   const membro = m as { id: string; conta_id: string; email: string; nome: string; papel: string; estado: string } | null;
   if (!membro || membro.estado !== "convidado") return false;
   const { data: conta } = await servico().from("produto_contas").select("nome").eq("id", membro.conta_id).maybeSingle();
-  const destino = `${app()}/app/bem-vindo`;
-  let link = `${app()}/app`;
-  const convite = await servico().auth.admin.generateLink({ type: "invite", email: membro.email, options: { redirectTo: destino } });
-  if (convite.data && convite.data.properties && convite.data.properties.action_link) {
-    link = convite.data.properties.action_link;
-  } else {
-    // Já tem login: um link de entrada, sem senha nova.
-    const entrada = await servico().auth.admin.generateLink({ type: "magiclink", email: membro.email, options: { redirectTo: `${app()}/app` } });
-    if (entrada.data && entrada.data.properties && entrada.data.properties.action_link) link = entrada.data.properties.action_link;
-  }
+  const link = (await gerarLinkDeAcesso(membro.email)) || `${app()}/app`;
   let nomeDeQuem = "";
   if (quemConvidou) {
     const { data: p } = await servico().from("profiles").select("full_name").eq("id", quemConvidou).maybeSingle();
@@ -604,6 +621,7 @@ type Acao = (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>;
 const ACOES: Record<string, Acao> = {
   convidar,
   reenviar_convite: reenviarConvite,
+  link_de_acesso: linkDeAcesso,
   assinar,
   cancelar: (ch) => cancelar(ch),
   pedir_email: pedirEmail,
