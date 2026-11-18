@@ -3137,6 +3137,14 @@
       "remote_name": "afiliado_dos_extras",
       "remote_statements_sha256": "1ea27fcab305a537213001bdb097a0a8ead324b83f3ff7783daa86264c756ac5",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118100000",
+      "path": "supabase/migrations/20261118100000_crm_pelo_plano_do_cliente.sql",
+      "local_sha256": "80d1440261df9ac610be218ff6836e8f62dba6a9a3c9f85dda07202400ba89e5",
+      "remote_name": "crm_pelo_plano_do_cliente",
+      "remote_statements_sha256": "5d7e2cbb4c10a7c9bbd560576cee30f89b1ea4b800ad980b43f858f84f21c8da",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
