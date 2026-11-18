@@ -673,6 +673,118 @@ export async function listarContasDaCasa(): Promise<ContaNaCasa[]> {
   }));
 }
 
+// ------------------------------------------------------------------ monitor da casa
+
+export type NivelDaSaude = "ok" | "atencao" | "problema";
+
+export interface PontoDaSaude {
+  chave: string;
+  titulo: string;
+  nivel: NivelDaSaude;
+  resumo: string;
+  detalhe: string | null;
+  quando: string | null;
+  rotulo_quando: string;
+}
+
+export interface EmpresaNoMonitor {
+  id: string;
+  nome: string;
+  estado: EstadoDaConta;
+  cobranca_por: string;
+  liberada: boolean;
+  crm_ativo: boolean;
+  usuarios_ativos: number;
+  convites: number;
+  ultimo_acesso: string | null;
+  ultima_atividade: string | null;
+  abertos: number;
+  valor_aberto: number;
+  novos_hoje: number;
+  novos_7d: number;
+  ganhos_mes: number;
+  valor_ganho_mes: number;
+  movimentos_hoje: number;
+  tarefas_atrasadas: number;
+}
+
+export interface MonitorDoProduto {
+  gerado_em: string;
+  saude: PontoDaSaude[];
+  empresas: EmpresaNoMonitor[];
+}
+
+export interface MonitorDaConta {
+  funil: Array<{ etapa: string; negocios: number; valor: number }>;
+  pessoas: Array<{ id: string; nome: string; papel: string; cargo: string; estado: string; ultimo_acesso: string | null; abertos: number; ganhos_mes: number; movimentos_7d: number; tarefas_atrasadas: number; ultimo_movimento: string | null }>;
+  movimentos: Array<{ id: string; quando: string; tipo: string; de: string | null; para: string | null; quem: string | null }>;
+}
+
+const nivelDe = (v: unknown): NivelDaSaude => (v === "problema" || v === "atencao" ? v : "ok");
+
+/** A saúde do produto e o movimento do CRM de cada empresa: só a administração da casa lê. */
+export async function lerMonitor(): Promise<MonitorDoProduto> {
+  const { data, error } = await db.rpc("produto_admin_monitor");
+  if (error) throw error;
+  const d = data || {};
+  return {
+    gerado_em: String(d.gerado_em || ""),
+    saude: lista<any>(d.saude).map((s) => ({
+      chave: String(s.chave || ""),
+      titulo: String(s.titulo || ""),
+      nivel: nivelDe(s.nivel),
+      resumo: String(s.resumo || ""),
+      detalhe: s.detalhe ? String(s.detalhe) : null,
+      quando: s.quando || null,
+      rotulo_quando: String(s.rotulo_quando || ""),
+    })),
+    empresas: lista<any>(d.empresas).map((e) => ({
+      id: String(e.id),
+      nome: String(e.nome || ""),
+      estado: e.estado as EstadoDaConta,
+      cobranca_por: String(e.cobranca_por || "assinatura"),
+      liberada: !!e.liberada,
+      crm_ativo: !!e.crm_ativo,
+      usuarios_ativos: numero(e.usuarios_ativos),
+      convites: numero(e.convites),
+      ultimo_acesso: e.ultimo_acesso || null,
+      ultima_atividade: e.ultima_atividade || null,
+      abertos: numero(e.abertos),
+      valor_aberto: numero(e.valor_aberto),
+      novos_hoje: numero(e.novos_hoje),
+      novos_7d: numero(e.novos_7d),
+      ganhos_mes: numero(e.ganhos_mes),
+      valor_ganho_mes: numero(e.valor_ganho_mes),
+      movimentos_hoje: numero(e.movimentos_hoje),
+      tarefas_atrasadas: numero(e.tarefas_atrasadas),
+    })),
+  };
+}
+
+/** O funil, as pessoas e os últimos movimentos de uma empresa (sem nome nem contato de lead). */
+export async function lerMonitorDaConta(contaId: string): Promise<MonitorDaConta> {
+  const { data, error } = await db.rpc("produto_admin_monitor_conta", { _conta: contaId });
+  if (error) throw error;
+  const d = data || {};
+  return {
+    funil: lista<any>(d.funil).map((f) => ({ etapa: String(f.etapa || ""), negocios: numero(f.negocios), valor: numero(f.valor) })),
+    pessoas: lista<any>(d.pessoas).map((p) => ({
+      id: String(p.id),
+      nome: String(p.nome || ""),
+      papel: String(p.papel || ""),
+      cargo: String(p.cargo || ""),
+      estado: String(p.estado || ""),
+      ultimo_acesso: p.ultimo_acesso || null,
+      abertos: numero(p.abertos),
+      ganhos_mes: numero(p.ganhos_mes),
+      movimentos_7d: numero(p.movimentos_7d),
+      tarefas_atrasadas: numero(p.tarefas_atrasadas),
+      ultimo_movimento: p.ultimo_movimento || null,
+    })),
+    movimentos: lista<any>(d.movimentos).map((m) => ({ id: String(m.id), quando: String(m.quando || ""), tipo: String(m.tipo || ""), de: m.de || null, para: m.para || null, quem: m.quem || null })),
+  };
+}
+
 export interface FaturamentoDoProduto {
   mes: string;
   mrr: number;
