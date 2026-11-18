@@ -214,10 +214,11 @@ interface Conta {
   plano_id: string;
   usuarios_contratados: number;
   estado: string;
+  cobranca_por?: string;
 }
 
 async function lerConta(id: string): Promise<Conta> {
-  const { data, error } = await servico().from("produto_contas").select("id, nome, documento, email_cobranca, telefone, plano_id, usuarios_contratados, estado").eq("id", id).maybeSingle();
+  const { data, error } = await servico().from("produto_contas").select("id, nome, documento, email_cobranca, telefone, plano_id, usuarios_contratados, estado, cobranca_por").eq("id", id).maybeSingle();
   if (error || !data) throw new ErroHttp(404, "conta_inexistente", "A empresa não foi encontrada.");
   return data as Conta;
 }
@@ -282,6 +283,12 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>, pelaCasa?: 
   const antes = { plano_id: conta.plano_id, usuarios_contratados: conta.usuarios_contratados };
   const gravar = (v: { plano_id: string; usuarios_contratados: number }) => servico().from("produto_contas").update({ ...v, atualizado_em: new Date().toISOString() }).eq("id", contaId);
 
+  // CRM cobrado no plano do cliente da Aceleriq: não abre checkout, senão a empresa pagaria duas vezes.
+  if (conta.cobranca_por === "plano") {
+    throw new ErroHttp(409, "pelo_plano", pelaCasa
+      ? "O CRM desta empresa é cobrado no plano do cliente. Mude usuários e valor no extra de CRM, na ficha do cliente."
+      : "O CRM da sua empresa é cobrado junto com o plano da Aceleriq. Para mudar o número de usuários, fale com a Aceleriq.");
+  }
   // Em cortesia quem paga é a casa: plano e usuários só mudam por ela.
   if (conta.estado === "cortesia") throw new ErroHttp(409, "cortesia", "A empresa está em cortesia. Para mudar o plano ou os usuários, fale com a Aceleriq.");
   const assinando = !!a.asaas_assinatura_id && (a.estado === "ativa" || a.estado === "atrasada");
@@ -537,6 +544,25 @@ async function adminTestarAsaas(ch: Chamador) {
 }
 
 /** O admin da casa gera o link do checkout da assinatura de uma empresa, com o plano e os usuários dela (ou os que vierem). */
+/**
+ * Liga o CRM ao plano do cliente da Aceleriq (extra "crm" da ficha): cria ou acha a empresa do cliente,
+ * convida quem vai administrar e devolve o estado. O acesso libera quando o dono marca a cobrança do
+ * extra como paga (o banco cuida disso). O login geral do painel não vira usuário do CRM.
+ */
+async function adminCrmPeloPlano(ch: Chamador, corpo: Record<string, unknown>) {
+  exigirDono(ch);
+  const { data, error } = await servico().rpc("produto_crm_pelo_plano", {
+    _extra: uuidDe(corpo.extra_id, "extra"),
+    _email: texto(corpo.email, 254).toLowerCase(),
+    _nome: texto(corpo.nome, 120),
+    _ator: ch.userId,
+  });
+  if (error || !data) throw erroDoBanco(error, "Não foi possível ligar o CRM agora.");
+  const r = data as { conta_id: string; membro_id: string | null; estado: string; acesso_ate: string | null; liberada: boolean };
+  const enviado = r.membro_id ? await enviarConvite(r.membro_id, ch.userId) : false;
+  return json({ ...r, convite_enviado: enviado });
+}
+
 async function adminGerarCheckout(ch: Chamador, corpo: Record<string, unknown>) {
   exigirDono(ch);
   return assinar(ch, corpo, uuidDe(corpo.conta_id, "conta"));
@@ -587,6 +613,7 @@ const ACOES: Record<string, Acao> = {
   admin_sincronizar: adminSincronizar,
   admin_cobrar_migracao: adminCobrarMigracao,
   admin_gerar_checkout: adminGerarCheckout,
+  admin_crm_pelo_plano: adminCrmPeloPlano,
   admin_testar_asaas: (ch) => adminTestarAsaas(ch),
 };
 

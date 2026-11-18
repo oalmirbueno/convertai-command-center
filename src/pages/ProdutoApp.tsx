@@ -16,6 +16,7 @@ import InicioDoProduto from "@/components/produto/InicioDoProduto";
 import PrimeirosPassos from "@/components/produto/PrimeirosPassos";
 import SemAcesso from "@/components/produto/SemAcesso";
 import CriarSenha from "@/components/produto/CriarSenha";
+import { useTrocaDeAcesso } from "@/components/produto/TrocaDeAcesso";
 
 const AdminComercial = lazy(() => import("@/pages/AdminComercial"));
 const EmailDoProduto = lazy(() => import("@/components/produto/EmailDoProduto"));
@@ -190,6 +191,7 @@ export default function ProdutoApp() {
   const produto = useProduto();
   const estado = produto.data;
   const [gaveta, setGaveta] = useState(false);
+  const trocaDeAcesso = useTrocaDeAcesso();
   // O menu lateral recolhe para uma faixa só de ícones; a escolha fica guardada no aparelho.
   const [recolhida, setRecolhida] = useState(() => {
     try {
@@ -221,6 +223,8 @@ export default function ProdutoApp() {
       rotulo="Minha conta e outros lugares"
       itens={[
         temPainel && { rotulo: papelNoPainel === "client" ? "Painel do cliente" : "Painel da agência", icone: <LayoutGrid className="h-4 w-4" />, aoEscolher: () => navigate("/dashboard") },
+        // O painel da empresa tem login próprio (o geral): entrar nele sai do CRM e pede esse login.
+        !temPainel && estado && estado.conta && estado.conta.tem_painel && { rotulo: "Painel da empresa", icone: <LayoutGrid className="h-4 w-4" />, aoEscolher: () => trocaDeAcesso.abrir("painel") },
         { rotulo: "Área de membros", icone: <BookOpen className="h-4 w-4" />, aoEscolher: () => navigate("/membros") },
         estado && estado.dono_da_casa && { rotulo: "Administrar o produto", icone: <Settings2 className="h-4 w-4" />, aoEscolher: () => navigate("/produto") },
         admin && { rotulo: "Conexões", icone: <Plug className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=conexoes"), separadorAntes: true },
@@ -273,9 +277,9 @@ export default function ProdutoApp() {
         aria-current={ativo ? "page" : undefined}
         aria-label={soIcone ? item.rotulo : undefined}
         title={soIcone ? item.rotulo : undefined}
-        className={juntar("produto-item-do-menu flex h-9 min-w-0 items-center rounded-lg text-[13px] font-medium", soIcone ? "justify-center px-0" : "px-2.5", foco, ativo ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")}
+        className={juntar("produto-item-do-menu flex h-10 min-w-0 items-center rounded-full text-[13px] font-medium", soIcone ? "justify-center px-0" : "px-3", foco, ativo ? "bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_hsl(var(--primary)/0.7)]" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")}
       >
-        <span className={juntar("shrink-0", !soIcone && "mr-2.5", ativo && "text-primary")}>{item.icone}</span>
+        <span className={juntar("shrink-0", !soIcone && "mr-2.5")}>{item.icone}</span>
         {!soIcone && <span className="min-w-0 truncate">{item.rotulo}</span>}
       </Link>
     );
@@ -434,6 +438,7 @@ export default function ProdutoApp() {
       )}
 
       {user && estado && estado.conta && <CriarSenha />}
+      {trocaDeAcesso.janela}
       {/* Só para o leitor de tela e os testes saberem o nível de quem está logado. */}
       {estado && estado.eu && <span className="sr-only" data-nivel-de-acesso-atual={estado.eu.papel}>{gestor ? "Gestão" : "Vendas"}</span>}
     </div>

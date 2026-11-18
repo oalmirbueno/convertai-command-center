@@ -1,9 +1,26 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lerValorBR } from "@/lib/paymentInstallments";
+import { fraseDoErro } from "@/lib/produto/api";
+import {
+  avisoDoCrmLigado,
+  conferirCrm,
+  erroDeCrmRepetido,
+  formInicialDoCrm,
+  lerCrmECadastro,
+  lerPlanosDoCrm,
+  ligarCrmPeloPlano,
+  numerosDoCrm,
+  situacaoDoCrm,
+  type CrmDoCliente,
+  type FormDoCrm,
+  type PlanoDoCrm,
+} from "@/lib/crmPeloPlano";
+import CamposDoCrm from "@/components/clientes/CamposDoCrm";
 import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, MenuMais, Secao, SeletorCompacto, botao, campo, etiqueta, juntar, texto } from "@/components/sistema";
 import {
   ATALHOS,
@@ -38,6 +55,8 @@ const dataCurta = (iso?: string | null) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso
 const numero = (t: string) => lerValorBR(t);
 
 function mensagemDoErro(e: unknown): string {
+  const repetido = erroDeCrmRepetido(e);
+  if (repetido) return repetido;
   const m = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
   if (m.includes("PARCELAS_PASSAM_DO_TOTAL")) return "As parcelas passam do valor total.";
   if (m.includes("COMISSAO_JA_LANCADA")) return "A comissão deste mês já foi lançada.";
@@ -77,10 +96,16 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
   const cobrancas = dados.data?.cobrancas ?? [];
   const resumo = useMemo(() => resumoDosExtras(extras), [extras]);
   const base = Number(mensalidade) || 0;
+  // CRM pelo plano: o estado da conta do CRM deste cliente e o login geral do painel (que não vira usuário do CRM).
+  const doCrm = useQuery({ queryKey: ["crm-do-cliente", clientId], queryFn: () => lerCrmECadastro(clientId), retry: false });
+  const crm = doCrm.data?.crm ?? null;
+  const loginDoPainel = doCrm.data?.loginDoPainel ?? null;
+  const crmVivo = extras.some((e) => e.categoria === "crm" && e.status !== "encerrado");
 
   const atualizar = async () => {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["extras-do-cliente", clientId] }),
+      qc.invalidateQueries({ queryKey: ["crm-do-cliente", clientId] }),
       qc.invalidateQueries({ queryKey: ["billing"] }),
       qc.invalidateQueries({ queryKey: ["crescimento-recebimentos"] }),
       qc.invalidateQueries({ queryKey: ["extras-mensais-ativos"] }),
@@ -128,6 +153,7 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
                   {e.observacao ? ` ${e.observacao}` : ""}
                   {e.afiliado_nome && Number(e.afiliado_percentual) > 0 ? ` Indicação: ${e.afiliado_nome}, ${String(e.afiliado_percentual).replace(".", ",")}% de cada pagamento.` : ""}
                 </p>
+                {e.categoria === "crm" && <LinhaDoCrm extra={e} crm={crm} carregando={doCrm.isLoading} aoLigar={() => setAcao({ tipo: "editar", id: e.id })} />}
                 <div className="-m-1 mt-2 flex flex-wrap items-center [&>*]:m-1">
                   {!encerrado && e.cobranca === "comissao" && <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setAcao({ tipo: "cobrancas", id: e.id, nova: true })} data-lancar-recebimento="">Lançar recebimento</button>}
                   {!encerrado && e.cobranca === "unico" && unico.aLancar > 0 && <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setAcao({ tipo: "cobrancas", id: e.id, nova: true })}>Adicionar parcela</button>}
@@ -142,7 +168,7 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
                     ]} />
                   </>)}
                 </div>
-                {acao && acao.id === e.id && acao.tipo === "editar" && <EditarExtra extra={e} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
+                {acao && acao.id === e.id && acao.tipo === "editar" && <EditarExtra extra={e} crm={crm} loginDoPainel={loginDoPainel} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
                 {acao && acao.id === e.id && acao.tipo === "cobrancas" && <CobrancasDoExtra key={acao.nova ? "nova" : "lista"} extra={e} cobrancas={doExtra} sugestao={e.cobranca === "unico" ? unico.aLancar : 0} abrirNova={!!acao.nova} aoMudar={atualizar} />}
                 {acao && acao.id === e.id && (acao.tipo === "iniciar" || acao.tipo === "encerrar") && <AcaoDoExtra extra={e} tipo={acao.tipo} aoFechar={() => setAcao(null)} aoMudar={atualizar} />}
               </li>
@@ -150,8 +176,29 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
           })}
         </ul>
       )}
-      {adicionando && <JanelaDoExtra clientId={clientId} nomeDoCliente={nomeDoCliente} aoFechar={() => setAdicionando(false)} aoSalvar={atualizar} />}
+      {adicionando && <JanelaDoExtra clientId={clientId} nomeDoCliente={nomeDoCliente} crm={crm} crmVivo={crmVivo} loginDoPainel={loginDoPainel} aoFechar={() => setAdicionando(false)} aoSalvar={atualizar} />}
     </Secao>
+  );
+}
+
+/** O CRM na linha do extra: liberado ou aguardando o pagamento, usuários em uso e o atalho para o admin do produto. */
+function LinhaDoCrm({ extra, crm, carregando, aoLigar }: { extra: Extra; crm: CrmDoCliente | null; carregando: boolean; aoLigar: () => void }) {
+  if (carregando) return null;
+  const s = situacaoDoCrm(crm, extra);
+  const cor = s.tom === "ok" ? "bg-success-soft text-success" : s.tom === "espera" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground";
+  return (
+    <div className="mt-2 min-w-0" data-crm-do-extra="">
+      <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+        <span className={juntar(etiqueta, "h-6 px-2.5", cor)} data-crm-situacao="">{s.rotulo}</span>
+        {s.usuarios && <span className={juntar(texto.auxiliar, "tabular-nums")}>{s.usuarios}</span>}
+        {!s.ligado && extra.status !== "encerrado" && !s.cartao && <button type="button" className={juntar(botao.secundario, "h-8")} onClick={aoLigar} data-ligar-crm="">Ligar o CRM</button>}
+        <Link to="/produto" className={juntar(botao.discreto, "h-8 px-2 text-[13px]")} data-abrir-admin-do-produto="">Abrir no admin do produto</Link>
+      </div>
+      {s.cartao && extra.status !== "encerrado" && (
+        <p className={juntar(texto.auxiliar, "mt-1 text-warning")}>Esta empresa já paga o CRM no cartão. Encerre este extra para não cobrar duas vezes.</p>
+      )}
+      {s.ligado && s.tom === "espera" && <p className={juntar(texto.auxiliar, "mt-1")}>Marque a cobrança do mês como paga, em Cobranças, e o acesso ao CRM libera na hora.</p>}
+    </div>
   );
 }
 
@@ -204,7 +251,7 @@ function AcaoDoExtra({ extra, tipo, aoFechar, aoMudar }: { extra: Extra; tipo: "
 }
 
 /** Editar o extra: nome, tipo, valor, dia do vencimento, percentual e observação. O que ainda não foi pago acompanha. */
-function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () => void; aoMudar: () => Promise<void> }) {
+function EditarExtra({ extra, crm, loginDoPainel, aoFechar, aoMudar }: { extra: Extra; crm: CrmDoCliente | null; loginDoPainel: string | null; aoFechar: () => void; aoMudar: () => Promise<void> }) {
   const paraCampo = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
   const [nome, setNome] = useState(extra.nome);
   const [categoria, setCategoria] = useState(extra.categoria);
@@ -217,9 +264,25 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
   const [afiliadoPct, setAfiliadoPct] = useState(paraCampo(extra.afiliado_percentual));
   const [ocupado, setOcupado] = useState(false);
   const comissao = extra.cobranca === "comissao";
+  // CRM pelo plano: plano, usuários e quem administra. O valor do extra é o valor por mês do CRM.
+  const ehCrm = extra.categoria === "crm" && extra.cobranca === "mensal";
+  const situacao = situacaoDoCrm(crm, extra);
+  const planos = useQuery({ queryKey: ["produto-planos-do-crm"], queryFn: lerPlanosDoCrm, enabled: ehCrm, staleTime: 300_000 });
+  const listaDePlanos: PlanoDoCrm[] = planos.data ?? [];
+  const [formCrm, setFormCrm] = useState<FormDoCrm>(() => formInicialDoCrm([], {
+    planoId: extra.produto_plano_id || (situacao.ligado && crm?.plano_id) || "starter",
+    usuarios: String(extra.quantidade || (situacao.ligado && crm?.usuarios_contratados) || 1),
+    valor: paraCampo(extra.valor),
+  }));
+  const mudarCrm = (f: FormDoCrm) => {
+    setFormCrm(f);
+    setValor(f.valor);
+  };
+  const nCrm = numerosDoCrm({ ...formCrm, valor });
+  const faltaCrm = ehCrm ? conferirCrm({ planoId: formCrm.planoId, usuarios: nCrm.usuarios, valor: nCrm.valor, email: formCrm.email, emailObrigatorio: !situacao.temAdmin, loginDoPainel, ocupados: situacao.ocupados }) : null;
   const pctAfiliado = numero(afiliadoPct);
   const faltaAfiliado = pctAfiliado > 100 ? "O repasse vai até 100%." : pctAfiliado > 0 && afiliadoNome.trim().length < 2 ? "Diga quem indicou." : null;
-  const falta = nome.trim().length < 2 ? "Escreva o nome." : comissao ? (numero(percentual) <= 100 ? null : "O percentual vai até 100.") : numero(valor) > 0 ? null : "Diga o valor.";
+  const falta = nome.trim().length < 2 ? "Escreva o nome." : comissao ? (numero(percentual) <= 100 ? null : "O percentual vai até 100.") : numero(valor) > 0 ? faltaCrm : "Diga o valor.";
 
   const salvar = async () => {
     if (ocupado || falta) return;
@@ -234,7 +297,25 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
         .update(pctAfiliado > 0 ? { afiliado_nome: afiliadoNome.trim(), afiliado_percentual: pctAfiliado } : { afiliado_nome: null, afiliado_percentual: null })
         .eq("id", extra.id);
       if (afError) throw afError;
-      toast.success(`${nome.trim()} atualizado. O Financeiro já acompanha.`);
+      if (ehCrm) {
+        // Já ligado e sem pessoa nova: só usuários e plano (o banco acompanha a conta sozinho).
+        if (situacao.ligado && !formCrm.email.trim()) {
+          const { error: crmError } = await (supabase as any).from("client_extras").update({ quantidade: nCrm.usuarios, produto_plano_id: formCrm.planoId }).eq("id", extra.id);
+          if (crmError) throw crmError;
+          toast.success(`${nome.trim()} atualizado. O CRM e o Financeiro já acompanham.`);
+        } else {
+          try {
+            const r = await ligarCrmPeloPlano({ extraId: extra.id, planoId: formCrm.planoId, usuarios: nCrm.usuarios, email: formCrm.email, nome: formCrm.nome });
+            toast.success(avisoDoCrmLigado(r, formCrm.email));
+          } catch (e) {
+            toast.error(`${nome.trim()} salvo, mas o CRM não ligou: ${fraseDoErro(e)}`);
+            await aoMudar();
+            return;
+          }
+        }
+      } else {
+        toast.success(`${nome.trim()} atualizado. O Financeiro já acompanha.`);
+      }
       await aoMudar();
       aoFechar();
     } catch (e) {
@@ -264,6 +345,14 @@ function EditarExtra({ extra, aoFechar, aoMudar }: { extra: Extra; aoFechar: () 
               <input className={campo} value={baseDaComissao} maxLength={160} onChange={(e) => setBaseDaComissao(e.target.value)} />
             </CampoDeFormulario>
           </>
+        ) : ehCrm ? (
+          <CamposDoCrm
+            planos={listaDePlanos}
+            form={{ ...formCrm, valor }}
+            aoMudar={mudarCrm}
+            emailObrigatorio={!situacao.temAdmin}
+            apoioDoEmail={situacao.temAdmin ? "Já tem quem administra. Deixe vazio, ou escreva o e-mail de mais uma pessoa para convidar. O login geral do painel continua só para o painel." : undefined}
+          />
         ) : (
           <CampoDeFormulario rotulo={extra.cobranca === "mensal" ? "Valor por mês (R$)" : "Valor total (R$)"} apoio={extra.cobranca === "mensal" ? "Vale para o que ainda não foi pago." : "As parcelas você ajusta em Cobranças."}>
             <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} data-editar-valor="" />
@@ -389,7 +478,7 @@ function FormDaCobranca({ extra, cobranca, valorInicial, aoFechar, aoMudar }: { 
   );
 }
 
-function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { clientId: string; nomeDoCliente?: string; aoFechar: () => void; aoSalvar: () => Promise<void> }) {
+function JanelaDoExtra({ clientId, nomeDoCliente, crm, crmVivo, loginDoPainel, aoFechar, aoSalvar }: { clientId: string; nomeDoCliente?: string; crm: CrmDoCliente | null; crmVivo: boolean; loginDoPainel: string | null; aoFechar: () => void; aoSalvar: () => Promise<void> }) {
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState("outro");
   const [cobranca, setCobranca] = useState<CobrancaDoExtra>("mensal");
@@ -407,13 +496,32 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
   const [primeiraEm, setPrimeiraEm] = useState(() => somarMeses(hoje(), 1));
   const [observacao, setObservacao] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  // CRM pelo plano: só mensal, por usuário, com quem administra o CRM.
+  const ehCrm = categoria === "crm";
+  const planos = useQuery({ queryKey: ["produto-planos-do-crm"], queryFn: lerPlanosDoCrm, enabled: ehCrm, staleTime: 300_000 });
+  const listaDePlanos: PlanoDoCrm[] = planos.data ?? [];
+  const [formCrm, setFormCrm] = useState<FormDoCrm | null>(null);
+  const crmAtual = formCrm ?? formInicialDoCrm(listaDePlanos);
+  const mudarCrm = (f: FormDoCrm) => {
+    setFormCrm(f);
+    setValor(f.valor);
+  };
+  // O valor sugerido aparece assim que os planos chegam, sem esperar o dono mexer.
+  const valorDoForm = ehCrm ? (formCrm ? valor : crmAtual.valor) : valor;
 
-  const total = numero(valor);
+  const total = numero(valorDoForm);
   const lista = useMemo(
     () => (cobranca === "unico" && total > 0 ? montarParcelas({ total, entrada: numero(entrada), entradaPaga, entradaEm, parcelas: Number(parcelas) || 1, primeiraEm, restanteDepois }) : []),
     [cobranca, total, entrada, entradaPaga, entradaEm, parcelas, primeiraEm, restanteDepois],
   );
-  const falta = conferirExtra({ nome, cobranca, valor: total, percentual: numero(percentual), comecaAgora, inicio, parcelas: lista });
+  const bloqueioDoCrm = !ehCrm ? null
+    : crmVivo ? "Este cliente já tem CRM. Edite o que já existe na lista."
+    : crm?.assinatura_no_cartao ? "Esta empresa já paga o CRM no cartão. Não crie este extra, para não cobrar duas vezes."
+    : null;
+  const nCrm = numerosDoCrm({ ...crmAtual, valor: valorDoForm });
+  const falta = bloqueioDoCrm
+    || conferirExtra({ nome, cobranca, valor: total, percentual: numero(percentual), comecaAgora, inicio, parcelas: lista })
+    || (ehCrm ? conferirCrm({ planoId: crmAtual.planoId, usuarios: nCrm.usuarios, valor: nCrm.valor, email: crmAtual.email, emailObrigatorio: true, loginDoPainel }) : null);
 
   const usarAtalho = (id: string) => {
     const a = ATALHOS.find((x) => x.id === id);
@@ -427,7 +535,7 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
     if (ocupado || falta) return;
     setOcupado(true);
     try {
-      const { error } = await (supabase as any).rpc("extra_salvar", {
+      const { data: criado, error } = await (supabase as any).rpc("extra_salvar", {
         _dados: {
           client_id: clientId,
           nome: nome.trim(),
@@ -444,7 +552,16 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
         },
       });
       if (error) throw error;
-      toast.success(`${nome.trim()} adicionado${nomeDoCliente ? ` a ${nomeDoCliente}` : ""}. O Financeiro já foi atualizado.`);
+      if (ehCrm && criado?.id) {
+        try {
+          const r = await ligarCrmPeloPlano({ extraId: String(criado.id), planoId: crmAtual.planoId, usuarios: nCrm.usuarios, email: crmAtual.email, nome: crmAtual.nome });
+          toast.success(avisoDoCrmLigado(r, crmAtual.email));
+        } catch (e) {
+          toast.error(`${nome.trim()} adicionado, mas o CRM não ligou: ${fraseDoErro(e)} Termine em "Ligar o CRM", na linha do extra.`);
+        }
+      } else {
+        toast.success(`${nome.trim()} adicionado${nomeDoCliente ? ` a ${nomeDoCliente}` : ""}. O Financeiro já foi atualizado.`);
+      }
       await aoSalvar();
       aoFechar();
     } catch (e) {
@@ -483,17 +600,26 @@ function JanelaDoExtra({ clientId, nomeDoCliente, aoFechar, aoSalvar }: { client
         <CampoDeFormulario rotulo="O que ele está comprando" obrigatorio largo>
           <input className={campo} value={nome} maxLength={120} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Suporte e manutenção do sistema" />
         </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Como cobra" largo apoio={O_QUE_E[cobranca]}>
-          <SeletorCompacto rotulo="Como cobra" modo="segmentado" larguraTotal opcoes={COBRANCAS} valor={cobranca} onEscolher={(v) => setCobranca(v as CobrancaDoExtra)} />
-        </CampoDeFormulario>
+        {ehCrm ? (
+          <>
+            <p className={juntar(texto.auxiliar, "sm:col-span-full", bloqueioDoCrm && "text-warning")} data-crm-na-janela="">
+              {bloqueioDoCrm || "O CRM é cobrado todo mês, por usuário. O acesso ao CRM é separado do painel e libera quando você marcar a cobrança como paga."}
+            </p>
+            {!bloqueioDoCrm && <CamposDoCrm planos={listaDePlanos} form={{ ...crmAtual, valor: valorDoForm }} aoMudar={mudarCrm} emailObrigatorio />}
+          </>
+        ) : (
+          <CampoDeFormulario rotulo="Como cobra" largo apoio={O_QUE_E[cobranca]}>
+            <SeletorCompacto rotulo="Como cobra" modo="segmentado" larguraTotal opcoes={COBRANCAS} valor={cobranca} onEscolher={(v) => setCobranca(v as CobrancaDoExtra)} />
+          </CampoDeFormulario>
+        )}
 
-        {cobranca !== "comissao" && (
+        {cobranca !== "comissao" && !ehCrm && (
           <CampoDeFormulario rotulo={cobranca === "mensal" ? "Valor por mês (R$)" : "Valor total (R$)"} obrigatorio>
             <input className={juntar(campo, "tabular-nums")} inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0,00" data-valor-do-extra="" />
           </CampoDeFormulario>
         )}
 
-        {cobranca === "mensal" && (
+        {cobranca === "mensal" && !bloqueioDoCrm && (
           <>
             <CampoDeFormulario rotulo="Quando começa a cobrar">
               <SeletorCompacto rotulo="Quando começa a cobrar" modo="segmentado" larguraTotal opcoes={[{ valor: "data", rotulo: "Numa data" }, { valor: "depois", rotulo: "Depois da entrega" }]} valor={comecaAgora ? "data" : "depois"} onEscolher={(v) => setComecaAgora(v === "data")} />

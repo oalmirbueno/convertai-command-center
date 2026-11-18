@@ -62,7 +62,7 @@ export function situacaoDaConta(c: ContaNaCasa, agora = Date.now()): string {
   }
   if (c.estado === "atrasada") return c.liberada ? "atrasada, ainda com acesso" : "atrasada, sem acesso";
   if (c.estado === "cancelada" && c.liberada) return `cancelada, acesso até ${diaLegivel(c.acesso_ate)}`;
-  return ROTULO_DO_ESTADO[c.estado].toLowerCase();
+  return ROTULO_DO_ESTADO[c.estado].toLowerCase() + (pelaPlano(c) ? ", pelo plano do cliente" : "");
 }
 
 /**
@@ -70,6 +70,10 @@ export function situacaoDaConta(c: ContaNaCasa, agora = Date.now()): string {
  * A casa cria a empresa, ajusta o que foi contratado e cuida da cobrança.
  * O conteúdo do CRM de cada empresa não aparece aqui: é dela.
  */
+
+/** O CRM desta empresa é cobrado no plano do cliente da Aceleriq (extra de CRM), e não no cartão. */
+const pelaPlano = (c: object): boolean => (c as { cobranca_por?: string }).cobranca_por === "plano";
+
 export default function ContasDaCasa() {
   const qc = useQueryClient();
   const contas = useQuery({ queryKey: chaveDasContas, queryFn: listarContasDaCasa });
@@ -406,9 +410,10 @@ function FichaDaConta({ conta, planos, onFechar, onMudou }: { conta: ContaNaCasa
         <section aria-label="Cobranças da empresa">
           <div className="mb-1 flex min-w-0 items-center">
             <h3 className={juntar(texto.tituloSecao, "min-w-0 flex-1")}>Cobranças</h3>
-            <button type="button" className={juntar(botao.primario, "mr-2 h-8")} onClick={() => void gerarCheckout()} disabled={cobrando} title="Cria o checkout da assinatura no cartão com o plano e os usuários desta empresa e copia o link" data-gerar-checkout="">
+            {pelaPlano(conta) && <span className={juntar(texto.auxiliar, "mr-3")} data-cobrado-no-plano="">Cobrado no plano do cliente: o acesso segue o extra de CRM da ficha.</span>}
+            {!pelaPlano(conta) && <button type="button" className={juntar(botao.primario, "mr-2 h-8")} onClick={() => void gerarCheckout()} disabled={cobrando} title="Cria o checkout da assinatura no cartão com o plano e os usuários desta empresa e copia o link" data-gerar-checkout="">
               Link de pagamento
-            </button>
+            </button>}
             <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void cobrarMigracao()} disabled={cobrando} title="Cria a cobrança avulsa da migração do e-mail no Asaas" data-cobrar-migracao="">
               {cobrando ? "Criando..." : `Cobrar a migração${config.data ? ` (${reais(config.data.email_migracao)})` : ""}`}
             </button>
