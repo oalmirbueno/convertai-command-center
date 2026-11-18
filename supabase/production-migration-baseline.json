@@ -3177,6 +3177,14 @@
       "remote_name": "grupos_ao_vivo",
       "remote_statements_sha256": "89f5089045b03006a8ddd512f10c33f7103491ba24edd8ba824959884e0456f8",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118200000",
+      "path": "supabase/migrations/20261118200000_escritorio_dos_agentes.sql",
+      "local_sha256": "8d27e1a6b43b56996fafb0a579168c87f3b6a608b803440299589b99fc32897b",
+      "remote_name": "escritorio_dos_agentes",
+      "remote_statements_sha256": "810a72822b04b1139c356379a687001c54d0b7e17e2b67538e40e163ce1a8ef5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
