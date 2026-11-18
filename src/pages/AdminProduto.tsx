@@ -1,9 +1,10 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Building2, ExternalLink, Inbox, Mail, Tags, Wallet } from "lucide-react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Activity, Building2, ExternalLink, Inbox, Mail, Tags, Wallet } from "lucide-react";
 import { CabecalhoDePagina, Carregando, Etapas, botao, juntar } from "@/components/sistema";
 import ContasDaCasa from "@/components/produto/casa/ContasDaCasa";
 
+const MonitorDoProduto = lazy(() => import("@/components/produto/casa/MonitorDoProduto"));
 const EmailDaCasa = lazy(() => import("@/components/produto/casa/EmailDaCasa"));
 const PrecosDoProduto = lazy(() => import("@/components/produto/casa/PrecosDoProduto"));
 const FaturamentoDoProduto = lazy(() => import("@/components/produto/casa/FaturamentoDoProduto"));
@@ -11,13 +12,14 @@ const CaixaDaAceleriq = lazy(() => import("@/components/produto/casa/CaixaDaAcel
 
 /**
  * A administração do produto CRM e E-mail, dentro do painel da casa (só admin).
- * Empresas e cobrança, a migração de e-mail de cada uma, os preços e o
+ * O monitor (se está tudo em ordem e o CRM de cada empresa ao vivo), empresas e cobrança, a migração de e-mail de cada uma, os preços e o
  * faturamento com os custos. O produto em si abre em /app.
  */
 
-type Area = "empresas" | "email" | "caixa" | "precos" | "faturamento";
+type Area = "monitor" | "empresas" | "email" | "caixa" | "precos" | "faturamento";
 
 const AREAS: Array<{ valor: Area; rotulo: string; icone: ReactNode }> = [
+  { valor: "monitor", rotulo: "Monitor", icone: <Activity className="h-4 w-4" /> },
   { valor: "empresas", rotulo: "Empresas", icone: <Building2 className="h-4 w-4" /> },
   { valor: "email", rotulo: "E-mail", icone: <Mail className="h-4 w-4" /> },
   { valor: "caixa", rotulo: "Caixa da Aceleriq", icone: <Inbox className="h-4 w-4" /> },
@@ -26,6 +28,7 @@ const AREAS: Array<{ valor: Area; rotulo: string; icone: ReactNode }> = [
 ];
 
 const AJUDA: Record<Area, string> = {
+  monitor: "Se está tudo em ordem (e-mails, cobrança, rotinas, integrações, convites) e o CRM de cada empresa ao vivo. A tela se relê sozinha a cada 15 segundos.",
   empresas: "Quem usa o produto: situação, plano, usuários e mensalidade. Abra uma empresa para ajustar o que foi contratado, convidar pessoas e cobrar.",
   email: "O e-mail profissional numa rota só: as entradas (pedidos) com o marcar como pago e, embaixo, a migração de cada empresa (domínio, passo a passo, caixas, integração com Cloudflare e Zoho e a conferência do DNS).",
   caixa: "A caixa de e-mail oficial da Aceleriq dentro do painel, com o Zoho por trás. Desligada até o dono decidir: ligar pede o plano pago do Zoho.",
@@ -33,15 +36,26 @@ const AJUDA: Record<Area, string> = {
   faturamento: "Quanto o produto fatura por mês, o que está em atraso e quanto custa entregar. A mesma leitura aparece no Financeiro.",
 };
 
+/**
+ * 18/11/2026: cada área tem a sua rota (/produto/crm, /produto/email...), para o menu Produtos
+ * apontar direto e acender o item certo. O antigo ?area= continua aceito (links já espalhados).
+ */
+const ROTA_DA_AREA: Record<Area, string> = { monitor: "", empresas: "crm", email: "email", caixa: "caixa", precos: "precos", faturamento: "faturamento" };
+
+export function areaDaRota(segmento: string | undefined, consulta: string | null): Area {
+  const pelaRota = (Object.keys(ROTA_DA_AREA) as Area[]).find((a) => ROTA_DA_AREA[a] !== "" && ROTA_DA_AREA[a] === segmento);
+  if (pelaRota) return pelaRota;
+  return AREAS.some((a) => a.valor === consulta) ? (consulta as Area) : "monitor";
+}
+
 export default function AdminProduto() {
-  const [busca, setBusca] = useSearchParams();
-  const pedida = busca.get("area") || "";
-  const area: Area = AREAS.some((a) => a.valor === pedida) ? (pedida as Area) : "empresas";
+  const [busca] = useSearchParams();
+  const { area: segmento } = useParams();
+  const navegar = useNavigate();
+  const area = areaDaRota(segmento, busca.get("area"));
   const irPara = (a: string) => {
-    const nova = new URLSearchParams(busca);
-    if (a === "empresas") nova.delete("area");
-    else nova.set("area", a);
-    setBusca(nova, { replace: true });
+    const rota = ROTA_DA_AREA[a as Area];
+    navegar(rota ? `/produto/${rota}` : "/produto", { replace: true });
   };
   return (
     <div className="min-w-0 space-y-5" data-admin-produto="">
@@ -57,6 +71,7 @@ export default function AdminProduto() {
       />
       {area === "empresas" && <ContasDaCasa />}
       <Suspense fallback={<Carregando linhas={5} />}>
+        {area === "monitor" && <MonitorDoProduto />}
         {area === "email" && <EmailDaCasa />}
         {area === "caixa" && <CaixaDaAceleriq />}
         {area === "precos" && <PrecosDoProduto />}

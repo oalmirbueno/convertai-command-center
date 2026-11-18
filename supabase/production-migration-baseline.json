@@ -3179,19 +3179,11 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261118200000",
-      "path": "supabase/migrations/20261118200000_escritorio_dos_agentes.sql",
-      "local_sha256": "8d27e1a6b43b56996fafb0a579168c87f3b6a608b803440299589b99fc32897b",
-      "remote_name": "escritorio_dos_agentes",
-      "remote_statements_sha256": "810a72822b04b1139c356379a687001c54d0b7e17e2b67538e40e163ce1a8ef5",
-      "remote_hash_mode": "supabase_cli_split"
-    },
-    {
-      "version": "20261118210000",
-      "path": "supabase/migrations/20261118210000_regras_permanentes.sql",
-      "local_sha256": "b1e1b5c1e156075be3046ee20c7e4dc2a3a4973051252a9340d65cd358d93664",
-      "remote_name": "regras_permanentes",
-      "remote_statements_sha256": "21cc6c4a31627cde270cd36375b2c2f4949cdc559de700be1abf27a81871c0a5",
+      "version": "20261118190000",
+      "path": "supabase/migrations/20261118190000_monitor_do_produto.sql",
+      "local_sha256": "022def1e0a9356e6287214c89b065c25a7a72f5f44a20ad44767f9bfc54b0d46",
+      "remote_name": "monitor_do_produto",
+      "remote_statements_sha256": "2032ce4e35c55602fd0e3ba2d5955ac76b85124a4380aa95e354d2f30d6fe938",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],
