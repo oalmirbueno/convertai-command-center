@@ -110,8 +110,11 @@ def token() -> str:
 
 
 def maquina() -> str:
+    arquivo = PASTA / "maquina"
+    fixo = arquivo.read_text(encoding="utf-8").strip() if arquivo.exists() else ""
     return (
         os.environ.get("ACELERIQ_MAQUINA")
+        or fixo
         or os.environ.get("SECOND_BRAIN_MACHINE_NAME")
         or platform.node()
         or "maquina"
@@ -334,6 +337,14 @@ def indice_local() -> dict[str, dict[str, dict]]:
                 if s and s["slug"] not in indice["claude-plugin"]:
                     indice["claude-plugin"][s["slug"]] = s
     return indice
+
+
+def config() -> dict:
+    """~/.aceleriq/central-config.json, ex.: {"hermes_tudo": true} instala tudo também no Hermes."""
+    try:
+        return json.loads((PASTA / "central-config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 
 
 # ─── estado ──────────────────────────────────────────────────────
@@ -562,6 +573,8 @@ def sync(dry=False, so_subir=False, so_baixar=False, conectores=True) -> int:
                 local = indice.get(rt, {}).get(slug)
                 if local and local["hash"] == r["hash"]:
                     continue
+                if not local and rt == "hermes" and not config().get("hermes_tudo"):
+                    continue  # Hermes lista as skills em toda chamada: por padrão só atualiza as que já tem
                 if local and local["link"]:
                     continue  # pasta ligada a outro sistema (ex.: ego-browser): não mexo
                 if local and slug in subiu:
