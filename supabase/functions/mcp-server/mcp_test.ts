@@ -249,6 +249,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_create_project',
     'aceleriq_create_report_draft',
     'aceleriq_create_task',
+    'aceleriq_criar_publicacao_de_aprovado',
     'aceleriq_delete_opportunity',
     'aceleriq_delete_task',
     'aceleriq_dia_prioritario',
@@ -1557,9 +1558,8 @@ const ctxDoClienteA: AuthContext = {
   dataScope: { ...writeCtx.dataScope, unrestricted: false, clientIds: [PERFIS_CLIENTE_A] },
 };
 
-Deno.test('2.29: versão, as duas ferramentas novas no catálogo, no guia e contadas na descoberta', async () => {
+Deno.test('2.29: as duas ferramentas novas no catálogo, no guia e contadas na descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.29.0');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
   for (const nome of ['aceleriq_perfis_instagram_listar', 'aceleriq_perfis_instagram_arquivar', 'aceleriq_perfis_instagram_gravar']) {
@@ -1575,7 +1575,6 @@ Deno.test('2.29: versão, as duas ferramentas novas no catálogo, no guia e cont
     agora: new Date('2026-11-17T12:00:00Z'),
   });
   assertEquals(d.toolCount, TOOLS.length);
-  assertEquals(TOOLS.length, 198);
 });
 
 Deno.test('perfis listar: só leitura com clients:read, schema fechado e papel no singular ou plural', async () => {
@@ -1783,4 +1782,69 @@ Deno.test('perfis gravar: idempotency_key opcional, mesmo schema fechado de ante
   assert(!gravarPerfisSchema.safeParse({ ...base, idempotency_key: 'x'.repeat(121) }).success);
   assert(!gravarPerfisSchema.safeParse({ client_id: PERFIS_CLIENTE_A, idempotency_key: 'perfis-0001' }).success, 'a chave sozinha não basta');
   assert(!gravarPerfisSchema.safeParse({ ...base, extra: 1 }).success);
+});
+
+// ─── MCP 2.30.0 (18/11/2026): publicação planejada de post já aprovado ───
+
+Deno.test('2.30: versão, criar publicação de aprovado no catálogo, no guia e contada na descoberta', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  assertEquals(MCP_VERSION, '2.30.0');
+  const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
+  const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
+  assert(TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado'), 'no catálogo');
+  assert(FERRAMENTAS_POR_AREA.calendario.includes('aceleriq_criar_publicacao_de_aprovado'));
+  const regra = REGRAS_DE_ACAO.find((r) => r.includes('aceleriq_criar_publicacao_de_aprovado')) || '';
+  assert(regra.includes('aceleriq_reagendar_publicacao') && regra.includes('expected_version'), 'guia ensina o caminho até o reagendar');
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-11-18T12:00:00Z'),
+  });
+  assertEquals(d.toolCount, TOOLS.length);
+  assertEquals(TOOLS.length, 199);
+});
+
+Deno.test('criar publicação de aprovado: escrita editorial:write, schema fechado, ponte e fora da lista de cliente', async () => {
+  const { criarPublicacaoSchema } = await import('./modulos/criar-publicacao-de-aprovado.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const tool = TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado')!;
+  assert(tool.scopes.includes('editorial:write'));
+  assertEquals(GRANULAR_SCOPE_BY_TOOL.aceleriq_criar_publicacao_de_aprovado, 'editorial:write');
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(writeCtx, tool));
+  assert(canInvoke({ ...readCtx, scopes: ['editorial:write'] }, tool));
+  assert(tool.description.includes('aceleriq_reagendar_publicacao'));
+  assert(tool.description.includes('Não aprova, não agenda e não publica'));
+  // Como a 2.29: credencial de cliente não usa.
+  assert(!(CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_criar_publicacao_de_aprovado'));
+  assert(!canUseToolWithDataScope(restrictedCtx, tool));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('save_editorial_post'));
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['confirmar', 'external_account_id', 'idempotency_key', 'post_id']);
+  assertEquals(schema.properties.confirmar.const, true);
+  assert(!('scheduled_at' in schema.properties), 'nunca recebe data');
+
+  const base = {
+    post_id: '11111111-1111-4111-8111-111111111111',
+    external_account_id: '22222222-2222-4222-8222-222222222222',
+    confirmar: true,
+    idempotency_key: 'criar-pub-0001',
+  };
+  assert(criarPublicacaoSchema.safeParse(base).success);
+  const { confirmar: _c, ...semConfirmar } = base;
+  assert(!criarPublicacaoSchema.safeParse(semConfirmar).success, 'sem confirmar recusa');
+  assert(!criarPublicacaoSchema.safeParse({ ...base, confirmar: false }).success, 'confirmar false recusa');
+  const { idempotency_key: _k, ...semChave } = base;
+  assert(!criarPublicacaoSchema.safeParse(semChave).success, 'sem idempotency_key recusa');
+  assert(!criarPublicacaoSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!criarPublicacaoSchema.safeParse({ ...base, idempotency_key: 'x'.repeat(121) }).success);
+  assert(!criarPublicacaoSchema.safeParse({ ...base, post_id: 'nao-uuid' }).success);
+  assert(!criarPublicacaoSchema.safeParse({ ...base, scheduled_at: '2026-11-20T12:00:00-03:00' }).success, 'data não passa');
+  await assertRejects(() => Promise.resolve(tool.handler({ ...base, confirmar: false }, writeCtx)), Error, 'Invalid input');
 });

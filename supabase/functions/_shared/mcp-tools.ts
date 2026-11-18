@@ -63,6 +63,7 @@ import { FERRAMENTAS_DO_PAINEL_INTEIRO, ligarCatalogo } from '../mcp-server/modu
 import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro.ts';
 import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspace-e-perfis.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
+import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
 import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
 import {
@@ -376,6 +377,8 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_workspace_link_arquivo: 'workspace:read',
   aceleriq_workspace_retirar_aprovacao: 'files:write',
   aceleriq_reagendar_publicacao: 'editorial:write',
+  // MCP 2.30 (18/11/2026): publicação planejada de post já aprovado, para depois o reagendar.
+  aceleriq_criar_publicacao_de_aprovado: 'editorial:write',
   aceleriq_editar_legenda_publicacao: 'editorial:write',
   aceleriq_ajustar_formato_publicacao: 'editorial:write',
   // MCP 2.28 (14/11/2026): revisão interna, caixa Precisa de você e pedido ao dono.
@@ -5106,6 +5109,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DE_ANUNCIOS,
   ...FERRAMENTAS_DE_WORKSPACE_E_PERFIS,
   ...FERRAMENTA_DE_REAGENDAR,
+  ...FERRAMENTA_DE_CRIAR_PUBLICACAO,
   ...FERRAMENTA_DE_EDITAR_LEGENDA,
   ...FERRAMENTA_DE_AJUSTAR_FORMATO,
   ...FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO,
