@@ -2,7 +2,7 @@ import NumerosOusados from "@/components/admin/NumerosOusados";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, RefreshCw, UserPlus } from "lucide-react";
+import { Link2, Plus, RefreshCw, UserPlus } from "lucide-react";
 import { useClients } from "@/hooks/useSupabaseData";
 import {
   casa,
@@ -16,6 +16,7 @@ import {
   mensalidadePrevista,
   reais,
   reenviarConvite,
+  copiarLinkDeAcesso,
   ROTULO_DO_ESTADO,
   type ContaNaCasa,
   type EstadoDaConta,
@@ -379,6 +380,16 @@ function FichaDaConta({ conta, planos, onFechar, onMudou }: { conta: ContaNaCasa
                   <span className={juntar(texto.auxiliar, "block truncate")}>{m.email}{m.entrou_em ? ` · entrou em ${diaLegivel(m.entrou_em)}` : ""}</span>
                 </span>
                 <span className={juntar(etiqueta, "ml-2", m.papel === "admin" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{m.papel === "admin" ? "Administra" : "Usuário"}</span>
+                <button
+                  type="button"
+                  className={juntar(botao.icone, "ml-1")}
+                  aria-label={`Copiar o link de acesso de ${m.email}`}
+                  title="Copiar link de acesso (para mandar por WhatsApp)"
+                  onClick={() => void copiarLinkDeAcesso(m.id).then((e) => toast.success(`Link de acesso de ${e} copiado. Vale uma vez.`)).catch((e) => toast.error(fraseDoErro(e)))}
+                  data-copiar-link-de-acesso=""
+                >
+                  <Link2 className="h-4 w-4" aria-hidden="true" />
+                </button>
                 {m.estado === "convidado" && (
                   <button
                     type="button"

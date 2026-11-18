@@ -68,10 +68,30 @@ async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
-function extractBearer(req: Request): string | null {
-  const h = req.headers.get('authorization') ?? req.headers.get('Authorization') ?? '';
+/**
+ * A chave que o cliente mandou (18/11/2026: "conectar com qualquer IA sem complicação").
+ * Aceita o jeito certo (Authorization: Bearer mcp_live_...) e os jeitos que os clientes erram:
+ * a chave sem "Bearer", entre aspas, com espaço ou caractere invisível sobrando, ou nos cabeçalhos
+ * X-API-Key / X-Aceleriq-Key. O valor nunca vai para log.
+ */
+export function extractBearer(req: Request): string | null {
+  const limpar = (v: string) => v.replace(/[\u200B-\u200D\uFEFF]/g, '').trim().replace(/^["'`]+|["'`]+$/g, '').trim();
+  const h = limpar(req.headers.get('authorization') ?? '');
   const m = h.match(/^Bearer\s+(.+)$/i);
-  return m ? m[1].trim() : null;
+  let token = m ? limpar(m[1]) : /^mcp_live_/i.test(h) ? h : '';
+  if (!token) {
+    const outro = limpar(req.headers.get('x-api-key') ?? req.headers.get('x-aceleriq-key') ?? '');
+    token = limpar(outro.replace(/^Bearer\s+/i, ''));
+  }
+  // Chave do painel (mcp_live_ + base64url): qualquer caractere fora disso é sobra de cópia (invisível, quebra, aspas).
+  if (/^mcp_live_/i.test(token)) token = token.replace(/[^A-Za-z0-9_-]/g, '');
+  return token || null;
+}
+
+/** O começo da chave recebida (os mesmos 12 caracteres que a central mostra), para conferir sem expor o resto. */
+export function comecoDaChave(req: Request): string | null {
+  const t = extractBearer(req);
+  return t ? `${t.slice(0, 12)}…` : null;
 }
 
 // Distinguish "wrong token" from "known token but revoked/expired" by probing

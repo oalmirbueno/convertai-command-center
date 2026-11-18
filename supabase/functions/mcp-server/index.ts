@@ -4,7 +4,7 @@
 // Bearer auth via public.api_keys. Audit via public.mcp_audit_log.
 // Does NOT modify api-gateway or any existing function.
 
-import { authenticate as conferirCredencial, DataScopeError, type AuthContext, type AuthResult } from "../_shared/mcp-auth.ts";
+import { authenticate as conferirCredencial, comecoDaChave, DataScopeError, type AuthContext, type AuthResult } from "../_shared/mcp-auth.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { MCP_RELEASE_SOURCE } from "../_shared/mcp-release-source.ts";
 import { shouldUseOAuthToolChallenge } from "../_shared/mcp-security.ts";
@@ -457,6 +457,20 @@ Deno.serve(async (req) => {
     return prefersSse(req) ? sseResponse(pong) : jsonResponse(pong);
   }
   const auth = await authenticate(req);
+
+  // 18/11/2026: chave mandada e não reconhecida não vira "visitante" calado. Quem chama uma ferramenta
+  // recebe o motivo e o começo da chave que chegou, para comparar com a central (Painel › API › MCP).
+  if (!auth.ok && auth.error.kind !== "missing" && message.method === "tools/call") {
+    const comeco = comecoDaChave(req) ?? "a chave";
+    const motivo = auth.error.kind === "expired_or_revoked"
+      ? `A chave ${comeco} foi revogada ou venceu.`
+      : `A chave ${comeco} não é reconhecida pelo servidor (não existe na central ou veio incompleta).`;
+    return jsonResponse(rpcError(
+      message.id ?? null,
+      RpcErrors.unauthorized,
+      `${motivo} Gere uma nova em Painel › API e integrações › MCP › Conectar uma IA e cole o valor inteiro no cabeçalho Authorization como "Bearer mcp_live_...".`,
+    ));
+  }
 
   // Discovery methods are public. A missing bearer on tools/call returns the
   // MCP result-level challenge ChatGPT needs to open OAuth. Invalid, expired

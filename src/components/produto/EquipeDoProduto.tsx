@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeftRight, Camera, Crown, RefreshCw, Trash2, Trophy, UserPlus } from "lucide-react";
+import { ArrowLeftRight, Camera, Crown, Link2, RefreshCw, Trash2, Trophy, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   ROTULO_DO_PAPEL,
@@ -12,6 +12,7 @@ import {
   mudarMembro,
   reais,
   reenviarConvite,
+  copiarLinkDeAcesso,
   repassarNegocios,
   salvarConta,
   salvarPerfilDoMembro,
@@ -426,6 +427,12 @@ function PerfilDaPessoa({ m, linha, estado, aoFechar, admin, gestor }: { m: Memb
             <button type="button" className={juntar(botao.discreto, "mr-auto text-destructive hover:text-destructive")} onClick={() => setRemovendo(true)} data-remover-pessoa="">
               <Trash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Remover
+            </button>
+          )}
+          {admin && m.estado !== "removido" && (
+            <button type="button" className={juntar(botao.secundario, "mr-2")} onClick={() => void copiarLinkDeAcesso(m.id).then((e) => toast.success(`Link de acesso de ${e} copiado. Vale uma vez.`)).catch((e) => toast.error(fraseDoErro(e)))} data-copiar-link-de-acesso="">
+              <Link2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Copiar link de acesso
             </button>
           )}
           {admin && m.estado === "convidado" && (

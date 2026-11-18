@@ -19,3 +19,16 @@ describe("guia de conexão do MCP central", () => {
     expect(configDoMcp(url, "k", "http")).not.toContain("Painel");
   });
 });
+
+describe("prompt pronto para a IA", async () => {
+  const { promptDeConexao } = await import("@/components/admin/GuiaDeConexaoMcp");
+  const p = promptDeConexao("https://x/mcp", "mcp_live_ABCDEFGHIJ");
+  it("traz servidor, cabeçalho certo, STDIO e o teste pelo aceleriq_health", () => {
+    expect(p).toContain("Servidor (Streamable HTTP): https://x/mcp");
+    expect(p).toContain("nome Authorization e valor Bearer mcp_live_ABCDEFGHIJ");
+    expect(p).toContain("npx -y mcp-remote https://x/mcp --header Authorization:${AUTH_HEADER}");
+    expect(p).toContain("aceleriq_health");
+    expect(p).toContain("public:discovery");
+    expect(p).toContain("o começo certo é mcp_live_ABC…");
+  });
+});

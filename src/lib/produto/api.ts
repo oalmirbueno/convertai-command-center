@@ -295,6 +295,20 @@ export async function salvarConta(dados: Partial<{ nome: string; documento: stri
 
 export const convidar = (p: { email: string; nome?: string; papel?: PapelNaConta; gerente_id?: string | null; cargo?: string }) =>
   chamar<{ membro_id: string; enviado: boolean }>({ acao: "convidar", ...p });
+/** Link de acesso de uma pessoa (vale uma vez): entra no CRM e cria ou troca a senha. Para mandar por WhatsApp. */
+export const linkDeAcesso = (membroId: string) => chamar<{ link: string; email: string }>({ acao: "link_de_acesso", membro_id: membroId });
+
+/** Gera o link de acesso e copia; sem área de transferência, mostra para copiar à mão. */
+export async function copiarLinkDeAcesso(membroId: string): Promise<string> {
+  const r = await linkDeAcesso(membroId);
+  try {
+    await navigator.clipboard.writeText(r.link);
+  } catch {
+    window.prompt(`Copie o link de acesso de ${r.email}:`, r.link);
+  }
+  return r.email;
+}
+
 export const reenviarConvite = (membroId: string) => chamar<{ enviado: boolean }>({ acao: "reenviar_convite", membro_id: membroId });
 
 export async function mudarMembro(membroId: string, p: { papel?: PapelNaConta; remover?: boolean }): Promise<void> {
