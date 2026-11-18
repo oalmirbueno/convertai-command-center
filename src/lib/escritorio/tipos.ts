@@ -1,6 +1,6 @@
 /**
  * Escritório dos agentes (18/11/2026): as linhas do banco como a tela lê.
- * Contrato: supabase/migrations/20261118200000_escritorio_dos_agentes.sql.
+ * Contrato: supabase/migrations/20261118220000_escritorio_dos_agentes.sql.
  * As tabelas ainda não estão nos tipos gerados do Supabase, por isso ficam aqui.
  */
 

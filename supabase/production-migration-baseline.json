@@ -3201,6 +3201,22 @@
       "remote_name": "produto_correio_meu_dia",
       "remote_statements_sha256": "ff035bb388abf79a8d633c1ebc2ce8b57d459bbf7caddb10cd973e09bc17664e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118220000",
+      "path": "supabase/migrations/20261118220000_escritorio_dos_agentes.sql",
+      "local_sha256": "8d27e1a6b43b56996fafb0a579168c87f3b6a608b803440299589b99fc32897b",
+      "remote_name": "escritorio_dos_agentes",
+      "remote_statements_sha256": "810a72822b04b1139c356379a687001c54d0b7e17e2b67538e40e163ce1a8ef5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118230000",
+      "path": "supabase/migrations/20261118230000_regras_permanentes.sql",
+      "local_sha256": "b1e1b5c1e156075be3046ee20c7e4dc2a3a4973051252a9340d65cd358d93664",
+      "remote_name": "regras_permanentes",
+      "remote_statements_sha256": "21cc6c4a31627cde270cd36375b2c2f4949cdc559de700be1abf27a81871c0a5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

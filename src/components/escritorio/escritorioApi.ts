@@ -2,7 +2,7 @@
  * Escritório dos agentes (18/11/2026): leituras e escritas da tela.
  * A equipe lê tudo; quem escreve é o dono (admin), pelos RPCs do banco ou,
  * nas salas e no dono da automação, direto na tabela (a política deixa).
- * Contrato: supabase/migrations/20261118200000_escritorio_dos_agentes.sql.
+ * Contrato: supabase/migrations/20261118220000_escritorio_dos_agentes.sql.
  */
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
