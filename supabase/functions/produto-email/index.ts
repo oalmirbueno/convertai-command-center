@@ -1,6 +1,6 @@
 /**
  * E-mail profissional, a parte que fala com a Cloudflare e o Zoho (18/11/2026).
- * Contrato: supabase/migrations/20261118140000_produto_email_rota_unica.sql.
+ * Contrato: supabase/migrations/20261118170000_produto_email_rota_unica.sql.
  *
  * Só o dono da casa chama. Tudo aqui é leitura nos provedores: nada muda DNS, caixa ou senha.
  *   conferir_cloudflare { dominio_id }        -> { resumo }  zona, proxy, MX, SPF, DKIM, DMARC

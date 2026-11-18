@@ -1,7 +1,7 @@
 /**
  * MCP 2.33.0 (18/11/2026): o e-mail profissional pelo agente, para tocar a migração sozinho quando o
  * dono pedir (roteiro na skill migracao-email-cliente). Mesmas regras da tela do dono: tudo passa
- * pelas funções do banco de 20261118140000_produto_email_rota_unica.sql, que deixam histórico.
+ * pelas funções do banco de 20261118170000_produto_email_rota_unica.sql, que deixam histórico.
  *
  *   aceleriq_email_entradas      leitura: os pedidos (abertos por padrão) com empresa, contato e andamento
  *   aceleriq_email_migracao      leitura: um pedido ou domínio inteiro (empresa, integração, caixas, etapas, histórico)

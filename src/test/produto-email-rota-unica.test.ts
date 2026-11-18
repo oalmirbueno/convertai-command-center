@@ -166,7 +166,7 @@ describe("rota única e convenções", () => {
   });
 
   it("nenhum segredo no front, no banco ou nos módulos", () => {
-    const sql = ler("supabase/migrations/20261118140000_produto_email_rota_unica.sql");
+    const sql = ler("supabase/migrations/20261118170000_produto_email_rota_unica.sql");
     expect(sql).toContain("vault.create_secret");
     expect(sql).not.toMatch(/add column if not exists \w*(token|senha|secret)/i);
     for (const p of ["src/lib/produto/email-pedidos.ts", "src/components/produto/casa/IntegracaoDoDominio.tsx", "supabase/functions/produto-email/index.ts"]) {
@@ -175,7 +175,7 @@ describe("rota única e convenções", () => {
   });
 
   it("a migration nova não redefine as funções que outro lote está mudando", () => {
-    const sql = ler("supabase/migrations/20261118140000_produto_email_rota_unica.sql");
+    const sql = ler("supabase/migrations/20261118170000_produto_email_rota_unica.sql");
     expect(sql).not.toMatch(/create or replace function public\.produto_estado\(/);
     expect(sql).not.toMatch(/create or replace function public\.produto_conta_liberada\(/);
   });

@@ -16,7 +16,7 @@ export interface DominioComIntegracao extends DominioDeEmail {
 /**
  * E-mail profissional numa rota só (18/11/2026): a entrada (pedido), o "marcar como pago", a
  * integração com a Cloudflare e o Zoho e a caixa oficial da Aceleriq. Contrato do banco:
- * supabase/migrations/20261118140000_produto_email_rota_unica.sql. O que fala com os provedores
+ * supabase/migrations/20261118170000_produto_email_rota_unica.sql. O que fala com os provedores
  * passa pela função produto-email; o resto são RPCs que conferem o dono no banco.
  */
 

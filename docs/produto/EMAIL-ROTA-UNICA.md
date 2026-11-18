@@ -90,7 +90,7 @@ Para passar a Prix para a rota nova (quando o Almir quiser): criar a empresa da 
 
 ## 8. Para publicar (só com o ok do Almir)
 
-1. Aplicar `supabase/migrations/20261118140000_produto_email_rota_unica.sql`.
+1. Aplicar `supabase/migrations/20261118170000_produto_email_rota_unica.sql`.
 2. Publicar as funções `produto` (pedido vira entrada), `produto-email` (nova) e `mcp-server` (2.33.0).
 3. Segredos da função `produto-email`, conforme for usar: `CLOUDFLARE_API_TOKEN` (Zone:Read e DNS:Read na conta da Aceleriq) e `CLOUDFLARE_ACCOUNT_ID`; `ZOHO_CLIENT_ID` e `ZOHO_CLIENT_SECRET` (app OAuth da Aceleriq no console da Zoho).
 4. Front: publicar pelo Lovable.

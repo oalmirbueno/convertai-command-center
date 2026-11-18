@@ -1,4 +1,4 @@
-// Teste isolado da migration 20261118140000_produto_email_rota_unica em PGlite.
+// Teste isolado da migration 20261118170000_produto_email_rota_unica em PGlite.
 // Usa as tabelas reais do produto (seções 1 a 4 de 20261113120000) e recortes mínimos do resto.
 // Não usa credencial nem projeto Supabase. PGlite fica fora do package.json:
 //   PGLITE_DIR=<pasta com node_modules/@electric-sql/pglite> node supabase/testes/email_rota_unica_runner.mjs
@@ -11,7 +11,7 @@ const { PGlite } = requireTest('@electric-sql/pglite');
 const db = new PGlite();
 
 const BASE = 'supabase/migrations/20261113120000_produto_crm_e_email.sql';
-const NOVA = 'supabase/migrations/20261118140000_produto_email_rota_unica.sql';
+const NOVA = 'supabase/migrations/20261118170000_produto_email_rota_unica.sql';
 const linhas = readFileSync(BASE, 'utf8').split('\n');
 // 1..356: catálogo, contas, cobranças, e-mail (tabelas e etapas) e as funções de quem é quem.
 // 1385..1397: produto_avisar_casa.
