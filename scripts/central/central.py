@@ -725,6 +725,11 @@ def main() -> int:
     ap.add_argument("--silencioso", action="store_true")
     a = ap.parse_args()
     SILENCIOSO = a.silencioso
+    for fluxo in (sys.stdout, sys.stderr):
+        try:
+            fluxo.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     if a.comando == "versao":
         print(VERSAO)
         return 0
