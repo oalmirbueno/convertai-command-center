@@ -13,10 +13,11 @@ describe("Credencial criada mostra endereço e token", () => {
   const painel = ler("src/components/admin/MCPManager.tsx");
   const janela = painel.slice(painel.indexOf("Issued token modal"), painel.indexOf("Revoke confirm"));
 
-  it("mostra o endereço do servidor com botão de copiar antes do token", () => {
-    expect(janela).toContain("1. Endereço do servidor");
-    expect(janela).toContain('copyText(MCP_URL, "Endereço copiado")');
-    expect(janela.indexOf("1. Endereço do servidor")).toBeLessThan(janela.indexOf("2. Token completo"));
+  it("mostra a configuração pronta: endereço do servidor, cabeçalho e a chave (18/11)", () => {
+    expect(janela).toContain("<GuiaDeConexaoMcp url={MCP_URL} chave={issuedToken}");
+    const guia = ler("src/components/admin/GuiaDeConexaoMcp.tsx");
+    expect(guia.indexOf('rotulo="URL do servidor"')).toBeLessThan(guia.indexOf('rotulo="Nome do cabeçalho"'));
+    expect(guia).toContain('valor="Authorization"');
   });
 
   it("diz onde colar o token e qual opção escolher na conexão", () => {
