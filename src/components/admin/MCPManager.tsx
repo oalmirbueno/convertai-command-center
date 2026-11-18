@@ -372,7 +372,18 @@ export default function MCPManager() {
 
   const [acessoCompleto, setAcessoCompleto] = useState(false);
   const novaConexao = () => { setAgentPreset(null); setAcessoCompleto(false); setShowCreate(true); };
-  const gerarAcessoCompleto = () => { setAgentPreset(null); setAcessoCompleto(true); setShowCreate(true); };
+  // 18/11 (dono: "mais rápido e prático para conectar em qualquer IA"): um clique gera a chave completa
+  // (todas as permissões, 90 dias) e já abre a configuração pronta para copiar.
+  const [conectando, setConectando] = useState(false);
+  const chavesAtivas = mcpKeys.filter(k => keyStatus(k).tone === "green" || keyStatus(k).tone === "amber").length;
+  const conectarRapido = async () => {
+    if (conectando) return;
+    setConectando(true);
+    const agora = new Date();
+    const quando = `${String(agora.getDate()).padStart(2, "0")}/${String(agora.getMonth() + 1).padStart(2, "0")} ${String(agora.getHours()).padStart(2, "0")}:${String(agora.getMinutes()).padStart(2, "0")}`;
+    await createCredential(`IA · ${quando}`, SCOPES.map((x) => x.id), new Date(Date.now() + 90 * 86400_000).toISOString());
+    setConectando(false);
+  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -386,54 +397,33 @@ export default function MCPManager() {
             <button type="button" className={botao.icone} onClick={() => { loadDiscovery(); loadKeys(); loadAudit(); }} aria-label="Atualizar MCP" title="Atualizar">
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
             </button>
-            <button type="button" className={juntar(botao.primario, "px-2.5 sm:px-3.5")} onClick={novaConexao} aria-label="Nova conexão">
-              <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Nova conexão</span>
+            <button type="button" className={juntar(botao.primario, "px-2.5 sm:px-3.5")} onClick={() => void conectarRapido()} disabled={conectando} aria-label="Conectar uma IA" data-conectar-uma-ia="">
+              {conectando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />}
+              <span className="hidden sm:inline">Conectar uma IA</span>
             </button>
           </>
         }
       >
-        {/* ── Estado dos serviços (uma grade de um nível) ─── */}
-        <div className="grid min-w-0 gap-3 md:grid-cols-2">
-          <StatusCard
-            icon={<Server className="h-3.5 w-3.5" />}
-            title="Servidor MCP"
-            loading={loadingDiscovery && !discovery}
-            ok={!!discovery && !discoveryError}
-            error={discoveryError}
-            onRetry={loadDiscovery}
-          >
-            {discovery && (
-              <dl className="divide-y divide-border">
-                <Row label="Servidor" value={<code className="text-foreground">{discovery.name}@{discovery.version}</code>} />
-                <Row label="Protocolo" value={<code>{discovery.protocolVersion}</code>} />
-                <Row label="Tools expostos" value={<span className="tabular-nums">{discovery.toolCount ?? 0}</span>} />
-                <Row label="Endpoint" value={<code className="font-mono">{MCP_URL}</code>} />
-                <Row label="Hora do servidor" value={<span className="tabular-nums">{fmtDate(discovery.serverTime ?? null)}</span>} />
-              </dl>
-            )}
-          </StatusCard>
-
-          <StatusCard
-            icon={<Cpu className="h-3.5 w-3.5" />}
-            title="Segundo Cérebro"
-            loading={loadingDiscovery && !discovery}
-            ok={!!discovery?.secondBrain?.configured}
-            error={discovery?.secondBrain && !discovery.secondBrain.configured ? "Bridge não configurada" : null}
-          >
-            {discovery?.secondBrain && (
-              <dl className="divide-y divide-border">
-                <Row label="Status" value={
-                  discovery.secondBrain.configured
-                    ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>Configurado</span>
-                    : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>Não configurado</span>
-                } />
-                <Row label="Escrita permitida" value={<code>memory/inbox/chatgpt/</code>} />
-                <Row label="Detalhes" value={<span className="text-muted-foreground">via <code>aceleriq_capabilities</code></span>} />
-              </dl>
-            )}
-          </StatusCard>
-        </div>
+        {/* 18/11: uma linha de estado (antes dois cartões com detalhes técnicos). */}
+        <p className="flex min-w-0 flex-wrap items-center text-[13px] leading-5" role="status" data-estado-do-mcp="">
+          {loadingDiscovery && !discovery ? (
+            <span className="text-muted-foreground">Verificando o servidor…</span>
+          ) : discoveryError ? (
+            <>
+              <span className="mr-2 h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
+              <span className="mr-3 text-destructive">Servidor fora do ar ({discoveryError})</span>
+              <button type="button" className={botao.discreto} onClick={loadDiscovery}>Tentar de novo</button>
+            </>
+          ) : (
+            <>
+              <span className="mr-2 h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+              <span className="mr-1 font-medium text-foreground">No ar</span>
+              <span className="text-muted-foreground">
+                · {discovery?.toolCount ?? 0} ferramentas · Segundo Cérebro {discovery?.secondBrain?.configured ? "ligado" : "desligado"} · {chavesAtivas} {chavesAtivas === 1 ? "chave ativa" : "chaves ativas"}
+              </span>
+            </>
+          )}
+        </p>
       </Secao>
 
       {/* ── Abas internas (4: segmentado, lembra ao voltar) ─ */}
@@ -458,26 +448,29 @@ export default function MCPManager() {
         <TabsContent value="connect" className="mt-5 space-y-6">
           <Secao
             titulo="Conectar qualquer IA"
-            descricao="Um servidor central: ler, executar e fazer tudo no painel"
-            ajuda="Funciona com Claude, Codex, Cursor, Grok, Hermes, Paperclip, n8n e qualquer cliente MCP. Gere a chave em Gerar acesso completo e escolha Streamable HTTP (URL e cabeçalho) ou STDIO (comando npx no computador). ChatGPT prefere OAuth: só a URL, sem chave."
+            descricao="Um clique gera a chave e mostra o que colar"
+            ajuda="Funciona com Claude, Codex, Cursor, Grok, Hermes, Paperclip, n8n e qualquer cliente MCP. A chave criada aqui tem acesso completo (ler e executar tudo) por 90 dias; o que vai para o cliente segue as aprovações do painel. Ajuste ou revogue em Credenciais."
             acao={
-              <button type="button" className={botao.primario} onClick={gerarAcessoCompleto} data-gerar-acesso-completo="">
-                <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Gerar acesso completo
+              <button type="button" className={botao.primario} onClick={() => void conectarRapido()} disabled={conectando} data-gerar-acesso-completo="">
+                {conectando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />} Gerar chave
               </button>
             }
           >
+            <ol className="mb-4 grid min-w-0 gap-2 text-[13px] leading-5 text-muted-foreground sm:grid-cols-3" data-passos-de-conexao="">
+              <li><span className="mr-1.5 font-semibold text-foreground">1.</span>Toque em Gerar chave.</li>
+              <li><span className="mr-1.5 font-semibold text-foreground">2.</span>Escolha Streamable HTTP ou STDIO, como a IA pedir.</li>
+              <li><span className="mr-1.5 font-semibold text-foreground">3.</span>Copie e cole na IA. Pronto.</li>
+            </ol>
             <GuiaDeConexaoMcp url={MCP_URL} />
           </Secao>
 
           <Secao
-            titulo="Endereços"
-            ajuda="ChatGPT Work usa OAuth: cadastre a URL MCP, escolha OAuth e aguarde a tela de login do Aceleriq. Não cole token manual no ChatGPT Work. Sem login, o servidor responde 401 com WWW-Authenticate (Bearer resource_metadata) e o PRM público responde JSON: é o que os clientes usam para achar o OAuth sozinhos."
+            titulo="Outras formas"
+            descricao="ChatGPT por OAuth, endereços e conexão sob medida"
+            recolhidaDeInicio
             divisoria
-            acao={
-              <a href="/conectar-mcp" target="_blank" rel="noreferrer" className={botao.secundario}>
-                <ExternalLink className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Guia público
-              </a>
-            }
+            acao={<button type="button" className={botao.secundario} onClick={novaConexao}>Conexão sob medida</button>}
+            ajuda="ChatGPT usa OAuth: cole só a URL MCP e escolha OAuth, sem chave. Conexão sob medida escolhe nome, validade e permissões. Sem login, o servidor responde 401 com WWW-Authenticate (Bearer resource_metadata) e o PRM público responde JSON: é o que os clientes usam para achar o OAuth sozinhos."
           >
             <ul className="divide-y divide-border border-y border-border">
               <li className="flex min-w-0 items-center py-2.5">
@@ -496,31 +489,19 @@ export default function MCPManager() {
                   <Copy className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </li>
-            </ul>
-          </Secao>
-
-
-          <Secao titulo="Agentes" descricao={`${AGENTS.length} modelos de conexão`} divisoria>
-            <ul className="divide-y divide-border border-y border-border">
               {AGENTS.map(agent => (
-                <li key={agent.id} className="flex min-w-0 items-start py-3">
+                <li key={agent.id} className="flex min-w-0 items-center py-2.5">
                   <div className="mr-3 min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-wrap items-center">
-                      <h4 className={juntar(texto.corpo, "mr-2 min-w-0 truncate font-semibold")}>{agent.name}</h4>
-                      <span className={juntar(etiqueta, agent.auth === "oauth" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{agent.auth === "oauth" ? "OAuth" : agent.auth === "bearer" ? "Bearer" : "OAuth ou Bearer"}</span>
-                    </div>
-                    <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{agent.title}. {agent.description}</p>
-                    <div className="-m-0.5 mt-1.5 flex flex-wrap">
-                      {agent.defaultScopes.map(scope => <span key={scope} className={juntar(etiqueta, "m-0.5 border border-border font-mono text-muted-foreground")}>{scope}</span>)}
-                    </div>
+                    <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{agent.name}</p>
+                    <p className="min-w-0 truncate text-[12px] leading-5 text-muted-foreground" title={agent.description}>{agent.title}</p>
                   </div>
                   {agent.auth === "oauth" ? (
                     <button type="button" className={juntar(botao.secundario, "px-2.5 sm:px-3.5")} onClick={() => copyText(MCP_URL, "URL do ChatGPT copiada")} aria-label={`Copiar URL OAuth para ${agent.name}`}>
-                      <Copy className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" /> <span className="hidden sm:inline">Copiar URL OAuth</span>
+                      <Copy className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" /> <span className="hidden sm:inline">Copiar URL</span>
                     </button>
                   ) : (
                     <button type="button" className={juntar(botao.secundario, "px-2.5 sm:px-3.5")} onClick={() => { setAgentPreset(agent); setShowCreate(true); }} aria-label={`Gerar conexão para ${agent.name}`}>
-                      <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" /> <span className="hidden sm:inline">Gerar conexão</span>
+                      <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" /> <span className="hidden sm:inline">Gerar</span>
                     </button>
                   )}
                 </li>
@@ -555,7 +536,7 @@ export default function MCPManager() {
                 compacto
                 titulo="Nenhuma credencial MCP."
                 descricao="Crie uma para conectar agentes externos."
-                acao={<button type="button" className={botao.discreto} onClick={novaConexao}>Nova conexão</button>}
+                acao={<button type="button" className={botao.discreto} onClick={() => void conectarRapido()}>Conectar uma IA</button>}
               />
             ) : (
               <RegiaoRolavel rotulo="Credenciais MCP" memoria="api-docs:mcp:credenciais" className="lg:max-h-[70vh]">
