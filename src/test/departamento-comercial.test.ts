@@ -92,13 +92,22 @@ describe("acesso: gestão da casa, não da equipe inteira", () => {
 });
 
 describe("o realizado vem do Financeiro, não é digitado aqui", () => {
-  it("receita do mês lê financial_entries por competência", () => {
-    // Competência é a régua com que o Financeiro fecha o mês; usar a data de
-    // pagamento faria a mesma empresa ter dois "faturamento de agosto".
-    expect(lib).toContain('.from("financial_entries")');
-    expect(lib).toContain('.eq("direction", "in")');
-    expect(lib).toContain('.gte("competence", inicio)');
-    expect(lib).toContain('.is("cancelled_at", null)');
+  it("receita do mês lê o recebido do Financeiro geral, pela data do pagamento", () => {
+    // É a conta da tela do Financeiro (billing + parcelas de projeto pagas).
+    // financial_entries nunca recebeu receita: ler de lá dava sempre R$ 0.
+    expect(lib).toContain('recebidasNoMes("billing"');
+    expect(lib).toContain('recebidasNoMes("payment_installments"');
+    expect(lib).toContain('.in("status", ["paid", "partial"])');
+    expect(lib).toContain('.gte("paid_date", periodo)');
+    expect(lib).not.toContain('.from("financial_entries")');
+  });
+
+  it("o CRM da empresa cliente não lê o caixa da casa", () => {
+    // Na conta da empresa a receita são os ganhos dela; cobrança, despesa e
+    // saldo da Aceleriq não aparecem nem são lidos.
+    expect(pagina).toContain("enabled: !conta");
+    expect(pagina).toContain("const receita = conta ? receitaDaConta : recebido?.total ?? 0;");
+    expect(pagina.split("{!naConta() && <DinheiroDoMes").length - 1).toBe(2);
   });
 
   it("a métrica de receita devolve exatamente o que o Financeiro deu", () => {
@@ -301,7 +310,9 @@ describe("o funil é um kanban de arrastar, não uma lista", () => {
 
   it("fechar pede contexto antes de gravar", () => {
     expect(kanban).toContain("setFechamento({ lead, destino })");
-    expect(kanban).toContain("Confirmar ganho");
+    // 05/11/2026: o ganho abre a JanelaDoGanho (cadastra o cliente); a perda segue pedindo o motivo.
+    expect(kanban).toContain("<JanelaDoGanho");
+    expect(kanban).toContain("Confirmar perda");
     expect(kanban).toContain("motivo.trim().length < 3");
   });
 

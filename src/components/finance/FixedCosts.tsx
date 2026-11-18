@@ -19,7 +19,8 @@ import {
   CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, RegiaoRolavel, Secao, SeletorCompacto,
   botao, campo, juntar, superficie, texto, useEstadoDaTela,
 } from "@/components/sistema";
-import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, botaoDeLinha } from "@/components/finance/pecasDoFinanceiro";
+import { AcoesDoDialogo, Etiqueta, GradeDeKpis, IconeDaLinha, Kpi, botaoDeLinha, botaoPrincipalDeLinha } from "@/components/finance/pecasDoFinanceiro";
+import { OverflowMenu } from "@/components/ds";
 import { ABAS_DOS_CUSTOS, CHAVE_DA_ABA_DOS_CUSTOS, validarAbaDosCustos, type AbaDosCustos } from "@/components/finance/abasDosCustos";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -361,7 +362,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
           </Secao>
 
           {suggested !== proLabore && (
-            <div className={juntar(superficie.poco, "flex min-w-0 flex-wrap items-center px-3.5 py-3")}>
+            <div className="ds-ink flex min-w-0 flex-wrap items-center rounded-lg px-5 py-4 sm:px-6">
               <p className="mr-3 min-w-0 flex-1 py-1 text-[13px] leading-5 text-foreground">
                 A escada indica <strong className="font-semibold tabular-nums">{fmt(suggested)}</strong> para {fmt(monthlyOperationalRevenue)} operacionais.
                 Hoje você retira <strong className="font-semibold tabular-nums">{fmt(proLabore)}</strong>. A diferença de{" "}
@@ -413,7 +414,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
             }
           >
             <div className="-mb-1 flex min-w-0 flex-wrap items-center [&>*]:mb-1">
-              <span className="mr-3 text-[24px] font-semibold leading-8 tabular-nums text-foreground">{fmt(proLabore)}</span>
+              <span className="mr-4 text-[32px] font-semibold leading-10 tracking-[-0.035em] tabular-nums text-foreground sm:text-[40px] sm:leading-[44px]">{fmt(proLabore)}</span>
               {suggested !== proLabore && (
                 <Etiqueta tom={suggested > proLabore ? "sucesso" : "aviso"}>Proporcional à receita: {fmt(suggested)}</Etiqueta>
               )}
@@ -423,19 +424,19 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                 </Etiqueta>
               )}
             </div>
-            <ul className="mt-3 flex min-w-0 overflow-x-auto pb-1 scrollbar-hidden [&>*+*]:ml-1" aria-label="Degraus da escada">
+            <ul className="mt-5 flex min-w-0 overflow-x-auto pb-1 scrollbar-hidden [&>*+*]:ml-2" aria-label="Degraus da escada">
               {PRO_LABORE_LADDER.map((t) => {
                 const atingido = monthlyOperationalRevenue >= t.revenue;
                 return (
                   <li
                     key={t.revenue}
                     className={juntar(
-                      "shrink-0 rounded-md px-2.5 py-1.5 text-center",
-                      atingido ? "bg-success/10" : "bg-muted/50",
+                      "min-w-[84px] shrink-0 rounded-md px-3 py-2.5 text-center",
+                      atingido ? "bg-accent-solid text-on-accent" : "bg-card shadow-card",
                     )}
                   >
-                    <p className="text-[11px] tabular-nums text-muted-foreground">{t.revenue >= 1000000 ? "R$ 1M" : `R$ ${Math.round(t.revenue / 1000)}k`}</p>
-                    <p className={juntar("text-[12px] font-medium tabular-nums", atingido ? "text-success" : "text-muted-foreground")}>{fmt(t.proLabore)}</p>
+                    <p className={juntar("text-[11px] tabular-nums", atingido ? "text-on-accent/70" : "text-muted-foreground")}>{t.revenue >= 1000000 ? "R$ 1M" : `R$ ${Math.round(t.revenue / 1000)}k`}</p>
+                    <p className={juntar("mt-0.5 text-[13px] font-semibold tabular-nums", atingido ? "text-on-accent" : "text-foreground")}>{fmt(t.proLabore)}</p>
                   </li>
                 );
               })}
@@ -445,25 +446,25 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
           {/* Garantias do Plano Diretor */}
           {(!hasToolsExpense || proLaboreRows.length === 0) && (
             <Secao divisoria titulo="Sugestões do Plano Diretor">
-              <ul className="divide-y divide-border">
+              <ul className={juntar(superficie.painel, "overflow-hidden py-1.5 [&>li]:px-4 sm:[&>li]:px-6")}>
                 {!hasToolsExpense && (
-                  <li className="flex min-w-0 flex-wrap items-center py-2.5">
-                    <Wrench className="mr-2.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
-                    <p className="mr-3 min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground">
+                  <li className="flex min-w-0 flex-wrap items-center py-3.5">
+                    <IconeDaLinha tom="info"><Wrench className="h-4 w-4" /></IconeDaLinha>
+                    <p className="mr-3 min-w-0 flex-1 basis-[180px] text-[13px] leading-5 text-muted-foreground">
                       Ferramentas e sistemas (<span className="tabular-nums">{fmt(toolsReference)}</span>/mês) ainda não estão lançados como custo fixo.
                     </p>
-                    <button type="button" onClick={() => launchExpense("tools")} className={juntar(botaoDeLinha, "my-1")}>
+                    <button type="button" onClick={() => launchExpense("tools")} className={juntar(botaoDeLinha, "my-1 ml-auto")}>
                       Lançar {fmt(toolsReference)}/mês
                     </button>
                   </li>
                 )}
                 {proLaboreRows.length === 0 && (
-                  <li className="flex min-w-0 flex-wrap items-center py-2.5">
-                    <PiggyBank className="mr-2.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-                    <p className="mr-3 min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground">
+                  <li className="flex min-w-0 flex-wrap items-center py-3.5">
+                    <IconeDaLinha tom="sucesso"><PiggyBank className="h-4 w-4" /></IconeDaLinha>
+                    <p className="mr-3 min-w-0 flex-1 basis-[180px] text-[13px] leading-5 text-muted-foreground">
                       O pró-labore de <span className="tabular-nums">{fmt(proLabore)}</span> ainda não é saída recorrente no fluxo.
                     </p>
-                    <button type="button" onClick={() => launchExpense("prolabore")} className={juntar(botaoDeLinha, "my-1")}>
+                    <button type="button" onClick={() => launchExpense("prolabore")} className={juntar(botaoDeLinha, "my-1 ml-auto")}>
                       Lançar {fmt(proLabore)}/mês
                     </button>
                   </li>
@@ -516,15 +517,15 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                 descricao="Eles passam a contar no fluxo de caixa assim que entram."
               />
             ) : (
-              <RegiaoRolavel memoria="financeiro:custos:lista" rotulo="Custos recorrentes" className="lg:max-h-[70vh]">
-                <ul className="divide-y divide-border">
+              <RegiaoRolavel memoria="financeiro:custos:lista" rotulo="Custos recorrentes" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden")} className="lg:max-h-[70vh]">
+                <ul className="py-1.5 [&>li]:px-4 sm:[&>li]:px-6">
                   {recurringExpenses.map((e: any) => {
                     // O vencimento em destaque, com o atraso dito em dias:
                     // "vence dia 10" não avisa nada em dia 23.
                     const dias = diasAteVencer(e.due_date, todayKey());
                     const venc = dataBr(e.due_date);
                     return (
-                      <li key={e.id} className="flex min-w-0 flex-wrap items-center py-2.5">
+                      <li key={e.id} className="flex min-w-0 flex-wrap items-center py-3 transition-colors hover:bg-muted/40">
                         <div className="mr-3 min-w-0 flex-1 basis-56">
                           <p className="flex min-w-0 items-center text-[13px] font-medium text-foreground">
                             <span className="min-w-0 truncate">{e.description}</span>
@@ -539,9 +540,9 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                               onClick={() => setVencModal({ id: e.id, description: e.description, due_date: e.due_date })}
                               title="Alterar a data de vencimento"
                               className={juntar(
-                                "inline-flex h-5 items-center rounded px-1.5 text-[11px] font-medium tabular-nums transition-colors",
-                                dias < 0 ? "bg-destructive/15 text-destructive hover:bg-destructive/25"
-                                  : dias <= 3 ? "bg-warning/15 text-warning hover:bg-warning/25"
+                                "toque-compacto inline-flex h-6 items-center rounded-full px-2.5 text-[11px] font-medium tabular-nums transition-colors",
+                                dias < 0 ? "bg-danger-soft text-destructive hover:bg-destructive/25"
+                                  : dias <= 3 ? "bg-warning-soft text-warning hover:bg-warning/25"
                                     : "bg-muted text-muted-foreground hover:text-foreground",
                               )}
                             >
@@ -561,28 +562,22 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                             onClick={() => pagarCusto(e)}
                             disabled={pagando === e.id}
                             title={`Registrar pagamento e rolar para ${dataBr(proximoVencimento(e.due_date, e.recurrence === "yearly" ? "yearly" : "monthly"))}`}
-                            className={juntar(botaoDeLinha, "border-success/40 text-success hover:bg-success/10")}
+                            className={botaoPrincipalDeLinha}
                           >
                             {pagando === e.id
                               ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                               : <Wallet className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
                             Pagar
                           </button>
-                          <button type="button" onClick={() => setCostModal({ ...e, amount: String(e.amount) })} className={juntar(botao.icone, "ml-1")} aria-label={`Editar ${e.description}`} title="Editar">
-                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => endRecurrence(e)}
-                            title="Encerrar recorrência (mantém o histórico)"
-                            aria-label={`Encerrar recorrência de ${e.description}`}
-                            className={juntar(botao.icone, "hover:text-warning")}
-                          >
-                            <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                          </button>
-                          <button type="button" onClick={() => setConfirmDel(e)} className={juntar(botao.icone, "hover:text-destructive")} aria-label={`Remover ${e.description}`} title="Remover">
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          </button>
+                          <OverflowMenu
+                            className="ml-1"
+                            label={`Mais ações de ${e.description}`}
+                            items={[
+                              { label: "Editar", icon: <Pencil className="h-3.5 w-3.5" />, onSelect: () => setCostModal({ ...e, amount: String(e.amount) }) },
+                              { label: "Encerrar recorrência", hint: "Mantém o histórico", icon: <XCircle className="h-3.5 w-3.5" />, onSelect: () => endRecurrence(e) },
+                              { label: "Remover", icon: <Trash2 className="h-3.5 w-3.5" />, danger: true, separatorBefore: true, onSelect: () => setConfirmDel(e) },
+                            ]}
+                          />
                         </div>
                       </li>
                     );
@@ -598,14 +593,14 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
               veio ver. */}
           {historico.length > 0 && (
             <Secao divisoria titulo="Histórico de pagamentos" descricao={`${historico.length} ${historico.length === 1 ? "pagamento" : "pagamentos"}`}>
-              <RegiaoRolavel memoria="financeiro:custos:historico" rotulo="Histórico de pagamentos" className="lg:max-h-[360px]">
-                <ul className="divide-y divide-border">
+              <RegiaoRolavel memoria="financeiro:custos:historico" rotulo="Histórico de pagamentos" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden")} className="lg:max-h-[360px]">
+                <ul className="py-1.5 [&>li]:px-4 sm:[&>li]:px-6">
                   {historico.map((h: any) => (
-                    <li key={h.id} className="flex min-w-0 flex-wrap items-center py-2">
+                    <li key={h.id} className="flex min-w-0 flex-wrap items-center py-3 transition-colors hover:bg-muted/40">
                       <span className="mr-3 min-w-0 flex-1 basis-40 truncate text-[13px] text-foreground">{h.description}</span>
                       <span className={juntar(texto.auxiliar, "mr-3 tabular-nums")}>venc. {dataBr(h.due_date)}</span>
-                      <span className="mr-3 text-[12px] tabular-nums text-success">pago {h.paid_date ? dataBr(h.paid_date) : "-"}</span>
-                      <span className="ml-auto whitespace-nowrap text-[13px] font-medium tabular-nums text-foreground">{fmt(Number(h.amount))}</span>
+                      <Etiqueta tom="sucesso" className="mr-3">pago {h.paid_date ? dataBr(h.paid_date) : "-"}</Etiqueta>
+                      <span className="ml-auto whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">{fmt(Number(h.amount))}</span>
                     </li>
                   ))}
                 </ul>

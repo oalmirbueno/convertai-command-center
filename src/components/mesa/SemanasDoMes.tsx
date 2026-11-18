@@ -220,7 +220,7 @@ function LinhaDoConteudo({
               className="flex w-full min-w-0 items-center text-left"
             >
               <span className="min-w-0 truncate text-[13px] font-medium">{ocupado === "titulo" ? titulo : item.tema || item.gancho || "Sem título"}</span>
-              <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
+              <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} />
             </button>
           )}
           {acoes.extra ? acoes.extra(item) : null}

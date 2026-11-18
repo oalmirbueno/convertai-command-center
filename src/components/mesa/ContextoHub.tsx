@@ -79,7 +79,7 @@ export function SeloDoScore({ score, rotulo = "Score", className = "" }: { score
   const cor = COR_DA_FAIXA[faixaDoScore(score)];
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${cor.fundo} ${cor.texto}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tabular-nums ${cor.fundo} ${cor.texto}`}
       title={`${rotulo}: ${score} de 100`}
       aria-label={`${rotulo}: ${score} de 100`}
     >
@@ -92,7 +92,7 @@ export function SeloDoScore({ score, rotulo = "Score", className = "" }: { score
 export function BarraDoScore({ score }: { score: number }) {
   const cor = COR_DA_FAIXA[faixaDoScore(score)];
   return (
-    <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}>
+    <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}>
       <div className={`h-full rounded-full transition-all ${cor.barra}`} style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
     </div>
   );
@@ -135,7 +135,7 @@ export function Hub({
           aria-controls={corpo}
           className="-mx-2 flex min-w-0 flex-1 items-center rounded-md px-2 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <ChevronDown className={`mr-2.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "" : "-rotate-90"}`} />
+          <ChevronDown className={`mr-2.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${aberto ? "" : "-rotate-90"}`} />
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center">
               <span className="truncate text-[15px] font-semibold leading-[22px] text-foreground">{titulo}</span>

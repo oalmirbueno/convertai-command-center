@@ -62,7 +62,7 @@ export default function FaixaDeRoteiros({
   return (
     <div className="flex min-w-0 items-center border-b border-border pb-1.5" data-faixa-de-roteiros="">
       <div role="tablist" aria-label="Roteiros abertos" className="scrollbar-hidden -mb-px flex min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overscroll-x-contain">
-        {!abas.length && <span className={juntar(texto.auxiliar, "shrink-0 px-1")}>Nenhum roteiro aberto. Use o + ou marque vários na Agenda.</span>}
+        {!abas.length && <span className={juntar(texto.auxiliar, "min-w-0 truncate px-1")} title="Use o + ou marque vários na Agenda."><span className="sm:hidden">Nenhum roteiro aberto.</span><span className="max-sm:hidden">Nenhum roteiro aberto. Use o + ou marque vários na Agenda.</span></span>}
         {abas.map((a) => {
           const noLote = estadoDaAbaNoLote(lote, a.id);
           const atual = a.id === ativa;
@@ -90,7 +90,7 @@ export default function FaixaDeRoteiros({
                 onClick={() => onFechar(a.id)}
                 aria-label={`Fechar ${a.titulo} da faixa`}
                 title="Fechar da faixa (o roteiro continua guardado)"
-                className={juntar("toque-compacto ml-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground", foco)}
+                className={juntar("toque-compacto ml-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground", foco)}
               >
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>

@@ -7,6 +7,7 @@ import { AjudaRecolhida, AreaDeTrabalho, CampoDeBusca, RegiaoRolavel, botao, eti
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { textoDoErro } from "@/lib/mesa/api";
 import { listarCampanhas } from "@/lib/comercial";
+import { escopoDoCrm } from "@/lib/comercial/escopo";
 import {
   avaliarComJev,
   buscaAndando,
@@ -55,7 +56,7 @@ const FILTROS: Array<{ id: Filtro; rotulo: string }> = [
 
 function Opcao({ ativo, onClick, children, rotulo }: { ativo: boolean; onClick: () => void; children: ReactNode; rotulo?: string }) {
   return (
-    <button type="button" aria-pressed={ativo} aria-label={rotulo} onClick={onClick} className={juntar(botao.barra, "border", ativo ? "border-primary bg-primary/10 font-medium text-foreground" : "border-border")}>
+    <button type="button" aria-pressed={ativo} aria-label={rotulo} onClick={onClick} className={juntar(botao.barra, "border", ativo ? "border-transparent bg-foreground font-medium text-background hover:bg-foreground hover:text-background" : "border-border")}>
       {children}
     </button>
   );
@@ -77,6 +78,11 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
   const [urls, setUrls] = useState("");
   const [campanha, setCampanha] = useState("");
   const [mercurio, setMercurio] = useState(false);
+  // No CRM da empresa: sem agente da casa, e o plano diz as fontes e o tamanho da busca.
+  const escopo = escopoDoCrm();
+  const conta = escopo.modo === "conta" ? escopo : null;
+  const fontesDaTela = conta && !conta.limites.maquina_google_maps ? FONTES_DA_BUSCA.filter((x) => x !== "google_maps") : FONTES_DA_BUSCA;
+  const quantos = conta ? QUANTOS.filter((q) => q <= conta.limites.maquina_limite_por_busca) : QUANTOS;
   const campanhas = useQuery({ queryKey: ["comercial", "campanhas", "para-busca"], queryFn: listarCampanhas, staleTime: 60_000 });
   const soLista = fontes.length === 1 && fontes[0] === "lista";
   const criar = useMutation({
@@ -122,7 +128,7 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
       <div className="min-w-0">
         <span className={texto.rotulo}>Quantos</span>
         <div className="mt-1 flex min-w-0 flex-wrap gap-1" role="group" aria-label="Quantos leads">
-          {QUANTOS.map((q) => <Opcao key={q} ativo={limite === q} onClick={() => setLimite(q)}>{q}</Opcao>)}
+          {(quantos.length ? quantos : QUANTOS.slice(0, 1)).map((q) => <Opcao key={q} ativo={limite === q} onClick={() => setLimite(q)}>{q}</Opcao>)}
         </div>
       </div>
       <div className="min-w-0">
@@ -133,9 +139,9 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
           </AjudaRecolhida>
         </span>
         <div className="mt-1 flex min-w-0 flex-wrap gap-1" role="group" aria-label="Fontes da busca">
-          {FONTES_DA_BUSCA.map((f) => <Opcao key={f} ativo={fontes.indexOf(f) >= 0} onClick={() => alternar(f)}>{ROTULO_DA_FONTE[f]}</Opcao>)}
+          {fontesDaTela.map((f) => <Opcao key={f} ativo={fontes.indexOf(f) >= 0} onClick={() => alternar(f)}>{ROTULO_DA_FONTE[f]}</Opcao>)}
         </div>
-        {fontes.indexOf("google_maps") >= 0 && <p className={juntar(texto.auxiliar, "mt-1")} data-teto-do-google="">Google Maps: gasta no máximo {usd(tetoDoGoogleEmDolar(limite))} nesta busca.</p>}
+        {!conta && fontes.indexOf("google_maps") >= 0 && <p className={juntar(texto.auxiliar, "mt-1")} data-teto-do-google="">Google Maps: gasta no máximo {usd(tetoDoGoogleEmDolar(limite))} nesta busca.</p>}
       </div>
       </div>
       {fontes.indexOf("lista") >= 0 && (
@@ -152,6 +158,7 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
             {(campanhas.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
+        {!conta && (
         <label className={juntar(texto.corpo, "flex min-w-0 items-center gap-2 self-end pb-2")}>
           <input type="checkbox" checked={mercurio} onChange={(e) => setMercurio(e.target.checked)} aria-label="Entregar ao Mercúrio" />
           Entregar ao Mercúrio
@@ -159,6 +166,7 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
             Marcar é a sua autorização para o Mercúrio, o agente comercial, fazer o primeiro contato com os leads que você levar ao CRM desta busca. Ele respeita o teto diário de primeiros contatos e o horário configurado, registra cada mensagem no lead e avisa na Caixa do comercial quem avançou ou fechou. Sem marcar, os leads entram no CRM só para a equipe.
           </AjudaRecolhida>
         </label>
+        )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-2">
         <button type="button" className={botao.discreto} onClick={aoFechar}>Cancelar</button>
@@ -227,6 +235,7 @@ function CandidatosDaBusca({ busca, aoAbrirLead, acoes }: { busca: BuscaDeLeads;
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [marcados, setMarcados] = useState<string[]>([]);
   const [mercurio, setMercurio] = useState(busca.entregar_ao_mercurio);
+  const daConta = escopoDoCrm().modo === "conta";
   const lidos = useQuery({
     queryKey: chavesDaMaquina.candidatos(busca.id),
     queryFn: () => lerCandidatos(busca.id),
@@ -346,20 +355,24 @@ function CandidatosDaBusca({ busca, aoAbrirLead, acoes }: { busca: BuscaDeLeads;
           </AjudaRecolhida>
         </div>
       </div>
-      <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-border pb-2">
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 rounded-md bg-muted/60 px-3 py-2.5">
         <label className={juntar(texto.auxiliar, "flex items-center gap-1.5")}>
           <input type="checkbox" checked={todosMarcados} onChange={(e) => setMarcados(e.target.checked ? visiveis.map((c) => c.id) : [])} aria-label="Marcar todos" />
           {escolhidos.length ? `${escolhidos.length} marcados` : "Marcar todos"}
         </label>
         <span className="flex-1" />
+        {!daConta && (
         <button type="button" className={botao.secundario} onClick={() => avaliar.mutate()} disabled={!paraAvaliar || avaliar.isPending} title="O Jev dá a nota de encaixe de 0 a 10 contra o perfil de cliente ideal">
           {avaliar.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" />}
           Avaliar com Jev · {usd(custoDaAvaliacao(paraAvaliar))}
         </button>
+        )}
+        {!daConta && (
         <label className={juntar(texto.corpo, "flex items-center gap-1.5")}>
           <input type="checkbox" checked={mercurio} onChange={(e) => setMercurio(e.target.checked)} aria-label="Mercúrio faz o primeiro contato" />
           Mercúrio contata
         </label>
+        )}
         <button type="button" className={botao.primario} onClick={() => void levarAoCrm()} disabled={!paraLevar.length || importar.isPending} title={novosEscolhidos.length ? "Leva os marcados" : "Sem marcar, leva os novos que estão na tela"}>
           {importar.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />}
           Levar ao CRM{paraLevar.length ? ` (${paraLevar.length})` : ""}
@@ -383,10 +396,10 @@ function CandidatosDaBusca({ busca, aoAbrirLead, acoes }: { busca: BuscaDeLeads;
               const estado = saudeDoCandidato(c);
               const lugar = dadosDoLugar(c);
               return (
-                <li key={c.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 border-t border-border py-3 first:border-t-0 lg:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1.4fr)_132px]" data-candidato={c.id} data-situacao={c.situacao} data-saude={estado.nivel}>
+                <li key={c.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-2 rounded-md border-t border-border/60 px-2 py-4 transition-colors first:border-t-0 hover:bg-muted/50 lg:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1.4fr)_140px]" data-candidato={c.id} data-situacao={c.situacao} data-saude={estado.nivel}>
                   <input type="checkbox" className="mt-1" checked={marcados.indexOf(c.id) >= 0} onChange={(e) => setMarcados((l) => (e.target.checked ? l.concat([c.id]) : l.filter((x) => x !== c.id)))} aria-label={`Marcar ${c.nome}`} />
                   <div className="min-w-0 space-y-1">
-                    <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.nome}</span>
+                    <span className="block truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{c.nome}</span>
                     {(c.categoria || lugar.bairro) && <span className={juntar(texto.auxiliar, "block truncate")}>{[c.categoria, lugar.bairro].filter(Boolean).join(" · ")}</span>}
                     {c.porque && <p className={texto.auxiliar}>{c.porque}</p>}
                   </div>
@@ -404,18 +417,18 @@ function CandidatosDaBusca({ busca, aoAbrirLead, acoes }: { busca: BuscaDeLeads;
                   </div>
                   <div className="col-start-2 flex min-w-0 flex-wrap items-center gap-1 lg:col-start-auto lg:justify-end">
                     {c.situacao === "novo" && (
-                      <button type="button" className={juntar(botao.barra, "w-full justify-center border border-border lg:order-last")} onClick={() => importar.mutate([c.id])} disabled={importar.isPending} aria-label={`Levar ${c.nome} ao CRM`}>
+                      <button type="button" className={juntar(botao.barra, "w-full justify-center bg-foreground font-medium text-background hover:bg-foreground/90 hover:text-background lg:order-last")} onClick={() => importar.mutate([c.id])} disabled={importar.isPending} aria-label={`Levar ${c.nome} ao CRM`}>
                         <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
                         Levar ao CRM
                       </button>
                     )}
-                    <span className={juntar(etiqueta, COR_DO_NIVEL[estado.nivel])} title={estado.porque}>{estado.rotulo}</span>
+                    <span className={juntar(etiqueta, "h-6 px-2.5", COR_DO_NIVEL[estado.nivel])} title={estado.porque}>{estado.rotulo}</span>
                     {c.nota != null ? (
-                      <span className={juntar(etiqueta, COR_DO_NIVEL[nivelDaNota(c.nota)], "font-semibold tabular-nums")} title={c.porque || undefined} aria-label={`Encaixe ${c.nota} de 10`}>
+                      <span className={juntar(etiqueta, "h-6 px-2.5", COR_DO_NIVEL[nivelDaNota(c.nota)], "font-semibold tabular-nums")} title={c.porque || undefined} aria-label={`Encaixe ${c.nota} de 10`}>
                         {c.nota.toFixed(1).replace(".", ",")}
                       </span>
                     ) : (
-                      <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>sem nota</span>
+                      <span className={juntar(etiqueta, "h-6 bg-muted px-2.5 text-muted-foreground")}>sem nota</span>
                     )}
                     {lugar.estrelas != null && (
                       <span className={juntar(texto.auxiliar, "tabular-nums")} title={`${lugar.avaliacoes} avaliações no Google`}>★ {String(lugar.estrelas).replace(".", ",")} ({lugar.avaliacoes})</span>
@@ -459,12 +472,25 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
       && (situacaoDasBuscas === "todas" || (situacaoDasBuscas === "andando" ? buscaAndando(b) : b.situacao === situacaoDasBuscas)))
     .slice()
     .sort((a, b) => ordemDasBuscas === "encontrados" ? b.encontrados - a.encontrados : String(b.created_at).localeCompare(String(a.created_at)));
+  // No CRM da empresa: quantas buscas do plano já foram usadas no mês.
+  const escopoDaMaquina = escopoDoCrm();
+  const contaDaMaquina = escopoDaMaquina.modo === "conta" ? escopoDaMaquina : null;
+  const inicioDoMes = `${new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 7)}-01T00:00:00-03:00`;
+  const usadasNoMes = contaDaMaquina ? lista.filter((b) => b.situacao !== "cancelada" && new Date(b.created_at).getTime() >= new Date(inicioDoMes).getTime()).length : 0;
+  const semBuscas = !!contaDaMaquina && usadasNoMes >= contaDaMaquina.limites.maquina_buscas_mes;
   const acoesDaMaquina = (
     <div className="ml-auto flex shrink-0 items-center gap-2">
+      {contaDaMaquina && (
+        <span className={juntar(texto.auxiliar, "tabular-nums", semBuscas && "text-warning")} data-buscas-do-plano="">
+          {usadasNoMes} de {contaDaMaquina.limites.maquina_buscas_mes} buscas no mês
+        </span>
+      )}
       <AjudaRecolhida rotulo="Como a Máquina de leads funciona">
-        Diga o nicho e a cidade: a máquina acha os negócios no mapa aberto ou no Google Maps e lê o site de cada um atrás do contato que a própria empresa publicou. Depois, o Jev dá a nota de encaixe com o perfil de cliente ideal, você leva os melhores ao CRM e, se quiser, entrega ao Mercúrio para o primeiro contato. Nada é enviado a ninguém nesta tela.
+        {contaDaMaquina
+          ? "Diga o nicho e a cidade: a máquina acha os negócios no mapa e lê o site de cada um atrás do contato que a própria empresa publicou. Você escolhe os melhores e leva ao CRM, já no seu nome. O plano diz quantas buscas cabem no mês; o contador zera no dia 1. Nada é enviado a ninguém nesta tela."
+          : "Diga o nicho e a cidade: a máquina acha os negócios no mapa aberto ou no Google Maps e lê o site de cada um atrás do contato que a própria empresa publicou. Depois, o Jev dá a nota de encaixe com o perfil de cliente ideal, você leva os melhores ao CRM e, se quiser, entrega ao Mercúrio para o primeiro contato. Nada é enviado a ninguém nesta tela."}
       </AjudaRecolhida>
-      <button type="button" className={botao.primario} onClick={() => setNovaAberta(true)}>
+      <button type="button" className={botao.primario} onClick={() => setNovaAberta(true)} disabled={semBuscas} title={semBuscas ? "As buscas do mês acabaram" : undefined}>
         <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
         Nova busca
       </button>
@@ -518,8 +544,8 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
             const andando = buscaAndando(b);
             const abertaAqui = !!aberta && aberta.id === b.id;
             return (
-              <li key={b.id} className={juntar("min-w-0 border-t border-border first:border-t-0", largo && abertaAqui && "rounded-md border-transparent bg-muted/50 px-2")} data-busca={b.id} data-situacao={b.situacao}>
-                <div className="flex min-w-0 items-center gap-2 py-2.5">
+              <li key={b.id} className={juntar("min-w-0 rounded-md border-t border-border/60 px-2 transition-colors first:border-t-0 hover:bg-muted/50", largo && abertaAqui && "ds-ink border-transparent bg-card text-foreground hover:bg-card")} data-busca={b.id} data-situacao={b.situacao}>
+                <div className="flex min-w-0 items-center gap-2 py-3">
                   <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setAbertaId(b.id)} aria-expanded={abertaAqui} aria-label={`Abrir a busca ${b.nicho} em ${b.cidade}`}>
                     {andando
                       ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden="true" />

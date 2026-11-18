@@ -123,7 +123,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
     <div className="min-w-0" data-estilos-da-pauta="">
       <div className="mb-2 flex min-w-0 items-center justify-between"><p className="text-[12px] font-medium text-muted-foreground">Estilo</p><span className="truncate text-[12px]">{estilo ? estilo.titulo : "Pela marca"}</span></div>
       <div className="relative mb-2"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><input aria-label="Buscar estilo" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(6); }} placeholder="Buscar estilo" className={juntar(campo, "pl-8")} /></div>
-      <div role="radiogroup" aria-label="Estilo da foto" className="grid grid-cols-3 gap-2">
+      <div role="radiogroup" aria-label="Estilo da foto" className="grid grid-cols-3 gap-2 sm:gap-3">
         <button type="button" role="radio" aria-checked={!estiloId} onClick={() => setEstiloId(null)} className={juntar("min-w-0 rounded-lg border-2 p-1 text-left", foco, !estiloId ? "border-primary" : "border-transparent hover:border-border")}>
           <Moldura proporcao={1} className="bg-muted"><span className="flex h-full w-full items-center justify-center px-1 text-center text-[11px] text-muted-foreground">Pela marca</span></Moldura>
           <span className="mt-1 block truncate text-[11px]">Sem estilo extra</span>
@@ -158,7 +158,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
       <div role="radiogroup" aria-label="Papel das próximas referências" className="mb-2 flex flex-wrap">
         {PAPEIS_DA_REFERENCIA.map((p) => <button key={p} type="button" role="radio" aria-checked={papelNovo === p} onClick={() => setPapelNovo(p)} className={juntar("mb-1 mr-1 rounded-full border px-2.5 py-1 text-[12px]", foco, papelNovo === p ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground")}>{ROTULO_DO_PAPEL[p]}</button>)}
       </div>
-      {refs.length > 0 && <ul className="mb-2 grid grid-cols-3 gap-2" aria-label="Referências escolhidas">
+      {refs.length > 0 && <ul className="mb-2 grid grid-cols-3 gap-2 sm:gap-3" aria-label="Referências escolhidas">
         {grupos.map((g) => g.tipo === "par"
           ? <li key={`${g.antes.imagem_id}-${g.depois.imagem_id}`} className="col-span-2 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1" data-par-antes-depois="" aria-label={`Par: ${porId.get(g.antes.imagem_id)!.nome} antes, ${porId.get(g.depois.imagem_id)!.nome} depois`}>
               {itemDaReferencia(g.antes)}
@@ -175,7 +175,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
       </div>
     </div>
 
-    <div className="grid min-w-0 grid-cols-2 gap-2">
+    <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
       <label className="min-w-0 text-[12px] text-muted-foreground">Formato<select aria-label="Formato da foto" className={juntar(campo, "mt-1")} value={formato} onChange={(e) => setFormato(e.target.value)}>{["4:5", "1:1", "9:16", "16:9"].map((f) => <option key={f}>{f}</option>)}</select></label>
       <label className="min-w-0 text-[12px] text-muted-foreground">Fotos<select aria-label="Quantidade de fotos a gerar" className={juntar(campo, "mt-1")} value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))}>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
     </div>

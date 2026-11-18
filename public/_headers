@@ -7,6 +7,10 @@
 /version.json
   Cache-Control: no-store
 
+# O service worker precisa ser conferido a cada abertura: guardado, prenderia o aparelho numa versão velha dele.
+/sw.js
+  Cache-Control: no-cache
+
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

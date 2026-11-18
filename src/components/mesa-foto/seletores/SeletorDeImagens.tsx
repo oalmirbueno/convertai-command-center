@@ -68,7 +68,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
                   setLimite(PASSO);
                 }}
                 className={juntar(
-                  "mb-1 mr-1 inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition-colors",
+                  "mb-1 mr-1 inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors",
                   filtro === o.valor ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground",
                   foco,
                 )}
@@ -85,7 +85,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
         </label>
       </div>
       {carregando ? (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" aria-busy="true">
+        <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4" aria-busy="true">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="aspect-square animate-pulse rounded-md bg-muted" />
           ))}
@@ -94,7 +94,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
         <p className={texto.auxiliar}>Nenhuma imagem neste filtro.</p>
       ) : (
         <>
-          <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-5" aria-label={rotulo}>
+          <ul className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 xl:grid-cols-5" aria-label={rotulo}>
             {lista.slice(0, limite).map((f) => {
               const marcada = escolhidas.indexOf(f.id) >= 0;
               const s = selo(f);
@@ -112,7 +112,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
                     <span className="block aspect-square w-full bg-muted">
                       <MiniaturaDoStorage bucket={f.storage_bucket} caminho={f.storage_path} alt={f.nome} largura={240} className="h-full w-full" />
                     </span>
-                    {s && <span className="pointer-events-none absolute left-1 top-1 rounded bg-background/85 px-1 text-[11px] font-medium text-foreground">{s}</span>}
+                    {s && <span className="pointer-events-none absolute left-1 top-1 rounded-sm bg-background/85 px-1 text-[11px] font-medium text-foreground">{s}</span>}
                     {marcada && (
                       <span className="pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                         <Check className="h-3 w-3" aria-hidden="true" />
@@ -124,7 +124,7 @@ export default function SeletorDeImagens({ clientId, escolhidas, onMudar, multip
             })}
           </ul>
           {lista.length > limite && (
-            <button type="button" className={juntar("mt-2 rounded text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => setLimite(limite + PASSO)}>
+            <button type="button" className={juntar("mt-2 rounded-sm text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => setLimite(limite + PASSO)}>
               Mostrar mais ({lista.length - limite})
             </button>
           )}

@@ -73,7 +73,7 @@ function Resultado({ arquivo }: { arquivo: ArquivoDeVideo }) {
       <div className="mt-1.5 flex min-w-0 items-center">
         {naEdicao ? (
           <>
-            <span className={juntar(etiqueta, "mr-1 bg-primary/10 text-primary")} data-na-edicao="">
+            <span className={juntar(etiqueta, "mr-1 bg-accent-soft text-primary")} data-na-edicao="">
               Na Edição
             </span>
             <button type="button" className={juntar(botao.icone, "ml-auto")} disabled={ocupado} onClick={() => void editar({ na_edicao: false }, "Saiu da Edição", { na_edicao: true })} aria-label={`Tirar ${arquivo.nome} da Edição`} title="Tirar da Edição">
@@ -178,7 +178,7 @@ export default function EtapaResultados({ irPara }: { irPara: IrPara }) {
             ))}
           </ul>
         ) : (
-          <EstadoVazio
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
             icone={<Film className="h-5 w-5" />}
             titulo="Nenhum vídeo gerado ainda"
             descricao={naFila ? `${naFila} ${naFila === 1 ? "pedido está" : "pedidos estão"} na fila, esperando o motor de vídeo.` : "Prepare um pedido em Gerar ou suba um vídeo gerado fora."}

@@ -278,7 +278,7 @@ export default function EtapaEstrategia() {
       </Secao>
 
       <Secao titulo="Arquétipo" divisoria descricao={e.arquetipo.principal ? ARQUETIPOS.filter((a) => a.valor === e.arquetipo.principal)[0].rotulo : "A escolher"} recolher={`mesa-identidade:${projeto.id}:estrategia:arquetipo`} acao={acaoDaSecao("arquetipo")} data-bloco-da-etapa="arquetipo" ajuda="Os 12 arquétipos de marca descrevem o papel que a marca faz na vida do cliente. Escolha um principal (o que mais explica o comportamento) e, se ajudar, um de apoio.">
-        <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label="Arquétipo principal">
+        <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label="Arquétipo principal">
           {ARQUETIPOS.map((a) => {
             const principal = e.arquetipo.principal === a.valor;
             const apoio = e.arquetipo.secundario === a.valor;

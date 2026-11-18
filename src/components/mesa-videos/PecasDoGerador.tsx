@@ -261,7 +261,7 @@ export function EscolherImagem({ rotulo, valor, onEscolher, opcional = false }: 
           </div>
           <RegiaoRolavel modo="sempre" className="max-h-[60vh]" rotulo="Imagens">
             {visiveis.length ? (
-              <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5" aria-label="Imagens para escolher">
+              <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-5" aria-label="Imagens para escolher">
                 {visiveis.map((o) => (
                   <li key={o.caminho}>
                     <button

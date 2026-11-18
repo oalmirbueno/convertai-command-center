@@ -19,6 +19,7 @@ import {
   FUSO_PADRAO,
   PUBLICAR_AGORA_EM_MIN,
   arquivoEditavel,
+  contaTravadaNaCadeia,
   payloadComData,
   payloadComPerfis,
   perfisValidos,
@@ -79,6 +80,9 @@ export function traduzirErroDaAgenda(bruto: unknown): string {
   if (/not linked to the project|account is inactive/i.test(m)) return "A conta do Instagram não está ligada a este projeto. Ligue a conta na Agenda.";
   if (/scheduled time cannot be in the past/i.test(m)) return "O horário já passou. Escolha outro.";
   if (/requires ready content and approved/i.test(m)) return "A arte ainda não está aprovada pelo cliente.";
+  if (/cancelled publication stays cancelled|only a cancelled publication can be rescheduled/i.test(m)) return "A publicação foi cancelada de propósito. Um admin ou gestor marca a conta de novo para agendar.";
+  if (/only an assigned manager or admin can reopen/i.test(m)) return "Só admin ou gestor reabre uma publicação cancelada.";
+  if (/cancelled plan was not approved/i.test(m)) return "A publicação cancelada não reabriu: a arte não está aprovada para publicar.";
   if (/immutable|create a revision/i.test(m)) return "A arte aprovada não muda no mesmo post. Entregue de novo para nascer a revisão.";
   if (/scheduled or terminal publications cannot be edited|failed or published/i.test(m)) return "A publicação já está agendada ou saiu. Mude pela Agenda.";
   if (/files must be readable|files are unavailable|file is unavailable/i.test(m)) return "Os arquivos da entrega não estão disponíveis para a Agenda.";
@@ -115,11 +119,105 @@ export async function lerPostDaAgenda(db: SupabaseClient, postId: string): Promi
     for (const l of (data as { publication_id: string; idempotency_key: string }[] | null) ?? []) chaves[l.publication_id] = l.idempotency_key;
   }
   const p = postRes.data as Omit<PostExistente, "internal" | "publications">;
+  const internal = (internoRes.data as PostExistente["internal"]) ?? null;
+  const naCadeia = await contasCanceladasPorPessoa(db, p.id, internal?.revision_of_post_id || null);
   return {
     ...p,
-    internal: (internoRes.data as PostExistente["internal"]) ?? null,
+    internal,
     publications: pubs.map((x) => ({ ...x, idempotency_key: chaves[x.id] ?? null })),
+    ...(naCadeia
+      ? {
+        contas_canceladas_por_pessoa: naCadeia.canceladas,
+        contas_livres_na_cadeia: naCadeia.livres,
+        ...(naCadeia.incompleta ? { cadeia_incompleta: true } : {}),
+      }
+      : {}),
   };
+}
+
+/** Motivos da limpeza automática do plano: não são cancelamento de pessoa. */
+const MOTIVOS_DA_LIMPEZA = ["removed_from_plan", "removed_from_approved_media_plan"];
+/** Teto de segurança da cadeia; o mesmo de editorial_conta_cancelada_por_pessoa. */
+export const MAX_CADEIA_DE_REVISOES = 256;
+
+export interface CanceladasNaCadeia {
+  /** Contas canceladas por pessoa no post mais novo da cadeia que tem linha nelas. */
+  canceladas: string[];
+  /** Contas decididas como livres na parte lida da cadeia. */
+  livres: string[];
+  /** A busca parou no teto com post anterior ainda por ler (falha fechada). */
+  incompleta: boolean;
+}
+
+/**
+ * Contas canceladas por pessoa no post ou nas revisões anteriores. A mesma
+ * regra de editorial_conta_cancelada_por_pessoa no banco: em cada conta decide
+ * o post mais novo da cadeia que tem linha nela; conta como pessoa o último
+ * publication_cancelled sem motivo de limpeza (cancelada sem evento também).
+ * Percorre a cadeia inteira (ciclo encerra a busca); se bater no teto, marca
+ * incompleta e quem usa trata a conta não decidida como travada.
+ * Falha de leitura: null (o plano usa só as canceladas do próprio post).
+ */
+export async function contasCanceladasPorPessoa(
+  db: SupabaseClient,
+  postId: string,
+  revisaoDe: string | null,
+  maxNivel: number = MAX_CADEIA_DE_REVISOES,
+): Promise<CanceladasNaCadeia | null> {
+  const cadeia = [postId];
+  let anterior = revisaoDe;
+  let incompleta = false;
+  while (anterior && UUID.test(anterior) && !cadeia.includes(anterior)) {
+    // Nível 0 é o próprio post: lê até o nível maxNivel, como o banco.
+    if (cadeia.length > Math.max(1, maxNivel)) {
+      incompleta = true;
+      break;
+    }
+    cadeia.push(anterior);
+    const { data, error } = await db.from("editorial_post_internal")
+      .select("post_id, revision_of_post_id")
+      .eq("post_id", anterior)
+      .maybeSingle();
+    if (error) return null;
+    anterior = (data as { revision_of_post_id: string | null } | null)?.revision_of_post_id || null;
+  }
+  const { data: pubs, error: erroPubs } = await db.from("editorial_publications")
+    .select("id, post_id, status, external_account_id")
+    .in("post_id", cadeia);
+  if (erroPubs) return null;
+  type Linha = { id: string; post_id: string; status: string; external_account_id: string | null };
+  const linhas = (pubs as Linha[] | null) ?? [];
+  const decide = new Map<string, Linha>();
+  for (const id of cadeia) {
+    for (const l of linhas) {
+      if (l.post_id === id && l.external_account_id && !decide.has(l.external_account_id)) decide.set(l.external_account_id, l);
+    }
+  }
+  const canceladas = [...decide.values()].filter((l) => l.status === "cancelled");
+  const resultado = (travadas: string[]): CanceladasNaCadeia => ({
+    canceladas: travadas,
+    livres: [...decide.keys()].filter((id) => !travadas.includes(id)),
+    incompleta,
+  });
+  if (!canceladas.length) return resultado([]);
+  const { data: eventos, error: erroEventos } = await db.from("editorial_events")
+    .select("publication_id, metadata, created_at")
+    .eq("event_type", "publication_cancelled")
+    .in("publication_id", canceladas.map((l) => l.id));
+  if (erroEventos) return null;
+  type Evento = { publication_id: string; metadata: { reason?: unknown } | null; created_at: string };
+  const daLimpeza = (e: Evento) => MOTIVOS_DA_LIMPEZA.includes(String(e.metadata?.reason ?? ""));
+  const ultimo: Record<string, Evento> = {};
+  for (const e of (eventos as Evento[] | null) ?? []) {
+    const atual = ultimo[e.publication_id];
+    const maisNovo = !atual || e.created_at > atual.created_at || (e.created_at === atual.created_at && !daLimpeza(e));
+    if (maisNovo) ultimo[e.publication_id] = e;
+  }
+  return resultado(
+    canceladas
+      .filter((l) => !ultimo[l.id] || !daLimpeza(ultimo[l.id]))
+      .map((l) => l.external_account_id as string),
+  );
 }
 
 /**
@@ -345,8 +443,43 @@ async function postEPublicacao(ctx: ContextoDaAgenda, t: TrabalhoParaAgenda) {
   const post = await postAtualDaPeca(ctx.db, t);
   if (!post) throw new ErroDaAgenda(409, "fora_da_agenda", "Esta peça ainda não está na Agenda. Use Levar para a Agenda.");
   const pub = publicacaoDaPeca(post.publications);
-  if (!pub) throw new ErroDaAgenda(409, "sem_conta", "O post não tem publicação no Instagram. Ligue a conta do projeto na Agenda.");
+  if (!pub) {
+    const cancelada = (post.publications || []).some((p) => p.status === "cancelled");
+    if (cancelada) {
+      throw new ErroDaAgenda(409, "publicacao_cancelada", "A publicação no Instagram foi cancelada. Escolha a conta de novo para agendar.");
+    }
+    throw new ErroDaAgenda(409, "sem_conta", "O post não tem publicação no Instagram. Ligue a conta do projeto na Agenda.");
+  }
   return { post, pub };
+}
+
+/** Reabre e grava a data na mesma função do banco. Sem estado parcial. */
+async function reagendarCanceladas(
+  ctx: ContextoDaAgenda,
+  post: PostExistente,
+  contas: string[],
+  quando: string,
+  versaoInicial: number,
+): Promise<{ post_version: number; publicacao_id: string; status: string }> {
+  let versao = versaoInicial;
+  let ultimo = { publicacao_id: "", status: "scheduled" };
+  for (const pub of post.publications) {
+    if (pub.status !== "cancelled") continue;
+    if (!contas.includes(pub.external_account_id || "") && !contas.includes(pub.id)) continue;
+    const r = await ctx.doChamador.rpc("reagendar_publicacao_cancelada", {
+      p_publication_id: pub.id,
+      p_expected_post_version: versao,
+      p_scheduled_at: quando,
+      p_timezone: pub.scheduled_timezone || FUSO_PADRAO,
+    });
+    if (r.error) {
+      throw new ErroDaAgenda(409, "publicacao_cancelada", `A publicação cancelada não voltou a ser agendável. ${traduzirErroDaAgenda(r.error)}`);
+    }
+    const data = r.data as { post_version?: number; publication_id?: string; status?: string } | null;
+    versao = Number(data?.post_version) || versao;
+    ultimo = { publicacao_id: String(data?.publication_id || pub.id), status: String(data?.status || "scheduled") };
+  }
+  return { post_version: versao, ...ultimo };
 }
 
 /**
@@ -369,6 +502,9 @@ export async function confirmarDataDaPeca(
     if (comPerfis) return comPerfis;
   }
   const { post, pub } = await postEPublicacao(ctx, t);
+  if (pub.status === "cancelled") {
+    throw new ErroDaAgenda(409, "publicacao_cancelada", "A publicação desta conta foi cancelada. Marque a conta de novo para agendar.");
+  }
   if (pub.status === "published") throw new ErroDaAgenda(409, "ja_publicado", "Esta peça já foi publicada.");
   if (pub.status === "failed") throw new ErroDaAgenda(409, "publicacao_falhou", "A publicação falhou. Use Tentar de novo.");
   const raiz = await lerArquivo(ctx.db, post.primary_file_id);
@@ -496,7 +632,21 @@ export async function perfisDaPeca(
   ]);
   const conexao: Record<string, ConexaoDaConta> = {};
   for (const c of conexoes) conexao[c.external_account_id] = c;
+  const canceladas = (post?.publications || []).filter((p) => p.status === "cancelled");
   const vivas = new Set((post?.publications || []).filter((p) => p.status !== "cancelled").map((p) => p.external_account_id || ""));
+  const motivoPorConta: Record<string, string> = {};
+  if (canceladas.length) {
+    const { data } = await db.from("editorial_publication_internal")
+      .select("publication_id, failure_reason")
+      .in("publication_id", canceladas.map((p) => p.id));
+    const porId: Record<string, string> = {};
+    for (const linha of (data as { publication_id: string; failure_reason: string | null }[] | null) ?? []) {
+      if (linha.failure_reason) porId[linha.publication_id] = linha.failure_reason;
+    }
+    for (const pub of canceladas) {
+      if (pub.external_account_id && porId[pub.id]) motivoPorConta[pub.external_account_id] = porId[pub.id];
+    }
+  }
   type Conta = { id: string; platform: string; display_name: string | null; handle: string | null };
   const perfis: PerfilDaPeca[] = ((contasRes.data as Conta[] | null) ?? []).map((c) => {
     const cx = conexao[c.id];
@@ -509,6 +659,10 @@ export async function perfisDaPeca(
       handle: c.handle ? String(c.handle) : null,
       automatico,
       escolhido: vivas.has(c.id),
+      // Cancelada aqui ou numa revisão anterior (sem linha viva neste post).
+      cancelada: canceladas.some((p) => p.external_account_id === c.id) ||
+        (!vivas.has(c.id) && !!post && contaTravadaNaCadeia(post, c.id)),
+      motivoCancelamento: motivoPorConta[c.id] || null,
     };
   });
   // Instagram primeiro (é o que o painel publica sozinho), depois as páginas.
@@ -536,7 +690,9 @@ async function confirmarComPerfis(
   pedido: { quando: string | null; agoraMesmo?: boolean; mutationId: string; perfis: string[] },
   agora: Date,
 ): Promise<ResultadoDaData | null> {
-  const { perfis, post } = await perfisDaPeca(ctx.db, t, ctx.doChamador);
+  const lidos = await perfisDaPeca(ctx.db, t, ctx.doChamador);
+  const perfis = lidos.perfis;
+  let post = lidos.post;
   if (!post) throw new ErroDaAgenda(409, "fora_da_agenda", "Esta peça ainda não está na Agenda. Use Levar para a Agenda.");
   const ids = perfisValidos(pedido.perfis, perfis);
   if (!ids.length) {
@@ -568,6 +724,34 @@ async function confirmarComPerfis(
     const p = perfis.find((x) => x.id === id) as PerfilDaPeca;
     return { id: p.id, platform: p.platform, automatico: p.automatico && assinadas && t.file_ids.length <= 10 };
   });
+  const canceladasEscolhidas = post.publications.filter((p) => p.status === "cancelled" && ids.includes(p.external_account_id || ""));
+  // Cancelada numa revisão anterior, sem linha neste post: o admin/gestor que
+  // marca a conta aqui é a marca explícita (o banco confere o papel).
+  // Cadeia incompleta: conta não decidida também conta como travada.
+  const reabrir = ids.filter(
+    (id) => !post!.publications.some((p) => p.external_account_id === id) && contaTravadaNaCadeia(post!, id),
+  );
+  if (canceladasEscolhidas.length) {
+    if (!quando) throw new ErroDaAgenda(400, "horario_invalido", "Escolha data e hora para reabrir a publicação cancelada.");
+    let versao = post.version;
+    const restamPlanejadas = post.publications.some((p) => p.status === "planned");
+    if (restamPlanejadas || reabrir.length) {
+      const payloadPlanejado = await payloadComPerfis(post, {
+        trabalhoId: t.id,
+        rodada: Math.max(1, Number(t.entrega_rodada) || 1),
+        perfis: escolhidos.filter((p) => !canceladasEscolhidas.some((c) => c.external_account_id === p.id)),
+        quando,
+        mutationId: pedido.mutationId,
+        assetFileIds: aprovado ? t.file_ids.slice() : null,
+        reabrir,
+      });
+      const salvo = await ctx.doChamador.rpc("save_editorial_post", { p_payload: payloadPlanejado, p_expected_version: versao });
+      if (salvo.error) throw new ErroDaAgenda(409, "agenda_recusou", traduzirErroDaAgenda(salvo.error));
+      versao = Number((salvo.data as { version?: number } | null)?.version) || versao;
+    }
+    const reaberto = await reagendarCanceladas(ctx, post, ids, quando, versao);
+    return { post_id: post.id, publicacao_id: reaberto.publicacao_id, quando, status: reaberto.status };
+  }
   const payload = await payloadComPerfis(post, {
     trabalhoId: t.id,
     rodada: Math.max(1, Number(t.entrega_rodada) || 1),
@@ -575,6 +759,7 @@ async function confirmarComPerfis(
     quando,
     mutationId: pedido.mutationId,
     assetFileIds: aprovado ? t.file_ids.slice() : null,
+    reabrir,
   });
   const { error } = await ctx.doChamador.rpc("save_editorial_post", { p_payload: payload, p_expected_version: post.version });
   if (error) throw new ErroDaAgenda(409, "agenda_recusou", traduzirErroDaAgenda(error));

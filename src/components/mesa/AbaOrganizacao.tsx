@@ -138,14 +138,14 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
   };
   const linha = (valor: string, rotulo: string, total: number, indentada = false) => <button
     type="button" key={valor} onClick={() => escolher(valor)} aria-pressed={selecao === valor}
-    title={rotulo} className={juntar("flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left text-[13px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary", indentada && "pl-5", selecao === valor ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-secondary hover:text-foreground")}>
+    title={rotulo} className={juntar("flex w-full min-w-0 items-center gap-2 rounded-full px-3 py-2 text-left text-[13px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary", indentada && "pl-5", selecao === valor ? "bg-accent-soft text-primary font-medium" : "text-muted-foreground hover:bg-secondary hover:text-foreground")}>
     <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{rotulo}</span><span className={juntar(texto.etiqueta, "ml-auto tabular-nums")}>{total}</span>
   </button>;
 
   return (
     <section aria-label="Organização do cliente" className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0"><h2 className={texto.tituloSecao}>Organização</h2><p className="text-[13px] text-muted-foreground">Pastas e arquivos de {clientName}, junto com o Workspace.</p></div>
+        <div className="flex min-w-0 items-center"><h2 className={juntar(texto.tituloPagina, "min-w-0 truncate")}>Organização</h2><AjudaRecolhida className="ml-2" rotulo="O que é a Organização">Pastas e arquivos de {clientName}, junto com o Workspace.</AjudaRecolhida></div>
         <div className="flex flex-wrap gap-1.5">
           <Button variant="ghost" size="sm" onClick={() => { atualizar(); }} disabled={consulta.isFetching} aria-label="Atualizar organização"><RefreshCw className={juntar("h-4 w-4", consulta.isFetching && "animate-spin")} /></Button>
           <Button variant="outline" size="sm" onClick={onAbrirMes}><CalendarDays className="mr-1.5 h-4 w-4" />Planejar o mês</Button>
@@ -168,14 +168,14 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
         </aside>
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="relative min-w-0 flex-1"><span className="sr-only">Buscar arquivos</span><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><Input className="pl-8" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(60); }} placeholder="Buscar arquivos…" /></label>
+            <label className="relative min-w-[160px] flex-1"><span className="sr-only">Buscar arquivos</span><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><Input className="rounded-full pl-9" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(60); }} placeholder="Buscar arquivos…" /></label>
             <Button variant="outline" size="sm" onClick={() => setOrganizador(true)} disabled={!consulta.isSuccess} title="Organizar as pastas e os arquivos do Workspace, com prévia antes de confirmar"><Wand2 className="mr-1.5 h-4 w-4" />Organizar com IA</Button>
           </div>
           <p className={texto.auxiliar}>{nomeDaPasta || (selecao === "todos" ? "Todos os arquivos" : selecao === "workspace" ? "Workspace do cliente" : selecao.startsWith("arquivos:") ? selecao.slice(9) : "Arquivos do painel")} · {visiveis.length} arquivo{visiveis.length === 1 ? "" : "s"}</p>
           {consulta.isError ? <EstadoDeErro titulo="Não foi possível ler os arquivos" descricao={textoDoErro(consulta.error)} acao={<Button variant="outline" size="sm" onClick={() => void consulta.refetch()}>Tentar novamente</Button>} /> :
             consulta.isLoading ? <Carregando forma="grade" linhas={6} rotulo="Lendo a organização do cliente" /> :
-              !visiveis.length ? <EstadoVazio icone={<Folder className="h-5 w-5" />} titulo={busca ? "Nenhum arquivo encontrado" : "Esta seleção ainda não tem arquivos"} descricao="Os arquivos enviados ao Workspace ou entregues pelo painel aparecem aqui." /> :
-                <><div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">{visiveis.slice(0, limite).map((item) => <CartaoDoArquivo key={`${item.origem}:${item.id}`} item={item} clientId={clientId} onOrganizar={() => { setMovendo(item); setDestino(item.pasta || ""); }} onAbrir={() => setVendo(item)} />)}</div>
+              !visiveis.length ? <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Folder className="h-5 w-5" />} titulo={busca ? "Nenhum arquivo encontrado" : "Esta seleção ainda não tem arquivos"} descricao="Os arquivos enviados ao Workspace ou entregues pelo painel aparecem aqui." /> :
+                <><div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">{visiveis.slice(0, limite).map((item) => <CartaoDoArquivo key={`${item.origem}:${item.id}`} item={item} clientId={clientId} onOrganizar={() => { setMovendo(item); setDestino(item.pasta || ""); }} onAbrir={() => setVendo(item)} />)}</div>
                   {visiveis.length > limite && <Button variant="outline" onClick={() => setLimite((v) => v + 60)}>Mostrar mais arquivos</Button>}</>}
         </div>
       </div>

@@ -94,3 +94,81 @@ export function buildPaymentInstallments({
     };
   });
 }
+
+interface PlanoComEntradaInput {
+  paymentId: string;
+  total: number;
+  /** Valor livre da entrada em R$ (0 = sem entrada). */
+  entrada: number;
+  entradaEm: string;
+  entradaPaga: boolean;
+  /** Em quantas parcelas fica o restante. */
+  parcelas: number;
+  primeiraEm: string;
+  /** Quantas das parcelas do restante já foram pagas (lançamento de histórico). */
+  parcelasPagas?: number;
+}
+
+/**
+ * Entrada de qualquer valor mais o restante em N parcelas (16/11/2026, pedido do dono: "poder colocar o
+ * valor que deu de entrada e quantos restou; fazendo a conta geral tira a liberdade"). A entrada é a
+ * parcela 0; o restante é dividido em partes iguais e o centavo que sobra vai na última.
+ */
+export function buildPlanoComEntrada({
+  paymentId,
+  total,
+  entrada,
+  entradaEm,
+  entradaPaga,
+  parcelas,
+  primeiraEm,
+  parcelasPagas = 0,
+}: PlanoComEntradaInput): PaymentInstallmentInsert[] {
+  if (!paymentId) throw new Error("Pagamento inválido");
+  const totalCents = Math.round(normalizeMoney(total) * 100);
+  const entradaCents = Math.round((Number(entrada) || 0) * 100);
+  if (entradaCents < 0) throw new Error("A entrada não pode ser negativa");
+  if (entradaCents > totalCents) throw new Error("A entrada é maior que o valor total");
+  const linhas: PaymentInstallmentInsert[] = [];
+  if (entradaCents > 0) {
+    if (!ISO_DATE_PATTERN.test(entradaEm)) throw new Error("Data da entrada inválida");
+    const valor = entradaCents / 100;
+    linhas.push({
+      payment_id: paymentId,
+      installment_number: 0,
+      amount: valor,
+      due_date: entradaEm,
+      status: entradaPaga ? "paid" : "pending",
+      paid_amount: entradaPaga ? valor : null,
+      paid_date: entradaPaga ? entradaEm : null,
+      description: entradaCents === totalCents ? "Pagamento à vista" : "Entrada",
+    });
+  }
+  const restoCents = totalCents - entradaCents;
+  if (restoCents > 0) {
+    const resto = buildPaymentInstallments({
+      paymentId,
+      total: restoCents / 100,
+      installmentsCount: Math.max(Math.trunc(parcelas) || 1, 1),
+      firstDueDate: primeiraEm,
+      paidInstallments: parcelasPagas,
+    });
+    if (resto.length === 1) resto[0].description = entradaCents > 0 ? "Restante" : "Pagamento à vista";
+    linhas.push(...resto);
+  }
+  return linhas;
+}
+
+/** Percentual da entrada sobre o total, só para registro (project_payments.entry_percentage). */
+export function percentualDaEntrada(total: number, entrada: number): number {
+  if (!(total > 0)) return 0;
+  return Math.round((Math.min(Math.max(entrada, 0), total) / total) * 10000) / 100;
+}
+
+/** Lê o valor digitado: aceita "3.000", "3.000,50", "3000,50" e "3000.50". */
+export function lerValorBR(t: string | number | null | undefined): number {
+  const v = String(t ?? "").trim();
+  if (v.includes(",")) return Number(v.replace(/\./g, "").replace(",", ".")) || 0;
+  if (/^\d{1,3}(\.\d{3})+$/.test(v)) return Number(v.replace(/\./g, "")) || 0;
+  return Number(v) || 0;
+}

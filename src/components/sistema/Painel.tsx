@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import AjudaRecolhida, { avisarSeForExplicacao } from "./AjudaRecolhida";
 import { useChaveDeRecolher, useRecolhido } from "./TituloRecolhivel";
@@ -45,7 +45,9 @@ export default function Painel(props: PropsDoPainel) {
 
 function PainelRecolhivel(props: PropsDoPainel & { chave: string }) {
   const [recolhido, setRecolhido] = useRecolhido(props.chave, !!props.recolhidoDeInicio);
-  return <CorpoDoPainel {...props} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} />;
+  // Só anima depois de um clique: ao carregar a página nada se mexe.
+  const [mexeu, setMexeu] = useState(false);
+  return <CorpoDoPainel {...props} recolhido={recolhido} abriuAgora={mexeu} onAlternar={() => { setMexeu(true); setRecolhido(!recolhido); }} />;
 }
 
 function CorpoDoPainel({
@@ -60,13 +62,14 @@ function CorpoDoPainel({
   children,
   recolhido,
   onAlternar,
+  abriuAgora,
   resumo,
   // Fora do DOM:
   recolher: _recolher,
   recolhidoDeInicio: _inicio,
   chave: _chave,
   ...resto
-}: PropsDoPainel & { recolhido?: boolean; onAlternar?: () => void; chave?: string }) {
+}: PropsDoPainel & { recolhido?: boolean; onAlternar?: () => void; abriuAgora?: boolean; chave?: string }) {
   avisarSeForExplicacao("Painel", descricao);
   const recolhivel = !!onAlternar;
   const fechado = recolhivel && !!recolhido;
@@ -75,10 +78,10 @@ function CorpoDoPainel({
   return (
     <Tag className={juntar(superficie.painel, "min-w-0", className)} data-recolhido={recolhivel ? (fechado ? "sim" : "nao") : undefined} {...resto}>
       {temCabecalho && (
-        <div className={juntar("flex min-w-0 items-start justify-between", semEspaco || fechado ? "px-4 py-3" : "px-4 pt-4 sm:px-5 sm:pt-5", semEspaco && !fechado && "border-b border-border", fechado && "sm:px-5")}>
+        <div className={juntar("flex min-w-0 items-start justify-between", semEspaco || fechado ? "px-5 py-4" : "px-5 pt-5 sm:px-6 sm:pt-6", semEspaco && !fechado && "border-b border-border", fechado && "sm:px-6")}>
           <div className="mr-3 min-w-0 flex-1">
             {titulo && (
-              <div className="flex min-w-0 items-center">
+              <div className="flex min-w-0 items-start">
                 {recolhivel ? (
                   <>
                     {/* Setinha pequena; o título continua título (clicar nele também alterna). relative -left-1, nunca margem negativa. */}
@@ -88,23 +91,23 @@ function CorpoDoPainel({
                       aria-expanded={!fechado}
                       aria-label={fechado ? "Mostrar" : "Recolher"}
                       title={fechado ? "Mostrar" : "Recolher"}
-                      className={juntar("toque-compacto relative -left-1 inline-flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
+                      className={juntar("toque-compacto relative -left-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
                       data-recolher-secao=""
                     >
-                      <ChevronDown className={juntar("h-4 w-4 transition-transform", fechado ? "-rotate-90" : "")} aria-hidden="true" />
+                      <ChevronDown className={juntar("h-4 w-4 transition-transform duration-200", fechado ? "-rotate-90" : "")} aria-hidden="true" />
                     </button>
-                    <h3 className={juntar(texto.tituloSecao, "min-w-0 cursor-pointer select-none truncate")} onClick={onAlternar}>
+                    <h3 className={juntar(texto.tituloSecao, "min-w-0 cursor-pointer select-none line-clamp-2 break-words [text-wrap:balance]")} onClick={onAlternar}>
                       {titulo}
                     </h3>
                   </>
                 ) : (
-                  <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{titulo}</h3>
+                  <h3 className={juntar(texto.tituloSecao, "min-w-0 line-clamp-2 break-words [text-wrap:balance]")}>{titulo}</h3>
                 )}
                 {ajuda && !fechado && <AjudaRecolhida className="no-print ml-1.5">{ajuda}</AjudaRecolhida>}
               </div>
             )}
             {linhaDeBaixo && (
-              <p className={juntar(texto.auxiliar, "mt-0.5", recolhivel && "pl-5", fechado && "truncate")} data-resumo-recolhido={fechado ? "" : undefined}>
+              <p className={juntar(texto.auxiliar, "mt-1", recolhivel && "pl-6", fechado && "truncate")} data-resumo-recolhido={fechado ? "" : undefined}>
                 {linhaDeBaixo}
               </p>
             )}
@@ -112,8 +115,8 @@ function CorpoDoPainel({
           {acao && !fechado && <div className="flex shrink-0 items-center [&>*+*]:ml-2">{acao}</div>}
         </div>
       )}
-      {!fechado && <div className={juntar("min-w-0", semEspaco ? "" : temCabecalho ? "px-4 pb-4 pt-3 sm:px-5 sm:pb-5" : "p-4 sm:p-5")}>{children}</div>}
-      {rodape && !fechado && <div className="flex min-w-0 flex-wrap items-center justify-end border-t border-border px-4 py-3 sm:px-5 [&>*+*]:ml-2">{rodape}</div>}
+      {!fechado && <div className={juntar("min-w-0", abriuAgora && "ds-abrir", semEspaco ? "" : temCabecalho ? "px-5 pb-5 pt-4 sm:px-6 sm:pb-6" : "p-5 sm:p-6")}>{children}</div>}
+      {rodape && !fechado && <div className="flex min-w-0 flex-wrap items-center justify-end border-t border-border px-5 py-4 sm:px-6 [&>*+*]:ml-2">{rodape}</div>}
     </Tag>
   );
 }

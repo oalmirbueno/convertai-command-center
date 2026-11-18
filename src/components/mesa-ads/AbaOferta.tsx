@@ -75,7 +75,7 @@ const vazio = (v: string) => !v || !v.trim();
 
 const campoPequeno = "h-9 text-[13px]";
 const areaPequena = "min-h-[64px] text-[13px] leading-relaxed";
-const seletorNativo = "h-9 min-w-0 max-w-full rounded-md border border-input bg-background px-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const seletorNativo = "h-9 min-w-0 max-w-full rounded-md border border-input bg-card px-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Marca de campo sem dado (nada é inventado). */
 function Lacuna() {
@@ -147,7 +147,7 @@ function SelecaoEmPilulas<T extends string>({
             aria-checked={ativa}
             onClick={() => onMudar(ativa ? "" : o.valor)}
             className={`mb-1.5 mr-1.5 max-w-full truncate rounded-full border px-2.5 py-1 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
+              ativa ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground"
             }`}
           >
             {o.rotulo}
@@ -200,7 +200,7 @@ function Ideias({ ideias, onLevar }: { ideias: Ideia[]; onLevar: (i: Ideia) => v
           <li key={`${i.titulo}-${k}`} className="flex min-w-0 flex-wrap items-start py-2.5">
             <div className="mr-3 min-w-0 flex-1">
               <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{i.titulo}</p>
-              {i.gancho_verbal && <p className="mt-0.5 font-serif text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{`“${i.gancho_verbal}”`}</p>}
+              {i.gancho_verbal && <p className="mt-0.5 tracking-[-0.01em] text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{`“${i.gancho_verbal}”`}</p>}
               {i.gancho_visual && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{i.gancho_visual}</p>}
               {(i.estilo_visual || i.formato) && (
                 <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{[i.estilo_visual ? humanizar(i.estilo_visual) : "", i.formato ? humanizar(i.formato) : ""].filter(Boolean).join(" · ")}</p>
@@ -532,7 +532,8 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
           )}
 
           <div className="mt-3 min-w-0">
-            {ofertas.isLoading && <Carregando forma="lista" linhas={3} rotulo="Lendo as ofertas" />}
+            {/* v4: a espera ocupa a altura da tela; o Briefing de baixo não pula quando as ofertas chegam. */}
+            {ofertas.isLoading && <div className="min-h-[calc(100vh-200px)]"><Carregando forma="lista" linhas={3} rotulo="Lendo as ofertas" /></div>}
             {ofertas.isError && todas.length === 0 && (
               <EstadoVazio compacto titulo="As ofertas salvas ainda não abriram." descricao={`(${textoDoErro(ofertas.error)}) As que o agente propuser aparecem aqui mesmo assim.`} />
             )}
@@ -544,7 +545,7 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
               />
             )}
             {listaDeOfertas.length > 0 && (
-              <div className="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 2xl:grid-cols-2">
                 {listaDeOfertas.map((o) => (
                   <CartaoDaOferta
                     key={o.id}

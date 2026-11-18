@@ -211,7 +211,7 @@ export default function CartaoMarca({
         ) : paleta.length ? (
           <PaletaDaMarca paleta={paleta} />
         ) : (
-          <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[12px] text-muted-foreground">
+          <p className="rounded-lg bg-muted/50 px-3 py-4 text-center text-[12px] text-muted-foreground">
             Sem paleta. Edite a Marca ou conte ao agente as cores da marca.
           </p>
         )}

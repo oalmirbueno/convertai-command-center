@@ -96,7 +96,7 @@ export function FormularioDoBriefing({
             type="button"
             onClick={() => mudar({ produtos: produtos.concat([{ nome: "", por_que: "" }]) })}
             disabled={desabilitado}
-            className="toque-compacto mt-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-primary hover:bg-muted"
+            className="toque-compacto mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-primary hover:bg-muted"
             aria-label="Outro produto"
             title="Outro produto"
           >
@@ -104,7 +104,7 @@ export function FormularioDoBriefing({
           </button>
         )}
       </div>
-      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
         <Campo rotulo="Oferta" id={`${prefixo}-oferta`}>
           <Input id={`${prefixo}-oferta`} value={valor.oferta} onChange={(e) => mudar({ oferta: e.target.value })} disabled={desabilitado} placeholder="Ex.: 20% nos kits até 12/06" className="h-8 text-[13px]" />
         </Campo>
@@ -153,7 +153,7 @@ export function FormularioDoBriefing({
                   aria-pressed={marcado}
                   disabled={desabilitado}
                   onClick={() => mudar({ canais: marcado ? (valor.canais || []).filter((x) => x !== c) : (valor.canais || []).concat([c]) })}
-                  className={`mb-1.5 mr-1.5 inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition-colors ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/50"}`}
+                  className={`mb-1.5 mr-1.5 inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors ${marcado ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background hover:border-primary/50"}`}
                 >
                   {c}
                 </button>
@@ -218,7 +218,7 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
   if (editando) {
     return (
       <div className="min-w-0 space-y-3">
-        <div className="grid min-w-0 grid-cols-2 gap-3 sm:max-w-sm">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:max-w-sm">
           <Campo rotulo="Início" id={`briefing-${campanha.id}-inicio`}>
             <Input id={`briefing-${campanha.id}-inicio`} type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} disabled={salvando} className="h-8 min-w-0 text-[13px]" />
           </Campo>

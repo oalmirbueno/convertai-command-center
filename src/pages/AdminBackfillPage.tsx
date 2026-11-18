@@ -1,3 +1,4 @@
+import NumerosOusados from "@/components/admin/NumerosOusados";
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -6,7 +7,6 @@ import {
   CabecalhoDePagina,
   CampoDeFormulario,
   EstadoDeErro,
-  FaixaDeNumeros,
   GrupoDeCampos,
   Painel,
   RegiaoRolavel,
@@ -141,7 +141,7 @@ export default function AdminBackfillPage() {
 
         {result && !errorMsg && (
           <>
-            <FaixaDeNumeros
+            <NumerosOusados
               rotulo="Resultado do backfill"
               colunas={3}
               itens={numeros.map((n) => ({ rotulo: n.rotulo, valor: n.valor, corDoValor: n.cor, ponto: n.ponto }))}

@@ -1,3 +1,4 @@
+import { ImageOff } from "lucide-react";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -122,8 +123,10 @@ export function ImagemDaMesa({
   const { data: url, isError } = useUrlDaMesa(caminho, bucket);
   if (!caminho || isError) {
     return (
-      <div className={`flex items-center justify-center bg-secondary/60 text-[11px] text-muted-foreground ${className}`}>
-        {isError ? "Imagem indisponível" : "Sem imagem"}
+      // v4: ícone no lugar do texto (o texto quebrava em duas linhas dentro da miniatura); o nome fica para o leitor de tela e no title.
+      <div className={`flex items-center justify-center bg-secondary/60 text-muted-foreground ${className}`} title={isError ? "Imagem indisponível" : "Sem imagem"}>
+        <ImageOff className="h-4 w-4 opacity-60" aria-hidden="true" />
+        <span className="sr-only">{isError ? "Imagem indisponível" : "Sem imagem"}</span>
       </div>
     );
   }

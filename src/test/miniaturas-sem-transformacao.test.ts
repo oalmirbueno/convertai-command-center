@@ -240,6 +240,8 @@ describe("URL leve: miniatura quando existe, original quando não", () => {
     let liberar: (v: unknown) => void = () => undefined;
     assinarUma.mockImplementationOnce(() => new Promise((r) => (liberar = r)));
     const primeira = resolveFileUrl({ fileUrl: "files://c9/j.png" });
+    // A assinatura sai no fim do passo (em lote com as do mesmo instante): espera ela partir.
+    await new Promise((r) => setTimeout(r, 0));
     __zerarUrlsAssinadasParaTeste();
     liberar({ data: { signedUrl: "https://x/j-de-quem-saiu" }, error: null });
     expect(await primeira).toBe("https://x/j-de-quem-saiu");

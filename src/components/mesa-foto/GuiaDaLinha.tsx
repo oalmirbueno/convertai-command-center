@@ -95,7 +95,7 @@ export default function GuiaDaLinha() {
           <div className="flex min-w-0 items-center text-[13px]">
             <span className="mr-1 shrink-0 text-muted-foreground">Fazendo:</span>
             <span className="min-w-0 truncate font-semibold">{objetivo.titulo}</span>
-            <button type="button" className={juntar("ml-2 shrink-0 rounded text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => irPara("criar")}>
+            <button type="button" className={juntar("ml-2 shrink-0 rounded-sm text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => irPara("criar")}>
               Trocar
             </button>
             <AjudaRecolhida className="ml-1" rotulo="Como funciona este passo">

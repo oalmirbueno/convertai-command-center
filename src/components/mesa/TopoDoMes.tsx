@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, CalendarPlus, FilePlus2, Flame, Layers, Lightbulb, Loader2, Megaphone, MessagesSquare, Newspaper, Sparkles, Zap } from "lucide-react";
 import { toast } from "sonner";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
+import { foco, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { IconButton, OverflowMenu, StatTrio } from "@/components/ds";
 import { supabase } from "@/integrations/supabase/client";
 import { useMesa } from "./MesaContexto";
 import { useKitDaMesa } from "./kitDaMesa";
@@ -108,6 +109,7 @@ export default function TopoDoMes({
   });
   const resumo = resumoDoMes({ posts: itens ? itens.length : null, datas: principais.length, emAlta: emAltaNoNicho });
   const nome = nomeDoMes(mes);
+  const carregando = agenda.isLoading || hypes.isLoading;
 
   const [misturando, setMisturando] = useState(false);
   // A sugestão proativa vira cartão com Confirmar e Desfazer na conversa do agente (nada muda antes).
@@ -138,26 +140,68 @@ export default function TopoDoMes({
 
   return (
     <div className="min-w-0 space-y-4" data-topo-do-mes="">
-      <header className="flex min-w-0 items-start">
-        <div className="min-w-0 flex-1">
+      {/* v4 (cabeçalho das referências): título, os números do mês sem cartão no meio e as ações em círculos à direita.
+          Os números ocupam o lugar desde o primeiro quadro (traço enquanto a agenda carrega): nada empurra depois. */}
+      <header className="flex min-w-0 flex-wrap items-center gap-x-8 gap-y-3">
+        <div className="min-w-0 flex-1 basis-[220px]">
         <h2 className={juntar(texto.tituloPagina, "truncate")} data-mes-do-topo="">{nome.charAt(0).toUpperCase() + nome.slice(1)}</h2>
-        <p className={juntar(texto.corpo, "mt-0.5 truncate text-muted-foreground")} data-nicho-do-topo="">
-          {nicho ? <><span className="font-medium text-foreground">{nicho}</span> · </> : null}{clientName}
+        {/* 14/11/2026 (dono: "uma linha de estado no máximo"): nicho e cliente numa linha só; o resumo virou os números ao lado. */}
+        <p className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-baseline")} title={[nicho, clientName, resumo].filter(Boolean).join(" · ")}>
+          <span className="min-w-0 truncate" data-nicho-do-topo="">{nicho ? <><span className="font-medium text-foreground">{nicho}</span> · </> : null}{clientName}</span>
+          <span className="sr-only" data-resumo-do-mes="">{resumo ? ` · ${resumo}` : ""}</span>
         </p>
-        <p className={juntar(texto.auxiliar, "mt-0.5")} data-resumo-do-mes="">{resumo}</p>
         </div>
-        {/* Ações do mês só em ícone (nome no title); o primário da aba é o Agente do mês que flutua. */}
-        <div className="ml-2 flex shrink-0 items-center" aria-label="Ações do mês" role="group">
-          <button type="button" className={botao.icone} onClick={onPeriodo} aria-label="Novo calendário" title="Novo calendário"><CalendarPlus className="h-4 w-4" aria-hidden="true" /></button>
-          <button type="button" className={botao.icone} onClick={onRapido} aria-label="Conteúdo rápido" title="Conteúdo rápido"><Zap className="h-4 w-4" aria-hidden="true" /></button>
-          <button type="button" className={botao.icone} onClick={() => onConversar("planejar")} aria-label="Planejar com o agente" title="Planejar com o agente"><MessagesSquare className="h-4 w-4" aria-hidden="true" /></button>
-          <button type="button" className={botao.icone} onClick={() => onConversar("criar")} aria-label="Criar conteúdos" title="Criar conteúdos"><FilePlus2 className="h-4 w-4" aria-hidden="true" /></button>
+        <StatTrio
+          label="Números do mês"
+          className="order-3 w-full sm:order-none sm:w-auto"
+          items={[
+            { label: "Posts planejados", value: itens ? itens.length : "–" },
+            { label: "Datas no radar", value: principais.length },
+            { label: "Em alta", value: hypes.isLoading ? "–" : emAltaNoNicho },
+          ]}
+        />
+        {/* v4 E2 (dono, 15/11: "uma ação principal"): Criar conteúdos em pílula verde com nome; Novo calendário em
+            círculo ao lado; Conteúdo rápido e Planejar com o agente no "…". */}
+        <div className="flex shrink-0 items-center" aria-label="Ações do mês" role="group">
+          <IconButton size="md" tone="soft" className="mr-1.5" onClick={onPeriodo} label="Novo calendário" icon={<CalendarPlus aria-hidden="true" />} />
+          <OverflowMenu
+            label="Mais ações do mês"
+            className="mr-2"
+            items={[
+              { label: "Conteúdo rápido", icon: <Zap className="h-4 w-4" aria-hidden="true" />, onSelect: onRapido },
+              { label: "Planejar com o agente", icon: <MessagesSquare className="h-4 w-4" aria-hidden="true" />, onSelect: () => onConversar("planejar") },
+            ]}
+          />
+          <button
+            type="button"
+            onClick={() => onConversar("criar")}
+            className={juntar("toque-compacto inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-accent-solid px-4 text-[13px] font-semibold text-on-accent transition-colors hover:bg-accent-solid/85", foco)}
+          >
+            <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+            Criar conteúdos
+          </button>
         </div>
       </header>
 
-      {sugestoes.length > 0 && (
+      {/* v4: enquanto a agenda e a leitura carregam, três azulejos do tamanho final guardam o lugar (nada empurra o calendário depois). */}
+      {carregando ? (
+        <section className="min-w-0" aria-hidden="true" data-o-que-fazer-carregando="">
+          <div className="flex h-6 items-center"><span className="h-4 w-40 rounded-full bg-muted" /></div>
+          <ul className="gap-bento mt-3 grid min-w-0 grid-cols-1 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <li key={i} className={juntar(superficie.painel, "flex h-24 min-w-0 items-center p-4")}>
+                <span className="mr-3 h-10 w-10 shrink-0 rounded-full bg-muted" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <span className="block h-3 w-4/5 rounded-full bg-muted" />
+                  <span className="block h-2.5 w-24 rounded-full bg-muted/70" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : sugestoes.length > 0 && (
         <section className="min-w-0" aria-label="O que fazer agora" data-o-que-fazer="">
-          <div className="flex min-w-0 items-center">
+          <div className="flex h-6 min-w-0 items-center">
             <h3 className={juntar(texto.tituloSecao, "flex items-center")}>
               <Lightbulb className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />
               O que fazer agora
@@ -166,15 +210,16 @@ export default function TopoDoMes({
               Montadas com o que já está na Mesa: as datas do nicho (Datas), a leitura da semana (Da semana), as notícias já buscadas (Em alta) e a agenda deste mês (Calendário). Cada uma diz a fonte.
             </AjudaRecolhida>
           </div>
-          <ul className={juntar(lista.aberta, lista.divisoria, "mt-1")}>
-            {sugestoes.map((s) => (
-              <li key={s.chave} className={juntar(lista.linha, "py-2")} data-sugestao={s.fonte}>
-                <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground" aria-hidden="true">{ICONE_DA_FONTE[s.fonte]}</span>
+          {/* v4 (referências): cada sugestão é um azulejo com o ícone num círculo e a ação num círculo; a primeira é o cartão de tinta. */}
+          <ul className="gap-bento mt-3 grid min-w-0 grid-cols-1 lg:grid-cols-3">
+            {sugestoes.map((s, i) => (
+              <li key={s.chave} className={juntar(superficie.painel, i === 0 && superficie.tinta, "flex h-24 min-w-0 items-center p-4")} data-sugestao={s.fonte} data-card={i === 0 ? "ink" : "default"}>
+                <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full", i === 0 ? "bg-foreground/15 text-foreground" : "bg-accent-soft text-primary")} aria-hidden="true">{ICONE_DA_FONTE[s.fonte]}</span>
                 <div className="min-w-0 flex-1">
-                  <p className={juntar(texto.corpo, "line-clamp-2 sm:line-clamp-1")} title={s.texto}>{s.texto}</p>
-                  <p className={texto.auxiliar}>de {ROTULO_DA_FONTE[s.fonte]}</p>
+                  <p className={juntar(texto.corpo, "line-clamp-2")} title={s.texto}>{s.texto}</p>
+                  <p className={juntar(texto.auxiliar, "truncate")}>de {ROTULO_DA_FONTE[s.fonte]}</p>
                 </div>
-                <button type="button" className={juntar(botao.icone, "ml-2 text-primary")} onClick={() => agir(s)} aria-label={s.rotuloDaAcao} title={s.rotuloDaAcao} disabled={s.acao === "mistura" && misturando}>
+                <button type="button" className={juntar("toque-compacto ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-60", i === 0 ? "bg-accent-solid text-on-accent hover:bg-accent-solid/85" : "bg-muted text-foreground hover:bg-foreground hover:text-background", foco)} onClick={() => agir(s)} aria-label={s.rotuloDaAcao} title={s.rotuloDaAcao} disabled={s.acao === "mistura" && misturando}>
                   {s.acao === "mistura" && misturando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : ICONE_DA_ACAO[s.acao]}
                 </button>
               </li>

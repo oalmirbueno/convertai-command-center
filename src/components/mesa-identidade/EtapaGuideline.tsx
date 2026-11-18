@@ -283,7 +283,7 @@ export default function EtapaGuideline() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" sideOffset={6} className="min-w-[180px] max-w-[calc(100vw-24px)] p-1">
                   <DropdownMenuItem
-                    className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]"
+                    className="min-h-8 cursor-pointer rounded-sm px-2 py-1.5 text-[13px]"
                     onSelect={() =>
                       void rodar("pdf", async () => {
                         const r = await pdfDoBrandbook(dados, modelo, atual.versao);
@@ -295,7 +295,7 @@ export default function EtapaGuideline() {
                     <FileText className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" /> PDF
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]"
+                    className="min-h-8 cursor-pointer rounded-sm px-2 py-1.5 text-[13px]"
                     onSelect={() =>
                       void rodar("web", async () => {
                         const r = await paginaWebDoBrandbook(dados, modelo, atual.versao);
@@ -306,7 +306,7 @@ export default function EtapaGuideline() {
                     <FileCode2 className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Página web
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]"
+                    className="min-h-8 cursor-pointer rounded-sm px-2 py-1.5 text-[13px]"
                     onSelect={() =>
                       void rodar("pacote", async () => {
                         const pdf = await pdfDoBrandbook(dados, modelo, atual.versao).catch(() => null);

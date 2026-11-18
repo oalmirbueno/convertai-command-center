@@ -135,7 +135,7 @@ export function PreviaDoTemplate({ corpo, deOnde = [] }: { corpo: CorpoDoTemplat
 function LaminasOrdenaveis<T extends { chave: string; mini?: string; url?: string; nome: string }>({ itens, onMudar, onTirar, desativado }: { itens: T[]; onMudar: (novos: T[]) => void; onTirar?: (i: number) => void; desativado?: boolean }) {
   const arrastando = useRef<number | null>(null);
   return (
-    <ol className="grid grid-cols-3 gap-2 sm:grid-cols-4" data-laminas-ordenaveis="">
+    <ol className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4" data-laminas-ordenaveis="">
       {itens.map((l, i) => (
         <li
           key={l.chave}
@@ -329,7 +329,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
         {t.ancoras.length > 0 && (
           <section>
             <h3 className={juntar(texto.rotulo, "mb-2")}>Âncoras</h3>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">
               {t.ancoras.map((a) => (
                 <div key={a.id} className="min-w-0">
                   <MiniaturaDoTemplate mini={a.mini} url={a.url} alt={a.nome}>
@@ -385,7 +385,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
         {testes.length > 0 && (
           <section>
             <h3 className={juntar(texto.rotulo, "mb-2")}>Testes</h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3">
               {testes.map((x) => (
                 <div key={x.id} className="min-w-0">
                   <MiniaturaDoTemplate mini={x.mini} url={x.url} alt={x.tema || "Teste do template"} />
@@ -442,7 +442,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
     !lista.length ? (
       vazio
     ) : (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-lista-de-templates="">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3" data-lista-de-templates="">
         {lista.map((t) => (
           <button key={t.id} type="button" className="min-w-0 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setAberto(t.id)} aria-label={`Abrir ${t.nome}`}>
             <MiniaturaDoTemplate mini={capaDoTemplate(t)} url={(t.laminas[0] || t.ancoras[0] || t.testes[0] || { url: "" }).url} alt={t.nome}>
@@ -605,7 +605,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
         {!opcoesDeFonte.length ? (
           <EstadoVazio compacto titulo="Nada para combinar ainda" descricao="Crie um template ou mande referências na conversa." />
         ) : (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">
             {opcoesDeFonte.map((o) => {
               const sim = escolhidas.indexOf(o.chave) >= 0;
               return (
@@ -642,7 +642,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
       {pedirAoDono && (
         <section className="space-y-2" data-pedir-ao-dono="">
           <p className="text-[13px] text-muted-foreground">{pedirAoDono.motivo}</p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
             {DIMENSOES_DA_COMBINACAO.map((d) => (
               <div key={d} className="flex min-w-0 items-center">
                 <span className="mr-2 w-32 shrink-0 truncate text-[12px]">{ROTULOS_DAS_DIMENSOES[d]}</span>

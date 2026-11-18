@@ -78,7 +78,7 @@ export default function MesEscolhaEditorial({
         <Shuffle className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="mr-1.5 shrink-0 text-[12px] font-medium">Tipos e frameworks</span>
         <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{resumoDaEscolha(valor)}</span>
-        <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
+        <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} />
       </button>
       {aberto && (
         <div className="space-y-2 border-t border-border px-3 pb-2 pt-2.5">

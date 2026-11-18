@@ -48,7 +48,7 @@ function Conferencia({ c }: { c: ConferenciaPublica }) {
   return (
     <div className={juntar(superficie.poco, "space-y-2 p-3")} data-conferencia="">
       <p className={juntar(texto.corpo, "flex items-center font-medium")}>
-        {c.aprovado ? <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-500" aria-hidden="true" /> : <AlertTriangle className="mr-2 h-4 w-4 text-amber-500" aria-hidden="true" />}
+        {c.aprovado ? <CheckCircle2 className="mr-2 h-4 w-4 text-success" aria-hidden="true" /> : <AlertTriangle className="mr-2 h-4 w-4 text-warning" aria-hidden="true" />}
         {c.aprovado ? "Token aprovado" : "Token com problema"}
       </p>
       <p className={texto.auxiliar}>
@@ -75,7 +75,7 @@ function ListaDePaginas({ paginas }: { paginas: PaginaVista[] }) {
         <li key={p.page_id} className="flex min-w-0 flex-wrap items-center py-2">
           <span className={juntar(texto.corpo, "mr-3 min-w-0 truncate font-medium")}>{p.nome}</span>
           <span className={juntar(texto.auxiliar, "mr-3")}>{p.instagram ? `@${p.instagram.username || p.instagram.id}` : "sem Instagram"}</span>
-          <span className={juntar(etiqueta, p.tem_token_de_pagina ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600")}>
+          <span className={juntar(etiqueta, p.tem_token_de_pagina ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
             {p.tem_token_de_pagina ? "token de página" : "sem token de página"}
           </span>
         </li>
@@ -212,7 +212,7 @@ export default function MetaUsuarioDoSistema() {
       <CabecalhoDePagina titulo="Meta pelo usuário do sistema" />
 
       {erro && <p role="alert" className={juntar(texto.corpo, "text-destructive")}>{erro}</p>}
-      {aviso && <p role="status" className={juntar(texto.corpo, "text-emerald-600")}>{aviso}</p>}
+      {aviso && <p role="status" className={juntar(texto.corpo, "text-success")}>{aviso}</p>}
 
       <Secao
         titulo="Token"

@@ -114,7 +114,7 @@ export default function BarraDeControles({
       aria-haspopup="dialog"
       aria-expanded={aberto}
       onClick={naGaveta ? () => setAberto(true) : undefined}
-      className={juntar(botao.secundario, "ml-2 px-3", aberto && "bg-muted")}
+      className={juntar(botao.secundario, "ml-2 px-3.5", aberto && "bg-muted")}
       data-botao-dos-filtros=""
     >
       <SlidersHorizontal className="h-4 w-4 shrink-0 sm:mr-1.5" aria-hidden="true" />

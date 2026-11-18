@@ -146,7 +146,7 @@ export default function AcervoDoEstudio({
                 </>
               }
             />
-            <ul className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={`Criativos do ângulo ${g.titulo}`}>
+            <ul className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={`Criativos do ângulo ${g.titulo}`}>
               {g.criativos.map((c) => {
                 const capa = capaDoTrabalho(trabalhoDe(c));
                 const f = formatoDe(c.formato);
@@ -155,7 +155,7 @@ export default function AcervoDoEstudio({
                 return (
                   <li key={c.id} className={juntar(superficie.painel, "flex min-w-0 p-2")} data-item-do-acervo={c.id}>
                     <span className="mr-2.5 block w-16 shrink-0">
-                      <span className="relative block w-full overflow-hidden rounded-md bg-secondary" style={{ paddingBottom: `${Math.min(178, Math.round((f.altura / f.largura) * 100))}%` }}>
+                      <span className="relative block w-full overflow-hidden rounded-md bg-muted" style={{ paddingBottom: `${Math.min(178, Math.round((f.altura / f.largura) * 100))}%` }}>
                         <span className="absolute inset-0">{capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
                       </span>
                     </span>

@@ -333,7 +333,7 @@ export default function MesaSite() {
         ) : null
       }
     >
-      {!clientId && <EstadoVazio icone={<Globe className="h-5 w-5" />} titulo="Escolha um cliente para abrir a Mesa Site dele." descricao="Site com prévia ao vivo e domínio." />}
+      {!clientId && <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Globe className="h-5 w-5" />} titulo="Escolha um cliente para abrir a Mesa Site dele." descricao="Site com prévia ao vivo e domínio." />}
 
       {valor && (
         <MesaProvider valor={valor}>

@@ -122,6 +122,13 @@ export async function ritualRedigirPorAutomacao(
     repeticao,
     memoria: extrairMemoriaDoRitual(escrito.body, escrito.next_steps),
     promessas: julgados?.promessas.map((p) => ({ texto: p.texto, situacao: p.situacao, prova: p.prova?.texto ?? null })) ?? [],
+    // As fontes que o escritor recebeu além do dossiê (10/11/2026): quem confere o texto de fora (o fluxo que
+    // envia a mensagem ao grupo) precisa julgar contra as mesmas fontes, senão todo número do estado real parece inventado.
+    fontes: {
+      estado_real: estadoTexto || null,
+      continuidade: contexto?.texto ?? null,
+      dia_prioritario: contexto?.diaPrioritario ?? null,
+    },
     model: escrito.model,
     custo_usd: escrito.custo_usd,
     aviso: 'Texto proposto por automação. Nada foi gravado, nenhuma tarefa foi criada e nada foi enviado. Para guardar: aceleriq_create_report_draft; para aprovar e enviar: a Revisão do Ciclo.',

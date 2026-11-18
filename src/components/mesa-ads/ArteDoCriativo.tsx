@@ -20,6 +20,7 @@ import PranchetaDoEstudio, {
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "@/components/mesa/autocorrecaoDaLamina";
 import { useEstadoGuardado } from "@/components/mesa/estudioUtil";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
+import { chamarEmSegundoPlano, usePedidosEmSegundoPlano } from "@/lib/mesa/segundoPlano";
 import SeletorDeAreas from "@/components/mesa/SeletorDeAreas";
 import { ultimasVersoes, type CardDaDirecao, type CardGerado, type Trabalho } from "@/components/mesa/useItensDoMes";
 import type { Area } from "@/components/mesa/estudioUtil";
@@ -197,7 +198,7 @@ function PreviaNoFormato({
       </div>
       <div className="mx-auto w-full" style={{ maxWidth: larguraMaxima }}>
         <div
-          className="relative w-full overflow-hidden rounded-lg border border-border bg-secondary shadow-sm"
+          className="relative w-full overflow-hidden rounded-lg border border-border bg-muted shadow-card"
           style={{ paddingBottom: `${(f.altura / f.largura) * 100}%` }}
           data-proporcao={f.curto}
         >
@@ -249,7 +250,10 @@ export default function ArteDoCriativo({
     aoMudar: () => onAtualizar(),
     aoFalhar: (i) => avisarErro(erroDoItem(i), "A arte não foi gerada"),
   });
-  const andamento: Record<number, AndamentoDaLamina> = { ...filaDoServidor.andamento, ...andamentoLocal };
+  // 14/11/2026: ajuste, conferência e correção em segundo plano ficam registrados no trabalho; reabrir o criativo
+  // no meio de um deles traz o indicador de volta pelo banco (mesmo padrão do Estúdio).
+  const pedidos = usePedidosEmSegundoPlano(trabalho.id, onAtualizar);
+  const andamento: Record<number, AndamentoDaLamina> = { ...filaDoServidor.andamento, ...pedidos.andamento, ...andamentoLocal };
   const [selecionado, setSelecionado] = useState<number | null>(null);
   const [painel, setPainel] = useState<PainelDaLamina>("direcao");
   const [versaoVista, setVersaoVista] = useState<number | null>(null);
@@ -307,10 +311,12 @@ export default function ArteDoCriativo({
     else onAtualizar();
   };
 
+  // 14/11/2026: conferência e correção também em segundo plano (202 na hora; a tela acompanha pelo banco). Pelo
+  // caminho direto, a resposta se perdia quando a função parava por limite de CPU, mesmo com o trabalho feito.
   const chamarConferir = (ordem: number, trabalhoId: string = trabalho.id) =>
-    chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
+    chamarEmSegundoPlano<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
   const chamarCorrigir = (ordem: number, pedidoDaEquipe: boolean) =>
-    chamarFuncao<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalho.id, ordem, pedido_da_equipe: pedidoDaEquipe || undefined });
+    chamarEmSegundoPlano<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalho.id, ordem, pedido_da_equipe: pedidoDaEquipe || undefined });
 
   /** Botão "Conferir" da ferramenta Arte: só a conferência, sem corrigir. */
   const conferir = async (ordem: number) => {
@@ -420,7 +426,7 @@ export default function ArteDoCriativo({
       const t = i.trabalho as Trabalho;
       try {
         passo(i.criativo.id, "ajustando");
-        const a = await chamarFuncao<any>("estudio-arte", { acao: "ajustar_card", trabalho_id: t.id, ordem, instrucao: texto, tipo: opcoes.tipo, imagem_id: opcoes.imagem_id });
+        const a = await chamarEmSegundoPlano<any>("estudio-arte", { acao: "ajustar_card", trabalho_id: t.id, ordem, instrucao: texto, tipo: opcoes.tipo, imagem_id: opcoes.imagem_id });
         custo += custoDaResposta(a) || 0;
         passo(i.criativo.id, "conferindo");
         try {
@@ -447,7 +453,8 @@ export default function ArteDoCriativo({
     marcar(ordem, "ajustando");
     let custo = 0;
     try {
-      const a = await chamarFuncao<any>("estudio-arte", {
+      // 14/11/2026: ajuste em segundo plano (202 na hora); a tela acompanha pelo banco (segundoPlano.ts).
+      const a = await chamarEmSegundoPlano<any>("estudio-arte", {
         acao: "ajustar_card",
         trabalho_id: trabalho.id,
         ordem,
@@ -530,7 +537,7 @@ export default function ArteDoCriativo({
 
   if (!cards.length) {
     return (
-      <div className="rounded-xl border border-dashed border-border p-8 text-center">
+      <div className="rounded-lg border border-dashed border-border p-8 text-center">
         <p className="text-[13px] font-medium">A direção de arte deste criativo ainda não chegou</p>
         <p className="mt-1 text-[12px] text-muted-foreground">
           {trabalho.status === "erro" ? "A última tentativa terminou com erro. Produza o criativo de novo pelo plano." : "O diretor está montando. A tela atualiza sozinha em instantes."}
@@ -572,7 +579,7 @@ export default function ArteDoCriativo({
         />
         {!configRecolhida && (
           <div className="mt-2 flex min-w-0 flex-wrap items-center">
-            <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="radiogroup" aria-label="Qualidade da arte">
+            <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5" role="radiogroup" aria-label="Qualidade da arte">
               {QUALIDADES.map((q) => {
                 const ativa = qualidade === q.valor;
                 return (
@@ -583,10 +590,10 @@ export default function ArteDoCriativo({
                     aria-checked={ativa}
                     disabled={algoGerando}
                     onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
-                    className={`flex h-9 min-w-[66px] flex-col items-center justify-center rounded-md px-2 leading-tight ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                    className={`flex h-9 min-w-[66px] flex-col items-center justify-center rounded-md px-2 leading-tight transition-colors ${ativa ? "bg-card font-medium text-foreground shadow-card" : "text-muted-foreground hover:text-foreground"}`}
                   >
                     <span className="text-[12px]">{q.rotulo}</span>
-                    <span className={`text-[11px] tabular-nums ${ativa ? "text-primary-foreground/80" : ""}`}>{precoDe(q.valor) || "sem preço"}</span>
+                    <span className={`text-[11px] tabular-nums ${ativa ? "text-primary" : ""}`}>{precoDe(q.valor) || "sem preço"}</span>
                   </button>
                 );
               })}
@@ -608,7 +615,7 @@ export default function ArteDoCriativo({
                 type="button"
                 aria-pressed={zonaSegura}
                 onClick={() => setZonaSegura((z) => !z)}
-                className={juntar(botao.icone, "mb-1 mr-2 mt-1", zonaSegura && "bg-primary/10 text-primary")}
+                className={juntar(botao.icone, "mb-1 mr-2 mt-1", zonaSegura && "bg-accent-soft text-primary")}
                 aria-label="Zona segura"
                 title="Zona segura: nada importante nos 14% de cima e nos 20% de baixo"
               >
@@ -637,7 +644,7 @@ export default function ArteDoCriativo({
               role="switch"
               aria-checked={corrigirSozinho}
               onClick={() => setCorrigirSozinho((c) => !c)}
-              className={juntar(botao.icone, "mb-1 mr-2 mt-1", corrigirSozinho && "bg-primary/10 text-primary")}
+              className={juntar(botao.icone, "mb-1 mr-2 mt-1", corrigirSozinho && "bg-accent-soft text-primary")}
               aria-label={`Corrigir sozinho${corrigirSozinho ? "" : " (desligado)"}`}
               title={`Corrigir sozinho${corrigirSozinho ? "" : " (desligado)"}: depois de gerar ou ajustar, se a conferência achar erro de texto, logo, identidade, política ou clareza, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a arte.`}
             >
@@ -654,7 +661,7 @@ export default function ArteDoCriativo({
             const e = andamentoIrmaos[i.criativo.id];
             const rotulo =
               e === "fila" ? "na fila" : e === "ajustando" ? "ajustando" : e === "conferindo" ? "conferindo" : e === "feito" ? "feito" : e === "sem_arte" ? "sem arte ainda" : "falhou";
-            const tom = e === "feito" ? "bg-success/10 text-success" : e === "erro" ? "bg-destructive/10 text-destructive" : e === "sem_arte" ? "bg-secondary text-muted-foreground" : "bg-primary/10 text-primary";
+            const tom = e === "feito" ? "bg-success-soft text-success" : e === "erro" ? "bg-danger-soft text-destructive" : e === "sem_arte" ? "bg-muted text-muted-foreground" : "bg-accent-soft text-primary";
             return (
               <span key={i.criativo.id} data-irmao={e} className={`mb-1 mr-1.5 mt-1 inline-flex h-6 items-center rounded-full px-2 text-[11px] ${tom}`}>
                 {formatoDe(i.criativo.formato).rotulo}: {rotulo}
@@ -735,7 +742,7 @@ export default function ArteDoCriativo({
                   onClick={() => setFerramenta(t.valor)}
                   title={t.rotulo}
                   aria-label={t.rotulo}
-                  className={`mr-1 inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-md px-1 text-[12px] ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  className={`mr-1 inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-full px-1 text-[12px] transition-colors ${ativa ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                 >
                   <Icone className="h-4 w-4 shrink-0" />
                 </button>

@@ -124,7 +124,7 @@ export default function CopyPorSecao({ site, modeloId }: { site: LinhaDoSite; mo
           <PreencherComIA papel="site" clientId={clientId} marcaId={marca ? marca.id : null} campos={camposDaAbertura} rotulo="Preencher a abertura" onAplicar={aplicarNaAbertura} onDesfazer={aplicarNaAbertura} />
         </div>
         {/* UXS 30/09: os três campos com nome à vista (antes eram três caixas vazias só com aria-label). */}
-        <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
           <CampoDeFormulario rotulo="Título">
             <input value={abertura.headline} onChange={(e) => setAbertura((a) => ({ ...a, headline: e.target.value }))} maxLength={80} className={campo} aria-label="Título da abertura" />
           </CampoDeFormulario>

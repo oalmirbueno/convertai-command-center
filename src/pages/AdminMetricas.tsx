@@ -46,7 +46,8 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { CampoDeBusca, FaixaDeNumeros } from "@/components/sistema";
+import { CampoDeBusca } from "@/components/sistema";
+import { DeltaChip, Sparkline, StatCard, StatGrid } from "@/components/ds";
 import {
   agruparPorConta,
   collectSocialMetricsNow,
@@ -120,13 +121,7 @@ function clienteDaContaUnica(identidades: Map<string, IdentidadeMinima> | undefi
 
 function DeltaBadge({ pct, className = "" }: { pct: number | null; className?: string }) {
   if (pct == null) return null;
-  const up = pct >= 0;
-  return (
-    <span className={juntar(etiqueta, up ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive", className)}>
-      {up ? <TrendingUp className="mr-0.5 h-3 w-3" aria-hidden="true" /> : <TrendingDown className="mr-0.5 h-3 w-3" aria-hidden="true" />}
-      {`${up ? "+" : ""}${pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
-    </span>
-  );
+  return <DeltaChip value={Math.round(pct * 10) / 10} className={className} />;
 }
 
 interface Indicador {
@@ -134,27 +129,30 @@ interface Indicador {
   valor: string;
   delta?: number | null;
   nota?: string | null;
+  /** Série que a tela já buscou (semanas coletadas, da mais antiga para a mais nova): vira a linha de tendência. */
+  serie?: number[];
 }
 
 /**
- * Os números numa faixa só: um painel com a grade separada por linhas finas
- * (nada de um cartão por número). `colunas` tem de dividir a quantidade de
- * itens em toda largura, senão sobra célula vazia.
+ * Os números em cartões grandes (rodada ousada, 15/11/2026): o primeiro em
+ * tinta, o segundo no sólido da marca, variação em pílula com seta e a linha
+ * de tendência quando a tela já tem as semanas.
  */
-function FaixaDeIndicadores({ itens, colunas, rotulo }: { itens: Indicador[]; colunas: string; rotulo: string }) {
-  // A faixa do sistema (compacta); aqui só a variação vira selo ao lado do valor.
+function FaixaDeIndicadores({ itens, rotulo }: { itens: Indicador[]; colunas?: string; rotulo: string }) {
   return (
-    <FaixaDeNumeros
-      rotulo={rotulo}
-      grade={colunas}
-      tamanho="compacto"
-      itens={itens.map((item) => ({
-        rotulo: item.rotulo,
-        valor: item.valor,
-        aoLado: item.delta != null ? <DeltaBadge pct={item.delta} /> : undefined,
-        apoio: item.nota || undefined,
-      }))}
-    />
+    <StatGrid cols={itens.length > 4 ? 3 : 4} label={rotulo}>
+      {itens.map((item, i) => (
+        <StatCard
+          key={item.rotulo}
+          variant={i === 0 ? "ink" : i === 1 ? "accent" : "default"}
+          label={item.rotulo}
+          value={item.valor}
+          delta={item.delta != null ? Math.round(item.delta * 10) / 10 : undefined}
+          hint={item.nota || undefined}
+          chart={item.serie && item.serie.length > 1 ? <Sparkline values={item.serie} height={36} label={`${item.rotulo} nas últimas ${item.serie.length} semanas`} /> : undefined}
+        />
+      ))}
+    </StatGrid>
   );
 }
 
@@ -309,6 +307,9 @@ function ClientMetricsDetail({
   const deltaSeguidores = weekDeltaPct(rows, "followers");
   const ultimasSemanas = rows.slice(0, 8);
   const maxReach = Math.max(...ultimasSemanas.map((row) => row.reach || 0), 1);
+  // As mesmas semanas, da mais antiga para a mais nova, para a linha de tendência dos cartões.
+  const emOrdem = [...ultimasSemanas].reverse();
+  const serieDe = (campo: "followers" | "reach" | "total_interactions" | "profile_views") => emOrdem.map((row) => Number(row[campo]) || 0);
 
   const leituraDaMesa = evolucao ? evolucao.leitura : null;
   const conselho = useMemo(
@@ -507,28 +508,28 @@ function ClientMetricsDetail({
                   rotulo="Perfil orgânico"
                   colunas="grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
                   itens={[
-                    { rotulo: "Seguidores", valor: formatMetricNumber(latest.followers), delta: deltaSeguidores },
-                    { rotulo: "Alcance", valor: formatMetricNumber(latest.reach), delta: deltaAlcance, nota: "na semana" },
-                    { rotulo: "Interações", valor: formatMetricNumber(latest.total_interactions), delta: weekDeltaPct(rows, "total_interactions"), nota: "na semana" },
+                    { rotulo: "Seguidores", valor: formatMetricNumber(latest.followers), delta: deltaSeguidores, serie: serieDe("followers") },
+                    { rotulo: "Alcance", valor: formatMetricNumber(latest.reach), delta: deltaAlcance, nota: "na semana", serie: serieDe("reach") },
+                    { rotulo: "Interações", valor: formatMetricNumber(latest.total_interactions), delta: weekDeltaPct(rows, "total_interactions"), nota: "na semana", serie: serieDe("total_interactions") },
                     { rotulo: "Salvamentos", valor: formatMetricNumber(totais.salvos), nota: "posts de 30 dias" },
                     { rotulo: "Compartilhamentos", valor: formatMetricNumber(totais.compartilhamentos), nota: "posts de 30 dias" },
-                    { rotulo: "Visitas ao perfil", valor: formatMetricNumber(latest.profile_views), delta: weekDeltaPct(rows, "profile_views"), nota: "na semana" },
+                    { rotulo: "Visitas ao perfil", valor: formatMetricNumber(latest.profile_views), delta: weekDeltaPct(rows, "profile_views"), nota: "na semana", serie: serieDe("profile_views") },
                   ]}
                 />
                 {ultimasSemanas.length > 1 && (
-                  <div className="mt-4 min-w-0">
-                    <p className={texto.rotulo}>Alcance semana a semana</p>
-                    <div className="mt-2 space-y-1.5">
+                  <div className={juntar(superficie.painel, "mt-5 min-w-0 p-5 sm:p-6")}>
+                    <p className={texto.tituloSecao}>Alcance semana a semana</p>
+                    <div className="mt-4 space-y-3">
                       {ultimasSemanas.map((row) => (
                         <div key={row.id} className="flex min-w-0 items-center">
                           <span className={juntar(texto.auxiliar, "w-32 shrink-0 truncate tabular-nums")}>{fmtWeek(row)}</span>
-                          <div className="mx-2 h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                          <div className="mx-3 h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                             <div
-                              className="h-full rounded-full bg-primary/70"
+                              className="h-full rounded-full bg-primary"
                               style={{ width: `${Math.max(((row.reach || 0) / maxReach) * 100, 2)}%` }}
                             />
                           </div>
-                          <span className="w-16 shrink-0 text-right text-[12px] tabular-nums text-foreground">{formatMetricNumber(row.reach)}</span>
+                          <span className="w-16 shrink-0 text-right text-[13px] font-semibold tabular-nums text-foreground">{formatMetricNumber(row.reach)}</span>
                         </div>
                       ))}
                     </div>
@@ -642,7 +643,7 @@ function ClientMetricsDetail({
   );
 }
 
-const COLUNAS = "md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_16px]";
+const COLUNAS = "md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_88px_minmax(0,1.7fr)_32px]";
 
 export default function AdminMetricas() {
   const { profile } = useAuth();
@@ -784,7 +785,7 @@ export default function AdminMetricas() {
   ) : null;
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-6">
       <CabecalhoDePagina
         titulo="Métricas"
         descricao={
@@ -852,15 +853,16 @@ export default function AdminMetricas() {
                 />
               ) : (
                 <Painel semEspaco>
-                  <div className={juntar("hidden gap-x-5 border-b border-border px-4 py-2 md:grid", COLUNAS)} aria-hidden="true">
+                  <div className={juntar("hidden items-center gap-x-5 border-b border-border/70 bg-muted/40 px-6 py-3 md:grid", COLUNAS)} aria-hidden="true">
                     <p className={texto.rotulo}>Conta</p>
                     <p className={juntar(texto.rotulo, "text-right")}>Seguidores</p>
                     <p className={juntar(texto.rotulo, "text-right")}>Alcance</p>
                     <p className={juntar(texto.rotulo, "text-right")}>Interações</p>
+                    <p className={texto.rotulo}>Alcance por semana</p>
                     <p className={texto.rotulo}>Anúncios 30 dias</p>
                     <span />
                   </div>
-                  <ul className="min-w-0 divide-y divide-border">
+                  <ul className="min-w-0 divide-y divide-border/70">
                     {filteredHubs.map(([accountId, list]) => {
                       const latest = list[0];
                       const clientId = latest.client_id;
@@ -881,7 +883,7 @@ export default function AdminMetricas() {
                             type="button"
                             onClick={() => openAccount(clientId, accountId)}
                             className={juntar(
-                              "group flex w-full min-w-0 flex-wrap items-center px-4 py-3 text-left transition-colors hover:bg-muted/50 md:grid md:gap-x-5",
+                              "group flex w-full min-w-0 flex-wrap items-center px-5 py-4 text-left transition-colors hover:bg-muted/50 sm:px-6 md:grid md:gap-x-5",
                               COLUNAS,
                               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                             )}
@@ -892,11 +894,11 @@ export default function AdminMetricas() {
                                 url={identidades?.get(accountId)?.profile_picture_url}
                                 clienteId={clienteDaContaUnica(identidades, clientId)}
                                 nome={clientNames.get(clientId)}
-                                tamanho={32}
-                                className="mr-2.5"
+                                tamanho={44}
+                                className="mr-3"
                               />
                               <div className="min-w-0">
-                                <p className="truncate text-[13px] font-semibold text-foreground">{clientNames.get(clientId) || "Cliente"}</p>
+                                <p className="truncate text-[15px] font-semibold leading-6 text-foreground">{clientNames.get(clientId) || "Cliente"}</p>
                                 <p className={juntar(texto.auxiliar, "truncate")}>
                                   {usuario ? `@${usuario} · ` : ""}
                                   semana {fmtWeek(latest)}
@@ -905,12 +907,18 @@ export default function AdminMetricas() {
                             </div>
                             {numeros.map((k) => (
                               <div key={k.r} className="hidden min-w-0 text-right md:block">
-                                <p className="truncate text-[13px] font-semibold tabular-nums text-foreground">{formatMetricNumber(k.v)}</p>
-                                <DeltaBadge pct={k.d} />
+                                <p className="truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{formatMetricNumber(k.v)}</p>
+                                <DeltaBadge pct={k.d} className="mt-1" />
                               </div>
                             ))}
-                            <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary md:order-last md:ml-0" aria-hidden="true" />
-                            <p className={juntar(texto.auxiliar, "mt-1.5 basis-full truncate md:mt-0 md:basis-auto")}>
+                            {/* A linha de tendência usa as semanas que a tela já buscou desta conta (até 8), da mais antiga para a mais nova. */}
+                            <div className="hidden min-w-0 md:block">
+                              <Sparkline values={list.slice(0, 8).map((w) => Number(w.reach) || 0).reverse()} height={32} label="Alcance nas últimas semanas" />
+                            </div>
+                            <span className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-foreground group-hover:text-background md:order-last md:ml-0" aria-hidden="true">
+                              <ChevronRight className="h-4 w-4" />
+                            </span>
+                            <p className={juntar(texto.auxiliar, "mt-1.5 w-full min-w-0 basis-full [overflow-wrap:anywhere] md:mt-0 md:w-auto md:basis-auto md:truncate")}>
                               {/* No celular a linha de baixo diz de que número se trata; no computador, a coluna. */}
                               <span className="md:hidden">
                                 Alcance {formatMetricNumber(latest.reach)} · </span>

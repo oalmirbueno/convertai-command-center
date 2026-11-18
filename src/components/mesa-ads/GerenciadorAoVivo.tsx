@@ -240,7 +240,7 @@ function PainelDaAcao({
   return (
     <div className="min-w-0 rounded-md border border-border bg-background p-2.5" aria-label={`Ações em ${n.nome}`} role="group">
       {gestao && !gestao.disponivel && (
-        <p className="mb-2 flex items-start rounded bg-warning/10 px-2 py-1.5 text-[12px] leading-snug">
+        <p className="mb-2 flex items-start rounded-sm bg-warning/10 px-2 py-1.5 text-[12px] leading-snug">
           <AlertTriangle className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
           <span className="min-w-0 [overflow-wrap:anywhere]">Agora a Meta não deixa mexer: {gestao.motivo || "sem permissão de gestão."} Se tentar, o painel confere de novo e diz o motivo.</span>
         </p>
@@ -398,7 +398,7 @@ function Linha(p: LinhaProps) {
   const mini = n.nivel === "anuncio" ? p.miniaturas[n.id] : undefined;
   const acoesAqui = p.acoesDe && p.acoesDe.id === n.id;
   const recuo = profundidade === 0 ? "pl-3" : profundidade === 1 ? "pl-7" : "pl-11";
-  const linkPequeno = juntar("toque-compacto inline-flex h-6 items-center rounded px-1.5 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50", foco);
+  const linkPequeno = juntar("toque-compacto inline-flex h-6 items-center rounded-sm px-1.5 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50", foco);
   return (
     <>
       <div
@@ -419,14 +419,14 @@ function Linha(p: LinhaProps) {
               <span className="-ml-1 mr-0.5 inline-block h-6 w-6 shrink-0" aria-hidden="true" />
             ) : null}
             {n.nivel === "anuncio" && (
-              <button type="button" className="mr-2 block h-9 w-9 shrink-0 overflow-hidden rounded border border-border bg-secondary/40" onClick={() => p.onDescer(n)} aria-label={`Ver o criativo de ${n.nome}`} tabIndex={-1}>
+              <button type="button" className="mr-2 block h-9 w-9 shrink-0 overflow-hidden rounded-sm border border-border bg-muted/40" onClick={() => p.onDescer(n)} aria-label={`Ver o criativo de ${n.nome}`} tabIndex={-1}>
                 <Foto src={mini ? mini.imagem_url : null} alt="" className="h-full w-full text-[0px]" />
               </button>
             )}
             <div className="min-w-0 flex-1">
               <button
                 type="button"
-                className={juntar("block max-w-full truncate rounded text-left text-[13px] font-semibold leading-5 text-foreground hover:text-primary hover:underline", foco)}
+                className={juntar("block max-w-full truncate rounded-sm text-left text-[13px] font-semibold leading-5 text-foreground hover:text-primary hover:underline", foco)}
                 onClick={() => p.onDescer(n)}
                 title={n.nivel === "campanha" ? "Ver os conjuntos desta campanha" : n.nivel === "conjunto" ? "Ver os anúncios deste conjunto" : "Abrir o anúncio: criativo, números e diagnóstico"}
               >
@@ -765,8 +765,8 @@ export function BotaoAtualizarAgora({ atualizando, onAtualizar }: { atualizando:
 function Fato({ rotulo, children, className = "" }: { rotulo: string; children: ReactNode; className?: string }) {
   return (
     <div className={juntar("min-w-0", className)}>
-      <dt className="truncate text-[11px] leading-4 text-muted-foreground">{rotulo}</dt>
-      <dd className="mt-0.5 min-w-0 truncate text-[13px] font-medium leading-5">{children}</dd>
+      <dt className="truncate text-[12px] leading-4 text-muted-foreground">{rotulo}</dt>
+      <dd className="mt-1 min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em]">{children}</dd>
     </div>
   );
 }
@@ -775,8 +775,8 @@ function Fato({ rotulo, children, className = "" }: { rotulo: string; children: 
 function LinhaDaConta({ c, gestao }: { c: ContaNaTela; gestao: LeituraDoGerenciador["gestao"] }) {
   const travada = c.situacao.travada;
   return (
-    <div className="min-w-0 px-3 py-2.5" data-conta={c.id} data-travada={travada ? "sim" : "nao"}>
-      <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))]">
+    <div className="min-w-0 px-5 py-4 sm:px-6 sm:py-5" data-conta={c.id} data-travada={travada ? "sim" : "nao"}>
+      <dl className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))]">
         <Fato rotulo="Conta" className="col-span-2 sm:col-span-1">
           <span className="flex min-w-0 items-center">
             <span className={juntar("mr-2 inline-block h-2 w-2 shrink-0 rounded-full", travada ? "bg-destructive" : c.situacao.codigo === 1 ? "bg-success" : "bg-warning")} aria-hidden="true" />
@@ -809,7 +809,7 @@ function LinhaDaConta({ c, gestao }: { c: ContaNaTela; gestao: LeituraDoGerencia
           {c.situacao.motivo && <span className="mr-2 min-w-0 [overflow-wrap:anywhere]">{c.situacao.motivo}</span>}
           {c.situacao.o_que_fazer && <span className="mr-2 min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{c.situacao.o_que_fazer}</span>}
           {c.link_cobranca && (
-            <a href={c.link_cobranca} target="_blank" rel="noopener noreferrer" className={juntar("inline-flex items-center rounded font-medium text-primary hover:underline", foco)}>
+            <a href={c.link_cobranca} target="_blank" rel="noopener noreferrer" className={juntar("inline-flex items-center rounded-sm font-medium text-primary hover:underline", foco)}>
               <ExternalLink className="mr-1 h-3 w-3" />
               Cobrança e pagamentos na Meta
             </a>
@@ -836,7 +836,7 @@ export function SituacaoDaConta({ leitura, carregando, erro }: { leitura: Leitur
     <section className={juntar(superficie.painel, "min-w-0 divide-y divide-border")} aria-label="Situação da conta">
       {leitura.contas.map((c) => <LinhaDaConta key={c.id} c={c} gestao={g} />)}
       {((g && !g.disponivel && !algumaTravada) || semMeta.length > 0) && (
-        <p className="flex min-w-0 flex-wrap items-center px-3 py-1.5 text-[12px] leading-snug text-muted-foreground">
+        <p className="flex min-w-0 flex-wrap items-center px-5 py-3 text-[12px] leading-snug text-muted-foreground sm:px-6">
           {g && !g.disponivel && !algumaTravada && <span className="mr-3 min-w-0 [overflow-wrap:anywhere]">Só leitura agora: {g.motivo || "sem permissão de gestão."}</span>}
           {semMeta.length > 0 && <span className="min-w-0">{semMeta.map((p) => `${p.nome}: ${p.conectada ? "ligado, leitura ainda não feita" : "não conectado"}`).join(" · ")}</span>}
         </p>
@@ -948,7 +948,7 @@ export default function GerenciadorAoVivo({
   return (
     <section className="min-w-0" aria-label="Gerenciador de anúncios">
       <div className="mb-2 flex min-w-0 flex-wrap items-end">
-        <div className="mb-1 mr-3 min-w-0 flex-1">
+        <div className="mb-1 mr-3 min-w-0 flex-1 basis-full sm:basis-64">
           {r && (
             <p className="text-[13px] leading-snug" data-resumo-do-gerenciador="">
               <span className="font-semibold">{r.campanhas_entregando}</span> de {r.campanhas_ativas} {r.campanhas_ativas === 1 ? "campanha ativa entregando" : "campanhas ativas entregando"}
@@ -966,12 +966,12 @@ export default function GerenciadorAoVivo({
           </p>
         </div>
         <div className="-m-0.5 mb-1 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
-          <div className="inline-flex rounded-md border border-border p-0.5" role="group" aria-label="Filtro do gerenciador">
+          <div className="scrollbar-hidden inline-flex max-w-full overflow-x-auto rounded-full bg-muted p-0.5 [&>*]:shrink-0" role="group" aria-label="Filtro do gerenciador">
             {FILTROS.map((f) => (
               <button
                 key={f.valor}
                 type="button"
-                className={juntar("toque-compacto h-8 rounded px-2.5 text-[12px] font-medium", foco, filtro === f.valor ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted")}
+                className={juntar("toque-compacto h-8 rounded-full px-3 text-[12px] font-medium transition-colors", foco, filtro === f.valor ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}
                 aria-pressed={filtro === f.valor}
                 onClick={() => setFiltro(f.valor)}
               >
@@ -1011,8 +1011,8 @@ export default function GerenciadorAoVivo({
       {l && campanhas.length > 0 && (
         <div className={juntar(superficie.painel, "min-w-0 overflow-hidden")}>
           {/* Abas por nível, cada uma com a cor do nível; o escolhido ao descer aparece ao lado, com o x para sair. */}
-          <div className="flex min-w-0 flex-wrap items-center border-b border-border px-2 pt-1.5">
-            <div className="-mb-px flex min-w-0 items-center" role="tablist" aria-label="Nível do gerenciador">
+          <div className="flex min-w-0 flex-wrap items-center border-b border-border/60 px-2 py-1.5">
+            <div className="flex min-w-0 items-center" role="tablist" aria-label="Nível do gerenciador">
               {NIVEIS.map((nv) => (
                 <button
                   key={nv}
@@ -1020,9 +1020,9 @@ export default function GerenciadorAoVivo({
                   role="tab"
                   aria-selected={nivel === nv}
                   className={juntar(
-                    "toque-compacto mr-1 inline-flex h-9 items-center border-b-2 px-2.5 text-[13px] font-medium",
+                    "toque-compacto mr-1 inline-flex h-8 items-center rounded-full px-3 text-[13px] font-medium transition-colors",
                     foco,
-                    nivel === nv ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                    nivel === nv ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                   onClick={() => {
                     setNivel(nv);

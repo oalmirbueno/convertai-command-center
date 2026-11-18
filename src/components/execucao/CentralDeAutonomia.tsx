@@ -1,3 +1,4 @@
+import NumerosOusados from "@/components/admin/NumerosOusados";
 import { limparTecnico } from "@/lib/cadernoExecucao";
 import { nomeDaTarefa } from "@/lib/nomeDaTarefa";
 import { fraseDoAgente, tipoDaEntrega } from "@/lib/execucaoHumana";
@@ -21,7 +22,7 @@ import type { ObjetoAberto } from "@/lib/centralObjetos";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, JanelaCentral, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela, useLargo,
+  Carregando, EstadoDeErro, EstadoVazio, JanelaCentral, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela, useLargo,
 } from "@/components/sistema";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import GestorConversa, { type ContextoDaConversa, type PedidoAoHermes } from "@/components/execucao/GestorConversa";
@@ -169,7 +170,7 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { d:
   }).sort((a, b) => Number(b.agora) - Number(a.agora) || ORDEM.indexOf(a.status) - ORDEM.indexOf(b.status));
   const ha = (ms: number) => { const m = Math.max(1, Math.round((agora - ms) / 60_000)); return m < 60 ? `há ${m} min` : `há ${Math.round(m / 60)} h`; };
   return (
-    <section aria-label="Agora" className="space-y-3 rounded-xl bg-muted/30 p-3">
+    <section aria-label="Agora" className="space-y-3 rounded-lg bg-muted/30 p-3">
       {d.aprovacoes > 0 && (
         <button type="button" onClick={aoVerDecisoes} className="flex w-full items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 text-left text-[13px] hover:bg-warning/15">
           <Scale className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
@@ -233,7 +234,7 @@ function Indicadores({ q, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { q: Re
       <p className="px-1 text-[12px] text-muted-foreground">{d.periodo.rotulo} · comparado a {d.periodo.anterior.rotulo}</p>
       <div>
         <p className={juntar(texto.rotulo, "mb-1.5 px-1")}>Tarefas (Kanban)</p>
-        <FaixaDeNumeros semMoldura tamanho="compacto" colunas={2} itens={[
+        <NumerosOusados tamanho="compacto" colunas={2} tinta={-1} itens={[
           { rotulo: "Abertas", valor: ind.tarefasAbertas.total, apoio: `${ind.tarefasAbertas.doing} em andamento · ${ind.tarefasAbertas.todo} a fazer · ${ind.tarefasAbertas.backlog} backlog` },
           { rotulo: "Concluídas no período", valor: ind.tarefasConcluidas.periodo, apoio: variacao(ind.tarefasConcluidas.periodo, ind.tarefasConcluidas.anterior), dica: "Tarefas em done cuja última mudança caiu no período." },
           { rotulo: "Entregas em revisão", valor: ind.entregasEmRevisao, ponto: ind.entregasEmRevisao ? "info" : "neutro", apoio: "Esperam revisão humana; não contam como feitas" },
@@ -242,7 +243,7 @@ function Indicadores({ q, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { q: Re
       </div>
       <div>
         <p className={juntar(texto.rotulo, "mb-1.5 px-1")}>Execuções dos agentes</p>
-        <FaixaDeNumeros semMoldura tamanho="compacto" colunas={2} itens={[
+        <NumerosOusados tamanho="compacto" colunas={2} tinta={-1} itens={[
           { rotulo: "No período", valor: ind.execucoes.periodo, apoio: variacao(ind.execucoes.periodo, ind.execucoes.anterior) },
           { rotulo: "Concluídas", valor: ind.execucoes.concluidas, apoio: variacao(ind.execucoes.concluidas, ind.execucoes.concluidasAnterior), dica: "Execução concluída não é tarefa concluída: veja o resultado verificado no histórico." },
           { rotulo: "Em andamento agora", valor: ind.execucoes.emAndamento },
@@ -333,7 +334,7 @@ function Historico({ q, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentra
         <p className="text-[12px] text-muted-foreground">Cada execução com o resultado verificado: tarefa, execução e prova juntas.</p>
         <SeletorCompacto rotulo="Mostrar" valor={filtro} onEscolher={(v) => setFiltro(v as typeof filtro)} modo="segmentado" listaQuandoNaoCabe opcoes={[{ valor: "todas", rotulo: "Todas" }, { valor: "atencao", rotulo: "Atenção" }, { valor: "concluidas", rotulo: "Com prova" }]} />
       </div>
-      <div className="divide-y divide-border rounded-xl border border-border">
+      <div className="divide-y divide-border rounded-lg border border-border">
         {linhas.length === 0 ? <div className="p-4"><EstadoVazio titulo="Nenhuma execução neste recorte." descricao="Execução só aparece aqui quando o agente relata pelo OS." /></div> : linhas.map(({ r, v, t, resultado, divergencia }, i) => {
           const titulo = t?.title || limparTecnico(String(r.detail?.title || r.detail?.action || r.run_key));
           const aberto = aberta === r.id;
@@ -598,7 +599,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
       className="h-full min-h-0"
     />
   ) : (
-    <section className={juntar(superficie.painel, "p-4")}><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="O resumo, o histórico e as decisões ao lado continuam abertos para a equipe." /></section>
+    <section className={juntar(superficie.painel, "p-5")}><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="O resumo, o histórico e as decisões ao lado continuam abertos para a equipe." /></section>
   );
 
   const chatDoHermes = ehAdmin ? (
@@ -785,15 +786,15 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const mioloCelular = (
     <div className="flex min-w-0 flex-col gap-2">
       {ehAdmin && (
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1" role="tablist" aria-label="Painel da Central">
+        <div className="grid grid-cols-3 gap-1 rounded-full bg-muted/50 p-1" role="tablist" aria-label="Painel da Central">
           {PAINEIS.map((p) => (
-            <button key={p} type="button" role="tab" aria-selected={noCelular === p} onClick={() => setNoCelular(p)} className={juntar("rounded-lg py-1.5 text-[12px] font-medium", noCelular === p ? "bg-background shadow-sm" : "text-muted-foreground")}>
+            <button key={p} type="button" role="tab" aria-selected={noCelular === p} onClick={() => setNoCelular(p)} className={juntar("rounded-full py-1.5 text-[12px] font-medium", noCelular === p ? "bg-card shadow-card" : "text-muted-foreground")}>
               {NOME_DO_PAINEL[p]}{p === "area" && decisoesPendentes ? ` · ${decisoesPendentes}` : ""}
             </button>
           ))}
         </div>
       )}
-      {ehAdmin && conversasNoCelular && <div className={juntar(superficie.painel, "p-3")}>{listaDeConversas}</div>}
+      {ehAdmin && conversasNoCelular && <div className={juntar(superficie.painel, "p-4 sm:p-5")}>{listaDeConversas}</div>}
       <div ref={refDoCelular} style={{ height: alturaNoCelular }}>
         {ferramentaGrande ? (
           <div className={juntar(superficie.painel, "h-full overflow-hidden")}><FerramentaEmbutida ferramenta={ferramentaGrande} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} conteudo={conteudoDa(ferramentaGrande)} aoRecarregar={() => recarregarFerramenta(ferramentaGrande.caminho)} /></div>

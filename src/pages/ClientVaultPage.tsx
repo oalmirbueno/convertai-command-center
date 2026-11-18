@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { LateralEsquerda } from "@/components/workspace/LateralEsquerda";
 import {
   AreaDeTrabalho,
-  CabecalhoDePagina,
   Carregando,
   EstadoDeErro,
   EstadoVazio,
@@ -24,6 +23,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
+import { PageHeader } from "@/components/ds";
 
 interface ClientOption {
   id: string;
@@ -167,7 +167,7 @@ export default function ClientVaultPage() {
     </>
   ) : undefined;
   const conteudo = effectiveClientId ? (
-    <ClientVault clientId={effectiveClientId} canManage={isAdminOrTeam && !impersonatedId} titulo={tituloDoCofre} />
+    <ClientVault clientId={effectiveClientId} canManage={isAdminOrTeam && !impersonatedId} titulo={tituloDoCofre} amplo />
   ) : isHubMode && loadingClients ? (
     <Carregando forma="lista" linhas={4} rotulo="Carregando o cofre" />
   ) : isHubMode && clientsFailed ? (
@@ -186,27 +186,16 @@ export default function ClientVaultPage() {
 
   return (
     <div className="min-w-0">
-      <CabecalhoDePagina
-        titulo="Cofre"
-        descricao={resumo}
-        ajuda="Senhas, links úteis e sistemas do cliente num lugar só. As senhas ficam mascaradas até alguém pedir para ver."
-        acoes={
+      <PageHeader
+        title="Cofre"
+        subtitle={resumo}
+        help="Senhas, links úteis e sistemas do cliente num lugar só. As senhas ficam mascaradas até alguém pedir para ver."
+        actions={
           <>
-            {podeLimpar && (
-              <button
-                type="button"
-                onClick={() => setConfirmClearId(effectiveClientId)}
-                className={juntar(botao.discreto, "hidden hover:text-destructive sm:inline-flex")}
-                title="Limpar todo o cofre deste cliente"
-              >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                Limpar cofre
-              </button>
-            )}
             {podeLimpar && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className={juntar(botao.icone, "sm:hidden")} aria-label="Mais ações">
+                  <button type="button" className={botao.icone} aria-label="Mais ações">
                     <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </DropdownMenuTrigger>
@@ -226,7 +215,7 @@ export default function ClientVaultPage() {
         // Área de trabalho (SISTEMA.md seção 8): de 1024 px para cima a lista de
         // clientes e os itens do cofre rolam cada um por conta própria, até o fim
         // da janela. No celular a página rola normal e o cliente é o seletor do título.
-        <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal="Cofre" className="mt-4">
+        <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal="Cofre" className="mt-6">
           <div
             className={juntar(
               "flex min-w-0 flex-col lg:grid lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]",
@@ -247,14 +236,14 @@ export default function ClientVaultPage() {
                 ) : undefined
               }
             >
-              <div className="relative mb-2 shrink-0">
+              <div className="relative mb-3 shrink-0">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Buscar cliente"
                   aria-label="Buscar cliente"
-                  className={juntar(campo, "pl-8")}
+                  className={juntar(campo, "h-10 rounded-full pl-9")}
                 />
               </div>
               {loadingClients && !clients ? (
@@ -272,34 +261,34 @@ export default function ClientVaultPage() {
                 <EstadoVazio compacto titulo="Nenhum cliente encontrado." />
               ) : (
                 <RegiaoRolavel memoria="cofre:clientes" rotulo="Lista de clientes">
-                  <ul className="divide-y divide-border">
+                  <ul className="space-y-1">
                     {filteredClients.map((c) => {
                       const active = c.id === effectiveClientId;
                       return (
-                        <li key={c.id} className="group flex min-w-0 items-center py-1">
+                        <li key={c.id} className="group flex min-w-0 items-center">
                           <button
                             type="button"
                             onClick={() => setSelectedClientId(c.id)}
                             aria-current={active ? "true" : undefined}
                             className={juntar(
-                              "flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                              active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                              "flex min-w-0 flex-1 items-center rounded-md px-2.5 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              active ? "bg-foreground text-background" : "text-foreground hover:bg-muted",
                             )}
                           >
                             <FotoDoCliente
                               nome={c.full_name || "?"}
                               fotos={c.avatar_url ? [{ url: c.avatar_url, tipo: "foto" }] : null}
                               clienteId={c.id}
-                              lado={28}
+                              lado={36}
                               forma="quadrada"
                               alt=""
-                              className="mr-2.5"
+                              className="mr-3"
                             />
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[13px] font-medium">{c.full_name}</span>
-                              {c.company_name && <span className="block truncate text-[12px] text-muted-foreground">{c.company_name}</span>}
+                              {c.company_name && <span className={juntar("block truncate text-[12px]", active ? "text-background/70" : "text-muted-foreground")}>{c.company_name}</span>}
                             </span>
-                            {active && <span className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />}
+                            {active && <span className="ml-2 h-2 w-2 shrink-0 rounded-full bg-accent-solid" aria-hidden="true" />}
                           </button>
                           {isAdminOrTeam && (
                             <button
@@ -329,7 +318,7 @@ export default function ClientVaultPage() {
           </div>
         </AreaDeTrabalho>
       ) : (
-        <section className="mt-5 min-w-0" aria-label="Itens do cofre">
+        <section className="mt-6 min-w-0 sm:mt-8" aria-label="Itens do cofre">
           {conteudo}
         </section>
       )}

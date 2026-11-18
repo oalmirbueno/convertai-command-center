@@ -25,8 +25,8 @@ export default function ConfirmModal({ open, title, description, confirmLabel = 
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-150" onClick={() => !loading && onCancel()}>
-      <div className="bg-card border border-border rounded-xl p-6 w-[340px] space-y-4 shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px] animate-in fade-in duration-150" onClick={() => !loading && onCancel()}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-[340px] min-w-0 space-y-4 shadow-pop animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
             <AlertTriangle className="w-5 h-5 text-destructive" />

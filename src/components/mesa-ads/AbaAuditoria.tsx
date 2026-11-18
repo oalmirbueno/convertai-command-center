@@ -87,7 +87,7 @@ export default function AbaAuditoria() {
       {q.isLoading && <Carregando forma="aba" rotulo="Lendo as auditorias" />}
       {q.isError && <EstadoDeErro titulo="Não deu para ler as auditorias" descricao={q.error instanceof Error ? q.error.message : ""} />}
       {!q.isLoading && !q.isError && !atual && (
-        <EstadoVazio icone={<ShieldCheck className="h-5 w-5" />} titulo="Nenhuma auditoria ainda" descricao="Rode a primeira: leva alguns segundos e não custa nada (é cálculo do painel, sem IA)." />
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<ShieldCheck className="h-5 w-5" />} titulo="Nenhuma auditoria ainda" descricao="Rode a primeira: leva alguns segundos e não custa nada (é cálculo do painel, sem IA)." />
       )}
 
       {atual && (
@@ -114,7 +114,7 @@ export default function AbaAuditoria() {
                   <span>{c.rotulo}</span>
                   <span className="tabular-nums text-muted-foreground">{c.saude !== null ? `${c.saude}` : "sem dado"} · cobre {c.cobertura}%</span>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
                   <div className={juntar("h-full rounded-full", c.saude === null ? "bg-muted" : c.saude >= 80 ? "bg-success" : c.saude >= 50 ? "bg-warning" : "bg-destructive")} style={{ width: `${c.saude ?? 0}%` }} />
                 </div>
               </div>
@@ -123,7 +123,7 @@ export default function AbaAuditoria() {
 
           {atual.prioridades.length > 0 && (
             <section className="min-w-0">
-              <h3 className="mb-1 text-[13px] font-semibold">O que resolver primeiro</h3>
+              <h3 className="mb-1 text-[15px] font-semibold">O que resolver primeiro</h3>
               <ul className="min-w-0 divide-y divide-border border-y border-border">
                 {atual.prioridades.slice(0, 6).map((c) => <Controle key={c.id} c={c} />)}
               </ul>
@@ -136,7 +136,7 @@ export default function AbaAuditoria() {
               const rotulo = atual.categorias.find((c) => c.categoria === cat)?.rotulo ?? cat;
               return (
                 <details key={cat} className="min-w-0 border-b border-border py-1.5">
-                  <summary className={juntar("cursor-pointer rounded text-[13px]", foco)}>
+                  <summary className={juntar("cursor-pointer rounded-sm text-[13px]", foco)}>
                     {rotulo} <span className="text-[12px] text-muted-foreground">({doCat.filter((c) => c.resultado === "passou").length} de {doCat.filter((c) => c.resultado === "passou" || c.resultado === "falhou").length} passaram)</span>
                   </summary>
                   <ul className="min-w-0 divide-y divide-border/60">{doCat.map((c) => <Controle key={c.id} c={c} />)}</ul>

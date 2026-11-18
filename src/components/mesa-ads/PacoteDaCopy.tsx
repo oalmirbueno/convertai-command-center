@@ -1,3 +1,4 @@
+import { HelpTooltip } from "@/components/ds";
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Download, FileArchive, Loader2, Package, Send } from "lucide-react";
@@ -89,7 +90,7 @@ function Grupo({
         type="button"
         onClick={aoAlternar}
         aria-expanded={aberto}
-        className="mb-1.5 flex w-full min-w-0 items-center rounded text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        className="mb-1.5 flex w-full min-w-0 items-center rounded-sm text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
       >
         <ChevronRight className={`mr-1 h-3.5 w-3.5 shrink-0 transition-transform ${aberto ? "rotate-90" : ""}`} />
         <span className="min-w-0 flex-1 truncate">
@@ -269,8 +270,9 @@ export default function PacoteDaCopy({
       <Andamento desde={desde} rotulo="Escrevendo e conferindo o pacote" />
 
       {!pacote && desde === null && (
-        <p className="text-[12px] leading-snug text-muted-foreground">
-          Gere o pacote para ter muitas variações de texto, título, descrição e botão, prontas para o gestor subir no Gerenciador.
+        <p className="flex items-center text-[12px] leading-snug text-muted-foreground">
+          Nenhum pacote gerado ainda.
+          <HelpTooltip className="ml-1">Gere o pacote para ter muitas variações de texto, título, descrição e botão, prontas para o gestor subir no Gerenciador.</HelpTooltip>
         </p>
       )}
 

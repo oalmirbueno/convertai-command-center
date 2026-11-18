@@ -25,7 +25,7 @@ const ROTULOS_FORA_DO_CATALOGO: Record<string, string> = {
 };
 
 export const botaoPequeno =
-  "inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * Saldo e gasto do mês numa linha curta. Tocar abre o detalhe (por modelo,
@@ -63,7 +63,7 @@ export function CustoCompacto({
           <button
             type="button"
             aria-label="Saldo e gasto do mês"
-            className="inline-flex h-8 min-w-0 items-center rounded-lg px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex h-8 min-w-0 items-center rounded-full px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:bg-muted/70 sm:px-3"
           >
             {/* 16/10/2026 (dono: "cara de aplicativo" no celular): abaixo de 640 px o saldo vira só o ícone da
                 carteira (com o ponto vermelho do alerta); o valor e o gasto aparecem ao tocar. */}
@@ -78,7 +78,7 @@ export function CustoCompacto({
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[340px] p-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <div className="rounded-lg bg-muted px-2.5 py-2">
               <p className="text-[11px] text-muted-foreground">Saldo</p>
               <p className={`text-[15px] font-semibold tabular-nums ${negativo ? "text-destructive" : "text-foreground"}`}>{saldoUsd === null ? "?" : usd(saldoUsd)}</p>
@@ -135,17 +135,17 @@ export function CustoCompacto({
           {(podeRecarregar || isAdmin) && (
             <div className="mt-3 flex flex-wrap border-t border-border pt-2 sm:hidden [&>*]:mr-1.5 [&>*]:mt-1" data-atalhos-do-saldo="">
               {podeRecarregar && (
-                <button type="button" onClick={onRecarregar} className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground">
+                <button type="button" onClick={onRecarregar} className="inline-flex h-9 items-center rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground">
                   <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Recarregar
                 </button>
               )}
               {isAdmin && (
-                <button type="button" onClick={onModelos} className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-[13px]">
+                <button type="button" onClick={onModelos} className="inline-flex h-9 items-center rounded-full bg-muted px-3 text-[13px]">
                   <Sparkles className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Modelos de IA
                 </button>
               )}
               {isAdmin && (
-                <button type="button" onClick={onChaves} className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-[13px]">
+                <button type="button" onClick={onChaves} className="inline-flex h-9 items-center rounded-full bg-muted px-3 text-[13px]">
                   <KeyRound className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Chaves e cotas
                 </button>
               )}

@@ -10,19 +10,17 @@ import MeetingToProjectModal from "@/components/admin/MeetingToProjectModal";
 import ProjectView from "@/components/client/ProjectView";
 import {
   AreaDeTrabalho,
-  CabecalhoDePagina,
   Carregando,
   EstadoVazio,
-  RegiaoRolavel,
   SeletorCompacto,
   botao,
-  etiqueta,
   foco,
   juntar,
   superficie,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
+import { Avatar, Chip, OverflowMenu, PageHeader, ProgressBar, StatTrio, StatusPill, type Tone } from "@/components/ds";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Todos" },
@@ -41,6 +39,8 @@ const statusDotColors: Record<string, string> = {
   paused: "bg-muted-foreground",
   done: "bg-success",
 };
+
+const statusTone: Record<string, Tone> = { active: "info", review: "warning", planning: "neutral", paused: "neutral", done: "success" };
 
 const statusLabels: Record<string, string> = {
   planning: "Planejamento", active: "Ativo", review: "Revisão", paused: "Pausado", done: "Concluído",
@@ -80,13 +80,28 @@ export default function Projects() {
   };
   const clicavel = isClient || isAdmin;
 
+  const numeros = (
+    <StatTrio
+      label="Projetos em números"
+      items={[
+        { label: "Projetos", value: visiveis.length, hint: filter !== "all" ? `${filtered.length} no filtro` : undefined },
+        { label: "Ativos", value: contagem("active") },
+        { label: "Em revisão", value: contagem("review") },
+        { label: "Concluídos", value: contagem("done") },
+      ]}
+    />
+  );
+
   return (
     <div className="min-w-0">
-      <CabecalhoDePagina
-        titulo="Projetos"
-        ajuda={isClient ? "Seus projetos com a Aceleriq. Toque num projeto para ver o andamento." : "Todos os projetos da agência, com status, andamento e prazo. Clique num projeto para abrir o detalhe."}
-        descricao={isLoading ? undefined : `${filtered.length} ${filtered.length === 1 ? "projeto" : "projetos"}`}
-        acoes={
+      {/* Cabeçalho como nas referências: sobretítulo, título, números sem cartão e UMA ação verde; o resto no "…". */}
+      <PageHeader
+        eyebrow={isClient ? "Com a Aceleriq" : "Operação"}
+        title="Projetos"
+        help={isClient ? "Seus projetos com a Aceleriq. Toque num projeto para ver o andamento." : "Todos os projetos da agência, com status, andamento e prazo. Clique num projeto para abrir o detalhe."}
+        beside={!isLoading && visiveis.length > 0 ? <div className="ml-6 hidden min-w-0 xl:block">{numeros}</div> : undefined}
+        stats={!isLoading && visiveis.length > 0 ? <div className="xl:hidden">{numeros}</div> : undefined}
+        actions={
           <>
             <SeletorCompacto
               rotulo="Status"
@@ -96,13 +111,10 @@ export default function Projects() {
               onEscolher={setFilter}
             />
             {isAdmin && (
-              <button type="button" onClick={() => setMeetingModalOpen(true)} className={botao.secundario} aria-label="Gerar projeto pela ata">
-                <Sparkles className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Gerar via ata</span>
-              </button>
+              <OverflowMenu label="Mais ações de projetos" items={[{ label: "Gerar via ata", icon: <Sparkles className="h-4 w-4" />, onSelect: () => setMeetingModalOpen(true) }]} />
             )}
             {isAdmin && (
-              <button type="button" onClick={() => setCreateOpen(true)} data-tour="projects-create-btn" className={botao.primario} aria-label="Novo projeto">
+              <button type="button" onClick={() => setCreateOpen(true)} data-tour="projects-create-btn" className={juntar(botao.primario, "font-semibold")} aria-label="Novo projeto">
                 <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Novo projeto</span>
               </button>
@@ -112,7 +124,7 @@ export default function Projects() {
       />
 
       {/* A lista rola sozinha de 1024 px para cima e lembra onde estava. */}
-      <AreaDeTrabalho className="mt-4" rotuloDoPrincipal="Lista de projetos" memoriaDaRolagem="projetos:lista">
+      <AreaDeTrabalho className="mt-6 sm:mt-8" rotuloDoPrincipal="Lista de projetos" memoriaDaRolagem="projetos:lista">
         {isLoading ? (
           <Carregando rotulo="Carregando projetos" linhas={6} />
         ) : filtered.length === 0 ? (
@@ -129,7 +141,7 @@ export default function Projects() {
             }
           />
         ) : (
-          <ul aria-label="Projetos" data-tour="projects-list" className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+          <ul aria-label="Projetos" data-tour="projects-list" className={juntar(superficie.painel, "space-y-1 overflow-hidden p-2 sm:p-3")}>
             {filtered.map((p: any) => {
               // Recorrente nao tem "80% pronto": mostra o ritmo do ciclo.
               const view = buildProgressView(p, (tasks || []) as any[]);
@@ -147,31 +159,36 @@ export default function Projects() {
                         abrir(p);
                       }
                     }}
-                    className={juntar("flex min-w-0 items-center px-4 py-3 transition-colors", clicavel && "cursor-pointer hover:bg-muted/40", clicavel && foco)}
+                    className={juntar("flex min-w-0 items-center rounded-md px-3 py-3.5 transition-colors sm:px-4 sm:py-4", clicavel && "cursor-pointer hover:bg-muted/60", clicavel && foco)}
                   >
-                    <span aria-hidden="true" className={juntar("mr-3 h-2 w-2 shrink-0 rounded-full", statusDotColors[p.status] || "bg-muted-foreground")} />
+                    <span className="relative mr-3 shrink-0 sm:mr-4">
+                      <Avatar name={p.client?.company_name || p.client?.full_name || p.name} size="md" square />
+                      <span aria-hidden="true" className={juntar("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card sm:hidden", statusDotColors[p.status] || "bg-muted-foreground")} />
+                    </span>
                     <div className="mr-3 min-w-0 flex-1">
                       <div className="flex min-w-0 items-center">
-                        <span className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{p.name}</span>
+                        <span className="min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{p.name}</span>
                         {p.project_type && (
-                          <span className={juntar(etiqueta, "ml-2 hidden bg-muted capitalize text-muted-foreground sm:inline-flex")}>{p.project_type.replace("_", " ")}</span>
+                          <Chip className="ml-2 hidden capitalize text-muted-foreground sm:inline-flex">{p.project_type.replace("_", " ")}</Chip>
                         )}
                       </div>
-                      <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
-                        {[p.client?.company_name || p.client?.full_name, statusLabels[p.status]].filter(Boolean).join(" · ")}
+                      <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
+                        {p.client?.company_name || p.client?.full_name}
+                        {/* O status já aparece na pílula de 1024 px para cima: aqui só quando ela some. */}
+                        {statusLabels[p.status] && <span className="lg:hidden">{p.client?.company_name || p.client?.full_name ? " · " : ""}{statusLabels[p.status]}</span>}
                       </p>
                     </div>
-                    <div className="mr-3 hidden w-36 shrink-0 md:block">
-                      <div className="h-[3px] overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full bg-primary" style={{ width: `${cycleFillPercent(view)}%` }} />
-                      </div>
-                      <p className="mt-1 truncate text-right text-[11px] tabular-nums text-muted-foreground">
+                    {view.mode === "percent" && <span className="mr-1 shrink-0 text-[13px] font-semibold tabular-nums text-foreground md:hidden" aria-hidden="true">{view.percent}%</span>}
+                    <div className="mr-4 hidden w-40 shrink-0 md:block">
+                      <p className="mb-1.5 truncate text-right text-[13px] font-semibold tabular-nums text-foreground">
                         {view.mode === "percent" ? `${view.percent}%` : view.label}
                       </p>
+                      <ProgressBar value={cycleFillPercent(view)} max={100} height={6} label={view.mode === "percent" ? `${view.percent}% pronto` : view.label} />
                     </div>
+                    {statusLabels[p.status] && <StatusPill plain tone={statusTone[p.status] || "neutral"} className="mr-4 hidden w-[112px] justify-start lg:inline-flex">{statusLabels[p.status]}</StatusPill>}
                     {p.deadline && (
                       <span className={juntar(texto.auxiliar, "hidden shrink-0 items-center tabular-nums sm:flex", isAdmin && "mr-2")}>
-                        <Clock className="mr-1 h-3 w-3" aria-hidden="true" />
+                        <Clock className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                         {formatDate(p.deadline)}
                       </span>
                     )}

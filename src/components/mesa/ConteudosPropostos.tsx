@@ -81,7 +81,7 @@ export function CartaoDoConteudo({
               className="mr-3 inline-flex items-center text-[12px] font-medium text-primary hover:underline"
             >
               {aberto ? "Fechar roteiro" : "Ver roteiro"}
-              <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${aberto ? "rotate-180" : ""}`} />
+              <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} />
             </button>
           )}
           {item.task_id && onAbrir && (
@@ -232,7 +232,7 @@ export function BlocoDaProposta({
   return (
     <div className="min-w-0 space-y-2">
       {!compacto && grade && (
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 2xl:grid-cols-3">
           {itens.map((it, i) => (
             <CartaoDoConteudo
               key={it.tema_id || i}

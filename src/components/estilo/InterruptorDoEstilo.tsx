@@ -62,7 +62,7 @@ export default function InterruptorDoEstilo({
   const desativado = gravando || lido.isLoading || (!estiloAtivo && !ligado);
   return (
     <div className={`inline-flex min-w-0 items-center ${className}`} data-interruptor-do-estilo={ligado ? "ligado" : "desligado"}>
-      <Switch
+      <Switch className="toque-compacto"
         id={`estilo-${ids[0]}`}
         checked={ligado}
         disabled={desativado}

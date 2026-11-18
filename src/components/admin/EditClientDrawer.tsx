@@ -1,28 +1,27 @@
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { saldoDaCobranca, saldoDaParcela } from "@/lib/clientes/situacaoDaCobranca";
 import DiaPrioritarioNoCadastro from "@/components/dia-prioritario/DiaPrioritarioNoCadastro";
+import ModoDeAprovacaoNoCadastro from "@/components/admin/ModoDeAprovacaoNoCadastro";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { X, Loader2, Trash2, FileText, Camera, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, PackageCheck, FolderOpen, Briefcase, Pause, Play } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, PackageCheck, FolderOpen, Briefcase, Pause, Play, Mail, Phone, ArrowUpRight } from "lucide-react";
+import { Avatar, List, ListRow, PillTabs, ProgressBar, StatCard, StatusPill, type PillTab, type Tone } from "@/components/ds";
 import {
   AjudaRecolhida,
   CampoDeFormulario,
   EstadoVazio,
-  Etapas,
   GrupoDeCampos,
   RegiaoRolavel,
   Secao,
   SeletorCompacto,
   botao,
   campo,
-  etiqueta,
   foco,
   juntar,
   superficie,
   texto,
   useEstadoDaTela,
-  type ItemDeEtapa,
 } from "@/components/sistema";
 import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,9 +34,12 @@ import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
 import MudarPlano from "@/components/admin/MudarPlano";
+import ExtrasDoCliente from "@/components/clientes/ExtrasDoCliente";
 import GerarLinkDoBriefing from "@/components/briefing/GerarLinkDoBriefing";
 import { estadoDoLink, modeloDeFabrica } from "../../../supabase/functions/_shared/briefing-modelos";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
+import { buildPlanoComEntrada, lerValorBR, percentualDaEntrada } from "@/lib/paymentInstallments";
+import { somarMeses } from "@/lib/extrasDoCliente";
 import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
 import ClientConnectionsPanel from "@/components/admin/ClientConnectionsPanel";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
@@ -82,12 +84,32 @@ const STATUS_DO_PROJETO: Record<string, string> = {
   cancelled: "Cancelado",
 };
 
-const CLIENT_STATUS_OPTIONS = [
-  { value: "onboarding", label: "Em Andamento", color: "bg-warning" },
-  { value: "active", label: "Ativo", color: "bg-success" },
-  { value: "standby", label: "Standby", color: "bg-accent" },
-  { value: "inactive", label: "Inativo", color: "bg-muted-foreground" },
+const CLIENT_STATUS_OPTIONS: Array<{ value: string; label: string; tom: Tone }> = [
+  { value: "onboarding", label: "Em Andamento", tom: "warning" },
+  { value: "active", label: "Ativo", tom: "success" },
+  { value: "standby", label: "Standby", tom: "info" },
+  { value: "inactive", label: "Inativo", tom: "neutral" },
 ];
+
+const TOM_DO_PROJETO: Record<string, Tone> = {
+  todo: "neutral",
+  in_progress: "info",
+  review: "warning",
+  paused: "neutral",
+  done: "success",
+  cancelled: "danger",
+};
+
+/** Bloco da ficha: cartão de 24 px com respiro; a seção de dentro perde a divisória (o cartão já separa). */
+const BLOCO = juntar(superficie.painel, "min-w-0 p-5 empty:hidden sm:p-6 [&>section]:border-t-0 [&>section]:pt-0 [&>fieldset]:border-t-0 [&>fieldset]:pt-0");
+
+/** Azulejo de ação (Operação): ícone num círculo grande, nome embaixo e a seta no canto. */
+const AZULEJO = juntar(
+  "toque-compacto group relative flex min-w-0 flex-col items-start rounded-lg border border-border bg-card p-4 text-left shadow-card transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 sm:p-5",
+  foco,
+);
+
+const dinheiroDaFicha = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
 
 interface Props {
   open: boolean;
@@ -189,7 +211,7 @@ export default function EditClientDrawer({
   // Payment management state
   const [payCreateForProject, setPayCreateForProject] = useState<string | null>(null);
   const [payTotal, setPayTotal] = useState("");
-  const [payEntryPct, setPayEntryPct] = useState("50");
+  const [payEntryPct, setPayEntryPct] = useState(""); // entrada em R$ (16/11: valor livre, não mais %)
   const [payInstCount, setPayInstCount] = useState("1");
   const [payNotes, setPayNotes] = useState("");
   const [paySubmitting, setPaySubmitting] = useState(false);
@@ -568,32 +590,27 @@ export default function EditClientDrawer({
   };
 
   const handleCreatePayment = async (projectId: string) => {
-    const total = parseFloat(payTotal);
-    const entryPct = parseFloat(payEntryPct);
-    const count = parseInt(payInstCount);
-    if (!total || isNaN(entryPct) || !count) return;
+    const total = lerValorBR(payTotal);
+    const entryAmount = Math.min(lerValorBR(payEntryPct), total);
+    const entryPct = percentualDaEntrada(total, entryAmount);
+    const count = Math.max(parseInt(payInstCount) || 1, 1);
+    if (!(total > 0)) return;
     setPaySubmitting(true);
     try {
-      const entryAmount = (total * entryPct) / 100;
-      const remaining = total - entryAmount;
-      const perInstallment = count > 0 ? remaining / count : 0;
       const { data: paymentData, error: paymentError } = await supabase
         .from("project_payments")
         .insert({ project_id: projectId, client_id: client.id, total_value: total, entry_percentage: entryPct, entry_amount: entryAmount, installments_count: count, notes: payNotes.trim() || null, created_by: profile?.id })
         .select().single();
       if (paymentError) throw paymentError;
-      const rows: any[] = [{ payment_id: paymentData.id, installment_number: 0, amount: entryAmount, due_date: todayBR(), status: "pending", description: `Entrada (${entryPct}%)` }];
-      for (let i = 1; i <= count; i++) {
-        const d = new Date(); d.setMonth(d.getMonth() + i);
-        rows.push({ payment_id: paymentData.id, installment_number: i, amount: perInstallment, due_date: toBRDateKey(d), status: "pending", description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}` });
-      }
+      const hoje = todayBR();
+      const rows = buildPlanoComEntrada({ paymentId: paymentData.id, total, entrada: entryAmount, entradaEm: hoje, entradaPaga: false, parcelas: count, primeiraEm: entryAmount > 0 ? somarMeses(hoje, 1) : hoje });
 
       const { error: instErr } = await supabase.from("payment_installments").insert(rows);
       if (instErr) throw instErr;
       queryClient.invalidateQueries({ queryKey: ["client-nonrecurring-projects"] });
       queryClient.invalidateQueries({ queryKey: ["project-payments"] });
       toast.success("Plano de pagamento criado!");
-      setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes("");
+      setPayCreateForProject(null); setPayTotal(""); setPayEntryPct(""); setPayInstCount("1"); setPayNotes("");
     } catch (err: any) { toast.error(err.message || "Erro ao criar plano"); }
     setPaySubmitting(false);
   };
@@ -733,97 +750,140 @@ export default function EditClientDrawer({
   };
 
   const nomeDoCliente = client.company_name || client.full_name;
-  const abas: ItemDeEtapa[] = [
-    { valor: "resumo", rotulo: "Resumo", contador: execPendingFiles || null },
-    { valor: "cadastro", rotulo: "Cadastro" },
-    ...(isAdmin ? [{ valor: "plano", rotulo: "Plano e cobrança", contador: execOverdueBills || null }] : []),
-    ...(isAdmin ? [{ valor: "acesso", rotulo: "Acesso" }] : []),
-    { valor: "contas", rotulo: "Contas e cofre" },
-    { valor: "onboarding", rotulo: "Onboarding" },
+  const abas: PillTab<AbaDaFicha>[] = [
+    { value: "resumo", label: "Resumo", count: execPendingFiles || undefined },
+    { value: "cadastro", label: "Cadastro" },
+    ...(isAdmin ? [{ value: "plano" as AbaDaFicha, label: "Plano e cobrança", count: execOverdueBills || undefined }] : []),
+    ...(isAdmin ? [{ value: "acesso" as AbaDaFicha, label: "Acesso" }] : []),
+    { value: "contas", label: "Contas e cofre" },
+    { value: "onboarding", label: "Onboarding" },
   ];
-  const abaAberta: AbaDaFicha = abas.some((a) => a.valor === aba) ? aba : "resumo";
-  const painelDaAba = (valor: AbaDaFicha) => juntar("space-y-6", abaAberta !== valor && "hidden");
+  const abaAberta: AbaDaFicha = abas.some((a) => a.value === aba) ? aba : "resumo";
+  const painelDaAba = (valor: AbaDaFicha) => juntar("space-y-5", abaAberta !== valor && "hidden");
   const statusAtual = CLIENT_STATUS_OPTIONS.find((s) => s.value === planStatus);
+  // Andamento com o que a ficha já buscou: projetos concluídos e tarefas feitas sobre o total.
+  const totalDeProjetos = (clientProjects || []).length;
+  const projetosConcluidos = totalDeProjetos - execActiveProjects;
+  const totalDeTarefas = (clientTasks || []).length;
+  const tarefasFeitas = totalDeTarefas - execOpenTasks;
 
   // Portal no body: dentro do conteúdo do painel (camada fixa própria no celular) a ficha ficava por baixo das barras.
   return createPortal(
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] sm:p-6">
-        <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="client-drawer-title"
-          className="relative flex h-full w-full max-w-4xl flex-col overflow-hidden border-border bg-card sm:h-[88vh] sm:max-h-[900px] sm:rounded-lg sm:border"
+          className="relative flex h-full w-full max-w-5xl flex-col overflow-hidden border-border bg-background sm:h-[90vh] sm:max-h-[940px] sm:rounded-lg sm:border sm:shadow-pop"
         >
-          {/* Cabeçalho da ficha: logo (troca ao tocar), nome, estado e fechar */}
-          <div className="flex min-w-0 items-center border-b border-border px-4 pb-2 pt-3 sm:px-5">
-            <div className="group relative shrink-0">
-              {avatarUrl ? (
-                <div className="h-11 w-11 overflow-hidden rounded-full bg-muted ring-1 ring-border">
-                  <img src={avatarUrl} alt={client.full_name} className="h-full w-full object-cover" />
-                </div>
-              ) : (
-                <FotoDoCliente nome={nomeDoCliente || ""} foto={fotoFallback} tamanho="md" />
-              )}
-              <button
-                type="button"
-                onClick={() => avatarInputRef.current?.click()}
-                disabled={uploadingAvatar}
-                aria-label={avatarUrl ? "Trocar a logo do cliente" : "Subir a logo do cliente"}
-                title={avatarUrl ? "Trocar a logo" : fotoFallback?.tipo === "instagram" ? "Foto do Instagram. Toque para subir a logo." : "Subir a logo"}
-                className={juntar(
-                  "absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground",
-                  foco,
+          {/* Cabeçalho da ficha (rodada ousada, 15/11/2026): logo grande (troca ao tocar), nome, estado em pílula, contato, o plano no cartão sólido e as abas em pílula */}
+          <div className="min-w-0 border-b border-border bg-card px-4 pb-4 pt-4 sm:px-8 sm:pb-5 sm:pt-7">
+            <div className="flex min-w-0 items-start">
+              <div className="group relative shrink-0">
+                {avatarUrl ? (
+                  <div className="h-14 w-14 overflow-hidden rounded-full bg-muted ring-1 ring-border sm:h-16 sm:w-16">
+                    <img src={avatarUrl} alt={client.full_name} className="h-full w-full object-cover" />
+                  </div>
+                ) : (
+                  <FotoDoCliente nome={nomeDoCliente || ""} foto={fotoFallback} lado={56} />
                 )}
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  aria-label={avatarUrl ? "Trocar a logo do cliente" : "Subir a logo do cliente"}
+                  title={avatarUrl ? "Trocar a logo" : fotoFallback?.tipo === "instagram" ? "Foto do Instagram. Toque para subir a logo." : "Subir a logo"}
+                  className={juntar(
+                    "toque-compacto absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-foreground text-background transition-transform hover:scale-105",
+                    foco,
+                  )}
+                >
+                  {uploadingAvatar ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Camera className="h-3.5 w-3.5" aria-hidden="true" />}
+                </button>
+                <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+              </div>
+              <div className="ml-4 min-w-0 flex-1">
+                <h2 id="client-drawer-title" className="truncate text-[24px] font-semibold leading-8 tracking-[-0.03em] text-foreground sm:text-[28px] sm:leading-9">
+                  {nomeDoCliente}
+                </h2>
+                <div className="-mx-1 mt-1.5 flex min-w-0 flex-wrap items-center [&>*]:mx-1 [&>*]:my-0.5">
+                  <StatusPill tone={statusAtual?.tom || "neutral"}>{statusAtual?.label || "Sem status"}</StatusPill>
+                  {client.full_name && client.company_name && <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>{client.full_name}</span>}
+                  {client.email && (
+                    <span className={juntar(texto.auxiliar, "hidden min-w-0 items-center sm:inline-flex")}>
+                      <Mail className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0 truncate">{client.email}</span>
+                    </span>
+                  )}
+                  {client.phone && (
+                    <span className={juntar(texto.auxiliar, "hidden min-w-0 items-center tabular-nums sm:inline-flex")}>
+                      <Phone className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0 truncate">{client.phone}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                ref={closeButtonRef}
+                type="button"
+                aria-label="Fechar dados do cliente"
+                onClick={onClose}
+                className={juntar("toque-compacto ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-foreground hover:text-background", foco)}
               >
-                {uploadingAvatar ? <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden="true" /> : <Camera className="h-2.5 w-2.5" aria-hidden="true" />}
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
-              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
             </div>
-            <div className="ml-3 min-w-0 flex-1">
-              <h2 id="client-drawer-title" className={juntar(texto.tituloSecao, "truncate")}>
-                {nomeDoCliente}
-              </h2>
-              <p className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center truncate")}>
-                {statusAtual && <span className={`mr-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusAtual.color}`} aria-hidden="true" />}
-                <span className="truncate">
-                  {statusAtual?.label || "Sem status"}
-                  {client.full_name && client.company_name ? ` · ${client.full_name}` : ""}
-                </span>
-              </p>
+            {isAdmin && <MudarPlano key={client.id} client={client as never} onSalvo={(p) => { setPlanName(p.nome); setPlanValue(String(p.valor)); setPlanStatus("active"); }} />}
+            <div className="mt-4 min-w-0">
+              <PillTabs tabs={abas} value={abaAberta} onChange={(v) => setAba(v)} label="Partes da ficha do cliente" />
             </div>
-            <button ref={closeButtonRef} type="button" aria-label="Fechar dados do cliente" onClick={onClose} className={juntar(botao.icone, "ml-2")}>
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </div>
-          {isAdmin && <MudarPlano key={client.id} client={client as never} onSalvo={(p) => { setPlanName(p.nome); setPlanValue(String(p.valor)); setPlanStatus("active"); }} />}
-          <div className="border-b border-border px-2 sm:px-3">
-            <Etapas itens={abas} valor={abaAberta} onEscolher={(v) => setAba(v as AbaDaFicha)} rotulo="Partes da ficha do cliente" />
           </div>
 
-          <RegiaoRolavel modo="sempre" sobre="cartao" memoria={`ficha:${client.id}:${abaAberta}`} className="px-4 py-5 sm:px-5">
+          <RegiaoRolavel modo="sempre" sobre="fundo" memoria={`ficha:${client.id}:${abaAberta}`} className="px-4 py-5 sm:px-8 sm:py-6">
             {/* ── Resumo: números, operação, projetos e briefing ── */}
             <div className={painelDaAba("resumo")}>
               {isAdmin && (
-                <dl className={juntar(superficie.poco, "grid grid-cols-3 gap-y-3 px-2 py-3 sm:grid-cols-6")} aria-label="Resumo executivo">
+                <div role="group" aria-label="Resumo executivo" className="grid min-w-0 grid-cols-3 gap-3 sm:gap-4">
                   {/* 16/10/2026 (celular, menos números): abaixo de 640 px ficam Projetos, Tarefas e
                       Atrasados numa linha; Aprovações já é o contador da aba Resumo. */}
-                  {[
-                    { label: "Projetos", value: execActiveProjects, color: "text-foreground" },
-                    { label: "Tarefas", value: execOpenTasks, color: "text-foreground", alert: execUrgentTasks > 0 ? `${execUrgentTasks} urgentes` : "" },
-                    { label: "Aprovações", value: execPendingFiles, color: execPendingFiles > 0 ? "text-warning" : "text-foreground", secundario: true },
-                    { label: "Relatórios", value: execPublishedReports, color: "text-foreground", secundario: true },
-                    { label: "Pendências", value: execPendingBills, color: execPendingBills > 0 ? "text-warning" : "text-foreground", secundario: true },
-                    { label: "Atrasados", value: execOverdueBills, color: execOverdueBills > 0 ? "text-destructive" : "text-foreground" },
-                  ].map((m) => (
-                    <div key={m.label} className={juntar("min-w-0 px-2 text-center", "secundario" in m && m.secundario && "max-sm:hidden")}>
-                      <dd className={juntar("text-[15px] font-semibold leading-6 tabular-nums", m.color)}>{m.value}</dd>
-                      <dt className={juntar(texto.auxiliar, "truncate")}>{m.label}</dt>
-                      {"alert" in m && m.alert && <p className="truncate text-[11px] text-destructive">{m.alert}</p>}
-                    </div>
-                  ))}
-                </dl>
+                  <StatCard
+                    variant="ink"
+                    label="Projetos"
+                    value={execActiveProjects}
+                    hint={totalDeProjetos > 0 ? `${projetosConcluidos} de ${totalDeProjetos} concluídos` : "Nenhum ainda"}
+                    chart={totalDeProjetos > 0 ? <ProgressBar value={projetosConcluidos} max={totalDeProjetos} height={6} label={`${projetosConcluidos} de ${totalDeProjetos} projetos concluídos`} /> : undefined}
+                    className="max-sm:p-3.5"
+                  />
+                  <StatCard
+                    label="Tarefas"
+                    value={execOpenTasks}
+                    hint={execUrgentTasks > 0 ? <span className="font-medium text-destructive">{execUrgentTasks} urgentes</span> : totalDeTarefas > 0 ? `${tarefasFeitas} de ${totalDeTarefas} feitas` : "Em aberto"}
+                    chart={totalDeTarefas > 0 ? <ProgressBar value={tarefasFeitas} max={totalDeTarefas} height={6} label={`${tarefasFeitas} de ${totalDeTarefas} tarefas feitas`} /> : undefined}
+                    className="max-sm:p-3.5"
+                  />
+                  <StatCard
+                    variant={execPendingFiles > 0 ? "accent" : "default"}
+                    label="Aprovações"
+                    value={execPendingFiles}
+                    hint="Aguardando o cliente"
+                    className="max-sm:hidden"
+                  />
+                  <StatCard label="Relatórios" value={execPublishedReports} hint="Publicados" className="max-sm:hidden" />
+                  <StatCard
+                    label="Pendências"
+                    value={execPendingBills}
+                    hint={execPendingBills > 0 ? <span className="font-medium text-warning">Cobranças em aberto</span> : "Cobranças em aberto"}
+                    className="max-sm:hidden"
+                  />
+                  <StatCard
+                    label="Atrasados"
+                    value={execOverdueBills}
+                    hint={execOverdueBills > 0 ? <span className="font-medium text-destructive">Vencidas com saldo</span> : "Nada vencido"}
+                    className="max-sm:p-3.5"
+                  />
+                </div>
               )}
 
               <Secao
@@ -831,128 +891,140 @@ export default function EditClientDrawer({
                 descricao={execPendingFiles > 0 ? `${execPendingFiles} aguardando cliente` : undefined}
                 ajuda="Crie uma entrega ou acompanhe o que já foi enviado para este cliente."
               >
-                <div className="-m-1 flex flex-wrap [&>*]:m-1">
-                  <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais&novo=1`)} className={botao.secundario}>
-                    <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                    Novo conteúdo
+                <div className="grid min-w-0 grid-cols-3 gap-3 sm:gap-4">
+                  <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais&novo=1`)} className={AZULEJO}>
+                    <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-foreground text-background"><Plus className="h-5 w-5" /></span>
+                    <span className="mt-3 text-[13px] font-medium leading-5 text-foreground">Novo conteúdo</span>
+                    <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground max-sm:hidden" aria-hidden="true" />
                   </button>
-                  <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais`)} className={botao.secundario}>
-                    <FolderOpen className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />
-                    Ver entregas
+                  <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais`)} className={AZULEJO}>
+                    <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-primary"><FolderOpen className="h-5 w-5" /></span>
+                    <span className="mt-3 text-[13px] font-medium leading-5 text-foreground">Ver entregas</span>
+                    <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground max-sm:hidden" aria-hidden="true" />
                   </button>
-                  <button type="button" onClick={() => openClientOperation(`/aprovacoes?client=${encodeURIComponent(client.id)}`)} className={botao.secundario}>
-                    <PackageCheck className="mr-1.5 h-4 w-4 text-warning" aria-hidden="true" />
-                    Aprovações
+                  <button type="button" onClick={() => openClientOperation(`/aprovacoes?client=${encodeURIComponent(client.id)}`)} className={AZULEJO}>
+                    <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-warning-soft text-warning"><PackageCheck className="h-5 w-5" /></span>
+                    <span className="mt-3 text-[13px] font-medium leading-5 text-foreground">Aprovações</span>
+                    <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground max-sm:hidden" aria-hidden="true" />
                   </button>
                 </div>
               </Secao>
 
               {/* Frente PRO3 (30/09): as propostas do cliente (histórico, nova, upsell e conselho), só admin e gestor. */}
               {(isAdmin || profile?.role === "manager") && (
-                <PropostasDoCliente
-                  cliente={{ id: String(client.id), nome: nomeDoCliente || "Cliente", services_config: client.services_config, plan_name: client.plan_name, client_type: client.client_type }}
-                  onAbrir={(caminho) => openClientOperation(caminho)}
-                />
+                <div className={BLOCO}>
+                  <PropostasDoCliente
+                    cliente={{ id: String(client.id), nome: nomeDoCliente || "Cliente", services_config: client.services_config, plan_name: client.plan_name, client_type: client.client_type }}
+                    onAbrir={(caminho) => openClientOperation(caminho)}
+                  />
+                </div>
               )}
 
               {/* Projetos do cliente: criar aqui ou puxar um que ficou solto */}
-              <Secao
-                titulo="Projetos"
-                divisoria
-                descricao={(clientProjects || []).length === 0 ? "Nenhum projeto ainda" : `${(clientProjects || []).length} neste cadastro`}
-                acao={
-                  <>
-                    <button type="button" onClick={() => setVincularAberto((v) => !v)} aria-expanded={vincularAberto} className={botao.secundario} aria-label="Vincular projeto existente">
-                      <Briefcase className="h-4 w-4 text-primary" aria-hidden="true" />
-                      <span className="ml-1.5 hidden sm:inline">Vincular existente</span>
-                    </button>
-                    <button type="button" onClick={() => setNovoProjetoAberto(true)} className={botao.secundario} aria-label="Novo projeto">
-                      <Plus className="h-4 w-4" aria-hidden="true" />
-                      <span className="ml-1.5 hidden sm:inline">Novo projeto</span>
-                    </button>
-                  </>
-                }
-              >
-                {vincularAberto && (
-                  <div className={juntar(superficie.poco, "mb-3 p-3")}>
-                    <CampoDeFormulario
-                      rotulo="Projeto que vem para este cliente"
-                      ajuda="O projeto sai do cadastro atual e passa para cá com tarefas, marcos e arquivos. Fica registrado no diário dos dois."
-                    >
-                      <select value={projetoParaVincular} onChange={(e) => setProjetoParaVincular(e.target.value)} className={campo}>
-                        <option value="">Escolha o projeto</option>
-                        {projetosDeOutros.map((p: any) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} · hoje em {p.client?.company_name || p.client?.full_name || "sem cliente"} ({p.status})
-                          </option>
-                        ))}
-                      </select>
-                    </CampoDeFormulario>
-                    <div className="mt-3 flex justify-end [&>*+*]:ml-2">
-                      <button type="button" onClick={() => setVincularAberto(false)} className={botao.discreto}>
-                        Cancelar
+              <div className={BLOCO}>
+                <Secao
+                  titulo="Projetos"
+                  descricao={(clientProjects || []).length === 0 ? "Nenhum projeto ainda" : `${(clientProjects || []).length} neste cadastro`}
+                  acao={
+                    <>
+                      <button type="button" onClick={() => setVincularAberto((v) => !v)} aria-expanded={vincularAberto} className={botao.secundario} aria-label="Vincular projeto existente">
+                        <Briefcase className="h-4 w-4 text-primary" aria-hidden="true" />
+                        <span className="ml-1.5 hidden sm:inline">Vincular existente</span>
                       </button>
-                      <button type="button" disabled={!projetoParaVincular || vinculando} onClick={() => void vincularProjeto()} className={botao.primario}>
-                        {vinculando ? "Vinculando…" : "Vincular a este cliente"}
+                      <button type="button" onClick={() => setNovoProjetoAberto(true)} className={botao.primario} aria-label="Novo projeto">
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                        <span className="ml-1.5 hidden sm:inline">Novo projeto</span>
                       </button>
+                    </>
+                  }
+                >
+                  {vincularAberto && (
+                    <div className={juntar(superficie.poco, "mb-3 p-4")}>
+                      <CampoDeFormulario
+                        rotulo="Projeto que vem para este cliente"
+                        ajuda="O projeto sai do cadastro atual e passa para cá com tarefas, marcos e arquivos. Fica registrado no diário dos dois."
+                      >
+                        <select value={projetoParaVincular} onChange={(e) => setProjetoParaVincular(e.target.value)} className={campo}>
+                          <option value="">Escolha o projeto</option>
+                          {projetosDeOutros.map((p: any) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} · hoje em {p.client?.company_name || p.client?.full_name || "sem cliente"} ({p.status})
+                            </option>
+                          ))}
+                        </select>
+                      </CampoDeFormulario>
+                      <div className="mt-3 flex justify-end [&>*+*]:ml-2">
+                        <button type="button" onClick={() => setVincularAberto(false)} className={botao.discreto}>
+                          Cancelar
+                        </button>
+                        <button type="button" disabled={!projetoParaVincular || vinculando} onClick={() => void vincularProjeto()} className={botao.primario}>
+                          {vinculando ? "Vinculando…" : "Vincular a este cliente"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {(clientProjects || []).length > 0 ? (
-                  <ul className="divide-y divide-border">
-                    {(clientProjects || []).map((p: any) => (
-                      <li key={p.id} className="flex min-w-0 items-center justify-between py-2">
-                        <span className={juntar(texto.corpo, "min-w-0 truncate")}>{p.name}</span>
-                        <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>
-                          {STATUS_DO_PROJETO[p.status] || p.status} · {p.progress ?? 0}%
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EstadoVazio compacto titulo="Sem projeto." descricao="Crie um ou vincule um que já existe." />
-                )}
-              </Secao>
+                  )}
+                  {(clientProjects || []).length > 0 ? (
+                    <List label="Projetos deste cliente">
+                      {(clientProjects || []).map((p: any) => {
+                        const andamento = Math.max(0, Math.min(100, Number(p.progress) || 0));
+                        return (
+                          <ListRow
+                            key={p.id}
+                            leading={<Avatar icon={<Briefcase className="h-4 w-4" />} tone={p.status === "done" ? "solid" : p.status === "in_progress" ? "ink" : "neutral"} />}
+                            title={p.name}
+                            subtitle={p.deadline ? `Prazo ${String(p.deadline).slice(0, 10).split("-").reverse().join("/")}` : undefined}
+                            status={<StatusPill tone={TOM_DO_PROJETO[p.status] || "neutral"}>{STATUS_DO_PROJETO[p.status] || p.status}</StatusPill>}
+                            value={`${andamento}%`}
+                            valueHint={<span className="mt-1 block w-16"><ProgressBar value={andamento} max={100} height={4} label={`${andamento}% do projeto`} /></span>}
+                          />
+                        );
+                      })}
+                    </List>
+                  ) : (
+                    <EstadoVazio compacto titulo="Sem projeto." descricao="Crie um ou vincule um que já existe." />
+                  )}
+                </Secao>
+              </div>
 
-              <Secao
-                titulo="Briefing"
-                divisoria
-                acao={
-                  <button type="button" onClick={() => setBriefingOpen(true)} className={botao.barra}>
-                    <Plus className="h-4 w-4" aria-hidden="true" />
-                    <span className="ml-1.5">Novo link</span>
-                  </button>
-                }
-              >
-                {clientBriefings && clientBriefings.length > 0 ? (
-                  <ul className="-mx-1 min-w-0">
-                    {clientBriefings.map((b) => {
-                      const estado = b.submitted && b.reabertura_pedida_em ? "reabertura pedida" : estadoDoLink(b) === "enviado" ? "recebido" : estadoDoLink(b) === "expirado" ? "expirado" : "aguardando";
-                      const quando = b.submitted ? b.enviado_em || b.created_at : b.created_at;
-                      return (
-                        <li key={b.id}>
-                          <button
-                            type="button"
+              <div className={BLOCO}>
+                <Secao
+                  titulo="Briefing"
+                  acao={
+                    <button type="button" onClick={() => setBriefingOpen(true)} className={botao.secundario}>
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                      <span className="ml-1.5">Novo link</span>
+                    </button>
+                  }
+                >
+                  {clientBriefings && clientBriefings.length > 0 ? (
+                    <List label="Briefings deste cliente">
+                      {clientBriefings.map((b) => {
+                        const estado = b.submitted && b.reabertura_pedida_em ? "reabertura pedida" : estadoDoLink(b) === "enviado" ? "recebido" : estadoDoLink(b) === "expirado" ? "expirado" : "aguardando";
+                        const tomDoEstado: Tone = estado === "recebido" ? "success" : estado === "expirado" ? "danger" : estado === "aguardando" ? "warning" : "info";
+                        const quando = b.submitted ? b.enviado_em || b.created_at : b.created_at;
+                        return (
+                          <ListRow
+                            key={b.id}
+                            leading={<Avatar icon={<FileText className="h-4 w-4" />} tone="accent" />}
+                            title={b.titulo || modeloDeFabrica(b.modelo).nome}
+                            subtitle={new Date(quando).toLocaleDateString("pt-BR")}
+                            status={<StatusPill tone={tomDoEstado}>{estado}</StatusPill>}
                             onClick={() => void openClientOperation(`/briefings?briefing=${b.id}`)}
-                            className={juntar("flex w-full min-w-0 items-center rounded-md px-1 py-1.5 text-left hover:bg-muted/50", foco)}
-                          >
-                            <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                            <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{b.titulo || modeloDeFabrica(b.modelo).nome} · {estado}</span>
-                            <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{new Date(quando).toLocaleDateString("pt-BR")}</span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <EstadoVazio compacto titulo="Sem briefing." descricao="Gere o link no modelo do serviço." />
-                )}
-              </Secao>
+                          />
+                        );
+                      })}
+                    </List>
+                  ) : (
+                    <EstadoVazio compacto titulo="Sem briefing." descricao="Gere o link no modelo do serviço." />
+                  )}
+                </Secao>
+              </div>
 
             </div>
 
             {/* ── Cadastro: dados, status, tipo, marca e serviços ── */}
             <div className={painelDaAba("cadastro")}>
+              <div className={BLOCO}>
               <GrupoDeCampos titulo="Dados">
                 <CampoDeFormulario rotulo="Nome completo" obrigatorio>
                   <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={campo} />
@@ -980,7 +1052,9 @@ export default function EditClientDrawer({
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} className={campo} inputMode="tel" />
                 </CampoDeFormulario>
               </GrupoDeCampos>
+              </div>
 
+              <div className={juntar(BLOCO, "space-y-5")}>
               <GrupoDeCampos titulo="Situação" colunas={1}>
                 <CampoDeFormulario rotulo="Status do cliente">
                   <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
@@ -1037,34 +1111,56 @@ export default function EditClientDrawer({
                   />
                 </CampoDeFormulario>
               </GrupoDeCampos>
+              </div>
 
               {/* 12/10/2026: Dia Prioritário (salva sozinho, pela RPC; só admin muda) */}
-              <DiaPrioritarioNoCadastro client={{ ...client, id: String(client.id) }} admin={isAdmin} />
+              <div className={BLOCO}>
+                <DiaPrioritarioNoCadastro client={{ ...client, id: String(client.id) }} admin={isAdmin} />
+              </div>
 
-              <Secao titulo="Serviços ativos" divisoria descricao={`${SERVICES.filter((s) => !!services[s.key]).length} de ${SERVICES.length}`}>
-                <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
-                  {SERVICES.map((s) => (
-                    <li key={s.key} className="flex min-w-0 items-center justify-between border-b border-border py-2">
-                      <span className={juntar(texto.corpo, "min-w-0 truncate")} id={`servico-${s.key}`}>
-                        {s.label}
-                      </span>
-                      <Switch aria-labelledby={`servico-${s.key}`} checked={!!services[s.key]} onCheckedChange={() => toggleService(s.key)} />
-                    </li>
-                  ))}
-                </ul>
-              </Secao>
-              {(isAdmin || profile?.role === "manager") && abaAberta === "cadastro" && (
-                <Secao titulo="Dados fiscais" divisoria ajuda="CNPJ ou CPF, razão social, endereço, representante e e-mails de contrato e cobrança. Todo contrato do cliente usa estes dados.">
-                  <Suspense fallback={<div className="h-24 animate-pulse rounded-md bg-muted" aria-busy="true" aria-label="Abrindo a ficha fiscal" />}>
-                    <DadosFiscaisDoCliente clientId={client.id} />
-                  </Suspense>
+              {/* 14/11/2026: como o cliente aprova as peças (só o registro da regra; só admin muda) */}
+              <div className={BLOCO}>
+                <ModoDeAprovacaoNoCadastro clientId={String(client.id)} admin={isAdmin} />
+              </div>
+
+              <div className={BLOCO}>
+                <Secao titulo="Serviços ativos" descricao={`${SERVICES.filter((s) => !!services[s.key]).length} de ${SERVICES.length}`}>
+                  <div className="mb-4">
+                    <ProgressBar value={SERVICES.filter((s) => !!services[s.key]).length} max={SERVICES.length} height={6} label={`${SERVICES.filter((s) => !!services[s.key]).length} de ${SERVICES.length} serviços ativos`} />
+                  </div>
+                  <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {SERVICES.map((s) => (
+                      <li key={s.key} className={juntar("flex min-w-0 items-center justify-between rounded-md px-4 py-3 transition-colors", services[s.key] ? "bg-accent-soft" : "bg-muted/60")}>
+                        <span className={juntar(texto.corpo, "min-w-0 truncate font-medium")} id={`servico-${s.key}`}>
+                          {s.label}
+                        </span>
+                        <Switch aria-labelledby={`servico-${s.key}`} checked={!!services[s.key]} onCheckedChange={() => toggleService(s.key)} />
+                      </li>
+                    ))}
+                  </ul>
                 </Secao>
+              </div>
+              {(isAdmin || profile?.role === "manager") && abaAberta === "cadastro" && (
+                <div className={BLOCO}>
+                  <Secao titulo="Dados fiscais" ajuda="CNPJ ou CPF, razão social, endereço, representante e e-mails de contrato e cobrança. Todo contrato do cliente usa estes dados.">
+                    <Suspense fallback={<div className="h-24 animate-pulse rounded-md bg-muted" aria-busy="true" aria-label="Abrindo a ficha fiscal" />}>
+                      <DadosFiscaisDoCliente clientId={client.id} />
+                    </Suspense>
+                  </Secao>
+                </div>
               )}
             </div>
 
             {/* ── Plano e cobrança (admin) ── */}
             {isAdmin && (
               <div className={painelDaAba("plano")}>
+                {/* 14/11/2026: o que o cliente comprou além da mensalidade (order bumps e upsells), com o financeiro junto. */}
+                {abaAberta === "plano" && (
+                  <div className={BLOCO}>
+                    <ExtrasDoCliente clientId={client.id} nomeDoCliente={client.company_name || client.full_name || undefined} mensalidade={Number(planValue) || 0} />
+                  </div>
+                )}
+                <div className={BLOCO}>
                 <GrupoDeCampos titulo="Plano">
                   <CampoDeFormulario rotulo="Plano do catálogo" apoio="Preenche nome e valor. O valor segue editável.">
                     <select
@@ -1105,7 +1201,7 @@ export default function EditClientDrawer({
                   <CampoDeFormulario rotulo="Data de vencimento">
                     <input type="date" value={renewalDate} onChange={(e) => setRenewalDate(e.target.value)} className={campo} />
                   </CampoDeFormulario>
-                  <div className={juntar(superficie.poco, "flex min-w-0 items-center justify-between px-3 py-2.5 sm:col-span-full")}>
+                  <div className={juntar(superficie.poco, "flex min-w-0 items-center justify-between px-4 py-3 sm:col-span-full")}>
                     <div className="mr-3 flex min-w-0 items-center">
                       <span className={juntar(texto.corpo, "font-medium")} id="empresa-do-grupo">
                         Empresa do grupo (interna)
@@ -1119,15 +1215,17 @@ export default function EditClientDrawer({
                     />
                   </div>
                 </GrupoDeCampos>
+                </div>
 
                 {/* Cobranças editáveis: valor, vencimento e pago/pendente. É o
                     caminho de corrigir o financeiro sem caçar linha no banco. */}
-                {client?.id && <CobrancasDoCliente clientId={client.id} />}
+                {client?.id && <div className={BLOCO}><CobrancasDoCliente clientId={client.id} /></div>}
 
                 {/* Pagamentos de projetos não recorrentes */}
                 {nonRecurringProjects && nonRecurringProjects.length > 0 && (
-                  <Secao titulo="Pagamentos de projetos" divisoria descricao={`${nonRecurringProjects.length} projeto(s) avulso(s)`}>
-                    <ul className="divide-y divide-border">
+                  <div className={BLOCO}>
+                  <Secao titulo="Pagamentos de projetos" descricao={`${nonRecurringProjects.length} projeto(s) avulso(s)`}>
+                    <ul className="divide-y divide-border/70">
                       {nonRecurringProjects.map((proj: any) => {
                         const pay = proj.payment;
                         const isExpanded = expandedProject === proj.id;
@@ -1140,7 +1238,7 @@ export default function EditClientDrawer({
                                 {payCreateForProject !== proj.id && (
                                   <button
                                     type="button"
-                                    onClick={() => { setPayCreateForProject(proj.id); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
+                                    onClick={() => { setPayCreateForProject(proj.id); setPayTotal(""); setPayEntryPct(""); setPayInstCount("1"); setPayNotes(""); }}
                                     className={juntar(botao.discreto, "ml-3 h-8 text-primary")}
                                   >
                                     <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Criar plano de pagamento
@@ -1148,15 +1246,15 @@ export default function EditClientDrawer({
                                 )}
                               </div>
                               {payCreateForProject === proj.id && (
-                                <div className={juntar(superficie.poco, "mt-3 p-3")}>
+                                <div className={juntar(superficie.poco, "mt-3 p-4")}>
                                   <GrupoDeCampos colunas={3}>
                                     <CampoDeFormulario rotulo="Valor total (R$)" obrigatorio>
-                                      <input type="number" placeholder="5000" value={payTotal} onChange={(e) => setPayTotal(e.target.value)} className={juntar(campo, "tabular-nums")} />
+                                      <input inputMode="decimal" placeholder="5000" value={payTotal} onChange={(e) => setPayTotal(e.target.value)} className={juntar(campo, "tabular-nums")} />
                                     </CampoDeFormulario>
-                                    <CampoDeFormulario rotulo="Entrada (%)">
-                                      <input type="number" min="0" max="100" value={payEntryPct} onChange={(e) => setPayEntryPct(e.target.value)} className={juntar(campo, "tabular-nums")} />
+                                    <CampoDeFormulario rotulo="Entrada (R$)">
+                                      <input inputMode="decimal" placeholder="0,00" value={payEntryPct} onChange={(e) => setPayEntryPct(e.target.value)} className={juntar(campo, "tabular-nums")} />
                                     </CampoDeFormulario>
-                                    <CampoDeFormulario rotulo="Parcelas">
+                                    <CampoDeFormulario rotulo={lerValorBR(payEntryPct) > 0 ? "Restante em" : "Parcelas"}>
                                       <input type="number" min="1" max="24" value={payInstCount} onChange={(e) => setPayInstCount(e.target.value)} className={juntar(campo, "tabular-nums")} />
                                     </CampoDeFormulario>
                                     <CampoDeFormulario rotulo="Observações" largo>
@@ -1165,19 +1263,19 @@ export default function EditClientDrawer({
                                   </GrupoDeCampos>
                                   <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between">
                                     <p className={juntar(texto.auxiliar, "mr-3 min-w-0 tabular-nums")}>
-                                      {parseFloat(payTotal) > 0
-                                        ? `Entrada R$ ${((parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} (${payEntryPct}%) · ${payInstCount}x de R$ ${(((parseFloat(payTotal) - (parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100) / (parseInt(payInstCount) || 1))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                                      {lerValorBR(payTotal) > 0
+                                        ? `${lerValorBR(payEntryPct) > 0 ? `Entrada R$ ${Math.min(lerValorBR(payEntryPct), lerValorBR(payTotal)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} · restante ` : ""}${Math.max(parseInt(payInstCount) || 1, 1)}x de R$ ${(Math.max(lerValorBR(payTotal) - lerValorBR(payEntryPct), 0) / Math.max(parseInt(payInstCount) || 1, 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
                                         : ""}
                                     </p>
                                     <div className="flex [&>*+*]:ml-2">
                                       <button
                                         type="button"
-                                        onClick={() => { setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
+                                        onClick={() => { setPayCreateForProject(null); setPayTotal(""); setPayEntryPct(""); setPayInstCount("1"); setPayNotes(""); }}
                                         className={botao.discreto}
                                       >
                                         Cancelar
                                       </button>
-                                      <button type="button" onClick={() => handleCreatePayment(proj.id)} disabled={paySubmitting || !parseFloat(payTotal)} className={botao.primario}>
+                                      <button type="button" onClick={() => handleCreatePayment(proj.id)} disabled={paySubmitting || !(lerValorBR(payTotal) > 0) || lerValorBR(payEntryPct) > lerValorBR(payTotal)} className={botao.primario}>
                                         {paySubmitting ? "Criando..." : "Criar plano"}
                                       </button>
                                     </div>
@@ -1201,21 +1299,24 @@ export default function EditClientDrawer({
                               type="button"
                               onClick={() => setExpandedProject(isExpanded ? null : proj.id)}
                               aria-expanded={isExpanded}
-                              className={juntar("flex w-full min-w-0 items-center rounded-md px-1 py-2 text-left hover:bg-muted/40", foco)}
+                              className={juntar("-mx-2 flex w-[calc(100%+16px)] min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/60", foco)}
                             >
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-center">
                                   <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{proj.name}</p>
-                                  {hasOverdue && <span className={juntar(etiqueta, "ml-2 bg-destructive/10 text-destructive")}>Atrasado</span>}
+                                  {hasOverdue && <StatusPill tone="danger" className="ml-2">Atrasado</StatusPill>}
                                 </div>
-                                <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
-                                  <span className="text-success">R$ {paidTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                                  {" de "}R$ {Number(pay.total_value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                  <span className="text-warning"> · falta R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                <p className="mt-1 truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums text-foreground">
+                                  {dinheiroDaFicha(paidTotal)}
+                                  <span className="ml-1.5 text-[12px] font-normal tracking-normal text-muted-foreground">de {dinheiroDaFicha(Number(pay.total_value))}</span>
                                 </p>
-                                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
-                                  <div className="h-full rounded-full bg-success" style={{ width: `${pay.total_value > 0 ? Math.round((paidTotal / pay.total_value) * 100) : 0}%` }} />
+                                <div className="mt-2">
+                                  <ProgressBar value={paidTotal} max={Number(pay.total_value) || 0} height={6} label={`Recebido ${dinheiroDaFicha(paidTotal)} de ${dinheiroDaFicha(Number(pay.total_value))}`} />
                                 </div>
+                                <p className={juntar(texto.auxiliar, "mt-1.5 truncate tabular-nums")}>
+                                  {paidCount}/{totalCount} parcelas
+                                  {remaining > 0 && <span className="text-warning"> · falta {dinheiroDaFicha(remaining)}</span>}
+                                </p>
                               </div>
                               {isExpanded ? <ChevronUp className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronDown className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
                             </button>
@@ -1223,16 +1324,16 @@ export default function EditClientDrawer({
                             {isExpanded && (
                               <div className="pb-2 pl-1">
                                 <p className={juntar(texto.auxiliar, "mb-1 tabular-nums")}>{paidCount}/{totalCount} parcelas · entrada {pay.entry_percentage}%</p>
-                                <ul className="divide-y divide-border">
+                                <ul className="divide-y divide-border/70">
                                   {installments
                                     .sort((a: any, b: any) => a.installment_number - b.installment_number)
                                     .map((inst: any) => {
                                       const isPaid = inst.status === "paid";
                                       const isOverdue = !isPaid && new Date(inst.due_date) < new Date();
                                       return (
-                                        <li key={inst.id} className="flex min-w-0 items-center py-2">
-                                          <span className={`mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${isPaid ? "bg-success/10 text-success" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`} aria-hidden="true">
-                                            {isPaid ? <CheckCircle2 className="h-3 w-3" /> : isOverdue ? <AlertCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                                        <li key={inst.id} className="flex min-w-0 items-center py-2.5">
+                                          <span className={`mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isPaid ? "bg-success-soft text-success" : isOverdue ? "bg-danger-soft text-destructive" : "bg-warning-soft text-warning"}`} aria-hidden="true">
+                                            {isPaid ? <CheckCircle2 className="h-4 w-4" /> : isOverdue ? <AlertCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                                           </span>
                                           <div className="min-w-0 flex-1">
                                             <p className={juntar(texto.corpo, "truncate")}>{inst.description}</p>
@@ -1241,7 +1342,7 @@ export default function EditClientDrawer({
                                               {inst.paid_date && ` · pago ${new Date(inst.paid_date).toLocaleDateString("pt-BR")}`}
                                             </p>
                                           </div>
-                                          <span className="ml-3 whitespace-nowrap text-[13px] font-medium tabular-nums text-foreground">R$ {Number(inst.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                          <span className="ml-3 whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">R$ {Number(inst.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                                           {!isPaid && (
                                             <button
                                               type="button"
@@ -1263,6 +1364,7 @@ export default function EditClientDrawer({
                       })}
                     </ul>
                   </Secao>
+                  </div>
                 )}
               </div>
             )}
@@ -1270,6 +1372,7 @@ export default function EditClientDrawer({
             {/* ── Acesso ao portal (admin) ── */}
             {isAdmin && (
               <div className={painelDaAba("acesso")}>
+                <div className={BLOCO}>
                 <Secao
                   titulo="Convite de primeiro acesso"
                   ajuda="Cliente não recebeu o e-mail para criar a senha? Reenvie o convite: um novo link seguro é gerado e enviado para o e-mail cadastrado."
@@ -1280,10 +1383,11 @@ export default function EditClientDrawer({
                     </button>
                   }
                 />
+                </div>
                 {!client?.first_access_used_at && (
+                  <div className={BLOCO}>
                   <Secao
                     titulo="Link de primeiro acesso"
-                    divisoria
                     ajuda="Gera o link para você enviar na mão (WhatsApp) sem disparar e-mail. Cada novo link invalida o anterior, então envie sempre o último gerado."
                     acao={
                       <button type="button" disabled={generatingLink} onClick={gerarLinkDeAcesso} className={botao.secundario}>
@@ -1317,8 +1421,10 @@ export default function EditClientDrawer({
                       </div>
                     )}
                   </Secao>
+                  </div>
                 )}
-                <GrupoDeCampos titulo="Senha" className="border-t border-border pt-5">
+                <div className={BLOCO}>
+                <GrupoDeCampos titulo="Senha">
                   <CampoDeFormulario
                     rotulo="Definir ou alterar senha"
                     apoio="Deixe vazio para manter a atual."
@@ -1334,28 +1440,33 @@ export default function EditClientDrawer({
                     />
                   </CampoDeFormulario>
                 </GrupoDeCampos>
+                </div>
               </div>
             )}
 
             {/* ── Contas e canais (sem credenciais) + cofre de acessos ── */}
             <div className={painelDaAba("contas")}>
-              <div ref={accountsSectionRef} className="scroll-mt-4">
+              <div ref={accountsSectionRef} className={juntar(BLOCO, "scroll-mt-4")}>
                 <ClientConnectionsPanel key={client.id} clientId={client.id} clientName={client.company_name || client.full_name || "Cliente"} initialProjectId={initialProjectId} />
               </div>
-              <Secao titulo="Cofre de acessos" divisoria>
-                <ClientVault clientId={client.id} canManage={isAdmin || ["design", "traffic", "manager"].includes(profile?.role || "")} />
-              </Secao>
+              <div className={BLOCO}>
+                <Secao titulo="Cofre de acessos">
+                  <ClientVault clientId={client.id} canManage={isAdmin || ["design", "traffic", "manager"].includes(profile?.role || "")} />
+                </Secao>
+              </div>
             </div>
 
             {/* ── Esteira de onboarding ── */}
             <div className={painelDaAba("onboarding")}>
-              <Secao titulo="Esteira de onboarding">
-                <ClientOnboardingPanel clientId={client.id} servicesConfig={services} />
-              </Secao>
+              <div className={BLOCO}>
+                <Secao titulo="Esteira de onboarding">
+                  <ClientOnboardingPanel clientId={client.id} servicesConfig={services} />
+                </Secao>
+              </div>
             </div>
           </RegiaoRolavel>
 
-          <div className="flex min-w-0 items-center justify-between border-t border-border px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center justify-between border-t border-border bg-card px-4 py-3 sm:px-8 sm:py-4">
             {isAdmin ? (
               <button type="button" onClick={() => setConfirmDelete(true)} disabled={saving} className={juntar(botao.discreto, "text-destructive hover:text-destructive")}>
                 <Trash2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />

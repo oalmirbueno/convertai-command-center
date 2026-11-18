@@ -64,7 +64,7 @@ function Prova({ p }: { p: ProvaNaTela }) {
   const [aberta, setAberta] = useState(false);
   return (
     <div className="mt-1 min-w-0">
-      <button type="button" className={juntar("inline-flex items-center rounded text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => setAberta(!aberta)} aria-expanded={aberta}>
+      <button type="button" className={juntar("inline-flex items-center rounded-sm text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => setAberta(!aberta)} aria-expanded={aberta}>
         <ChevronDown className={`mr-0.5 h-3.5 w-3.5 transition-transform ${aberta ? "rotate-180" : ""}`} />
         Prova
       </button>
@@ -139,7 +139,7 @@ function ItemFeito({ a, fazendo, onDesfazer, onLevar, onDescartar }: { a: AcaoFe
       <p className="flex min-w-0 flex-wrap items-center text-[13px] leading-snug">
         {a.estado === "feita" && a.tipo !== "parada" ? <Check className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" /> : a.estado === "proposta" ? <Bot className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" /> : <X className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         <span className="mr-2 min-w-0 font-medium [overflow-wrap:anywhere]">{a.resumo}</span>
-        {selo && <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{selo}</span>}
+        {selo && <span className="mr-2 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">{selo}</span>}
         <span className="text-[11px] text-muted-foreground">
           {dataEHora(a.criado_em)} · {a.origem === "rotina" ? "rotina" : a.origem === "equipe" ? "você, no Gerenciador" : "agente sênior"}
           {a.alvo ? ` · ${NIVEL[a.alvo.nivel] || "Item"}` : ""}
@@ -201,7 +201,7 @@ function Ajustes({ l, fazendo, onSalvar }: { l: LeituraDaRotina; fazendo: string
   );
   return (
     <form onSubmit={salvar} className="mt-2 min-w-0 space-y-3" aria-label="Ajustes da rotina">
-      <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         {entrada("Teto diário de verba (R$)", teto, setTeto, "sem teto")}
         {entrada("Subida por vez (%)", subida, setSubida, "20")}
         {entrada("Ações por rodada", porRodada, setPorRodada, "3")}
@@ -341,7 +341,7 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
       )}
 
       {ligada && e && (e.fez.length > 0 || e.planeja.length > 0) && (
-        <div className="mb-2 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2" aria-label="Última rodada">
+        <div className="mb-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2" aria-label="Última rodada">
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-muted-foreground">Fez na última rodada{e.rodada_em ? ` (${horaCurta(e.rodada_em)})` : ""}</p>
             {e.fez.length ? (
@@ -376,7 +376,7 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
           {regras.map((g) => (
             <li key={g.id} className={juntar("mb-1 mr-1.5 inline-flex min-w-0 max-w-full items-center rounded-full px-2.5 py-1 text-[12px]", g.vale ? "bg-primary/10 text-foreground" : "bg-muted text-muted-foreground line-through")} title={`Você escreveu: ${g.texto}`}>
               <span className="min-w-0 truncate">{g.texto_da_regra || g.texto}</span>
-              <button type="button" className={juntar("ml-1.5 shrink-0 rounded text-muted-foreground hover:text-foreground", foco)} aria-label={`Tirar a regra: ${g.texto}`} disabled={!!fazendo} onClick={() => void agir(`tirar:${g.id}`, () => tirarRegra(clientId, g.id), "Regra tirada")}>
+              <button type="button" className={juntar("ml-1.5 shrink-0 rounded-sm text-muted-foreground hover:text-foreground", foco)} aria-label={`Tirar a regra: ${g.texto}`} disabled={!!fazendo} onClick={() => void agir(`tirar:${g.id}`, () => tirarRegra(clientId, g.id), "Regra tirada")}>
                 <X className="h-3 w-3" />
               </button>
             </li>
@@ -393,11 +393,11 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
         </p>
       )}
       <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2" ref={feitoRef}>
-        <button type="button" className={juntar("mr-4 inline-flex items-center rounded text-[13px] font-medium", foco)} onClick={() => setFeitoAberto(!feitoAberto)} aria-expanded={feitoAberto}>
+        <button type="button" className={juntar("mr-4 inline-flex items-center rounded-sm text-[13px] font-medium", foco)} onClick={() => setFeitoAberto(!feitoAberto)} aria-expanded={feitoAberto}>
           <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${feitoAberto ? "rotate-180" : ""}`} />
           O que foi feito ({feitas.length}){naoDeram ? ` · ${naoDeram} não ${naoDeram === 1 ? "deu" : "deram"}` : ""}{propostas ? ` · ${propostas} ${propostas === 1 ? "proposta" : "propostas"}` : ""}
         </button>
-        <button type="button" className={juntar("inline-flex items-center rounded text-[12px] text-muted-foreground hover:text-foreground", foco)} onClick={() => setAjustesAbertos(!ajustesAbertos)} aria-expanded={ajustesAbertos}>
+        <button type="button" className={juntar("inline-flex items-center rounded-sm text-[12px] text-muted-foreground hover:text-foreground", foco)} onClick={() => setAjustesAbertos(!ajustesAbertos)} aria-expanded={ajustesAbertos}>
           <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${ajustesAbertos ? "rotate-180" : ""}`} />
           Ajustes{r && r.teto_diario_brl !== null ? ` (teto ${brl(r.teto_diario_brl)} por dia)` : " (sem teto: só pausa)"}
         </button>

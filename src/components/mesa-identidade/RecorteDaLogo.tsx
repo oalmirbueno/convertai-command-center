@@ -239,7 +239,7 @@ export default function RecorteDaLogo({
             {/* Sem limpeza a fazer, sem medida: a borda clara de um desenho claro (cinza da VIFUT) não é defeito. */}
             {resultado && resultado.diagnostico && pode && (q === "antes" && precisa === "fundo_solido" ? <Pastilha tom="alerta">{resultado.diagnostico.fundo.claro ? "fundo claro" : "fundo liso"}</Pastilha> : halo(q === "antes" ? resultado.haloAntes : resultado.haloDepois))}
           </p>
-          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-3">
             <Prova url={limpando && q === "depois" ? null : urls[q]} fundo="escuro" rotulo={`${q === "antes" ? "Como está" : "Limpa"} no escuro`} />
             <Prova url={limpando && q === "depois" ? null : urls[q]} fundo="cor" rotulo={`${q === "antes" ? "Como está" : "Limpa"} na cor`} />
             <Prova url={limpando && q === "depois" ? null : urls[q]} fundo="xadrez" rotulo={`${q === "antes" ? "Como está" : "Limpa"} no xadrez`} />

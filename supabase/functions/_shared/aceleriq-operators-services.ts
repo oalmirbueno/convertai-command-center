@@ -27,6 +27,9 @@ import { operatorRunIsStale } from './operator-freshness.ts';
 import { mensagemVinculoInexistente, type VinculoCandidato } from './vinculo-guard.ts';
 import { jevPerguntar } from './jev.ts';
 import { decidirTrava, perguntaDaTrava, ROTULO_DO_MOTIVO, type MotivoDoDono, type RespostaDaTrava } from './trava-do-dono.ts';
+import {
+  mensagemTetoNaReativacao, mensagemTetoNoCadastro, podeCadastrar, podeReativar, reativacaoOcupaVaga,
+} from './teto-de-operadores.ts';
 import { avaliarRodada, classificarProva, ehSoLeitura, provaConfere, vinculoSemEntrega, type Prova } from '../mcp-server/modulos/rodada-e-prova.ts';
 
 const texto = (v: unknown): string | null => {
@@ -65,8 +68,18 @@ export const OPERATOR_EVENTS = [
   'started', 'progress', 'done', 'failed', 'blocked', 'review', 'awaiting_input', 'heartbeat',
 ] as const;
 
-/** Teto de operadores. Não é burocracia: é o freio de um laço em fuga. */
-const MAXIMO_DE_OPERADORES = 40;
+/**
+ * Teto de operadores ATIVOS (MAXIMO_DE_OPERADORES_ATIVOS, em
+ * teto-de-operadores.ts). Não é burocracia: é o freio de um laço em fuga.
+ * Pausado e aposentado não ocupam vaga; reativar ocupa.
+ */
+async function contarOperadoresAtivos(): Promise<number> {
+  const { count, error } = await comPrazo(
+    db().from('internal_operators').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+  );
+  if (error) throw new Error(`internal_operators: ${error.message}`);
+  return count ?? 0;
+}
 
 const SLUG_VALIDO = /^[a-z][a-z0-9-]{1,38}$/;
 
@@ -100,13 +113,9 @@ export async function operatorRegister(input: {
     );
   }
 
-  const { count } = await comPrazo(
-    db().from('internal_operators').select('id', { count: 'exact', head: true }),
-  );
-  if ((count ?? 0) >= MAXIMO_DE_OPERADORES) {
-    throw new Error(
-      `limite de ${MAXIMO_DE_OPERADORES} operadores atingido. Desative os que nao usa antes de criar outro.`,
-    );
+  const ativos = await contarOperadoresAtivos();
+  if (!podeCadastrar(ativos)) {
+    throw new Error(mensagemTetoNoCadastro(ativos));
   }
 
   const { data: existente } = await comPrazo(
@@ -782,8 +791,26 @@ export async function operatorOrganize(input: {
   status?: string;
   is_coordinator?: boolean;
 }, actor: string) {
+  const slug = String(input.slug || '').trim().toLowerCase();
+  const statusPedido = texto(input.status);
+
+  // Reativar (paused/retired -> active) ocupa vaga no teto de ativos. A
+  // checagem fica aqui, antes do RPC, para nao mexer no operator_update.
+  if (statusPedido === 'active') {
+    const { data: atual, error: erroAtual } = await comPrazo(
+      db().from('internal_operators').select('status').eq('slug', slug).maybeSingle(),
+    );
+    if (erroAtual) throw new Error(`internal_operators: ${erroAtual.message}`);
+    const statusAtual = (atual as { status?: string } | null)?.status ?? null;
+    // Operador inexistente segue para o RPC, que devolve operator_not_found.
+    if (atual && reativacaoOcupaVaga(statusAtual, statusPedido)) {
+      const ativos = await contarOperadoresAtivos();
+      if (!podeReativar(ativos)) throw new Error(mensagemTetoNaReativacao(slug, ativos));
+    }
+  }
+
   const { data, error } = await comPrazo(db().rpc('operator_update', {
-    _slug: String(input.slug || '').trim().toLowerCase(),
+    _slug: slug,
     _actor: actor,
     _display_name: texto(input.display_name),
     _role: texto(input.role),
@@ -791,7 +818,7 @@ export async function operatorOrganize(input: {
     _parent_slug: input.parent_slug === undefined ? null : String(input.parent_slug),
     _display_order: input.display_order === undefined ? null : Math.trunc(Number(input.display_order)),
     _scope: texto(input.scope),
-    _status: texto(input.status),
+    _status: statusPedido,
     _is_coordinator: input.is_coordinator === undefined ? null : input.is_coordinator === true,
   }));
   if (error) throw new Error(`operator_update: ${error.message}`);

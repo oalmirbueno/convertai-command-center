@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, ExternalLink, FileText, MessageCircle, Phone, Settings2 } from "lucide-react";
 import { toast } from "sonner";
+import { CardSurface } from "@/components/ds";
 import { AjudaRecolhida, AreaDeTrabalho, Carregando, EstadoDeErro, EstadoVazio, SeletorCompacto, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import {
   CONFIG_PADRAO,
@@ -34,8 +35,8 @@ import {
 export const CHAVE_DA_CAIXA = ["comercial-caixa"];
 
 /** Quantos itens novos (para o contador da aba e o aviso da visão geral). */
-export function useCaixaDoComercial() {
-  return useQuery({ queryKey: CHAVE_DA_CAIXA, queryFn: listarCaixa, refetchOnWindowFocus: true, refetchInterval: 60_000 });
+export function useCaixaDoComercial(ligada = true) {
+  return useQuery({ queryKey: CHAVE_DA_CAIXA, queryFn: listarCaixa, refetchOnWindowFocus: true, refetchInterval: 60_000, enabled: ligada });
 }
 
 export const novosNaCaixa = (itens: ItemDaCaixa[] | undefined) => (itens || []).filter((i) => i.situacao === "nova").length;
@@ -123,15 +124,17 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
     }
   };
   return (
-    <li
-      id={`caixa-${item.id}`}
+    <CardSurface
+      as="li"
+      padded
       data-item-da-caixa={item.id}
       data-tipo={item.tipo}
-      className={juntar("grid min-w-0 grid-cols-1 gap-x-8 gap-y-4 border-t border-border py-5 first:border-t-0 first:pt-1 lg:grid-cols-[minmax(0,1fr)_220px]", destacado && "-mx-3 rounded-md bg-primary/5 px-3 ring-1 ring-primary/40")}
+      className={juntar("grid min-w-0 grid-cols-1 gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1fr)_220px]", destacado && "ring-1 ring-primary")}
     >
-      <div className="min-w-0">
+      {/* O id fica no miolo (o CardSurface só repassa data-*): é para onde o sino rola. */}
+      <div className="min-w-0 scroll-mt-24" id={`caixa-${item.id}`}>
         <div className="flex min-w-0 items-center">
-          <span className={juntar(texto.etiqueta, "mr-2 shrink-0 rounded px-1.5 leading-5", item.tipo === "fechou" ? "bg-success/15 text-success" : "bg-primary/15 text-primary")}>
+          <span className={juntar(texto.etiqueta, "mr-2.5 inline-flex h-6 shrink-0 items-center rounded-full px-2.5 leading-none", item.tipo === "fechou" ? "bg-accent-solid text-on-accent" : "bg-foreground text-background")}>
             {item.tipo === "fechou" ? "Fechou" : "Avançou"}
           </span>
           <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{item.lead ? item.lead.company || item.lead.name : "Lead"}</h3>
@@ -145,12 +148,12 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
         </p>
         <p className={juntar(texto.corpo, "mt-3 max-w-[72ch] whitespace-pre-line")}>{item.resumo}</p>
         {item.proximo_passo && (
-          <p className={juntar(texto.corpo, "mt-3 max-w-[72ch] border-l-2 border-primary pl-3")}>
+          <p className={juntar(texto.corpo, "mt-4 max-w-[72ch] rounded-md bg-accent-soft px-4 py-3")}>
             <span className="font-medium">Próximo passo:</span> {item.proximo_passo}
           </p>
         )}
         {dados.length > 0 && (
-          <dl className="mt-4 grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Dados levantados">
+          <dl className="mt-4 grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 rounded-md bg-muted/60 p-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Dados levantados">
             {dados.map((d) => (
               <div key={d.chave} className="min-w-0">
                 <dt className={texto.auxiliar}>{d.chave}</dt>
@@ -189,7 +192,7 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
           </a>
         )}
         {pedidoDoBolso && <ConfirmarPagamentoDoBolso pedidoId={pedidoDoBolso} />}
-        <div className="flex min-w-0 gap-2 border-t border-border pt-2">
+        <div className="flex min-w-0 gap-2 border-t border-border/60 pt-3">
           {item.situacao === "nova" && (
             <button type="button" disabled={mudando} onClick={() => void mudar("assumida")} className={juntar(botao.secundario, "flex-1")}>
               Assumir
@@ -207,7 +210,7 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
           )}
         </div>
       </div>
-    </li>
+    </CardSurface>
   );
 }
 
@@ -296,14 +299,14 @@ function CobrancasDoMercurio() {
   const lista = q.data || [];
   if (!lista.length) return null;
   return (
-    <section className="min-w-0 space-y-1 border-b border-border pb-3" aria-label="Cobranças do Mercúrio">
-      <h3 className="text-sm font-medium">Pix do Mercúrio</h3>
+    <section className="min-w-0 space-y-2 rounded-md bg-muted/60 p-4" aria-label="Cobranças do Mercúrio">
+      <h3 className={texto.tituloSecao}>Pix do Mercúrio</h3>
       <ul className="min-w-0">
         {lista.map((c) => (
-          <li key={c.id} className="flex min-w-0 flex-wrap items-baseline gap-x-3 py-1 text-sm">
+          <li key={c.id} className="flex min-w-0 flex-wrap items-baseline gap-x-3 py-1.5 text-[13px]">
             <span className="min-w-0 truncate font-medium">{c.lead?.company || c.lead?.name || c.nome}</span>
             <span className="text-muted-foreground">{c.plano_nome}</span>
-            <span className="tabular-nums">{Number(c.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+            <span className="font-semibold tabular-nums">{Number(c.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
             <span className={c.situacao === "paga" ? "text-primary" : "text-muted-foreground"}>{c.situacao === "paga" ? "Pago, confirmado no Asaas" : c.situacao === "aguardando" ? "Aguardando pagamento" : "Cancelada"}</span>
             {c.link ? <a className="underline" href={c.link} target="_blank" rel="noreferrer">Ver cobrança</a> : null}
           </li>
@@ -349,7 +352,7 @@ export default function CaixaDoComercial({ leads, onAbrirLead, itemDestacado }: 
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Caixa do comercial" memoriaDaRolagem="comercial:caixa" lateral={<ConfigDoMercurio />} rotuloDaLateral="Mercúrio" iconeDaLateral={<Settings2 className="h-4 w-4" />} memoria="comercial-caixa-mercurio" nasceRecolhida>
-    <section className="min-w-0 space-y-3" aria-label="Caixa do comercial">
+    <section className="min-w-0 space-y-5" aria-label="Caixa do comercial">
       <CobrancasDoMercurio />
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <SeletorCompacto
@@ -373,7 +376,7 @@ export default function CaixaDoComercial({ leads, onAbrirLead, itemDestacado }: 
       ) : visiveis.length === 0 ? (
         <EstadoVazio titulo={filtro === "nova" ? "Nada novo na Caixa." : filtro === "assumida" ? "Nada assumido." : "Nada concluído ainda."} />
       ) : (
-        <ul className="min-w-0" aria-label={`Caixa: ${ROTULO_DA_SITUACAO[filtro]}`}>
+        <ul className="min-w-0 space-y-4 sm:space-y-5" aria-label={`Caixa: ${ROTULO_DA_SITUACAO[filtro]}`}>
           {visiveis.map((item) => {
             const lead = leads.filter((l) => l.id === item.lead_id)[0];
             return (

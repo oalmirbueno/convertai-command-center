@@ -1,7 +1,9 @@
+import { ArrowUpRight } from "lucide-react";
 import { MenuMais, juntar, superficie, texto, type ItemDoMenu } from "@/components/sistema";
 import type { ProjetoDoLab } from "@/lib/laboratorio/api";
 import { TIPOS_DE_NO, type CanvasDoLab } from "@/lib/laboratorio/nos";
 import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
+import { pastelDe, tom } from "./visual";
 
 /** Cor das miniaturas sem o canvas (a lista só traz a contagem de nós): a cor da marca. */
 const COR_SEM_CANVAS = "hsl(var(--primary))";
@@ -41,7 +43,7 @@ function MiniaturaPorContagem({ total }: { total: number }) {
 export function PreviaDoCanvas({ canvas, total }: { canvas: CanvasDoLab; total?: number }) {
   if (!canvas.nos.length) {
     return (
-      <div className="flex h-28 items-center justify-center rounded-md bg-muted/50 text-muted-foreground" data-previa-do-canvas="">
+      <div className="flex h-28 items-center justify-center text-muted-foreground" data-previa-do-canvas="">
         {total ? <MiniaturaPorContagem total={total} /> : <span className="text-[12px]">Canvas vazio</span>}
       </div>
     );
@@ -57,7 +59,7 @@ export function PreviaDoCanvas({ canvas, total }: { canvas: CanvasDoLab; total?:
     return n ? { x: n.x - minX + 124, y: n.y - minY + 60 } : { x: 0, y: 0 };
   };
   return (
-    <svg viewBox={`0 0 ${larg} ${alt}`} className="block h-28 w-full rounded-md bg-muted/50" preserveAspectRatio="xMidYMid meet" aria-hidden="true" data-previa-do-canvas="" data-miniatura="canvas">
+    <svg viewBox={`0 0 ${larg} ${alt}`} className="block h-28 w-full" preserveAspectRatio="xMidYMid meet" aria-hidden="true" data-previa-do-canvas="" data-miniatura="canvas">
       {canvas.ligacoes.map((l) => {
         const a = pos(l.de);
         const b = pos(l.para);
@@ -83,17 +85,35 @@ export function dataCurta(iso: string, agora: Date = new Date()): string {
   return d.getFullYear() === agora.getFullYear() ? `${dd}/${mm}` : `${dd}/${mm}/${String(d.getFullYear()).slice(2)}`;
 }
 
+/**
+ * Cartão de projeto (v4, 15/11/2026): capa pastel de altura fixa (a miniatura do canvas ou a prévia, nunca
+ * muda de tamanho ao carregar) com a seta de abrir em círculo; embaixo, o nome e uma linha cinza com
+ * cliente, data e nós, e as ações no "…".
+ */
 export function CartaoDeProjeto({ projeto, clientes, onAbrir, acoes }: { projeto: ProjetoDoLab; clientes: ClienteDoLab[]; onAbrir: () => void; acoes?: ItemDoMenu[] }) {
   const cliente = nomeDoCliente(clientes, projeto.client_id, projeto.cliente_nome || "Livre");
   const quando = dataCurta(projeto.updated_at);
+  const cor = pastelDe(projeto.client_id || projeto.id);
   return (
-    <div className={juntar(superficie.painel, "min-w-0 transition-colors hover:border-primary/50")} data-cartao-de-projeto={projeto.id}>
-      <button type="button" onClick={onAbrir} title={`Abrir ${projeto.nome} no canvas`} className="block w-full min-w-0 rounded-t-lg p-3 pb-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-abrir-projeto="">
-        {projeto.previa_url ? <img src={projeto.previa_url} alt="" className="block h-28 w-full rounded-md object-cover" loading="lazy" /> : <PreviaDoCanvas canvas={projeto.canvas} total={projeto.total_nos} />}
-        <span className={juntar(texto.corpo, "mt-2 block truncate font-medium")}>{projeto.nome}</span>
+    <div className={juntar(superficie.painel, "group min-w-0 p-2.5 transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:transform-none")} data-cartao-de-projeto={projeto.id}>
+      <button type="button" onClick={onAbrir} title={`Abrir ${projeto.nome} no canvas`} className="block w-full min-w-0 rounded-[18px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-abrir-projeto="">
+        <span className="relative block h-36 min-w-0 overflow-hidden rounded-[18px]" style={{ backgroundColor: tom(cor, 0.14) }}>
+          {projeto.previa_url ? (
+            <img src={projeto.previa_url} alt="" className="block h-36 w-full object-cover" loading="lazy" />
+          ) : (
+            <span className="block px-3 pt-4">
+              <PreviaDoCanvas canvas={projeto.canvas} total={projeto.total_nos} />
+            </span>
+          )}
+          <span className="absolute right-2.5 top-2.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-card text-foreground transition-colors group-hover:bg-foreground group-hover:text-background" aria-hidden="true">
+            <ArrowUpRight className="h-4 w-4" />
+          </span>
+        </span>
+        <span className="mt-3 block truncate px-1.5 text-[15px] font-semibold leading-5 text-foreground">{projeto.nome}</span>
       </button>
-      <div className="flex min-w-0 items-center pb-2 pl-3 pr-1.5">
-        <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate")} title={`${cliente}${quando ? ` · ${quando}` : ""} · ${projeto.total_nos} nó(s)`}>
+      {/* Passada estrutural: uma linha só, em cinza (cliente · quando · nós), sem etiqueta na capa nem pílula de data. */}
+      <div className="mt-0.5 flex min-w-0 items-center pb-0.5 pl-1.5">
+        <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate tabular-nums")} title={`${cliente}${quando ? ` · ${quando}` : ""} · ${projeto.total_nos} nó(s)`}>
           {cliente}
           {quando ? ` · ${quando}` : ""} · {projeto.total_nos} nó(s)
         </span>

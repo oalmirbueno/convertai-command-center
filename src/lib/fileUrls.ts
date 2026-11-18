@@ -1,3 +1,4 @@
+import { assinarCaminho } from "@/lib/assinaturasEmLote";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { esquecerUrlsLeves, geracaoDasUrls, urlLeve } from "@/lib/miniaturas";
@@ -112,8 +113,20 @@ export async function resolveFileUrl(input: UseResolvedInput): Promise<string> {
 // Fica entre resolveFileUrl e useResolvedFileUrl: o contrato de segurança
 // (file-approval-security-contract.test.ts) confere aqui que a falha ao
 // assinar lança erro e nunca cai no link direto.
+async function assinarUm(bucket: string, path: string, expiresIn: number): Promise<{ data: { signedUrl: string } | null; error: unknown }> {
+  try {
+    const linha = await assinarCaminho(bucket, path, expiresIn);
+    if (linha.signedUrl && !linha.error) return { data: { signedUrl: linha.signedUrl }, error: null };
+    return { data: null, error: new Error(linha.error || "URL indisponível") };
+  } catch (erro) {
+    return { data: null, error: erro };
+  }
+}
+
 async function assinarOriginal(bucket: string, path: string, expiresIn: number): Promise<string> {
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+  // 10/11/2026: a assinatura sai em lote (src/lib/assinaturasEmLote.ts). Uma chamada por arquivo esgotava
+  // as conexões do banco quando a tela tinha centenas de arquivos.
+  const { data, error } = await assinarUm(bucket, path, expiresIn);
   if (error || !data?.signedUrl) {
     throw error || new Error("URL indisponível");
   }

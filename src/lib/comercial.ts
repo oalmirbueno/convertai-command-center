@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { lerOrigemDoClique, type OrigemDoClique } from "../../supabase/functions/_shared/origem-clique";
 import { toBRDateKey } from "@/lib/dateBR";
+import { naConta, tabelaDoCrm } from "./comercial/escopo";
+import { montarHistorico, type Historico, type Movimento } from "./financeiro/historicoDoCaixa";
 
 /**
  * O Departamento Comercial da Aceleriq.
@@ -169,6 +171,14 @@ export const leadQualificado = (lead: Lead, temProximoPasso: boolean) =>
   Boolean(lead.classe) && Boolean(lead.owner_id) && temProximoPasso;
 
 export interface Lead {
+  /** Nota e faixa da pontuação automática (só no CRM da conta; lead que veio do formulário da Meta). */
+  nota?: number | null;
+  faixa?: "quente" | "morno" | "frio" | null;
+  nota_motivos?: string[] | null;
+  fila_desde?: string | null;
+  nutricao?: boolean | null;
+  /** Campos próprios da empresa cliente (só no CRM da conta). */
+  campos?: Record<string, unknown> | null;
   id: string;
   name: string;
   company: string | null;
@@ -263,7 +273,7 @@ export class ErroDeLeitura extends Error {
 
 export async function listarLeads(): Promise<Lead[]> {
   const { data, error } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .select("*")
     .is("archived_at", null)
     .order("created_at", { ascending: false });
@@ -312,6 +322,8 @@ export async function salvarLead(
     notes: lead.notes?.trim() || null,
     classe: lead.classe || null,
     qualificacao: qualificacaoLimpa(lead.qualificacao),
+    // Os campos próprios da empresa só existem no CRM da conta (crm_leads.campos).
+    ...(naConta() && lead.campos && typeof lead.campos === "object" ? { campos: lead.campos } : {}),
   };
   erroDoComercial = "";
   if (lead.id) {
@@ -321,7 +333,7 @@ export async function salvarLead(
     const mandados = new Set(Object.keys(lead));
     const parcial = Object.fromEntries(Object.entries(corpo).filter(([campo]) => mandados.has(campo)));
     const { data: linhas, error } = await supabase
-      .from("commercial_leads")
+      .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
       .update(parcial as never)
       .eq("id", lead.id)
       .select("id");
@@ -331,7 +343,7 @@ export async function salvarLead(
     return lead.id;
   }
   const { data, error } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .insert({
       ...corpo,
       quiz_submission_id: lead.quiz_submission_id || null,
@@ -364,7 +376,7 @@ export async function moverLead(input: {
   const fechou = paraEstagio === "ganho" || paraEstagio === "perdido";
   erroDoComercial = "";
   const { data: linhas, error } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .update({
       stage: paraEstagio,
       closed_at: fechou ? new Date().toISOString() : null,
@@ -381,7 +393,7 @@ export async function moverLead(input: {
   // Sem erro e sem linha = a politica de acesso recusou em silencio: o cartao
   // nao pode ficar na coluna nova como se o banco tivesse aceitado.
   if (!linhas || linhas.length === 0) { erroDoComercial = "Sua conta não tem permissão para mover este lead."; return false; }
-  const { error: erroDoEvento } = await supabase.from("commercial_lead_events").insert({
+  const { error: erroDoEvento } = await supabase.from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events").insert({
     lead_id: lead.id,
     kind: "stage",
     from_stage: lead.stage,
@@ -399,7 +411,7 @@ export async function anotarNoLead(leadId: string, nota: string): Promise<boolea
   const texto = nota.trim();
   if (texto.length < 2) return false;
   const { data: sessao } = await supabase.auth.getUser();
-  const { error } = await supabase.from("commercial_lead_events").insert({
+  const { error } = await supabase.from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events").insert({
     lead_id: leadId,
     kind: "nota",
     note: texto.slice(0, 2000),
@@ -410,7 +422,7 @@ export async function anotarNoLead(leadId: string, nota: string): Promise<boolea
 
 export async function historicoDoLead(leadId: string) {
   const { data, error } = await supabase
-    .from("commercial_lead_events")
+    .from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events")
     .select("id, kind, from_stage, to_stage, note, created_at")
     .eq("lead_id", leadId)
     .order("created_at", { ascending: false })
@@ -428,7 +440,7 @@ export async function historicoDoLead(leadId: string) {
 
 export async function arquivarLead(id: string): Promise<boolean> {
   const { error } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .update({ archived_at: new Date().toISOString() } as never)
     .eq("id", id);
   return !error;
@@ -457,7 +469,7 @@ export async function importarLeadsDoQuiz(): Promise<number> {
   // recusava a gravacao toda.
   const ids = (quiz as Array<{ id: unknown }>).map((linha) => String(linha.id));
   const { data: existentes, error: erroDosExistentes } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .select("quiz_submission_id")
     .in("quiz_submission_id", ids);
   if (erroDosExistentes) throw new ErroDeLeitura("os negócios", erroDosExistentes);
@@ -481,7 +493,7 @@ export async function importarLeadsDoQuiz(): Promise<number> {
   if (novos.length === 0) return 0;
 
   const { data: sessao } = await supabase.auth.getUser();
-  const { error } = await supabase.from("commercial_leads").insert(
+  const { error } = await supabase.from(tabelaDoCrm("commercial_leads") as "commercial_leads").insert(
     novos.map((n) => ({ ...n, created_by: sessao?.user?.id || null })) as never,
   );
   if (error) throw new Error(`Não foi possível gravar os leads do diagnóstico. ${error.message}`);
@@ -501,7 +513,7 @@ export const METRICAS = [
   {
     id: "receita",
     label: "Receita do mês",
-    fonte: "Financeiro: entradas com competência no mês",
+    fonte: "Financeiro: tudo que foi recebido no mês",
     dinheiro: true,
   },
   {
@@ -525,7 +537,7 @@ export const METRICAS = [
   {
     id: "clientes_recorrentes",
     label: "Clientes recorrentes ativos",
-    fonte: "Financeiro: clientes com mensalidade recorrente lançada no mês",
+    fonte: "Financeiro: clientes com mensalidade recebida no mês",
     dinheiro: false,
   },
 ] as const;
@@ -535,7 +547,7 @@ export const primeiroDiaDoMes = (data: Date) =>
 
 export async function listarMetas(periodo: string): Promise<Meta[]> {
   const { data, error } = await supabase
-    .from("commercial_goals")
+    .from(tabelaDoCrm("commercial_goals") as "commercial_goals")
     .select("id, period, metric, target, notes")
     .eq("period", periodo);
   if (error) throw new ErroDeLeitura("as metas", error);
@@ -556,74 +568,243 @@ export async function salvarMeta(input: {
   const { data: sessao } = await supabase.auth.getUser();
   // onConflict na chave (period, metric): editar a meta do mês é o caso
   // comum, e sem isto o segundo salvar estouraria na chave única.
-  const { error } = await supabase.from("commercial_goals").upsert(
+  const { error } = await supabase.from(tabelaDoCrm("commercial_goals") as "commercial_goals").upsert(
     {
       period: periodo,
       metric: metrica,
       target: alvo,
       created_by: sessao?.user?.id || null,
     } as never,
-    { onConflict: "period,metric" },
+    // No CRM da empresa a meta é única por empresa, mês e métrica.
+    { onConflict: naConta() ? "conta_id,period,metric" : "period,metric" },
   );
   return !error;
 }
 
 export async function apagarMeta(id: string): Promise<boolean> {
-  const { error } = await supabase.from("commercial_goals").delete().eq("id", id);
+  const { error } = await supabase.from(tabelaDoCrm("commercial_goals") as "commercial_goals").delete().eq("id", id);
   return !error;
 }
 
 /* ────────────────────── A ponte com o Financeiro ────────────────────────── */
 
 /**
- * A receita REALIZADA do mês, lida do Financeiro central.
+ * O que ENTROU no mês, lido do Financeiro geral, separado por origem.
  *
- * Usa `competence` (o mês a que a receita pertence), não a data de
- * pagamento: é assim que o Financeiro fecha o mês, e usar régua diferente
- * faria a mesma empresa ter dois "faturamento de agosto". Cancelado fica de
- * fora — é lançamento que deixou de existir.
+ * É a mesma conta da tela do Financeiro (13/11/2026): cobrança de `billing`
+ * paga ou parcial, mais parcela de projeto paga ou parcial, no mês da data
+ * do pagamento (ou do vencimento, quando o pagamento ficou sem data). Antes
+ * esta leitura ia em `financial_entries`, tabela que nunca recebeu receita,
+ * e o Comercial mostrava R$ 0 com o caixa cheio. Régua diferente da do
+ * Financeiro faria a mesma empresa ter dois "recebido de novembro".
+ *
+ * Fica de fora: recarga de anúncio (dinheiro do cliente para a plataforma)
+ * e cobrança em dólar (o Freela tem caixa próprio).
  */
-export async function receitaDoMes(periodo: string): Promise<number> {
-  const inicio = periodo;
-  const fim = proximoMes(periodo);
-  const { data, error } = await supabase
-    .from("financial_entries")
-    .select("amount")
-    .eq("direction", "in")
-    .is("cancelled_at", null)
-    .gte("competence", inicio)
-    .lt("competence", fim);
-  // Falha nao vira "R$ 0": zero e dado, leitura que falhou e outra coisa.
-  if (error) throw new ErroDeLeitura("a receita do Financeiro", error);
-  if (!data) return 0;
-  return (data as Array<{ amount: unknown }>).reduce(
-    (soma, linha) => soma + numero(linha.amount),
-    0,
-  );
+export type RecebidoDoMes = {
+  /** Mensalidades (cobrança de renovação). */
+  mensalidades: number;
+  /** Serviço extra, avulso e qualquer outra cobrança que não é mensalidade. */
+  avulsos: number;
+  /** Parcelas de projeto fechado. */
+  projetos: number;
+  /** Assinaturas do produto CRM e E-mail pagas no Asaas (valor cheio, antes da taxa). */
+  crmEmail: number;
+  /** Tudo que entrou: a soma das três origens. */
+  total: number;
+  /** Clientes distintos com mensalidade recebida no mês. */
+  clientesRecorrentes: number;
+};
+
+type LinhaRecebida = {
+  amount?: unknown;
+  paid_amount?: unknown;
+  status?: unknown;
+  type?: unknown;
+  client_id?: unknown;
+  currency?: unknown;
+};
+
+/** Quanto entrou de fato numa cobrança ou parcela, respeitando pagamento parcial. */
+function recebidoDe(linha: LinhaRecebida): number {
+  const cheio = numero(linha.amount);
+  const pago = numero(linha.paid_amount);
+  if (linha.status === "partial") return Math.min(pago, cheio);
+  if (linha.status === "paid") return pago > 0 && pago < cheio ? pago : cheio;
+  return 0;
 }
 
 /**
- * Quantos clientes têm mensalidade RECORRENTE lançada no mês, lido do
- * Financeiro central. Conta cliente distinto com entrada gerada por regra
- * de recorrência, competência no mês e não cancelada: é quem o Financeiro
- * cobrou de verdade, não quem o comercial acha que é recorrente — a mesma
- * régua de "alvo é dado próprio, realizado é lido do Financeiro".
+ * As linhas recebidas de uma tabela no mês. São duas leituras porque o mês é
+ * o do pagamento e, só na falta dele, o do vencimento.
+ */
+async function recebidasNoMes(
+  tabela: "billing" | "payment_installments",
+  colunas: string,
+  periodo: string,
+): Promise<LinhaRecebida[]> {
+  const fim = proximoMes(periodo);
+  const [comData, semData] = await Promise.all([
+    supabase
+      .from(tabela)
+      .select(colunas)
+      .in("status", ["paid", "partial"])
+      .gte("paid_date", periodo)
+      .lt("paid_date", fim),
+    supabase
+      .from(tabela)
+      .select(colunas)
+      .in("status", ["paid", "partial"])
+      .is("paid_date", null)
+      .gte("due_date", periodo)
+      .lt("due_date", fim),
+  ]);
+  // Falha nao vira "R$ 0": zero e dado, leitura que falhou e outra coisa.
+  const erro = comData.error || semData.error;
+  if (erro) throw new ErroDeLeitura("o recebido do Financeiro", erro);
+  return [...(comData.data || []), ...(semData.data || [])] as LinhaRecebida[];
+}
+
+const centavos = (valor: number) => Math.round(valor * 100) / 100;
+
+/**
+ * O que o produto CRM e E-mail recebeu (13/11/2026): cobrança do Asaas paga,
+ * pelo dia do pagamento em São Paulo. Mesma régua da função
+ * produto_faturamento, que alimenta a aba "CRM e E-mail" do Financeiro.
+ * Sem `desde`, soma tudo o que já foi pago.
+ */
+async function pagoNoProduto(desde?: string, ate?: string): Promise<Array<{ valor: unknown; valor_liquido: unknown }>> {
+  // As tabelas do produto ainda não estão nos tipos gerados do banco.
+  type Consulta = PromiseLike<{ data: unknown; error: { message: string } | null }> & {
+    gte: (c: string, v: string) => Consulta;
+    lt: (c: string, v: string) => Consulta;
+  };
+  const semTipo = supabase as unknown as {
+    from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => Consulta } };
+  };
+  let q = semTipo.from("produto_cobrancas").select("valor, valor_liquido").eq("estado", "paga");
+  if (desde) q = q.gte("pago_em", `${desde}T00:00:00-03:00`);
+  if (ate) q = q.lt("pago_em", `${ate}T00:00:00-03:00`);
+  const { data, error } = await q;
+  if (error) throw new ErroDeLeitura("o recebido do CRM e E-mail", error);
+  return (data || []) as unknown as Array<{ valor: unknown; valor_liquido: unknown }>;
+}
+
+export async function recebidoDoMes(periodo: string): Promise<RecebidoDoMes> {
+  const [cobrancas, parcelas, doProduto] = await Promise.all([
+    recebidasNoMes("billing", "amount, paid_amount, status, type, client_id, currency", periodo),
+    recebidasNoMes("payment_installments", "amount, paid_amount, status", periodo),
+    pagoNoProduto(periodo, proximoMes(periodo)),
+  ]);
+  let mensalidades = 0;
+  let avulsos = 0;
+  const recorrentes = new Set<string>();
+  for (const c of cobrancas) {
+    if (c.type === "ads_recharge" || c.currency === "USD") continue;
+    const valor = recebidoDe(c);
+    if (c.type === "renewal") {
+      mensalidades += valor;
+      if (c.client_id && valor > 0) recorrentes.add(String(c.client_id));
+    } else avulsos += valor;
+  }
+  const projetos = parcelas.reduce((soma, p) => soma + recebidoDe(p), 0);
+  const crmEmail = doProduto.reduce((soma, c) => soma + numero(c.valor), 0);
+  return {
+    mensalidades: centavos(mensalidades),
+    avulsos: centavos(avulsos),
+    projetos: centavos(projetos),
+    crmEmail: centavos(crmEmail),
+    total: centavos(mensalidades + avulsos + projetos + crmEmail),
+    clientesRecorrentes: recorrentes.size,
+  };
+}
+
+/** A receita REALIZADA do mês: o total que entrou no Financeiro geral. */
+export async function receitaDoMes(periodo: string): Promise<number> {
+  // No CRM da empresa não existe o Financeiro da casa: o realizado são os ganhos dela.
+  if (naConta()) return (await ganhosDaContaNoMes(periodo)).receita;
+  return (await recebidoDoMes(periodo)).total;
+}
+
+/**
+ * Quantos clientes pagaram mensalidade no mês, lido do Financeiro geral:
+ * é quem pagou de verdade, não quem o comercial acha que é recorrente. A
+ * mesma régua de "alvo é dado próprio, realizado é lido do Financeiro".
  */
 export async function clientesRecorrentesDoMes(periodo: string): Promise<number> {
+  if (naConta()) return (await ganhosDaContaNoMes(periodo)).recorrentes;
+  return (await recebidoDoMes(periodo)).clientesRecorrentes;
+}
+
+/**
+ * No CRM da empresa cliente não existe o Financeiro da casa: o realizado do
+ * mês é o que ela mesma marcou como ganho (entrada mais a primeira
+ * mensalidade), pela data do fechamento.
+ */
+async function ganhosDaContaNoMes(periodo: string): Promise<{ receita: number; recorrentes: number }> {
   const { data, error } = await supabase
-    .from("financial_entries")
-    .select("client_id")
-    .eq("direction", "in")
-    .is("cancelled_at", null)
-    .not("recurring_rule_id", "is", null)
-    .not("client_id", "is", null)
-    .gte("competence", periodo)
-    .lt("competence", proximoMes(periodo));
-  if (error) throw new ErroDeLeitura("os clientes recorrentes do Financeiro", error);
-  if (!data) return 0;
-  return new Set(
-    (data as Array<{ client_id: unknown }>).map((linha) => String(linha.client_id)),
-  ).size;
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
+    .select("monthly_value, one_off_value, closed_at")
+    .eq("stage", "ganho")
+    .is("archived_at", null)
+    .gte("closed_at", `${periodo}T00:00:00-03:00`)
+    .lt("closed_at", `${proximoMes(periodo)}T00:00:00-03:00`);
+  if (error) throw new ErroDeLeitura("os ganhos do mês", error);
+  const linhas = (data || []) as Array<{ monthly_value: unknown; one_off_value: unknown }>;
+  return {
+    receita: linhas.reduce((soma, l) => soma + numero(l.monthly_value) + numero(l.one_off_value), 0),
+    recorrentes: linhas.filter((l) => numero(l.monthly_value) > 0).length,
+  };
+}
+
+/**
+ * O que SAIU no mês e o saldo em caixa de hoje, com a mesma conta do bloco
+ * "Caixa da Aceleriq" no Fluxo de Caixa do Financeiro (13/11/2026):
+ *
+ * - Saiu: despesa paga, no mês da data do pagamento (ou do vencimento, sem
+ *   data). Aporte de investidor (categoria `investidor` ou `inv_*`) é capital,
+ *   não despesa, e fica de fora.
+ * - Saldo: saldo inicial conciliado (`financial_settings.opening_balance`)
+ *   + tudo que já entrou − tudo que já saiu. Não depende do mês escolhido.
+ *   Do CRM e E-mail entra o valor líquido (o Asaas repassa já sem a taxa).
+ */
+export type CaixaDaCasa = { saiuNoMes: number; saldo: number };
+
+const ehAporteDeInvestidor = (categoria: unknown) => {
+  const c = typeof categoria === "string" ? categoria : "";
+  return c === "investidor" || c.startsWith("inv_");
+};
+
+export async function caixaDaCasa(periodo: string): Promise<CaixaDaCasa> {
+  const fim = proximoMes(periodo);
+  const [ajuste, cobrancas, parcelas, despesas, doProduto] = await Promise.all([
+    supabase.from("financial_settings").select("opening_balance").eq("settings_key", "default").maybeSingle(),
+    supabase.from("billing").select("amount, paid_amount, status, type, currency").in("status", ["paid", "partial"]),
+    supabase.from("payment_installments").select("amount, paid_amount, status").in("status", ["paid", "partial"]),
+    supabase.from("expenses").select("amount, category, paid_date, due_date").eq("status", "paid"),
+    pagoNoProduto(),
+  ]);
+  const erro = ajuste.error || cobrancas.error || parcelas.error || despesas.error;
+  if (erro) throw new ErroDeLeitura("o caixa do Financeiro", erro);
+
+  const entrou =
+    ((cobrancas.data || []) as LinhaRecebida[])
+      .filter((c) => c.type !== "ads_recharge" && c.currency !== "USD")
+      .reduce((soma, c) => soma + recebidoDe(c), 0) +
+    ((parcelas.data || []) as LinhaRecebida[]).reduce((soma, p) => soma + recebidoDe(p), 0) +
+    doProduto.reduce((soma, c) => soma + numero(c.valor_liquido ?? c.valor), 0);
+
+  let saiu = 0;
+  let saiuNoMes = 0;
+  for (const d of (despesas.data || []) as Array<{ amount: unknown; category: unknown; paid_date: string | null; due_date: string | null }>) {
+    if (ehAporteDeInvestidor(d.category)) continue;
+    const valor = numero(d.amount);
+    saiu += valor;
+    const dia = d.paid_date || d.due_date || "";
+    if (dia >= periodo && dia < fim) saiuNoMes += valor;
+  }
+  const abertura = numero((ajuste.data as { opening_balance?: unknown } | null)?.opening_balance);
+  return { saiuNoMes: centavos(saiuNoMes), saldo: centavos(abertura + entrou - saiu) };
 }
 
 export function proximoMes(periodo: string): string {
@@ -782,7 +963,7 @@ export function linhasDeMetaDoMes(input: {
 
 export async function listarCampanhas(): Promise<Campanha[]> {
   const { data, error } = await supabase
-    .from("commercial_campaigns")
+    .from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns")
     .select("*")
     .is("archived_at", null)
     .order("created_at", { ascending: false });
@@ -817,20 +998,20 @@ export async function salvarCampanha(
   };
   if (campanha.id) {
     const { error } = await supabase
-      .from("commercial_campaigns")
+      .from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns")
       .update(corpo as never)
       .eq("id", campanha.id);
     return !error;
   }
   const { error } = await supabase
-    .from("commercial_campaigns")
+    .from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never);
   return !error;
 }
 
 export async function arquivarCampanha(id: string): Promise<boolean> {
   const { error } = await supabase
-    .from("commercial_campaigns")
+    .from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns")
     .update({ archived_at: new Date().toISOString() } as never)
     .eq("id", id);
   return !error;
@@ -989,13 +1170,13 @@ const COLUNAS_DA_ATIVIDADE = "id, lead_id, kind, title, due_at, done_at, owner_i
 export async function listarAtividades(): Promise<Atividade[]> {
   const [abertas, feitas] = await Promise.all([
     supabase
-      .from("commercial_activities")
+      .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
       .select(COLUNAS_DA_ATIVIDADE)
       .is("done_at", null)
       .order("due_at", { ascending: true })
       .limit(1000),
     supabase
-      .from("commercial_activities")
+      .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
       .select(COLUNAS_DA_ATIVIDADE)
       .not("done_at", "is", null)
       .order("due_at", { ascending: false })
@@ -1034,13 +1215,13 @@ export async function salvarAtividade(input: {
   };
   if (input.id) {
     const { error } = await supabase
-      .from("commercial_activities")
+      .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
       .update(corpo as never)
       .eq("id", input.id);
     return !error;
   }
   const { error } = await supabase
-    .from("commercial_activities")
+    .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never);
   return !error;
 }
@@ -1058,14 +1239,14 @@ export async function concluirAtividade(
 ): Promise<boolean> {
   const { data: sessao } = await supabase.auth.getUser();
   const { error } = await supabase
-    .from("commercial_activities")
+    .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
     .update({ done_at: concluir ? new Date().toISOString() : null } as never)
     .eq("id", atividade.id);
   if (error) return false;
   // So o compromisso ligado a um lead vira linha na historia dele; o
   // proprio nao tem onde ser registrado, nem precisa.
   if (concluir && atividade.lead_id) {
-    await supabase.from("commercial_lead_events").insert({
+    await supabase.from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events").insert({
       lead_id: atividade.lead_id,
       kind: "atividade",
       note: `${rotuloDaAtividade(atividade.kind)}: ${atividade.title}`,
@@ -1076,7 +1257,7 @@ export async function concluirAtividade(
 }
 
 export async function apagarAtividade(id: string): Promise<boolean> {
-  const { error } = await supabase.from("commercial_activities").delete().eq("id", id);
+  const { error } = await supabase.from(tabelaDoCrm("commercial_activities") as "commercial_activities").delete().eq("id", id);
   return !error;
 }
 
@@ -1221,7 +1402,7 @@ export interface Contato {
 
 export async function listarEmpresas(): Promise<Empresa[]> {
   const { data, error } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .select("id, name, segment, site, city, notes, client_id, owner_id, instagram, phone, address, cnpj, size")
     .is("archived_at", null)
     .order("name");
@@ -1232,7 +1413,7 @@ export async function listarEmpresas(): Promise<Empresa[]> {
 
 export async function listarContatos(): Promise<Contato[]> {
   const { data, error } = await supabase
-    .from("commercial_contacts")
+    .from(tabelaDoCrm("commercial_contacts") as "commercial_contacts")
     .select("id, organization_id, name, role, email, whatsapp, is_primary, notes")
     .is("archived_at", null)
     .order("name");
@@ -1268,7 +1449,7 @@ export async function salvarEmpresa(
     const mandados = new Set(Object.keys(empresa));
     const parcial = Object.fromEntries(Object.entries(corpo).filter(([campo]) => mandados.has(campo)));
     const { data: linhas, error } = await supabase
-      .from("commercial_organizations")
+      .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
       .update(parcial as never)
       .eq("id", empresa.id)
       .select("id");
@@ -1278,7 +1459,7 @@ export async function salvarEmpresa(
   }
   // Mesmo nome = mesma ficha: criar de novo abriria duas historias para a mesma empresa.
   const { data: existente } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .select("id")
     .ilike("name", nome.replace(/[%_]/g, ""))
     .is("archived_at", null)
@@ -1288,7 +1469,7 @@ export async function salvarEmpresa(
     return null;
   }
   const { data, error } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never)
     .select("id")
     .single();
@@ -1307,7 +1488,7 @@ export async function salvarDadosDaEmpresaDoLead(
   const preenchidos = Object.entries(campos).filter(([, v]) => typeof v === "string");
   if (preenchidos.length === 0) return true;
   erroDoComercial = "";
-  const { data, error } = await supabase.from("commercial_leads").select("organization_id").eq("id", leadId).maybeSingle();
+  const { data, error } = await supabase.from(tabelaDoCrm("commercial_leads") as "commercial_leads").select("organization_id").eq("id", leadId).maybeSingle();
   // Leitura que falhou nao e "lead sem ficha": devolver true dizia "salvo" sem gravar nada.
   if (error) { erroDoComercial = error.message; return false; }
   const linha = data as { organization_id?: string | null } | null;
@@ -1316,7 +1497,7 @@ export async function salvarDadosDaEmpresaDoLead(
   // (ou "Empresa" quando vazio) renomeava a ficha a cada dado completado.
   const limpo = (v: string) => v.trim() || null;
   const { data: linhas, error: erroDaEmpresa } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .update(Object.fromEntries(preenchidos.map(([campo, v]) => [campo, limpo(String(v))])) as never)
     .eq("id", linha.organization_id)
     .select("id");
@@ -1332,7 +1513,7 @@ export async function salvarDadosDaEmpresaDoLead(
  */
 export async function apagarLead(id: string): Promise<boolean> {
   erroDoComercial = "";
-  const { data, error } = await supabase.from("commercial_leads").delete().eq("id", id).select("id");
+  const { data, error } = await supabase.from(tabelaDoCrm("commercial_leads") as "commercial_leads").delete().eq("id", id).select("id");
   if (error) { erroDoComercial = error.message; return false; }
   if (!data || data.length === 0) { erroDoComercial = "Sua conta não tem permissão para apagar este lead."; return false; }
   return true;
@@ -1355,13 +1536,13 @@ export async function salvarContato(
   };
   if (contato.id) {
     const { error } = await supabase
-      .from("commercial_contacts")
+      .from(tabelaDoCrm("commercial_contacts") as "commercial_contacts")
       .update(corpo as never)
       .eq("id", contato.id);
     return error ? null : contato.id;
   }
   const { data, error } = await supabase
-    .from("commercial_contacts")
+    .from(tabelaDoCrm("commercial_contacts") as "commercial_contacts")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never)
     .select("id")
     .single();
@@ -1371,7 +1552,7 @@ export async function salvarContato(
 
 export async function arquivarEmpresa(id: string): Promise<boolean> {
   const { error } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .update({ archived_at: new Date().toISOString() } as never)
     .eq("id", id);
   return !error;
@@ -1415,4 +1596,50 @@ export function fichaDaEmpresa(
     ).length,
     mrrGanho: ganhos.reduce((soma, lead) => soma + lead.monthly_value, 0),
   };
+}
+
+/**
+ * Resultado mês a mês do Financeiro (16/11/2026): o que entrou, o que saiu, o lucro e o caixa no fim de
+ * cada mês, até o mês escolhido. Mesmas réguas do "Entrou no mês" e do "Saldo em caixa".
+ */
+export async function historicoDoCaixa(periodo: string, quantos = 12): Promise<Historico> {
+  type Consulta = PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  const semTipo = supabase as unknown as { from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => Consulta } } };
+  const [ajuste, cobrancas, parcelas, despesas, produto] = await Promise.all([
+    supabase.from("financial_settings").select("opening_balance").eq("settings_key", "default").maybeSingle(),
+    supabase.from("billing").select("amount, paid_amount, status, type, currency, paid_date, due_date").in("status", ["paid", "partial"]),
+    supabase.from("payment_installments").select("amount, paid_amount, status, paid_date, due_date").in("status", ["paid", "partial"]),
+    supabase.from("expenses").select("amount, category, paid_date, due_date").eq("status", "paid"),
+    semTipo.from("produto_cobrancas").select("valor, valor_liquido, pago_em").eq("estado", "paga"),
+  ]);
+  const erro = ajuste.error || cobrancas.error || parcelas.error || despesas.error || produto.error;
+  if (erro) throw new ErroDeLeitura("o histórico do Financeiro", erro);
+
+  type ComData = LinhaRecebida & { paid_date?: string | null; due_date?: string | null };
+  const entradas: Movimento[] = [];
+  const entradasDoCaixa: Movimento[] = [];
+  for (const c of (cobrancas.data || []) as ComData[]) {
+    if (c.type === "ads_recharge" || c.currency === "USD") continue;
+    const m = { dia: String(c.paid_date || c.due_date || ""), valor: recebidoDe(c) };
+    entradas.push(m);
+    entradasDoCaixa.push(m);
+  }
+  for (const p of (parcelas.data || []) as ComData[]) {
+    const m = { dia: String(p.paid_date || p.due_date || ""), valor: recebidoDe(p) };
+    entradas.push(m);
+    entradasDoCaixa.push(m);
+  }
+  for (const c of (produto.data || []) as Array<{ valor: unknown; valor_liquido: unknown; pago_em: string | null }>) {
+    const dia = diaEmSaoPaulo(c.pago_em) || "";
+    entradas.push({ dia, valor: numero(c.valor) });
+    entradasDoCaixa.push({ dia, valor: numero(c.valor_liquido ?? c.valor) });
+  }
+  const saidas: Movimento[] = [];
+  for (const d of (despesas.data || []) as Array<{ amount: unknown; category: unknown; paid_date: string | null; due_date: string | null }>) {
+    if (ehAporteDeInvestidor(d.category)) continue;
+    saidas.push({ dia: String(d.paid_date || d.due_date || ""), valor: numero(d.amount) });
+  }
+  const abertura = numero((ajuste.data as { opening_balance?: unknown } | null)?.opening_balance);
+  const saldoHoje = abertura + entradasDoCaixa.reduce((s, m) => s + m.valor, 0) - saidas.reduce((s, m) => s + m.valor, 0);
+  return montarHistorico({ entradas, entradasDoCaixa, saidas, saldoHoje, ate: periodo.slice(0, 7), quantos });
 }

@@ -104,7 +104,7 @@ export function BotaoDeAnexarArquivos({ arquivos, anexos, className = "" }: { ar
         aria-label="Anexar arquivos"
         title={`Imagens, PDF, Word, planilha, apresentação, texto ou ZIP (até ${tamanhoLegivel(MAX_BYTES_DO_ZIP)} e ${MAX_ARQUIVOS_NO_ZIP} arquivos)`}
         // 16/10/2026 (dono: "só o ícone, sem as bordinhas"): sai a borda; o nome segue no aria-label e o detalhe no title.
-        className={`inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${className}`}
+        className={`inline-flex h-8 shrink-0 items-center justify-center rounded-full px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${className}`}
       >
         {arquivos.lendo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Paperclip className="h-4 w-4" aria-hidden="true" />}
         {total > 0 && <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{total}</span>}
@@ -144,7 +144,7 @@ export function ListaDeArquivos({ arquivos }: { arquivos: ControleDeArquivos }) 
       >
         <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
         <span className="min-w-0 flex-1 truncate">{partes.join(" · ")}</span>
-        <ChevronDown className={`ml-1 h-3 w-3 shrink-0 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} />
+        <ChevronDown className={`ml-1 h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 ${aberta ? "rotate-180" : ""}`} />
       </button>
       {aberta && (
         <ul className="mt-1 divide-y divide-border" aria-label="Arquivos do pedido">

@@ -50,7 +50,7 @@ export function PainelDeTextos({ ctx }: { ctx: ContextoDoPainel }) {
       <TituloDoPainel titulo="Legendas e textos" ajuda="Legenda da fala em 10 estilos, com a cor e a letra da marca, e textos na tela: título, gancho, tarjas, marca-texto, balão, vidro, chamada e nome e cargo. A legenda automática desvia do rosto quando ele está embaixo." />
       <div className="flex min-w-0 items-center text-[13px]">
         <span className="min-w-0 flex-1 truncate">Marca: {idAtual && idAtual.nome ? idAtual.nome : "sem marca no vídeo"}</span>
-        {idAtual && idAtual.cor && <span className="ml-1 inline-block h-4 w-4 shrink-0 rounded border border-border" style={{ background: idAtual.cor }} title={idAtual.cor} />}
+        {idAtual && idAtual.cor && <span className="ml-1 inline-block h-4 w-4 shrink-0 rounded-full border border-border" style={{ background: idAtual.cor }} title={idAtual.cor} />}
         {idAtual && idAtual.fonte && <span className="ml-1 max-w-[96px] shrink-0 truncate text-[12px] text-muted-foreground" title={`Letra da marca: ${idAtual.fonte}`}>{idAtual.fonte}</span>}
         {marca && (
           <button type="button" className={juntar(botao.discreto, "ml-1 h-7 px-2 text-[12px]")} onClick={() => ctx.onOps([{ op: "identidade", identidade: { nome: marca.nome, cor: marca.cor, cor2: marca.cor2 || null, fonte: marca.fonte || null, ...(marca.fonte && marca.fonte_path ? { fonte_path: marca.fonte_path } : {}) } }], "Identidade da marca")}>
@@ -189,7 +189,7 @@ export function PainelDeSom({ ctx }: { ctx: ContextoDoPainel }) {
           <li key={k} className="flex min-w-0 items-center py-1.5 text-[13px]">
             <Music className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate">{p.fontes[k].nome}</span>
-            {trilhaAtual === k ? <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>trilha</span> : (
+            {trilhaAtual === k ? <span className={juntar(etiqueta, "bg-accent-soft text-primary")}>trilha</span> : (
               <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => usarComoTrilha(k)}>
                 Usar
               </button>

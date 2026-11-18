@@ -285,7 +285,7 @@ function CartaoRecolhivel({
       <div className={juntar("flex min-w-0 flex-wrap items-center justify-between", recolhido ? "" : "mb-2.5")}>
         <div className="mr-2 flex min-w-0 flex-1 items-center">
           {/* O título continua heading (h3), como no Cartao sem recolher: quem navega por títulos acha o bloco. */}
-          <h3 className="min-w-0">
+          <h3 className="flex min-w-0">
             <TituloRecolhivel titulo={titulo} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
           </h3>
           {dica && !recolhido && <AjudaRecolhida className="ml-1.5">{dica}</AjudaRecolhida>}
@@ -369,7 +369,7 @@ export function SeloCurto({ foto }: { foto: Pick<FotoDoAcervo, "gerada" | "deriv
   }
   if (classe === "gerada") {
     return (
-      <span className="mb-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-medium text-primary" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
+      <span className="mb-1 inline-flex items-center whitespace-nowrap rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-medium text-primary" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
         a aprovar
       </span>
     );
@@ -438,7 +438,7 @@ export function ListaCurta({ titulo, itens, vazio, tom = "normal" }: { titulo: s
 export function Vazio({ titulo, children, acao, icone }: { titulo: string; children?: ReactNode; acao?: ReactNode; icone?: ReactNode }) {
   return (
     <EstadoVazio
-      className="py-8"
+      className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground py-8"
       icone={icone}
       titulo={titulo}
       descricao={children ? <span className="block [overflow-wrap:anywhere]">{children}</span> : undefined}
@@ -471,8 +471,8 @@ export function Pilulas<T extends string | number>({
           aria-checked={valor === o.valor}
           title={o.dica}
           onClick={() => onEscolher(o.valor)}
-          className={`mb-1.5 mr-1.5 h-7 max-w-full truncate rounded-full border px-2.5 text-[12px] transition-colors ${
-            valor === o.valor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
+          className={`mb-1.5 mr-1.5 h-8 max-w-full truncate rounded-full border px-3.5 text-[12px] font-medium transition-colors ${
+            valor === o.valor ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-foreground hover:border-primary/50"
           }`}
         >
           {o.rotulo}

@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -250,6 +251,7 @@ export function FocoDeEstudo({
               className="membros-relogio"
               role="timer"
               aria-label="Tempo restante no Pomodoro"
+              style={{ "--andamento": Math.min(100, Math.max(0, 100 - (restante / DURACOES[estado.etapa]) * 100)) } as CSSProperties}
             >
               {formatarTempo(restante)}
             </div>

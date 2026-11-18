@@ -120,6 +120,8 @@ export default function BaseDosAgentes() {
         descricao={<span><strong className="tabular-nums text-foreground">{totalAtivas}</strong> técnicas em uso em {AGENTES_COM_BASE.length} agentes</span>}
       />
 
+      {/* O lugar da linha da semana fica guardado enquanto ela carrega (o resto não desce quando chega). */}
+      {semana.isLoading && <div aria-hidden="true" className="min-h-[60px] sm:min-h-[20px]" />}
       {semana.data && (
         <section aria-label="Esta semana" className="min-w-0 space-y-2" data-resumo-da-semana="">
           <p className="text-[13px] leading-5 text-foreground">
@@ -138,10 +140,25 @@ export default function BaseDosAgentes() {
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Os agentes, por mesa. */}
-        <nav aria-label="Agentes" className="min-w-0 space-y-4">
+        {/* Celular e tablet: os agentes numa lista suspensa (a coluna inteira ocupava duas telas antes do conteúdo). */}
+        <select
+          aria-label="Agente"
+          value={agente.chave}
+          onChange={(e) => setChave(e.target.value)}
+          className={juntar(campo, "h-11 rounded-full lg:hidden")}
+        >
+          {mesas.map(([mesa, lista]) => (
+            <optgroup key={mesa} label={mesa}>
+              {lista.map((a) => (
+                <option key={a.chave} value={a.chave}>{`${a.nome} (${resumo.data?.[a.chave]?.ativas ?? 0})`}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <nav aria-label="Agentes" className={juntar(superficie.painel, "hidden min-w-0 space-y-4 self-start p-3 lg:block")}>
           {mesas.map(([mesa, lista]) => (
             <div key={mesa} className="min-w-0">
-              <p className={juntar(texto.rotulo, "mb-1 px-2")}>{mesa}</p>
+              <p className={juntar(texto.rotulo, "mb-1 px-3")}>{mesa}</p>
               <ul className="space-y-0.5">
                 {lista.map((a) => {
                   const r = resumo.data?.[a.chave];
@@ -153,13 +170,13 @@ export default function BaseDosAgentes() {
                         onClick={() => setChave(a.chave)}
                         aria-current={atual ? "true" : undefined}
                         className={juntar(
-                          "flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] transition-colors",
-                          atual ? "bg-secondary font-semibold text-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                          "flex w-full min-w-0 items-center rounded-full px-3 py-2 text-left text-[13px] transition-colors",
+                          atual ? "bg-foreground font-semibold text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         <GraduationCap className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden />
                         <span className="min-w-0 flex-1 truncate">{a.nome}</span>
-                        <span className="ml-2 shrink-0 text-[12px] tabular-nums">{r?.ativas ?? 0}</span>
+                        <span className={juntar("ml-2 inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums", atual ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground")}>{r?.ativas ?? 0}</span>
                       </button>
                     </li>
                   );
@@ -186,8 +203,10 @@ export default function BaseDosAgentes() {
                 novo sobre {agente.tema} e as fichas novas também entram em uso. Desligue o que não ajudar.
               </>
             }
-            acao={podeEnsinar ? <span className="inline-flex items-center"><BotaoDosResultados aoTerminar={recarregar} /><BotaoDePesquisa agente={agente} aoTerminar={recarregar} /></span> : undefined}
+            acao={podeEnsinar ? <span className="hidden items-center sm:inline-flex"><BotaoDosResultados aoTerminar={recarregar} /><BotaoDePesquisa agente={agente} aoTerminar={recarregar} /></span> : undefined}
           >
+            {/* Celular: as duas ações descem para a linha delas (ao lado do título, cortavam o nome do agente). */}
+            {podeEnsinar && <div className="mb-3 flex min-w-0 items-center sm:hidden"><BotaoDosResultados aoTerminar={recarregar} /><BotaoDePesquisa agente={agente} aoTerminar={recarregar} /></div>}
             <ChaveDaBiblioteca agente={agente} fichas={fichas.data || []} podeMudar={podeEnsinar} aoMudar={recarregar} />
             {podeEnsinar && <CaixaDeEnsino agente={agente} clientes={clientes.data || []} aoTerminar={recarregar} />}
           </Secao>
@@ -235,7 +254,7 @@ function ChaveDaBiblioteca({ agente, fichas, podeMudar, aoMudar }: { agente: Age
     }
   };
   return (
-    <div className={juntar(superficie.painel, "mb-3 flex min-w-0 items-center p-3")} data-biblioteca-da-casa={ligada ? "ligada" : "desligada"}>
+    <div className={juntar(superficie.painel, "mb-3 flex min-w-0 items-center p-4 sm:p-5")} data-biblioteca-da-casa={ligada ? "ligada" : "desligada"}>
       <BookOpen className="mr-2.5 h-4 w-4 shrink-0 text-primary" />
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-foreground">Biblioteca da casa</p>
@@ -377,7 +396,7 @@ function CaixaDeEnsino({ agente, clientes, aoTerminar }: { agente: AgenteComBase
   ];
 
   return (
-    <div className="min-w-0 space-y-3" data-ensinar="">
+    <div className={juntar(superficie.painel, "min-w-0 space-y-3 p-4 sm:p-5")} data-ensinar="">
       <div className="-m-0.5 flex flex-wrap" role="tablist" aria-label="Como ensinar">
         {MODOS.map((m) => (
           <button
@@ -386,7 +405,7 @@ function CaixaDeEnsino({ agente, clientes, aoTerminar }: { agente: AgenteComBase
             role="tab"
             aria-selected={modo === m.id}
             onClick={() => setModo(m.id)}
-            className={juntar("m-0.5 inline-flex h-8 items-center rounded-md px-2.5 text-[12px] transition-colors", modo === m.id ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground")}
+            className={juntar("toque-compacto m-0.5 inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium transition-colors", modo === m.id ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
           >
             <m.icone className="mr-1.5 h-3.5 w-3.5" aria-hidden />
             {m.rotulo}
@@ -479,7 +498,7 @@ function ListaDeFichas({
       ) : !filtradas.length ? (
         <EstadoVazio icone={<GraduationCap className="h-5 w-5" />} titulo={busca ? "Nenhuma ficha com essa busca." : `${agente.nome} ainda não aprendeu nada aqui.`} descricao={busca ? undefined : "Mande um texto, link ou documento acima, ou clique em Pesquisar agora."} />
       ) : (
-        <ul className="min-w-0 space-y-2">
+        <ul className="min-w-0 space-y-3">
           {filtradas.map((f) => editando === f.id ? (
             <EditorDaFicha key={f.id} ficha={f} clientes={clientes} aoFechar={() => setEditando(null)} aoMudar={aoMudar} />
           ) : (
@@ -512,11 +531,11 @@ function CartaoDaFicha({ ficha, fonte, cliente, podeEditar, aoEditar, aoMudar }:
     }
   };
   return (
-    <li className={juntar(superficie.painel, "min-w-0 p-3", !ficha.ativa && "opacity-60")} data-ficha={ficha.id}>
+    <li className={juntar(superficie.painel, "min-w-0 p-5", !ficha.ativa && "opacity-60")} data-ficha={ficha.id}>
       <div className="flex min-w-0 items-start">
         <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setAberta((v) => !v)} aria-expanded={aberta}>
-          <p className="text-[13px] font-semibold leading-5 text-foreground">{ficha.titulo}</p>
-          <p className={juntar("mt-0.5 text-[13px] leading-5 text-foreground/85", !aberta && "line-clamp-2")}>{ficha.tecnica}</p>
+          <p className="text-[15px] font-semibold leading-6 tracking-[-0.01em] text-foreground">{ficha.titulo}</p>
+          <p className={juntar("mt-1 text-[13px] leading-5 text-foreground/85", !aberta && "line-clamp-2")}>{ficha.tecnica}</p>
           {aberta && ficha.quando_usar && <p className="mt-1 text-[12px] text-muted-foreground"><span className="font-medium text-foreground">Quando usar:</span> {ficha.quando_usar}</p>}
           {aberta && ficha.exemplo && <p className="mt-1 text-[12px] text-muted-foreground"><span className="font-medium text-foreground">Exemplo:</span> {ficha.exemplo}</p>}
         </button>
@@ -527,7 +546,7 @@ function CartaoDaFicha({ ficha, fonte, cliente, podeEditar, aoEditar, aoMudar }:
           Esta ficha está atrapalhando ({resumoDoResultado(resultadoDe(ficha))}) e já não entra nas gerações. Desligue ou edite.
         </p>
       )}
-      <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground [&>*]:mr-2.5">
+      <div className="mt-3 flex min-w-0 flex-wrap items-center border-t border-border/60 pt-3 text-[12px] text-muted-foreground [&>*]:mr-2.5 [&>[class*=bg-]]:rounded-full [&>[class*=bg-]]:px-2">
         {ehDaCasa(ficha.fonte_url)
           ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")} data-da-casa="">Biblioteca da casa</span>
           : <span className={juntar(etiqueta, "bg-secondary text-foreground")}>{fonte ? origemDaFonte(fonte) : "À mão"}</span>}
@@ -573,7 +592,7 @@ function EditorDaFicha({ ficha, clientes, aoFechar, aoMudar }: { ficha: FichaDaB
     }
   };
   return (
-    <li className={juntar(superficie.painel, "min-w-0 space-y-2 p-3")}>
+    <li className={juntar(superficie.painel, "min-w-0 space-y-3 p-5")}>
       <input className={campo} value={v.titulo} onChange={(e) => setV({ ...v, titulo: e.target.value })} aria-label="Nome da técnica" />
       <textarea className={campoTexto} value={v.tecnica} onChange={(e) => setV({ ...v, tecnica: e.target.value })} aria-label="Como fazer" />
       <div className="grid gap-2 sm:grid-cols-2">
@@ -606,10 +625,10 @@ function ListaDeFontes({ fontes, podeApagar, nomeDoCliente, aoMudar }: { fontes:
   };
   return (
     <Secao titulo="O que ele recebeu" descricao={<span><strong className="tabular-nums text-foreground">{fontes.length}</strong> fontes</span>}>
-      <ul className="divide-y divide-border">
+      <ul className={juntar(superficie.painel, "divide-y divide-border/60 px-5 py-2")}>
         {fontes.map((f) => (
-          <li key={f.id} className="flex min-w-0 items-center py-2 text-[13px]">
-            <span className="mr-2 shrink-0">
+          <li key={f.id} className="flex min-w-0 items-center py-3 text-[13px]">
+            <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
               {f.tipo === "pesquisa" ? <Globe className="h-3.5 w-3.5 text-info" /> : f.tipo === "link" ? <Link2 className="h-3.5 w-3.5" /> : f.tipo === "documento" ? <Upload className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
             </span>
             <span className="min-w-0 flex-1">

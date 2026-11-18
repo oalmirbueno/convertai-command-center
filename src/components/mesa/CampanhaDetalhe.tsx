@@ -46,6 +46,7 @@ import CampanhaLinhaDoTempo from "./CampanhaLinhaDoTempo";
 import CampanhaStories from "./CampanhaStories";
 import CampanhaVideos from "./CampanhaVideos";
 import { BotaoDoCanvas, useTempoRealDaCampanha } from "./CampanhaCanvas";
+import MenuDaCampanha, { FaixaDeArquivada } from "./CampanhaArquivo";
 import { trilhaSugeridaDaCampanha } from "./trilhaDaCampanhaApi";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
@@ -63,8 +64,8 @@ import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_share
 export const ROTULO_DO_ESTADO: Record<string, string> = { planejada: "planejada", gravada: "gravada", encerrada: "encerrada" };
 
 export function SeloDoEstado({ estado }: { estado: string }) {
-  const cor = estado === "gravada" ? "bg-success/15 text-success" : estado === "encerrada" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary";
-  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${cor}`}>{ROTULO_DO_ESTADO[estado] || estado}</span>;
+  const cor = estado === "gravada" ? "bg-success-soft text-success" : estado === "encerrada" ? "bg-muted text-muted-foreground" : "bg-accent-soft text-primary";
+  return <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${cor}`}>{ROTULO_DO_ESTADO[estado] || estado}</span>;
 }
 
 // ------------------------------------------------------------------ seções
@@ -330,18 +331,25 @@ export default function CampanhaDetalhe({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center">
             {/* Título numa linha (28/09); inteiro no title. */}
-            <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate")} title={campanha.nome}>{campanha.nome}</h2>
+            {/* v4: no celular o nome ocupa a linha (até 2 linhas) e os selos descem para a linha do período. */}
+            <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate max-sm:line-clamp-2 max-sm:whitespace-normal max-sm:text-[20px] max-sm:leading-6")} title={campanha.nome}>{campanha.nome}</h2>
             {tipoDaCampanha(campanha.identidade) && (
-              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
+              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium max-sm:hidden" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
                 {rotuloDoTipo(tipoDaCampanha(campanha.identidade))}
               </span>
             )}
-            <SeloDoEstado estado={campanha.status} />
+            <span className="shrink-0 max-sm:hidden"><SeloDoEstado estado={campanha.status} /></span>
           </div>
           <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
             {periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}
             {itens.length ? ` · ${itens.length} conteúdo(s)` : ""}
             {campanha.custo_usd ? ` · ${usd(Number(campanha.custo_usd))}` : ""}
+          </p>
+          <p className="mt-1 flex min-w-0 flex-wrap items-center sm:hidden">
+            {tipoDaCampanha(campanha.identidade) && (
+              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium">{rotuloDoTipo(tipoDaCampanha(campanha.identidade))}</span>
+            )}
+            <SeloDoEstado estado={campanha.status} />
           </p>
         </div>
         <div className="ml-2 flex shrink-0 items-center">
@@ -377,8 +385,12 @@ export default function CampanhaDetalhe({
               <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
+          {/* 16/11/2026: Editar período e Arquivar campanha (sem IA). */}
+          <MenuDaCampanha campanha={campanha} />
         </div>
       </header>
+
+      <FaixaDeArquivada campanha={campanha} />
 
       {/* Frente AE: a campanha ligada às mesas (usar nas mesas, levar para, tipo e a base). */}
       <CampanhaNasMesas campanha={campanha} />

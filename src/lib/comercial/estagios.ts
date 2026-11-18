@@ -1,3 +1,5 @@
+import { rotuloDaEtapaNoEscopo } from "./escopo";
+
 export const ESTAGIOS = [
   { id: "novo", label: "Novo", ajuda: "Chegou e ainda não foi tocado" },
   {
@@ -34,5 +36,7 @@ export const ESTAGIOS_ABERTOS = ESTAGIOS.filter(
   (e) => e.id !== "ganho" && e.id !== "perdido",
 ).map((e) => e.id) as EstagioId[];
 
+// No CRM que a empresa assina, cada ramo dá o próprio nome às etapas ("Visita",
+// "Avaliação"). A casa não tem nome próprio e fica sempre no padrão.
 export const rotuloDoEstagio = (id: string) =>
-  ESTAGIOS.find((e) => e.id === id)?.label || id;
+  rotuloDaEtapaNoEscopo(id) || ESTAGIOS.find((e) => e.id === id)?.label || id;

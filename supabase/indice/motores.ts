@@ -808,6 +808,7 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "mesa-videos/diretor.ts#diretorAvaliar": "leituras",
   "perfis-instagram/index.ts#comparar": "leituras",
   "perfis-instagram/index.ts#gerarResumo": "leituras",
+  "perfis-instagram/index.ts#lerMoldesDoPerfil": "leituras",
   "perfis-instagram/index.ts#lerPostsDoPerfil": "leituras",
   "workspace-organizar/nucleo.ts#lerNoCliente/lerLote": "leituras",
   // 26/10: o robô que lê as fotos do acervo sem descrição (mesmo leitor do organizador).

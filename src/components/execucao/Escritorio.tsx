@@ -1,10 +1,12 @@
 import { limparTecnico } from "@/lib/cadernoExecucao";
 import { nomeDaTarefaDoBanco } from "@/lib/nomeDaTarefa";
 import { useMemo } from "react";
-import { Bot, FolderOpen, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
+import { Clock, ShieldAlert, UserRound } from "lucide-react";
 import { esperandoVoce, precisaDecisao } from "@/lib/precisaDecisao";
 import { etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
+import { ProgressBar } from "@/components/ds";
+import { AvatarComPresenca, BarraSegmentada, PilhaDeAvatares, TrioDeNumeros, type Segmento } from "@/components/execucao/Visuais";
 
 /**
  * O escritório: cada agente como uma pessoa, e o que ela está fazendo agora.
@@ -213,53 +215,80 @@ export default function Escritorio({
     [trabalhos, pendencias],
   );
 
-  return (
-    <div className="min-w-0 space-y-4">
-      {/* A frase que resume o dia. Um número sozinho não diz o que fazer. */}
-      <p className={juntar(texto.corpo, "flex items-start")}>
-        <span
-          className={juntar("mr-2 mt-1.5 h-2 w-2 shrink-0 rounded-full", totalEsperandoVoce > 0 ? "bg-warning" : "bg-success")}
-          aria-hidden="true"
-        />
-        <span className="min-w-0">
-          {totalEsperandoVoce > 0 ? (
-            <>
-              <strong className="font-semibold tabular-nums">{totalEsperandoVoce}</strong>{" "}
-              {totalEsperandoVoce === 1 ? "trabalho está" : "trabalhos estão"} parado esperando uma
-              decisão sua
-            </>
-          ) : (
-            <>Nada está parado esperando você</>
-          )}
-        </span>
-      </p>
+  /* Rodada v4 (15/11/2026): a equipe num relance, como nas referências (pilha de avatares, trio de
+     números e barra segmentada da carga). Tudo sai dos mesmos trabalhos que desenham os cartões. */
+  const conta = (...estados: string[]) => trabalhos.filter((t) => estados.includes(t.status)).length;
+  const ativos = agentes.filter((a) => a.status === "active").length;
+  const carga: Segmento[] = [
+    { rotulo: "Travadas", valor: conta("blocked", "awaiting_input"), tom: "perigo" },
+    { rotulo: "Em revisão", valor: conta("review"), tom: "aviso" },
+    { rotulo: "Andando", valor: conta("in_progress"), tom: "info" },
+    { rotulo: "Na fila", valor: conta("queued"), hachura: true },
+    { rotulo: "Feitas", valor: conta("done"), tom: "sucesso" },
+  ];
 
-      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+  return (
+    <div className="min-w-0 space-y-5">
+      <section aria-label="Resumo da equipe" className={juntar(superficie.painel, "min-w-0 p-5 sm:p-6")}>
+        <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-4">
+          <div className="flex min-w-0 items-center">
+            <PilhaDeAvatares nomes={agentes.map((a) => a.display_name)} max={5} tamanho={36} />
+            <p className="ml-3 min-w-0">
+              <span className="block truncate text-[15px] font-semibold leading-5 text-foreground">{agentes.length} {agentes.length === 1 ? "agente" : "agentes"}<span className="font-normal text-muted-foreground"> · {ativos} {ativos === 1 ? "ativo" : "ativos"}</span></span>
+              {/* A frase que resume o dia. Um número sozinho não diz o que fazer. */}
+              <span className="mt-0.5 flex min-w-0 items-start text-[12px] leading-4 text-muted-foreground">
+                <span className={juntar("mr-1.5 mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full", totalEsperandoVoce > 0 ? "bg-warning" : "bg-success")} aria-hidden="true" />
+                <span className="min-w-0">
+                  {totalEsperandoVoce > 0 ? (
+                    <>
+                      <strong className="font-semibold tabular-nums text-foreground">{totalEsperandoVoce}</strong>{" "}
+                      {totalEsperandoVoce === 1 ? "trabalho está" : "trabalhos estão"} parado esperando uma
+                      decisão sua
+                    </>
+                  ) : (
+                    <>Nada está parado esperando você</>
+                  )}
+                </span>
+              </span>
+            </p>
+          </div>
+          <TrioDeNumeros
+            itens={[
+              { rotulo: "Esperando você", valor: totalEsperandoVoce, tom: totalEsperandoVoce > 0 ? "text-warning" : "text-foreground" },
+              { rotulo: "Andando", valor: conta("in_progress") },
+              { rotulo: "Feitas", valor: conta("done") },
+            ]}
+          />
+        </div>
+        <BarraSegmentada rotulo="Carga da equipe por estado" itens={carga} className="mt-5 max-sm:overflow-x-auto max-sm:pb-1" />
+      </section>
+
+      <div className="grid gap-x-5 gap-y-6 lg:grid-cols-2 2xl:grid-cols-3">
       {areas.map(({ area, agentes: doGrupo, urgencia }) => {
         const aberta = estaAberta(area, urgencia);
         const larga = aberta && doGrupo.length > 2;
         return (
-        <section key={area} aria-label={area} className={juntar("min-w-0 rounded-xl border border-border p-3", larga && "lg:col-span-2 2xl:col-span-3")}>
+        <section key={area} aria-label={area} className={juntar("min-w-0", larga && "lg:col-span-2 2xl:col-span-3")}>
           {/* O nome da área, discreto: separa sem competir com a lista. O
               título recolhe pelo componente do sistema (setinha + título); a
               contagem fica à vista nos dois estados. */}
-          <div className="flex min-w-0 items-center">
-            <FolderOpen className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <div className="flex min-w-0 items-center px-1">
             <TituloRecolhivel
               titulo={area}
               recolhido={!aberta}
               onAlternar={() => alternar(area, urgencia)}
               className="mr-2 shrink"
             />
-            <span className={juntar(texto.auxiliar, "shrink-0")}>
+            <span className={juntar(texto.auxiliar, "min-w-0 shrink truncate")}>
               {doGrupo.length} {doGrupo.length === 1 ? "agente" : "agentes"}
               {!aberta && urgencia >= 90 && " · sem trabalho agora"}
             </span>
+            {!aberta && <PilhaDeAvatares nomes={doGrupo.map((a) => a.display_name)} max={3} tamanho={24} className="ml-auto pl-2" />}
           </div>
-          {area === "Sem área" && aberta && <p className="mt-1 text-[12px] text-muted-foreground">Abra o agente e escolha a área dele no topo do perfil.</p>}
+          {area === "Sem área" && aberta && <p className="mt-1 px-1 text-[12px] text-muted-foreground">Abra o agente e escolha a área dele no topo do perfil.</p>}
           {aberta && (
-            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar("mt-3 grid max-h-[65vh] gap-3 overflow-y-auto overscroll-contain rounded-lg pr-1 [scrollbar-width:thin]", doGrupo.length === 2 && "sm:grid-cols-2", doGrupo.length > 2 && "sm:grid-cols-2 xl:grid-cols-3")}>
-              {doGrupo.map((a) => {
+            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar("mt-3 grid gap-3 rounded-lg pr-1 [scrollbar-width:thin] lg:max-h-[65vh] lg:overflow-y-auto lg:overscroll-contain", doGrupo.length === 2 && "sm:grid-cols-2", doGrupo.length > 2 && "sm:grid-cols-2 xl:grid-cols-3")}>
+              {doGrupo.map((a, indice) => {
                 const meus = porAgente.get(a.id) ?? [];
                 const estado = estadoQueManda(meus);
                 const pausado = a.status !== "active";
@@ -271,64 +300,54 @@ export default function Escritorio({
                 const responsavel = tarefa?.assigned_to
                   ? humanos.get(String(tarefa.assigned_to))
                   : null;
+                const contaDoAgente = (...st: string[]) => meus.filter((t) => st.includes(t.status)).length;
+                const feitas = contaDoAgente("done");
+                const pedacos = [
+                  [contaDoAgente("blocked", "awaiting_input"), "travada", "text-destructive"],
+                  [contaDoAgente("review"), "em revisão", "text-warning"],
+                  [contaDoAgente("in_progress", "queued"), "andando", "text-info"],
+                ].filter(([n]) => Number(n) > 0) as Array<[number, string, string]>;
 
                 return (
-                  <li key={a.id} className={juntar(superficie.painel, "min-w-0 px-3.5 py-4", pausado && "opacity-60")}>
-                    <div className="flex min-w-0 items-start">
+                  <li key={a.id} className={juntar(superficie.painel, "flex min-w-0 flex-col p-4 sm:p-5", pausado && "opacity-60")}>
+                    <div className="flex min-w-0 items-center">
                       <button
                         type="button"
                         onClick={() => aoAbrirAgente(a)}
                         className={juntar("flex min-w-0 flex-1 items-center rounded-md text-left", foco)}
                       >
-                        <span className="mr-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                          <Bot className="h-4 w-4 text-primary" aria-hidden="true" />
-                        </span>
+                        <AvatarComPresenca nome={a.display_name} ativo={!pausado} tom={indice} className="mr-3" />
                         <span className="min-w-0 flex-1">
                           <span className="flex min-w-0 items-center">
-                            <span className="min-w-0 truncate text-[13px] font-semibold text-foreground">
+                            <span className="min-w-0 truncate text-[14px] font-semibold leading-5 text-foreground">
                               {a.display_name}
                             </span>
                             {a.is_coordinator && (
-                              <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>
+                              <span className={juntar(etiqueta, "ml-1.5 shrink-0 bg-primary/10 text-primary")}>
                                 coordena
                               </span>
                             )}
                           </span>
-                          <span className="block truncate text-[12px] text-muted-foreground">
-                            {a.role}
-                            {/* A frase de estado, em português de gente. */}
-                            <span className="mx-1" aria-hidden="true">·</span>
-                            <span className={juntar("font-medium", pausado ? "text-muted-foreground" : estado ? TOM[estado] : "text-muted-foreground")}>
-                              {pausado
-                                ? "pausado por você"
-                                : estado
-                                  ? FRASE[estado]
-                                  : "sem tarefa no momento"}
-                            </span>
-                          </span>
+                          <span className="block truncate text-[12px] leading-4 text-muted-foreground">{a.role}</span>
                         </span>
                       </button>
-                      <span className="ml-3 flex shrink-0 flex-col items-end">
-                        <span className="flex items-center">
-                          {meus.some((t) => precisaDecisao(t)) && (
-                            <span className={juntar(etiqueta, "mr-1 bg-warning/15 text-warning")}>
-                              <ShieldAlert className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> aprovação
-                            </span>
-                          )}
-                          {pausado && (
-                            <span className={juntar(etiqueta, "mr-1 bg-muted text-muted-foreground")}>
-                              <PauseCircle className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> pausado
-                            </span>
-                          )}
-                          {!pausado && estado && (
-                            <span className={juntar("h-2 w-2 rounded-full", PONTO[estado])} aria-hidden="true" />
-                          )}
-                        </span>
-                        <span className="mt-1 text-[11px] tabular-nums text-muted-foreground">
-                          {a.last_run_at ? quando(a.last_run_at) : "nunca executou"}
-                        </span>
+                      <span className="ml-3 shrink-0 text-right text-[11px] leading-4 tabular-nums text-muted-foreground" title="Última execução">
+                        {a.last_run_at ? quando(a.last_run_at) : "nunca executou"}
                       </span>
                     </div>
+
+                    {/* O estado, numa pílula só (ponto + frase), e os selos que pedem você. */}
+                    <p className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className={juntar("inline-flex min-w-0 items-center rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium leading-4", pausado ? "text-muted-foreground" : estado ? TOM[estado] : "text-muted-foreground")}>
+                        <span className={juntar("mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full", pausado ? "bg-muted-foreground/50" : estado ? PONTO[estado] : "bg-muted-foreground/50")} aria-hidden="true" />
+                        <span className="truncate">{pausado ? "pausado por você" : estado ? FRASE[estado] : "sem tarefa no momento"}</span>
+                      </span>
+                      {meus.some((t) => precisaDecisao(t)) && (
+                        <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>
+                          <ShieldAlert className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> aprovação
+                        </span>
+                      )}
+                    </p>
 
                     {!tarefa && emFoco?.last_action && <p className="mt-3 line-clamp-2 text-[13px] text-foreground/85">{limparTecnico(String(emFoco.last_action))}</p>}
                     {/* PARA QUEM. Era isto que faltava para o quadro fazer sentido. */}
@@ -336,32 +355,28 @@ export default function Escritorio({
                       <button
                         type="button"
                         onClick={() => idTarefa && aoAbrirTarefa(String(idTarefa))}
-                        className={juntar(superficie.poco, "mt-2 block w-full min-w-0 px-2.5 py-1.5 text-left transition-colors hover:bg-muted", foco)}
+                        className={juntar("mt-3 block w-full min-w-0 rounded-md bg-muted/60 px-3 py-2.5 text-left transition-colors hover:bg-muted", foco)}
                       >
                         {/* 26/10: "Área · assunto" (o cliente vem logo abaixo); o código ACE fica no detalhe da tarefa. */}
-                        <span className="block truncate text-[13px] text-foreground" title={nomeDaTarefaDoBanco(tarefa, { agente: a.display_name }).texto}>{nomeDaTarefaDoBanco(tarefa, { agente: a.display_name }).semCliente}</span>
+                        <span className="block truncate text-[13px] font-medium text-foreground" title={nomeDaTarefaDoBanco(tarefa, { agente: a.display_name }).texto}>{nomeDaTarefaDoBanco(tarefa, { agente: a.display_name }).semCliente}</span>
                         <span className="-mx-1 mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground [&>*]:mx-1">
                           {cliente && <span className="min-w-0 truncate font-medium text-foreground/80">{cliente.company_name || cliente.full_name}</span>}
-                          {responsavel && <span className="inline-flex shrink-0 items-center"><UserRound className="mr-1 h-2.5 w-2.5" aria-hidden="true" />{responsavel}</span>}
+                          {responsavel && <span className="inline-flex min-w-0 shrink items-center"><UserRound className="mr-1 h-2.5 w-2.5 shrink-0" aria-hidden="true" /><span className="truncate">{responsavel}</span></span>}
                           {tarefa.due_date && <span className="inline-flex shrink-0 items-center tabular-nums"><Clock className="mr-1 h-2.5 w-2.5" aria-hidden="true" />{String(tarefa.due_date).split("-").reverse().slice(0, 2).join("/")}</span>}
                         </span>
                       </button>
                     )}
 
-                    {meus.length > 1 && (() => {
-                      const conta = (st: string) => meus.filter((t) => t.status === st).length;
-                      const pedacos = [
-                        [conta("blocked") + conta("awaiting_input"), "travada", "text-destructive"],
-                        [conta("review"), "em revisão", "text-warning"],
-                        [conta("in_progress") + conta("queued"), "andando", "text-info"],
-                      ].filter(([n]) => Number(n) > 0) as Array<[number, string, string]>;
-                      return (
-                        <p className="mt-2 flex flex-wrap gap-x-2.5 text-[12px] text-muted-foreground">
+                    {/* A carga do agente: o que já entregou do que tem na mão. */}
+                    {meus.length > 0 && (
+                      <div className="mt-auto pt-4">
+                        <ProgressBar value={feitas} max={meus.length} height={6} tone={1} label={`${feitas} de ${meus.length} feitas`} />
+                        <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 text-[12px] leading-4 text-muted-foreground">
                           {pedacos.map(([n, r, tom]) => <span key={r}><span className={juntar("font-semibold tabular-nums", tom)}>{n}</span> {r}</span>)}
-                          <span className="ml-auto">{meus.length} no total</span>
+                          <span className="ml-auto tabular-nums"><span className="font-semibold text-foreground">{feitas}</span>/{meus.length}</span>
                         </p>
-                      );
-                    })()}
+                      </div>
+                    )}
                   </li>
                 );
               })}

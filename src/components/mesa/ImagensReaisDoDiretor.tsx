@@ -89,7 +89,7 @@ export default function ImagensReaisDoDiretor({ trabalho, ordem, bloqueado, onAt
     {!embutido && <div className="flex items-center"><span className={texto.auxiliar}>Compor com uma fonte real</span><AjudaRecolhida className="ml-1.5" rotulo="Como usar imagens reais">Busque pelo assunto ou pela marca. Confira a origem e a licença antes de escolher. No Template, fotos, logos e telas entram inteiras, sem redesenho. Para ensinar um botão ou configuração com login, envie uma captura atual em Fotos e marque o ponto na prévia do Template.</AjudaRecolhida></div>}
     <fieldset disabled={travado} className="space-y-2 disabled:opacity-70">
       <div role="group" aria-label="Banco de imagens" className="flex flex-wrap">
-        {bancos.map((b) => <button key={b.valor} type="button" aria-pressed={banco === b.valor} onClick={() => { setBanco(b.valor); setResultado(null); }} className={juntar("mb-1 mr-1.5 h-8 rounded-full border px-3 text-[12px] transition-colors", banco === b.valor ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>{b.rotulo}</button>)}
+        {bancos.map((b) => <button key={b.valor} type="button" aria-pressed={banco === b.valor} onClick={() => { setBanco(b.valor); setResultado(null); }} className={juntar("mb-1 mr-1.5 h-8 rounded-full border px-3 text-[12px] transition-colors", banco === b.valor ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border text-muted-foreground hover:text-foreground")}>{b.rotulo}</button>)}
       </div>
       <div className="flex min-w-0 items-end">
         <label className={juntar("block min-w-0 flex-1", texto.rotulo)}>Assunto ou marca<Input aria-label="Assunto das imagens reais" value={consulta} maxLength={200} onChange={(e) => { setConsulta(e.target.value); setResultado(null); }} onKeyDown={(e) => { if (e.key === "Enter" && consulta.trim().length >= 2) { e.preventDefault(); void buscar(); } }} className="mt-1" /></label>
@@ -99,7 +99,7 @@ export default function ImagensReaisDoDiretor({ trabalho, ordem, bloqueado, onAt
       <p className={texto.auxiliar}>Pesquisa sem IA · sem custo</p>
       {resultado && <div className="space-y-2" aria-label="Fontes reais encontradas">
         {achados.length === 0 && <p className={texto.auxiliar}>Sem imagens. Refine o assunto ou troque o banco.</p>}
-        {achados.length > 0 && <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Imagens encontradas">
+        {achados.length > 0 && <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3" aria-label="Imagens encontradas">
           {achados.map((r, i) => <li key={r.arquivo} className="min-w-0" data-banco-do-achado={r.banco || ""}>
             <button type="button" className="group block w-full min-w-0 text-left" onClick={() => void aplicar({ arquivo: r.arquivo })} aria-label={`Usar na lâmina: ${r.nome}`} title={`Usar na lâmina: ${r.nome}`}>
               <span className="relative block w-full overflow-hidden rounded-md border border-border bg-muted transition-colors group-hover:border-primary" style={{ paddingBottom: "75%" }}>

@@ -56,7 +56,7 @@ export default function EscolhaDoModeloDaFoto({ valor, onEscolher, semPessoa = f
 
   return (
     <div className="min-w-0" data-escolha-do-modelo="" data-modelo-escolhido={valor ? `${valor.tipo}:${valor.id}` : "ia"}>
-      <ul className="grid min-w-0 grid-cols-3 gap-2 scrollbar-hidden sm:grid-cols-4 lg:max-h-[280px] lg:overflow-y-auto lg:overscroll-contain" role="listbox" aria-label="Quem aparece na foto" data-lista-de-modelos="">
+      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 scrollbar-hidden sm:grid-cols-4 lg:max-h-[280px] lg:overflow-y-auto lg:overscroll-contain" role="listbox" aria-label="Quem aparece na foto" data-lista-de-modelos="">
         <li className="min-w-0">
           <button
             type="button"

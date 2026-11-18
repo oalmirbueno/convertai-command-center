@@ -77,7 +77,7 @@ export default function AbaResultados() {
           a={a}
           acao={
             criativoId ? (
-              <button className={juntar(botao.icone, "disabled:opacity-50", (aberto) && "bg-primary/10 text-primary")} type="button" onClick={() => { setRegistrando(aberto ? null : a.ad_id); setTextoDoAprendizado(""); }} aria-label="Aprendizado do criativo" title="Aprendizado do criativo">
+              <button className={juntar(botao.icone, "disabled:opacity-50", (aberto) && "bg-accent-soft text-primary")} type="button" onClick={() => { setRegistrando(aberto ? null : a.ad_id); setTextoDoAprendizado(""); }} aria-label="Aprendizado do criativo" title="Aprendizado do criativo">
                 <BookmarkCheck className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : undefined
@@ -152,7 +152,7 @@ export default function AbaResultados() {
         {conta.isLoading && <Carregando forma="aba" rotulo="Lendo os resultados" />}
 
         {dados && !dados.conta.conectada && (
-          <EstadoVazio icone={<BarChart3 className="h-5 w-5" />} titulo="A conta de anúncios deste cliente não está conectada" descricao="Conecte a conta da Meta no cadastro do cliente para ver os resultados aqui." />
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<BarChart3 className="h-5 w-5" />} titulo="A conta de anúncios deste cliente não está conectada" descricao="Conecte a conta da Meta no cadastro do cliente para ver os resultados aqui." />
         )}
 
         {dados && dados.conta.conectada && (
@@ -178,7 +178,7 @@ export default function AbaResultados() {
 
         {(aprendizados.data || []).length > 0 && (
           <details className="min-w-0 border-t border-border pt-4" aria-label="Aprendizados registrados">
-            <summary className={juntar("cursor-pointer rounded text-[13px] font-medium text-foreground", foco)}>Aprendizados registrados ({(aprendizados.data || []).length})</summary>
+            <summary className={juntar("cursor-pointer rounded-sm text-[13px] font-medium text-foreground", foco)}>Aprendizados registrados ({(aprendizados.data || []).length})</summary>
             <ul className="mt-2 divide-y divide-border">
               {(aprendizados.data || []).map((a) => (
                 <li key={a.id} className="py-2">

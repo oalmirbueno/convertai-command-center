@@ -231,7 +231,7 @@ function CartaoDoPrompt({
   const texto = ingles ? en : pt;
   const area = areaDoItem(item);
   return (
-    <li className={juntar(superficie.painel, "flex min-w-0 flex-col p-3 sm:flex-row sm:items-start")} data-prompt={item.id} data-area={area}>
+    <li className={juntar(superficie.painel, "flex min-w-0 flex-col p-4 sm:flex-row sm:items-start")} data-prompt={item.id} data-area={area}>
       <ExemploDoPrompt item={item} onAmpliar={onAmpliar} />
       <div className="mt-2 min-w-0 flex-1 space-y-2 sm:ml-3 sm:mt-0">
         <div className="flex min-w-0 items-start">
@@ -394,7 +394,7 @@ function ReferenciasLivres({ area, produtos }: { area: AreaDoArsenal | "todas"; 
       </form>
       {resultados && resultados.length === 0 && <p className="mt-3 text-[12px] text-muted-foreground">Nada encontrado. Tente em inglês ou com menos palavras.</p>}
       {resultados && resultados.length > 0 && (
-        <ul className={juntar(ROLAGEM_DO_ARSENAL, "mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4")} aria-label="Resultados da busca" data-rolagem-do-arsenal="" data-resultados-livres="">
+        <ul className={juntar(ROLAGEM_DO_ARSENAL, "mt-3 grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4")} aria-label="Resultados da busca" data-rolagem-do-arsenal="" data-resultados-livres="">
           {resultados.map((r) => {
             const ja = importadas.indexOf(r.chave) >= 0;
             return (
@@ -447,7 +447,7 @@ function Alternar({ ligado, onAlternar, icone, children }: { ligado: boolean; on
       onClick={onAlternar}
       className={juntar(
         "toque-compacto mb-1 mr-1.5 inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[12px]",
-        ligado ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        ligado ? "bg-accent-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       {icone}
@@ -617,7 +617,7 @@ export default function EtapaBiblioteca({ onUsarPrompt }: { onUsarPrompt?: (text
 
       {prompts.length > 0 && (
         <GrupoDaBiblioteca rotulo="Prompts da biblioteca" total={prompts.length} chave={`mesa-foto:biblioteca:lista-prompts:${clientId}`}>
-          <ul className={juntar(ROLAGEM_DO_ARSENAL, "grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2")} data-rolagem-do-arsenal="" data-lista-de-prompts="">
+          <ul className={juntar(ROLAGEM_DO_ARSENAL, "grid min-w-0 grid-cols-1 gap-2 sm:gap-3 xl:grid-cols-2")} data-rolagem-do-arsenal="" data-lista-de-prompts="">
             {prompts.map((i) => (
               <CartaoDoPrompt key={i.id} item={i} dados={dados} salvando={salvando === i.id} onSalvar={() => void salvar(i)} onAmpliar={() => setAmpliada(i)} onUsar={usar} />
             ))}
@@ -626,7 +626,7 @@ export default function EtapaBiblioteca({ onUsarPrompt }: { onUsarPrompt?: (text
       )}
       {referencias.length > 0 && (
         <GrupoDaBiblioteca rotulo="Referências de imagem" total={referencias.length} chave={`mesa-foto:biblioteca:lista-referencias:${clientId}`}>
-          <ul className={juntar(ROLAGEM_DO_ARSENAL, "grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5")} data-rolagem-do-arsenal="" data-lista-de-referencias="">
+          <ul className={juntar(ROLAGEM_DO_ARSENAL, "grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5")} data-rolagem-do-arsenal="" data-lista-de-referencias="">
             {referencias.map((i) => (
               <CartaoDaReferencia key={i.id} item={i} salvando={salvando === i.id} onSalvar={() => void salvar(i)} onAmpliar={() => setAmpliada(i)} />
             ))}
@@ -758,7 +758,7 @@ export function ExemplosDaBiblioteca() {
       resumo="limpar e gerar os exemplos"
       dica="As fotos do Openverse vieram por busca de palavras e não mostram a direção do prompt. Limpe e gere o exemplo de cada prompt com o próprio prompt."
     >
-      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
         <div className="min-w-0 space-y-2" data-limpar-openverse="">
           <p className="text-[12px] font-medium">1. Limpar os exemplos do Openverse</p>
           <div className="flex min-w-0 flex-wrap items-center">

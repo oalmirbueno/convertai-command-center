@@ -128,7 +128,7 @@ export default function ConversaDoPlano({ plano, className = "" }: { plano: Plan
             ))}
           </div>
           <ZonaDeAnexos anexos={anexos}>
-            <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
+            <div className="rounded-md border border-input bg-card p-2 focus-within:border-primary/60">
               <MiniaturasDosAnexos anexos={anexos} />
               <Textarea
                 value={texto}

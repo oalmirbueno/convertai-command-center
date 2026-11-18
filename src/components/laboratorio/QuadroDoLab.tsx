@@ -476,7 +476,7 @@ export default function QuadroDoLab({
 
   const estilo = {
     // Fundo um pouco cinza (tokens do tema) para os cartões se destacarem.
-    "--xy-background-color": theme === "light" ? "hsl(var(--muted))" : "hsl(var(--muted) / 0.45)",
+    "--xy-background-color": theme === "light" ? "hsl(var(--card))" : "hsl(var(--muted) / 0.18)",
     "--xy-edge-stroke-default": "hsl(var(--muted-foreground))",
     "--xy-connectionline-stroke-default": "hsl(var(--primary))",
     "--xy-connectionline-stroke-width-default": 2.5,
@@ -540,7 +540,7 @@ export default function QuadroDoLab({
           colorMode={theme === "light" ? "light" : "dark"}
           style={estilo}
         >
-          <Background id="lab" variant={BackgroundVariant.Dots} gap={24} size={1} color="hsl(var(--muted-foreground) / 0.18)" />
+          <Background id="lab" variant={BackgroundVariant.Dots} gap={24} size={1.5} color="hsl(var(--muted-foreground) / 0.3)" />
           <ControlesDoQuadro travado={travado} onTravar={setTravado} mapa={mapa} onMapa={setMapa} soCanvas={soCanvas} onSoCanvas={onSoCanvas} projetoId={projetoId} leitura={leitura} onLeitura={mudarLeitura} temSelecao={!!selecionado} />
           {mapa ? (
             <MiniMap
@@ -552,7 +552,7 @@ export default function QuadroDoLab({
               nodeBorderRadius={8}
               bgColor="hsl(var(--popover))"
               maskColor="hsl(var(--background) / 0.55)"
-              className="!m-3 overflow-hidden rounded-lg border border-border"
+              className="!m-3 overflow-hidden rounded-[18px] border border-border"
             />
           ) : null}
         </ReactFlow>

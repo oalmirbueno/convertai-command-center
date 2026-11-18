@@ -3,22 +3,27 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { brokeredPreviewStorage } from './previewAuthStorage';
 import { criarFetchComPrazo } from './fetchComPrazo';
-import { criarTravaDoLogin } from './travaDoLogin';
+import { criarTravaDoLogin, ESPERA_MAXIMA_MS } from './travaDoLogin';
+import { protegerSessaoGuardada } from './renovacaoSegura';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+// Storage da sessão: localStorage em produção, ponte do editor só na prévia do Lovable.
+// A proteção não apaga a sessão nova de outra aba por causa de um token velho (renovacaoSegura.ts, 14/11).
+const armazenamentoDoLogin = protegerSessaoGuardada(brokeredPreviewStorage());
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: brokeredPreviewStorage(),
+    storage: armazenamentoDoLogin,
     persistSession: true,
     autoRefreshToken: true,
-    // Trava entre abas que nunca prende o envio (travaDoLogin.ts, 26/09).
-    lock: criarTravaDoLogin(),
+    // Trava entre abas: nunca prende o envio (26/09) e nunca renova sem trava (14/11). Ver travaDoLogin.ts.
+    lock: criarTravaDoLogin(ESPERA_MAXIMA_MS, armazenamentoDoLogin),
   },
-  // Login com prazo: pedido de renovação preso não trava mais o painel na logo (fetchComPrazo.ts).
-  global: { fetch: criarFetchComPrazo() },
+  // Prazo nas chamadas de login; a renovação não é abortada, mas solta a fila se pendurar (fetchComPrazo.ts, 14/11).
+  global: { fetch: criarFetchComPrazo(undefined, undefined, { storage: armazenamentoDoLogin }) },
 });

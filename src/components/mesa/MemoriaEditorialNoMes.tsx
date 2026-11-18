@@ -29,7 +29,7 @@ import {
 
 const COR_DO_TOM: Record<"neutro" | "novo" | "aviso", string> = {
   neutro: "bg-muted text-muted-foreground",
-  novo: "bg-primary/10 text-primary",
+  novo: "bg-accent-soft text-primary",
   aviso: "bg-warning/15 text-foreground",
 };
 
@@ -86,7 +86,7 @@ export function SeloDaPauta({
   if (!selo) return null;
   return (
     <span className={juntar("inline-flex min-w-0 max-w-full flex-wrap items-center", className)}>
-      <span className={juntar("mr-1.5 inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[11px] font-medium", COR_DO_TOM[selo.tom])} title={selo.dica}>
+      <span className={juntar("mr-1.5 inline-flex max-w-full items-center truncate rounded-full px-2.5 py-1 text-[11px] font-medium", COR_DO_TOM[selo.tom])} title={selo.dica}>
         {selo.tom === "neutro" && <GitBranch className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />}
         <span className="truncate">{selo.rotulo}</span>
       </span>

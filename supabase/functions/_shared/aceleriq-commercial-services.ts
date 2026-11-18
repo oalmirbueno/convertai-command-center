@@ -454,12 +454,23 @@ async function baseDoComercial(): Promise<Array<{ titulo: string; tecnica: strin
   return (data ?? []) as Array<{ titulo: string; tecnica: string; quando_usar: string; exemplo: string }>;
 }
 
+/** As provas autorizadas da Biblioteca da agência (Mesa Proposta): o executivo escolhe as que combinam com o lead (dono, 06/11). */
+async function provasDoComercial(): Promise<Array<{ id: string; titulo: string; texto: string; empresa: string; link: string; nicho: string }>> {
+  const { data, error } = await comPrazo(db().from('proposta_provas').select('id, tipo, titulo, texto, nome, empresa, link, nicho')
+    .eq('autorizado', true).is('arquivado_em', null).order('criado_em', { ascending: true }).limit(40));
+  if (error) { console.error('[comercial] provas', error.message.slice(0, 160)); return []; }
+  return ((data ?? []) as Array<Record<string, string | null>>).map((p) => ({
+    id: String(p.id), titulo: String(p.titulo || (p.tipo === 'depoimento' ? 'Depoimento de ' + (p.nome || '') : '')).slice(0, 160),
+    texto: String(p.texto || '').slice(0, 600), empresa: String(p.empresa || ''), link: String(p.link || ''), nicho: String(p.nicho || ''),
+  }));
+}
+
 export async function comercialFila(input: { operador?: string; limit?: number }, ctx: AuthContext) {
   soDaCasa(ctx);
   const slug = slugDoOperador(input.operador);
   const agora = agoraEmSaoPaulo();
-  const [cfg, feitos, base] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso), baseDoComercial()]);
-  const regra = { ...resumoDaConfig(cfg, feitos, agora), conhecimento: base };
+  const [cfg, feitos, base, provas] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso), baseDoComercial(), provasDoComercial()]);
+  const regra = { ...resumoDaConfig(cfg, feitos, agora), conhecimento: base, provas };
   if (!regra.ativo) {
     return { operador: slug, config: regra, itens: [], total: 0, aviso: `O ${slug} esta desligado no painel (Comercial). Nao envie mensagem; so registre o que chegar.` };
   }
@@ -474,12 +485,17 @@ export async function comercialFila(input: { operador?: string; limit?: number }
   if (!ids.length) return { operador: slug, config: regra, itens: [], total: 0 };
   const campanhasInternas = Array.from(new Set(lista.map((l) => l.campaign_id).filter(Boolean))) as string[];
   const campanhasMeta = Array.from(new Set(lista.map((l) => l.ads_campaign_id).filter(Boolean))) as string[];
-  const [msgs, fatos, internas, meta] = await Promise.all([
+  const [msgs, fatos, internas, meta, caixa, reunioes, cobrancas] = await Promise.all([
     comPrazo(db().from('commercial_lead_messages').select('lead_id, direcao, canal, texto, enviada_em, operador_slug').in('lead_id', ids).order('enviada_em', { ascending: false }).limit(Math.min(2000, ids.length * 20))),
     comPrazo(db().from('commercial_facts').select('lead_id, campo, valor, evidencia, situacao, created_at').in('lead_id', ids).neq('situacao', 'descartado').order('created_at', { ascending: false }).limit(500)),
     campanhasInternas.length ? comPrazo(db().from('commercial_campaigns').select('id, name, channel').in('id', campanhasInternas)) : Promise.resolve({ data: [] }),
     campanhasMeta.length ? comPrazo(db().from('ads_campaigns').select('campaign_id, name, status').in('campaign_id', campanhasMeta)) : Promise.resolve({ data: [] }),
+    comPrazo(db().from('commercial_handoffs').select('lead_id').in('lead_id', ids).is('concluida_em', null)),
+    comPrazo(db().from('comercial_reunioes').select('lead_id').in('lead_id', ids).gte('inicio', new Date().toISOString())),
+    comPrazo(db().from('comercial_cobrancas').select('lead_id').in('lead_id', ids).eq('situacao', 'aguardando')),
   ]);
+  // Lead com a Caixa aberta, reunião marcada ou Pix esperando está com o Almir: o executivo não retoma sozinho.
+  const emFechamento = new Set([caixa, reunioes, cobrancas].flatMap((r) => ((r as { data: Array<{ lead_id: string }> | null }).data ?? []).map((x) => String(x.lead_id))));
   const porLead = new Map<string, Array<Record<string, unknown>>>();
   for (const m of ((msgs as { data: Array<Record<string, unknown>> | null }).data ?? [])) {
     const k = String(m.lead_id);
@@ -507,6 +523,7 @@ export async function comercialFila(input: { operador?: string; limit?: number }
       lead_frio: ORIGENS_FRIAS.indexOf(String(l.origin)) >= 0,
       primeiro_contato_feito: conversa.some((m) => m.direcao === 'saida'),
       nao_contatar: naoContatar(l),
+      em_fechamento: emFechamento.has(String(l.id)),
       classe: l.classe ?? null,
       qualificacao: l.qualificacao ?? {},
       proxima_acao: l.next_action ?? null,
@@ -686,7 +703,7 @@ export async function comercialMaquinaBuscar(input: { nicho: string; cidade: str
   const limite = Math.min(Math.max(Math.round(Number(input.limite) || 50), 1), 300);
   const fontes = (Array.isArray(input.fontes) ? input.fontes : ['osm', 'sites']).map((f) => String(f).trim().toLowerCase()).filter((f) => /^[a-z_]{2,20}$/.test(f)).slice(0, 5);
   if (input.campanha_id && !isUuid(input.campanha_id)) throw new Error('campanha_id must be a UUID');
-  const { data: igual } = await comPrazo(db().from('leads_buscas').select('*').ilike('nicho', nicho).ilike('cidade', cidade).in('situacao', ['na_fila', 'rodando']).limit(1));
+  const { data: igual } = await comPrazo(db().from('leads_buscas').select('*').is('conta_id', null).ilike('nicho', nicho).ilike('cidade', cidade).in('situacao', ['na_fila', 'rodando']).limit(1));
   if (igual && igual.length) return { busca: igual[0], criada: false, duplicada: true, observacao: 'Ja existe uma busca igual na fila.' };
   const { data, error } = await comPrazo(db().from('leads_buscas').insert({
     nicho, cidade, uf, limite, fontes: fontes.length ? fontes : ['osm', 'sites'],
@@ -701,12 +718,12 @@ export async function comercialMaquinaCandidatos(input: { busca_id?: string; sit
   soDaCasa(ctx);
   const limit = Math.min(Math.max(Number(input.limit) || 100, 1), 300);
   if (!input.busca_id) {
-    const { data, error } = await comPrazo(db().from('leads_buscas').select('id, nicho, cidade, uf, situacao, encontrados, limite, erro, entregar_ao_mercurio, created_at, terminado_em').order('created_at', { ascending: false }).limit(20));
+    const { data, error } = await comPrazo(db().from('leads_buscas').select('id, nicho, cidade, uf, situacao, encontrados, limite, erro, entregar_ao_mercurio, created_at, terminado_em').is('conta_id', null).order('created_at', { ascending: false }).limit(20));
     if (error) throw new Error(`leads_buscas: ${error.message}`);
     return { buscas: data ?? [], total: (data ?? []).length };
   }
   if (!isUuid(input.busca_id)) throw new Error('busca_id must be a UUID');
-  const { data: busca, error: e1 } = await comPrazo(db().from('leads_buscas').select('*').eq('id', input.busca_id).maybeSingle());
+  const { data: busca, error: e1 } = await comPrazo(db().from('leads_buscas').select('*').eq('id', input.busca_id).is('conta_id', null).maybeSingle());
   if (e1) throw new Error(`leads_buscas: ${e1.message}`);
   if (!busca) throw new Error('Busca nao encontrada.');
   let qb = db().from('leads_candidatos').select('*').eq('busca_id', input.busca_id).order('nota', { ascending: false, nullsFirst: false }).order('created_at', { ascending: true }).limit(limit);

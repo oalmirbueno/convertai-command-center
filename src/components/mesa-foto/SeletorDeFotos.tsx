@@ -77,7 +77,7 @@ export default function SeletorDeFotos({
   return (
     // Escolha aberta dentro da etapa: é uma janela no lugar (cartão com função). 28/09: sem rolagem
     // própria (uma por região); as ações ficam na linha do título, à vista mesmo com muitas fotos.
-    <section className={juntar(superficie.painel, "min-w-0 space-y-3 border-primary/40 p-3.5")} aria-label={titulo}>
+    <section className={juntar(superficie.painel, "min-w-0 space-y-3 border-primary/40 p-4")} aria-label={titulo}>
       <div className="flex min-w-0 items-center">
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{titulo}</p>
         {multiplas && (
@@ -94,7 +94,7 @@ export default function SeletorDeFotos({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <label className="block text-[12px]">Pasta do Workspace ou acervo<select aria-label="Pasta das fotos" className="mt-1 w-full rounded-md border bg-background p-2" value={pasta} onChange={(e) => { setPasta(e.target.value); setLimite(120); }}><option value="__todas">Todas as pastas ({soFotos.length} fotos)</option><option value="">Raiz do Workspace</option>{pastasOrganizadas.length > 0 && <optgroup label="Produtos, modelos e clones">{pastasOrganizadas.map(([id, nome]) => <option key={id} value={`organizada:${id}`}>{nome}</option>)}</optgroup>}{espelho.pastas.map((p) => <option key={p.id} value={p.id}>{trilhaAte(arvore, p.id).map((x) => x.nome).join(" / ")}</option>)}</select></label>
+      <label className="block text-[12px]">Pasta do Workspace ou acervo<select aria-label="Pasta das fotos" className="mt-1 w-full rounded-md border border-input bg-card p-2" value={pasta} onChange={(e) => { setPasta(e.target.value); setLimite(120); }}><option value="__todas">Todas as pastas ({soFotos.length} fotos)</option><option value="">Raiz do Workspace</option>{pastasOrganizadas.length > 0 && <optgroup label="Produtos, modelos e clones">{pastasOrganizadas.map(([id, nome]) => <option key={id} value={`organizada:${id}`}>{nome}</option>)}</optgroup>}{espelho.pastas.map((p) => <option key={p.id} value={p.id}>{trilhaAte(arvore, p.id).map((x) => x.nome).join(" / ")}</option>)}</select></label>
       {workspace.isError && <p role="alert" className="text-[12px]">Não foi possível ler as pastas. <button type="button" onClick={() => void workspace.refetch()}>Recarregar</button></p>}
       <div className="relative min-w-0">
         <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

@@ -73,10 +73,10 @@ export interface PublicacaoParaPublicar {
 
 export const TOM_DO_ESTADO: Record<TomDoEstado, string> = {
   neutro: "bg-secondary text-muted-foreground",
-  andamento: "bg-primary/10 text-primary",
-  ok: "bg-success/10 text-success",
+  andamento: "bg-accent-soft text-primary",
+  ok: "bg-success-soft text-success",
   alerta: "bg-warning/15 text-foreground",
-  erro: "bg-destructive/10 text-destructive",
+  erro: "bg-danger-soft text-destructive",
 };
 
 const dois = (n: number) => (n < 10 ? `0${n}` : String(n));
@@ -263,7 +263,7 @@ export function JanelaDaPublicacao({
           <p className="truncate font-medium">{titulo}</p>
           {estado && (
             <p className="mt-1 flex min-w-0 items-center text-[12px] text-muted-foreground">
-              <span className={`mr-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+              <span className={`mr-2 shrink-0 rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
               <span className="min-w-0 [overflow-wrap:anywhere]">{estado.detalhe}</span>
             </p>
           )}
@@ -308,7 +308,7 @@ export function JanelaDaPublicacao({
               />
             </CampoDeFormulario>
             <label className={`flex items-center ${podePublicar ? "" : "opacity-70"}`}>
-              <Switch checked={logoQueAprovar} onCheckedChange={setLogoQueAprovar} disabled={!podePublicar || ocupado} className="mr-2 shrink-0" />
+              <Switch checked={logoQueAprovar} onCheckedChange={setLogoQueAprovar} disabled={!podePublicar || ocupado} className="toque-compacto mr-2 shrink-0" />
               <span className="min-w-0 text-[13px]">Se o cliente aprovar depois do horário, publicar assim que aprovar</span>
             </label>
             {!podePublicar && <p className="text-[12px] text-muted-foreground">Só admin ou gestor confirma a data e publica.</p>}
@@ -379,11 +379,11 @@ export function PublicacaoDaMesaNaAgenda({
   const linkDaMesaFoto = soFotos && !linkDoEstudio && peca.data.taskId ? linkDoPostNaMesaFoto(clientId, { taskId: peca.data.taskId, trabalhoId: peca.data.peca.id }) : null;
   return (
     <>
-    <section className={juntar(superficie.painel, "flex min-w-0 items-center px-4 py-3")}>
+    <section className={juntar(superficie.painel, "flex min-w-0 items-center p-5")}>
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-medium text-muted-foreground">Publicação da Mesa</p>
         <p className="mt-1 flex min-w-0 items-center text-[13px]">
-          <span className={`mr-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+          <span className={`mr-2 shrink-0 rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
           <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{estado.detalhe}</span>
         </p>
       </div>

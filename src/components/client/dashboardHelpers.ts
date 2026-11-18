@@ -104,7 +104,7 @@ export function useClientDashboardData(clientId: string) {
 
   // Etapas e entregas: o erro da consulta é lançado (antes virava lista vazia e o cliente via "nada para
   // aprovar" numa falha de rede). A tela não cai: mostra um aviso com "Tentar de novo" (errorAprovacoes).
-  const { data: milestones, isError: errorMilestones, refetch: refetchMilestones } = useQuery({
+  const { data: milestones, isLoading: loadingMilestones, isError: errorMilestones, refetch: refetchMilestones } = useQuery({
     queryKey: ["client-milestones-all", clientId, projectIds.join(",")],
     queryFn: async () => {
       if (!projectIds.length) return [];
@@ -117,7 +117,7 @@ export function useClientDashboardData(clientId: string) {
     enabled: !!user && projectIds.length > 0,
   });
 
-  const { data: pendingFiles, isError: errorPendingFiles, refetch: refetchPendingFiles } = useQuery({
+  const { data: pendingFiles, isLoading: loadingPendingFiles, isError: errorPendingFiles, refetch: refetchPendingFiles } = useQuery({
     queryKey: ["client-pending-approvals", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.from("files")
@@ -136,7 +136,7 @@ export function useClientDashboardData(clientId: string) {
     enabled: !!user && !!clientId,
   });
 
-  const { data: deliveredFiles, isError: errorDeliveredFiles, refetch: refetchDeliveredFiles } = useQuery({
+  const { data: deliveredFiles, isLoading: loadingDeliveredFiles, isError: errorDeliveredFiles, refetch: refetchDeliveredFiles } = useQuery({
     queryKey: ["client-delivered-files", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.from("files")
@@ -155,7 +155,7 @@ export function useClientDashboardData(clientId: string) {
 
   // Publicações de conteúdo visíveis ao cliente (RLS libera apenas o que está
   // programado/publicado com aprovação completa — nada interno vaza).
-  const { data: contentPublications } = useQuery({
+  const { data: contentPublications, isLoading: loadingPublications } = useQuery({
     queryKey: ["client-content-publications", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.from("editorial_publications")
@@ -170,7 +170,7 @@ export function useClientDashboardData(clientId: string) {
   });
 
   // Dados do próprio contrato (renovação e cobranças pendentes do cliente).
-  const { data: clientProfile } = useQuery({
+  const { data: clientProfile, isLoading: loadingProfile } = useQuery({
     queryKey: ["client-profile-lite", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.from("profiles")
@@ -183,7 +183,7 @@ export function useClientDashboardData(clientId: string) {
     enabled: !!user && !!clientId,
   });
 
-  const { data: clientPendingBilling } = useQuery({
+  const { data: clientPendingBilling, isLoading: loadingBilling } = useQuery({
     queryKey: ["client-own-pending-billing", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.from("billing")
@@ -198,7 +198,7 @@ export function useClientDashboardData(clientId: string) {
   });
 
   // Última atualização publicada pela Aceleriq (relatórios/rituais publicados).
-  const { data: latestReport } = useQuery({
+  const { data: latestReport, isLoading: loadingReport } = useQuery({
     queryKey: ["client-latest-report", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.from("reports")
@@ -234,6 +234,12 @@ export function useClientDashboardData(clientId: string) {
 
   return {
     loadingProjects,
+    /**
+     * Primeira carga das outras consultas da tela (etapas, entregas, publicações, contrato, relatório).
+     * A tela espera todas para aparecer inteira de uma vez: sem isso cada bloco chegava depois e
+     * empurrava o resto para baixo (a "dança" no celular).
+     */
+    loadingDetails: loadingMilestones || loadingPendingFiles || loadingDeliveredFiles || loadingPublications || loadingProfile || loadingBilling || loadingReport,
     /** Falha na consulta de projetos (a base da tela): mostra "Tentar de novo". */
     errorProjects: errorProjects && !projects,
     refetchProjects,

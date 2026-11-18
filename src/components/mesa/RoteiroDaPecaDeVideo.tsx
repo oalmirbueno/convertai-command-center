@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, History, Lightbulb, Loader2, Sparkles, Star, Wand2, X } from "lucide-react";
+import { ChevronDown, History, Lightbulb, Loader2, Sparkles, Star, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { padraoPara, parteDaConferenciaDoJev, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
@@ -362,7 +362,7 @@ export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCor
                         </span>
                       </span>
                       <button type="button" className={botao.icone} onClick={() => setAberta(aberta === v.chave ? null : v.chave)} aria-expanded={aberta === v.chave} aria-label={`${aberta === v.chave ? "Fechar" : "Ver"} a versão ${v.numero == null ? "da peça" : v.numero}`} title="Ver o roteiro desta versão">
-                        {aberta === v.chave ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+                        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${aberta === v.chave ? "rotate-180" : ""}`} aria-hidden="true" />
                       </button>
                       {v.usar && (
                         <button type="button" className={juntar(botao.secundario, "h-8 shrink-0 px-3 text-[12px]")} onClick={v.usar} disabled={usando !== null} aria-label={`Usar a versão ${v.numero}`}>

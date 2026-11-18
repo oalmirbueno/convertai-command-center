@@ -99,6 +99,31 @@ export interface PostExistente {
     revision_of_post_id: string | null;
   } | null;
   publications: PublicacaoExistente[];
+  /**
+   * Contas canceladas por pessoa neste post ou nas revisões anteriores (a
+   * mesma regra do banco: a limpeza da revisão, removed_from_plan, não
+   * conta). Ausente: só as canceladas do próprio post contam.
+   */
+  contas_canceladas_por_pessoa?: string[];
+  /** Contas que a cadeia lida decidiu como livres (linha viva ou só limpa). */
+  contas_livres_na_cadeia?: string[];
+  /**
+   * A busca bateu no teto sem chegar ao fim da cadeia. Falha fechada: conta
+   * que a parte lida não decidiu conta como cancelada (o banco faz igual).
+   */
+  cadeia_incompleta?: boolean;
+}
+
+/**
+ * A conta está travada pela cadeia de revisões? Cancelada por pessoa, ou não
+ * decidida numa busca incompleta (falha fechada, a mesma regra do banco).
+ */
+export function contaTravadaNaCadeia(
+  post: Pick<PostExistente, "contas_canceladas_por_pessoa" | "contas_livres_na_cadeia" | "cadeia_incompleta">,
+  contaId: string,
+): boolean {
+  if (post.contas_canceladas_por_pessoa?.includes(contaId)) return true;
+  return !!post.cadeia_incompleta && !(post.contas_livres_na_cadeia ?? []).includes(contaId);
 }
 
 export interface ContaDoProjeto {
@@ -180,12 +205,20 @@ export function arquivoEditavel(f: { locked_at?: string | null; visibility?: str
   return !f.locked_at && f.visibility === "internal" && (f.agency_approval_status || "not_requested") === "not_requested" && (f.approval_status || "none") === "none";
 }
 
-/** A publicação da peça: a do Instagram viva (a que o motor publica). Na falta, qualquer viva. */
+/**
+ * A publicação da peça: a do Instagram viva (a que o motor publica). Na falta,
+ * qualquer viva. Se só restou cancelada, devolve essa da mesma conta: o
+ * reagendar reabre a linha em vez de tratar como "sem conta".
+ */
 export function publicacaoDaPeca(pubs: PublicacaoExistente[] | null | undefined): PublicacaoExistente | null {
-  const vivas = (pubs || []).filter((p) => p.status !== "cancelled");
+  const lista = pubs || [];
+  const vivas = lista.filter((p) => p.status !== "cancelled");
   const peso = (s: string) => (s === "published" ? 0 : s === "scheduled" ? 1 : s === "failed" ? 2 : 3);
-  const ordenar = (lista: PublicacaoExistente[]) => lista.slice().sort((a, b) => peso(a.status) - peso(b.status));
-  return ordenar(vivas.filter((p) => p.platform === "instagram"))[0] || ordenar(vivas)[0] || null;
+  const ordenar = (itens: PublicacaoExistente[]) => itens.slice().sort((a, b) => peso(a.status) - peso(b.status));
+  const viva = ordenar(vivas.filter((p) => p.platform === "instagram"))[0] || ordenar(vivas)[0] || null;
+  if (viva) return viva;
+  const canceladas = lista.filter((p) => p.status === "cancelled");
+  return canceladas.find((p) => p.platform === "instagram") || canceladas[0] || null;
 }
 
 /** O post já saiu do plano (agendado, publicado ou em falha do motor)? Aí a Mesa não troca a arte sozinha. */
@@ -310,15 +343,32 @@ export async function planoDaSincronizacao(
     scheduled_timezone: p.scheduled_timezone || FUSO_PADRAO,
   }));
 
+  // Cancelada por pessoa na cadeia de revisões (o banco recusa igual). Sem a
+  // lista, vale qualquer cancelada do próprio post.
+  const canceladaPorPessoa = (contaId: string) =>
+    existente.contas_canceladas_por_pessoa
+      ? contaTravadaNaCadeia(existente, contaId)
+      : existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === contaId);
+
   const podeTrocarNoMesmo = !existente.primary_file_id || mesmaArte || opcoes.arquivoAtualEditavel;
   if (podeTrocarNoMesmo) {
     const publicacoes: Record<string, unknown>[] = reaproveitadas.filter((p) => !!p.idempotency_key);
     const temInstagram = planejadas.some((p) => p.platform === "instagram");
-    if (!temInstagram && opcoes.conta) publicacoes.push(await novaPublicacao(opcoes.conta));
+    // No mesmo post, qualquer linha cancelada da conta fica como está (a chave
+    // estável da peça cairia nela); na cadeia, só a cancelada por pessoa.
+    const instagramCancelado = !!opcoes.conta && (
+      existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === opcoes.conta!.id) ||
+      canceladaPorPessoa(opcoes.conta.id)
+    );
+    // Conta cancelada de propósito (ex.: Para Si) não ganha publicação nova nem reabre aqui.
+    if (!temInstagram && opcoes.conta && !instagramCancelado) publicacoes.push(await novaPublicacao(opcoes.conta));
+    const avisoCancelada = instagramCancelado
+      ? "A publicação desta conta foi cancelada. Ela não volta na entrega: um admin ou gestor marca a conta na hora de confirmar a data."
+      : null;
     return {
       acao: "atualizar",
       motivo: null,
-      aviso: semConta && !temInstagram ? semConta : null,
+      aviso: avisoCancelada || (semConta && !temInstagram ? semConta : null),
       expectedVersion: existente.version,
       payload: {
         ...base,
@@ -335,10 +385,16 @@ export async function planoDaSincronizacao(
   // A arte anterior já entrou na aprovação: a Agenda não troca o arquivo de um
   // post aprovado ou em aprovação. Nasce a revisão do mesmo item, com a mesma
   // conta e a mesma data (se havia), e a anterior vira histórico.
+  // Conta cancelada de propósito (Para Si) não ganha publicação nova neste
+  // post de revisão, nem em revisão de revisão: o banco também recusa,
+  // subindo a cadeia. A limpeza do anterior (removed_from_plan) não conta.
   const anterior = publicacaoDaPeca(planejadas);
+  const contaCancelada = !!opcoes.conta && canceladaPorPessoa(opcoes.conta.id);
   const contaDaRevisao = anterior && anterior.external_account_id
     ? { id: anterior.external_account_id, platform: anterior.platform }
-    : opcoes.conta;
+    : contaCancelada
+      ? null
+      : opcoes.conta;
   const publicacoes: Record<string, unknown>[] = [];
   if (contaDaRevisao) {
     const p = await novaPublicacao(contaDaRevisao);
@@ -348,10 +404,13 @@ export async function planoDaSincronizacao(
     }
     publicacoes.push(p);
   }
+  const avisoCancelada = contaCancelada
+    ? "A publicação desta conta foi cancelada. A revisão não cria outra: um admin ou gestor marca a conta na hora de confirmar a data."
+    : null;
   return {
     acao: "revisao",
     motivo: null,
-    aviso: contaDaRevisao ? null : semConta,
+    aviso: avisoCancelada || (contaDaRevisao ? null : semConta),
     expectedVersion: null,
     postAnteriorId: existente.id,
     payload: {
@@ -551,7 +610,8 @@ export type CodigoDoEstado =
   | "agendado"
   | "publicando"
   | "publicado"
-  | "falhou";
+  | "falhou"
+  | "publicacao_cancelada";
 
 export type TomDoEstado = "neutro" | "andamento" | "ok" | "alerta" | "erro";
 
@@ -622,6 +682,9 @@ export function estadoDaPublicacao(e: EntradaDoEstado): EstadoDaPublicacao {
   }
   if (p?.status === "scheduled" && quandoPub) {
     return { codigo: "agendado", rotulo: "agendado", tom: "ok", detalhe: `Aprovado, agendado para ${f(quandoPub)}.`, quando: quandoPub, link: null };
+  }
+  if (p?.status === "cancelled") {
+    return { codigo: "publicacao_cancelada", rotulo: "cancelada", tom: "alerta", detalhe: "Publicação cancelada. Confirme a data para agendar de novo.", quando: null, link: null };
   }
   if (t.entrega_status === "reprovado") {
     // Reprovado e entregue de novo: o ajuste foi feito, falta reenviar ao cliente.
@@ -775,8 +838,11 @@ export interface PerfilDaPeca {
   handle: string | null;
   /** Instagram ligado com automação: o painel publica sozinho. */
   automatico: boolean;
-  /** Já tem publicação planejada, agendada ou publicada no post da peça. */
+  /** Já tem publicação viva nesta conta. Cancelada fica desmarcada. */
   escolhido: boolean;
+  /** A conta tem publicação cancelada de propósito. A tela não marca sozinha. */
+  cancelada?: boolean;
+  motivoCancelamento?: string | null;
 }
 
 /** Nome do perfil para a tela: "@handle" quando há, senão o nome. */
@@ -816,6 +882,8 @@ export async function payloadComPerfis(
     quando: string | null;
     mutationId: string;
     assetFileIds?: string[] | null;
+    /** Contas canceladas na cadeia que o admin/gestor marcou de novo: vão com reabrir_cancelada. */
+    reabrir?: string[] | null;
   },
 ): Promise<Record<string, unknown>> {
   const sementes = sementesDaPeca(a.trabalhoId, a.rodada);
@@ -829,8 +897,10 @@ export async function payloadComPerfis(
         asset_file_ids: a.assetFileIds.slice(0, MAX_MIDIAS_DO_CARROSSEL),
       }
       : {};
+    const marca = !existente && a.reabrir?.includes(perfil.id) ? { reabrir_cancelada: true } : {};
     publicacoes.push({
       ...entrega,
+      ...marca,
       id: existente ? existente.id : null,
       idempotency_key: existente ? existente.idempotency_key : await uuidEstavel(sementes.publicacao(perfil.id)),
       external_account_id: perfil.id,

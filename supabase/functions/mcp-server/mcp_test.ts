@@ -201,6 +201,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_ads_registrar_acao',
     'aceleriq_agent_conversations',
     'aceleriq_agent_handoff',
+    'aceleriq_ajustar_formato_publicacao',
     'aceleriq_archive_file',
     'aceleriq_archive_opportunity',
     'aceleriq_archive_project',
@@ -225,12 +226,19 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_comercial_avisar_caixa',
     'aceleriq_comercial_bolso_liberar',
     'aceleriq_comercial_bolso_pedir',
+    'aceleriq_comercial_cobrar',
+    'aceleriq_comercial_entrada_nova',
+    'aceleriq_comercial_falar',
     'aceleriq_comercial_fila',
+    'aceleriq_comercial_horarios',
     'aceleriq_comercial_maquina_buscar',
     'aceleriq_comercial_maquina_candidatos',
+    'aceleriq_comercial_marcar_reuniao',
     'aceleriq_comercial_pedir_proposta',
     'aceleriq_comercial_registrar_fato',
     'aceleriq_comercial_registrar_mensagem',
+    'aceleriq_comercial_repasse_marcar',
+    'aceleriq_comercial_repasses',
     'aceleriq_complete_commercial_activity',
     'aceleriq_complete_task',
     'aceleriq_create_commercial_activity',
@@ -241,10 +249,13 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_create_project',
     'aceleriq_create_report_draft',
     'aceleriq_create_task',
+    'aceleriq_criar_publicacao_de_aprovado',
     'aceleriq_delete_opportunity',
     'aceleriq_delete_task',
     'aceleriq_dia_prioritario',
     'aceleriq_dia_prioritario_registrar',
+    'aceleriq_editar_legenda_publicacao',
+    'aceleriq_estudio_erros',
     'aceleriq_estudio_trabalhos',
     'aceleriq_fetch',
     'aceleriq_finalize_file_upload',
@@ -300,6 +311,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_list_social_posts',
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
+    'aceleriq_listar_precisa_de_voce',
+    'aceleriq_marcar_precisa_de_voce',
     'aceleriq_mcp_saude',
     'aceleriq_membros',
     'aceleriq_mensagens_automaticas_fila',
@@ -340,11 +353,16 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_operator_request_approval',
     'aceleriq_panorama_da_casa',
     'aceleriq_panorama_do_cliente',
+    'aceleriq_perfis_instagram_arquivar',
+    'aceleriq_perfis_instagram_gravar',
+    'aceleriq_perfis_instagram_listar',
     'aceleriq_prepare_file_upload',
+    'aceleriq_reagendar_publicacao',
     'aceleriq_register_dossier_progress',
     'aceleriq_reopen_task',
     'aceleriq_restore_file',
     'aceleriq_restore_project',
+    'aceleriq_revisar_trabalho_interno',
     'aceleriq_ritual_redigir',
     'aceleriq_search',
     'aceleriq_search_file_content',
@@ -363,6 +381,10 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_upsert_current_dossier',
     'aceleriq_upsert_project_memory',
     'aceleriq_vault_overview',
+    'aceleriq_workspace_criar_arquivo',
+    'aceleriq_workspace_link_arquivo',
+    'aceleriq_workspace_mover_arquivo',
+    'aceleriq_workspace_retirar_aprovacao',
     'memory_fetch',
     'memory_get_context',
     'memory_get_pulse',
@@ -1244,7 +1266,8 @@ Deno.test('2.3: o mapa do painel aponta as ações e o cérebro', async () => {
   assert(mapa.find((m) => m.area === 'Cerebro do cliente')!.pelo_mcp.includes('aceleriq_cerebro_registrar'));
   assert(mapa.find((m) => m.area === 'Mesa Ads')!.pelo_mcp.includes('aceleriq_mesa_ads_entregar_ao_gestor'));
   // 2.17: + aceleriq_mesa_campanha_acao (as ações novas da campanha).
-  assertEquals((out.counts as Record<string, number>).mesas_write, ACOES_2_3.length + ACOES_ADS_2_12.length + 1);
+  // 2.28: + aceleriq_revisar_trabalho_interno e aceleriq_marcar_precisa_de_voce (rodam com a sessão da pessoa).
+  assertEquals((out.counts as Record<string, number>).mesas_write, ACOES_2_3.length + ACOES_ADS_2_12.length + 1 + 2);
 });
 
 Deno.test('2.3: resposta com fôlego respira antes e entrega JSON-RPC válido (JSON e SSE)', async () => {
@@ -1279,4 +1302,549 @@ Deno.test('AB2: GET sem Bearer desafia, GET pedindo stream e 405, o resto e a de
   assertEquals(d.toolCount, TOOLS.length);
   assertEquals(d.serverTime, '2026-09-26T12:00:00.000Z');
   assertEquals(Object.keys(d.secondBrain), ['configured']);
+});
+
+Deno.test('editar legenda aprovada: ferramenta no catálogo, escopo editorial:write e schema fechado', async () => {
+  const { editarLegendaSchema, LIMITE_DA_LEGENDA } = await import('./modulos/editar-legenda-publicacao.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const tool = TOOL_MAP.get('aceleriq_editar_legenda_publicacao');
+  assert(tool, 'ferramenta no catálogo');
+  assert(tool.scopes.includes('editorial:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['caption', 'confirmar', 'expected_version', 'idempotency_key', 'publication_id']);
+  assertEquals(schema.properties.confirmar.const, true);
+  assertEquals(schema.properties.caption.maxLength, LIMITE_DA_LEGENDA);
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_editar_legenda_publicacao'));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('editar_legenda_publicacao_aprovada'));
+
+  const base = {
+    publication_id: '11111111-1111-4111-8111-111111111111',
+    expected_version: 3,
+    caption: 'Legenda nova',
+    confirmar: true,
+    idempotency_key: 'legenda-0001',
+  };
+  assert(editarLegendaSchema.safeParse(base).success);
+  assert(!editarLegendaSchema.safeParse({ ...base, confirmar: false }).success, 'sem confirmar não edita');
+  assert(!editarLegendaSchema.safeParse({ ...base, caption: '   ' }).success, 'legenda vazia não passa');
+  assert(!editarLegendaSchema.safeParse({ ...base, caption: 'x'.repeat(LIMITE_DA_LEGENDA + 1) }).success);
+  assert(!editarLegendaSchema.safeParse({ ...base, content_type: 'story' }).success, 'não aceita mudar formato por aqui');
+  assert(!editarLegendaSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  // Sem escopo de escrita não chama.
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(adminCtx, tool));
+});
+
+Deno.test('ajustar formato aprovado: ferramenta no catálogo, escopo editorial:write e schema fechado', async () => {
+  const { ajustarFormatoSchema, FORMATOS_DE_PECA_UNICA } = await import('./modulos/editar-legenda-publicacao.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
+  const tool = TOOL_MAP.get('aceleriq_ajustar_formato_publicacao');
+  assert(tool, 'ferramenta no catálogo');
+  assert(tool.scopes.includes('editorial:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['confirmar', 'content_type', 'expected_version', 'idempotency_key', 'post_id']);
+  assertEquals(schema.properties.confirmar.const, true);
+  assertEquals(schema.properties.content_type.enum, ['static', 'story', 'reel', 'video']);
+  assertEquals([...FORMATOS_DE_PECA_UNICA], ['static', 'story', 'reel', 'video']);
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_ajustar_formato_publicacao'));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('ajustar_formato_publicacao_aprovada'));
+  assert(FERRAMENTAS_POR_AREA.calendario.includes('aceleriq_ajustar_formato_publicacao'));
+
+  const base = {
+    post_id: '22222222-2222-4222-8222-222222222222',
+    expected_version: 5,
+    content_type: 'story',
+    confirmar: true,
+    idempotency_key: 'formato-0001',
+  };
+  assert(ajustarFormatoSchema.safeParse(base).success);
+  for (const formato of ['static', 'reel', 'video']) {
+    assert(ajustarFormatoSchema.safeParse({ ...base, content_type: formato }).success, formato);
+  }
+  assert(!ajustarFormatoSchema.safeParse({ ...base, content_type: 'carousel' }).success, 'carrossel não troca por aqui');
+  assert(!ajustarFormatoSchema.safeParse({ ...base, confirmar: false }).success, 'sem confirmar não ajusta');
+  assert(!ajustarFormatoSchema.safeParse({ ...base, expected_version: undefined }).success, 'versão é obrigatória');
+  assert(!ajustarFormatoSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!ajustarFormatoSchema.safeParse({ ...base, caption: 'x' }).success, 'não aceita mudar legenda por aqui');
+  assert(!ajustarFormatoSchema.safeParse({ ...base, publication_id: base.post_id }).success, 'é o conteúdo, não a publicação');
+  // Sem escopo de escrita não chama.
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(adminCtx, tool));
+});
+
+// ─── MCP 2.28.0 (14/11/2026): revisão interna, caixa Precisa de você e pedido ao dono ───
+
+Deno.test('2.28: as três ferramentas estão no catálogo e contadas na descoberta', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
+  for (const nome of ['aceleriq_revisar_trabalho_interno', 'aceleriq_listar_precisa_de_voce', 'aceleriq_marcar_precisa_de_voce']) {
+    assert(TOOL_MAP.get(nome), `${nome} no catálogo`);
+  }
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-11-14T12:00:00Z'),
+  });
+  assertEquals(d.toolCount, TOOLS.length);
+});
+
+Deno.test('revisão interna: escrita com mesas:write, cliente no escopo, RPC na ponte e schema fechado', async () => {
+  const { revisarTrabalhoSchema, NOTA_MINIMA_DO_AJUSTE } = await import('./modulos/precisa-de-voce-e-revisao.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
+  const tool = TOOL_MAP.get('aceleriq_revisar_trabalho_interno');
+  assert(tool, 'ferramenta no catálogo');
+  assert(tool.scopes.includes('mesas:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['decisao', 'idempotency_key', 'trabalho_id']);
+  assertEquals(schema.properties.decisao.enum, ['aprovado', 'ajuste']);
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_revisar_trabalho_interno'));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('revisar_trabalho_interno'));
+  assert(FERRAMENTAS_POR_AREA.aprovacoes.includes('aceleriq_revisar_trabalho_interno'));
+  // A descrição diz o limite, com todas as letras.
+  for (const trecho of ['aprovação do cliente NÃO muda', 'não aprova pelo cliente', 'não agenda', 'não publica']) {
+    assert(tool.description.includes(trecho), trecho);
+  }
+
+  const base = { trabalho_id: '33333333-3333-4333-8333-333333333333', decisao: 'aprovado', idempotency_key: 'revisao-0001' };
+  assert(revisarTrabalhoSchema.safeParse(base).success);
+  assert(revisarTrabalhoSchema.safeParse({ ...base, decisao: 'ajuste', nota: 'x'.repeat(NOTA_MINIMA_DO_AJUSTE) }).success);
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'ajuste' }).success, 'ajuste sem nota não passa');
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'ajuste', nota: 'curta' }).success, 'nota curta não passa');
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'ajuste', nota: '   espaços   ' }).success, 'espaço não conta');
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'approved' }).success);
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, decisao: 'aprovado_pelo_cliente' }).success);
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, client_approval: 'approved' }).success, 'campo a mais não passa');
+  assert(!revisarTrabalhoSchema.safeParse({ ...base, agendar: true }).success, 'não aceita pedir agendamento');
+  assert(!canInvoke(readCtx, tool));
+  assert(!canInvoke(emptyCtx, tool));
+  assert(canInvoke(writeCtx, tool));
+  // Credencial presa a clientes pode chamar: o handler confere o cliente da peça.
+  assert(canUseToolWithDataScope(restrictedCtx, tool));
+});
+
+Deno.test('caixa Precisa de você: só leitura, com cache curto e visível para credencial restrita', async () => {
+  const { listarPrecisaDeVoceSchema } = await import('./modulos/precisa-de-voce-e-revisao.ts');
+  const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
+  const tool = TOOL_MAP.get('aceleriq_listar_precisa_de_voce');
+  assert(tool, 'ferramenta no catálogo');
+  assertEquals(tool.annotations?.readOnlyHint, true);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  assertEquals(tool.cacheSeg, 30);
+  assert(tool.scopes.includes('aceleriq:read'));
+  assert(canInvoke(readCtx, tool));
+  assert(!canInvoke(emptyCtx, tool));
+  assert(canUseToolWithDataScope(restrictedCtx, tool));
+  assert(FERRAMENTAS_POR_AREA.execucao.includes('aceleriq_listar_precisa_de_voce'));
+  const schema = tool.inputSchema as { required?: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals(schema.required ?? [], []);
+  assertEquals(schema.properties.tipo.enum, ['dinheiro', 'cliente_ou_plano', 'rejeicao_repetida', 'decisao_de_agente']);
+  assert(listarPrecisaDeVoceSchema.safeParse({}).success);
+  assert(listarPrecisaDeVoceSchema.safeParse({ tipo: 'dinheiro', limite: 10 }).success);
+  assert(!listarPrecisaDeVoceSchema.safeParse({ tipo: 'tudo' }).success);
+  assert(!listarPrecisaDeVoceSchema.safeParse({ limite: 0 }).success);
+  assert(!listarPrecisaDeVoceSchema.safeParse({ decidir: true }).success, 'leitura não aceita ação');
+});
+
+Deno.test('marcar para o dono: escrita sem vínculo obrigatório, sem ação escolhida pelo agente e com o limite na descrição', async () => {
+  const { marcarPrecisaDeVoceSchema } = await import('./modulos/precisa-de-voce-e-revisao.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
+  const tool = TOOL_MAP.get('aceleriq_marcar_precisa_de_voce');
+  assert(tool, 'ferramenta no catálogo');
+  assert(tool.scopes.includes('mesas:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['idempotency_key', 'o_que', 'operator', 'por_que']);
+  assert(!schema.required.includes('link_id'), 'não exige vínculo de execução');
+  assert(!('action_kind' in schema.properties), 'o agente não escolhe a ação: é sempre o pedido de decisão');
+  assert(!('payload' in schema.properties), 'não carrega ação a executar');
+  assertEquals(schema.properties.por_que.minLength, 10);
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_marcar_precisa_de_voce'));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('marcar_precisa_do_dono'));
+  assert(FERRAMENTAS_POR_AREA.execucao.includes('aceleriq_marcar_precisa_de_voce'));
+  assert(REGRAS_DE_ACAO.join(' ').includes('aceleriq_marcar_precisa_de_voce'));
+  for (const trecho of ['NÃO aprova', 'NÃO agenda', 'NÃO publica', 'não fala com o cliente']) {
+    assert(tool.description.includes(trecho), trecho);
+  }
+
+  const base = { operator: 'hermes', o_que: 'Renovar o domínio do cliente', por_que: 'O valor passa do teto combinado', idempotency_key: 'precisa-0001' };
+  assert(marcarPrecisaDeVoceSchema.safeParse(base).success);
+  assert(marcarPrecisaDeVoceSchema.safeParse({ ...base, client_id: '44444444-4444-4444-8444-444444444444', custo_previsto: 120 }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, por_que: 'porque' }).success, 'motivo curto não passa');
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, o_que: 'curto' }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, operator: 'Slug Errado!' }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, custo_previsto: -1 }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, action_kind: 'publicar' }).success, 'não aceita escolher ação');
+  assert(!marcarPrecisaDeVoceSchema.safeParse({ ...base, status: 'aprovado' }).success, 'não aceita nascer decidido');
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(writeCtx, tool));
+  assert(canUseToolWithDataScope(restrictedCtx, tool));
+});
+
+// ─── MCP 2.29.0 (17/11/2026): listar e arquivar Referências e Concorrentes ───
+
+type FiltroDePerfil = { op: 'eq' | 'is' | 'not_is'; coluna: string; valor: unknown };
+
+/** Banco de mentira para perfis: select/eq/is/limit/maybeSingle e update com select. Guarda os updates. */
+function bancoDePerfis(
+  linhas: Record<string, unknown>[],
+  perfis = [{ id: '00000000-0000-4000-8000-0000000000aa', deleted_at: null }],
+  antesDoUpdate?: () => void,
+) {
+  const updates: Array<{ valores: Record<string, unknown>; filtros: FiltroDePerfil[] }> = [];
+  const passa = (l: Record<string, unknown>, filtros: FiltroDePerfil[]) =>
+    filtros.every((f) => f.op === 'eq' ? l[f.coluna] === f.valor
+      : f.op === 'is' ? (l[f.coluna] ?? null) === f.valor
+      : (l[f.coluna] ?? null) !== f.valor);
+  return {
+    updates,
+    from(tabela: string) {
+      const filtros: FiltroDePerfil[] = [];
+      let valores: Record<string, unknown> | null = null;
+      const fonte = () => tabela === 'profiles' ? perfis as Record<string, unknown>[] : linhas;
+      const resolver = () => {
+        if (valores) {
+          antesDoUpdate?.();
+          const alvo = fonte().filter((l) => passa(l, filtros));
+          for (const l of alvo) Object.assign(l, valores);
+          updates.push({ valores, filtros: [...filtros] });
+          return { data: alvo.map((l) => ({ ...l })), error: null };
+        }
+        return { data: fonte().filter((l) => passa(l, filtros)).map((l) => ({ ...l })), error: null };
+      };
+      const q: Record<string, unknown> = {};
+      q.select = () => q;
+      q.limit = () => q;
+      q.order = () => q;
+      q.eq = (coluna: string, valor: unknown) => { filtros.push({ op: 'eq', coluna, valor }); return q; };
+      q.is = (coluna: string, valor: unknown) => { filtros.push({ op: 'is', coluna, valor }); return q; };
+      q.not = (coluna: string, _op: 'is', valor: unknown) => { filtros.push({ op: 'not_is', coluna, valor }); return q; };
+      q.update = (v: Record<string, unknown>) => { valores = v; return q; };
+      q.maybeSingle = () => Promise.resolve(resolver()).then((r) => ({ data: r.data[0] ?? null, error: null }));
+      q.then = (ok: (r: unknown) => unknown, falha?: (e: unknown) => unknown) => Promise.resolve(resolver()).then(ok, falha);
+      return q;
+    },
+  };
+}
+
+const PERFIS_CLIENTE_A = '00000000-0000-4000-8000-0000000000aa';
+const PERFIS_CLIENTE_B = '00000000-0000-4000-8000-0000000000bb';
+const perfilDeTeste = (id: string, extra: Record<string, unknown> = {}) => ({
+  id, client_id: PERFIS_CLIENTE_A, papel: 'referencia', handle: `h${id.slice(-2)}`, nome: null, seguidores: null,
+  monitorar: false, criado_em: '2026-11-01T10:00:00Z', atualizado_em: '2026-11-01T10:00:00Z', arquivado_em: null, ...extra,
+});
+const idDePerfil = (n: number) => `11111111-1111-4111-8111-1111111111${String(n).padStart(2, '0')}`;
+const ctxDoClienteA: AuthContext = {
+  ...writeCtx,
+  dataScope: { ...writeCtx.dataScope, unrestricted: false, clientIds: [PERFIS_CLIENTE_A] },
+};
+
+Deno.test('2.29: as duas ferramentas novas no catálogo, no guia e contadas na descoberta', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
+  const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
+  for (const nome of ['aceleriq_perfis_instagram_listar', 'aceleriq_perfis_instagram_arquivar', 'aceleriq_perfis_instagram_gravar']) {
+    assert(TOOL_MAP.get(nome), `${nome} no catálogo`);
+    assert(FERRAMENTAS_POR_AREA.mesa.includes(nome), `${nome} na mesa do guia`);
+  }
+  assert(REGRAS_DE_ACAO.join(' ').includes('aceleriq_perfis_instagram_arquivar'));
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-11-17T12:00:00Z'),
+  });
+  assertEquals(d.toolCount, TOOLS.length);
+});
+
+Deno.test('perfis listar: só leitura com clients:read, schema fechado e papel no singular ou plural', async () => {
+  const { listarPerfisSchema } = await import('./modulos/workspace-e-perfis.ts');
+  const tool = TOOL_MAP.get('aceleriq_perfis_instagram_listar')!;
+  assert(tool.scopes.includes('clients:read'));
+  assertEquals(tool.annotations?.readOnlyHint, true);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  assert(canInvoke(readCtx, tool));
+  assert(!canInvoke(emptyCtx, tool));
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals(schema.required, ['client_id']);
+  assertEquals(schema.properties.papel.enum, ['referencias', 'concorrentes', 'referencia', 'concorrente']);
+  const base = { client_id: PERFIS_CLIENTE_A };
+  assert(listarPerfisSchema.safeParse(base).success);
+  for (const papel of ['referencias', 'concorrentes', 'referencia', 'concorrente']) {
+    assert(listarPerfisSchema.safeParse({ ...base, papel, incluir_arquivados: false }).success, papel);
+  }
+  assert(!listarPerfisSchema.safeParse({}).success);
+  assert(!listarPerfisSchema.safeParse({ ...base, papel: 'amigos' }).success);
+  assert(!listarPerfisSchema.safeParse({ ...base, arquivar: true }).success, 'leitura não aceita ação');
+});
+
+Deno.test('perfis listar: abas com contagem, arquivados depois e recusa de cliente fora do escopo', async () => {
+  const { listarPerfisDoInstagram } = await import('./modulos/workspace-e-perfis.ts');
+  const linhas = [
+    perfilDeTeste(idDePerfil(1)),
+    perfilDeTeste(idDePerfil(2), { arquivado_em: '2026-11-10T00:00:00Z' }),
+    perfilDeTeste(idDePerfil(3), { papel: 'concorrente', monitorar: true }),
+    perfilDeTeste(idDePerfil(4), { client_id: PERFIS_CLIENTE_B }),
+  ];
+  const banco = bancoDePerfis(linhas);
+  const r = await listarPerfisDoInstagram({ client_id: PERFIS_CLIENTE_A }, ctxDoClienteA, banco as never);
+  assertEquals(r.referencias!.perfis.map((p) => [p.id, p.status]), [[idDePerfil(1), 'ativo'], [idDePerfil(2), 'arquivado']]);
+  assertEquals(r.referencias!.perfis[0].handle, '@h01');
+  assertEquals([r.referencias!.ativos, r.referencias!.limite, r.referencias!.vagas], [1, 6, 5]);
+  assertEquals(r.concorrentes!.perfis.map((p) => p.id), [idDePerfil(3)]);
+  assert(!JSON.stringify(r).includes(idDePerfil(4)), 'não mostra perfil de outro cliente');
+  const so = await listarPerfisDoInstagram({ client_id: PERFIS_CLIENTE_A, papel: 'concorrentes', incluir_arquivados: false }, ctxDoClienteA, banco as never);
+  assertEquals(Object.keys(so).filter((k) => k === 'referencias' || k === 'concorrentes'), ['concorrentes']);
+  await assertRejects(
+    () => listarPerfisDoInstagram({ client_id: PERFIS_CLIENTE_B }, ctxDoClienteA, banco as never),
+    Error,
+    'outside this MCP principal data scope',
+  );
+});
+
+Deno.test('perfis arquivar: escrita com clients:write e schema fechado (perfil_id ou handle com papel)', async () => {
+  const { arquivarPerfilSchema } = await import('./modulos/workspace-e-perfis.ts');
+  const tool = TOOL_MAP.get('aceleriq_perfis_instagram_arquivar')!;
+  assert(tool.scopes.includes('clients:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(writeCtx, tool));
+  assert(tool.description.includes('Não apaga nada'));
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals(schema.required, ['client_id']);
+  assert(!('confirmar' in schema.properties), 'sem confirmar');
+  const base = { client_id: PERFIS_CLIENTE_A };
+  assert(arquivarPerfilSchema.safeParse({ ...base, perfil_id: idDePerfil(1) }).success);
+  assert(arquivarPerfilSchema.safeParse({ ...base, handle: 'https://instagram.com/fulano', papel: 'concorrentes' }).success);
+  assert(arquivarPerfilSchema.safeParse({ ...base, handle: '@fulano', papel: 'referencia', idempotency_key: 'arquivar-0001' }).success);
+  assert(!arquivarPerfilSchema.safeParse(base).success, 'sem perfil_id nem handle');
+  assert(!arquivarPerfilSchema.safeParse({ ...base, handle: '@fulano' }).success, 'handle sem papel');
+  assert(!arquivarPerfilSchema.safeParse({ ...base, perfil_id: idDePerfil(1), handle: '@fulano', papel: 'referencia' }).success);
+  assert(!arquivarPerfilSchema.safeParse({ ...base, perfil_id: 'nao-uuid' }).success);
+  assert(!arquivarPerfilSchema.safeParse({ ...base, perfil_id: idDePerfil(1), idempotency_key: 'curta' }).success);
+  assert(!arquivarPerfilSchema.safeParse({ ...base, perfil_id: idDePerfil(1), apagar: true }).success, 'campo a mais não passa');
+});
+
+Deno.test('perfis arquivar: igual à tela, idempotente, por handle e sem tocar em outro cliente', async () => {
+  const { arquivarPerfilDoInstagram } = await import('./modulos/workspace-e-perfis.ts');
+  const linhas = [
+    perfilDeTeste(idDePerfil(1), { monitorar: true }),
+    perfilDeTeste(idDePerfil(2), { handle: 'fulano', papel: 'concorrente' }),
+    perfilDeTeste(idDePerfil(3), { client_id: PERFIS_CLIENTE_B }),
+    perfilDeTeste(idDePerfil(4), { handle: 'antigo', arquivado_em: '2026-11-05T00:00:00Z' }),
+  ];
+  const banco = bancoDePerfis(linhas);
+
+  const r = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(1) }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(r.ok, true);
+  assertEquals(r.ja_estava_arquivado, false);
+  assertEquals(r.perfil.status, 'arquivado');
+  assertEquals(r.perfil.monitorar, false);
+  assertEquals([r.aba, r.ativos, r.limite, r.vagas], ['referencias', 0, 6, 6]);
+  assertEquals(banco.updates.length, 1);
+  assertEquals(banco.updates[0].valores.arquivado_por, writeCtx.dataScope.principalUserId);
+  assertEquals(banco.updates[0].valores.monitorar, false);
+  assert(banco.updates[0].filtros.some((f) => f.coluna === 'client_id' && f.valor === PERFIS_CLIENTE_A), 'update preso ao cliente');
+  assertEquals(linhas.length, 4, 'nada apagado');
+
+  const de_novo = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(1) }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(de_novo.ja_estava_arquivado, true);
+  assertEquals(banco.updates.length, 1, 'já arquivado não muda nada');
+
+  const porHandle = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, handle: 'https://www.instagram.com/Fulano/', papel: 'concorrentes' }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(porHandle.perfil.id, idDePerfil(2));
+  assertEquals(porHandle.aba, 'concorrentes');
+
+  const soArquivado = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, handle: '@antigo', papel: 'referencias' }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(soArquivado.ja_estava_arquivado, true);
+
+  await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, handle: '@ninguem', papel: 'referencias' }, writeCtx, banco as never),
+    Error,
+    '@ninguem não está em Referências',
+  );
+  // Perfil de outro cliente: o mesmo erro de id inexistente, sem update e sem vazar dado.
+  const antes = banco.updates.length;
+  const erroDeOutro = await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(3) }, writeCtx, banco as never),
+    Error,
+  );
+  const erroInexistente = await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(99) }, writeCtx, banco as never),
+    Error,
+  );
+  assertEquals(erroDeOutro.message, erroInexistente.message);
+  assertEquals(erroDeOutro.message, 'Perfil não encontrado para este cliente.');
+  assertEquals(banco.updates.length, antes);
+  assertEquals(linhas[2].arquivado_em, null);
+  // Credencial presa ao cliente A não arquiva no cliente B.
+  await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_B, perfil_id: idDePerfil(3) }, ctxDoClienteA, banco as never),
+    Error,
+    'outside this MCP principal data scope',
+  );
+});
+
+Deno.test('perfis arquivar: corrida no update relê o perfil e devolve a linha arquivada', async () => {
+  const { arquivarPerfilDoInstagram } = await import('./modulos/workspace-e-perfis.ts');
+  const outraChamada = '2026-11-17T09:00:00Z';
+  const linhas = [perfilDeTeste(idDePerfil(1), { monitorar: true })];
+  // Outra chamada arquiva entre a leitura e o update: o update (is arquivado_em null) não devolve linha.
+  const banco = bancoDePerfis(linhas, undefined, () => {
+    Object.assign(linhas[0], { arquivado_em: outraChamada, monitorar: false });
+  });
+  const r = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(1) }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(r.ja_estava_arquivado, true);
+  assertEquals(r.perfil.status, 'arquivado', 'não devolve a linha ativa antiga');
+  assertEquals(r.perfil.arquivado_em, outraChamada);
+  assertEquals(r.perfil.monitorar, false);
+  assertEquals([r.ativos, r.vagas], [0, 6]);
+
+  // Se a releitura não acha o perfil, erro claro.
+  const sumiu = [perfilDeTeste(idDePerfil(2))];
+  const bancoSumiu = bancoDePerfis(sumiu, undefined, () => { sumiu.splice(0, 1); });
+  await assertRejects(
+    () => arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(2) }, writeCtx, bancoSumiu as never),
+    Error,
+    'não foi encontrado de novo',
+  );
+});
+
+Deno.test('perfis: idempotency_key de gravar e arquivar vale por cliente', async () => {
+  const { escopoDaChaveDoCliente } = await import('./modulos/perfis-listar-arquivar.ts');
+  const { filtroDeIdempotencia } = await import('../_shared/mcp-write-services.ts');
+  const chave = 'arquivar-0001';
+  const deA = filtroDeIdempotencia('oauth:pessoa', chave, escopoDaChaveDoCliente(PERFIS_CLIENTE_A));
+  const deB = filtroDeIdempotencia('oauth:pessoa', chave, escopoDaChaveDoCliente(PERFIS_CLIENTE_B));
+  assertEquals(deA, { client_id: PERFIS_CLIENTE_A, __principal: 'oauth:pessoa', idempotency_key: chave });
+  assert(JSON.stringify(deA) !== JSON.stringify(deB), 'mesma chave em outro cliente não casa');
+  // O input auditado guarda client_id e idempotency_key crus: o replay do cliente A casa só com A.
+  const auditadoDeA = { client_id: PERFIS_CLIENTE_A, perfil_id: idDePerfil(1), idempotency_key: chave, __principal: 'oauth:pessoa' };
+  const casa = (filtro: Record<string, unknown>) => Object.entries(filtro).every(([k, v]) => (auditadoDeA as Record<string, unknown>)[k] === v);
+  assert(casa(deA));
+  assert(!casa(deB));
+  // Sem escopo, as outras ferramentas seguem como antes.
+  assertEquals(filtroDeIdempotencia(null, chave), { idempotency_key: chave });
+});
+
+Deno.test('perfis listar e arquivar: muitos arquivados não escondem o ativo', async () => {
+  const { listarPerfisDoInstagram, arquivarPerfilDoInstagram } = await import('./modulos/workspace-e-perfis.ts');
+  const linhas = [
+    ...Array.from({ length: 60 }, (_, i) => perfilDeTeste(`22222222-2222-4222-8222-2222222222${String(i).padStart(2, '0')}`, {
+      handle: 'repetido', arquivado_em: `2026-10-${String(1 + (i % 28)).padStart(2, '0')}T00:00:00Z`,
+    })),
+    perfilDeTeste(idDePerfil(1), { handle: 'repetido' }),
+  ];
+  const banco = bancoDePerfis(linhas);
+  const lista = await listarPerfisDoInstagram({ client_id: PERFIS_CLIENTE_A, papel: 'referencias' }, ctxDoClienteA, banco as never);
+  assertEquals(lista.referencias!.perfis[0].id, idDePerfil(1));
+  assertEquals(lista.referencias!.ativos, 1);
+  assertEquals(lista.referencias!.perfis.length, 61);
+  const r = await arquivarPerfilDoInstagram({ client_id: PERFIS_CLIENTE_A, handle: '@repetido', papel: 'referencias' }, writeCtx, banco as never) as Record<string, any>;
+  assertEquals(r.ja_estava_arquivado, false);
+  assertEquals(r.perfil.id, idDePerfil(1));
+});
+
+Deno.test('perfis gravar: idempotency_key opcional, mesmo schema fechado de antes', async () => {
+  const { gravarPerfisSchema } = await import('./modulos/workspace-e-perfis.ts');
+  const tool = TOOL_MAP.get('aceleriq_perfis_instagram_gravar')!;
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals(schema.required, ['client_id']);
+  assert('idempotency_key' in schema.properties);
+  const base = { client_id: PERFIS_CLIENTE_A, referencias: ['@fulano'] };
+  assert(gravarPerfisSchema.safeParse(base).success, 'sem a chave continua valendo');
+  assert(gravarPerfisSchema.safeParse({ ...base, idempotency_key: 'perfis-0001' }).success);
+  assert(!gravarPerfisSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!gravarPerfisSchema.safeParse({ ...base, idempotency_key: 'x'.repeat(121) }).success);
+  assert(!gravarPerfisSchema.safeParse({ client_id: PERFIS_CLIENTE_A, idempotency_key: 'perfis-0001' }).success, 'a chave sozinha não basta');
+  assert(!gravarPerfisSchema.safeParse({ ...base, extra: 1 }).success);
+});
+
+// ─── MCP 2.30.0 (18/11/2026): publicação planejada de post já aprovado ───
+
+Deno.test('2.30: versão, criar publicação de aprovado no catálogo, no guia e contada na descoberta', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  assertEquals(MCP_VERSION, '2.30.0');
+  const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
+  const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
+  assert(TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado'), 'no catálogo');
+  assert(FERRAMENTAS_POR_AREA.calendario.includes('aceleriq_criar_publicacao_de_aprovado'));
+  const regra = REGRAS_DE_ACAO.find((r) => r.includes('aceleriq_criar_publicacao_de_aprovado')) || '';
+  assert(regra.includes('aceleriq_reagendar_publicacao') && regra.includes('expected_version'), 'guia ensina o caminho até o reagendar');
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-11-18T12:00:00Z'),
+  });
+  assertEquals(d.toolCount, TOOLS.length);
+  assertEquals(TOOLS.length, 199);
+});
+
+Deno.test('criar publicação de aprovado: escrita editorial:write, schema fechado, ponte e mesma lista de cliente do reagendar', async () => {
+  const { criarPublicacaoSchema } = await import('./modulos/criar-publicacao-de-aprovado.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const tool = TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado')!;
+  assert(tool.scopes.includes('editorial:write'));
+  assertEquals(GRANULAR_SCOPE_BY_TOOL.aceleriq_criar_publicacao_de_aprovado, 'editorial:write');
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  assertEquals(tool.annotations?.destructiveHint, false);
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(writeCtx, tool));
+  assert(canInvoke({ ...readCtx, scopes: ['editorial:write'] }, tool));
+  assert(tool.description.includes('aceleriq_reagendar_publicacao'));
+  assert(tool.description.includes('Não aprova, não agenda e não publica'));
+  // Como o reagendar: credencial restrita a clientes pode chamar; o handler confere o cliente do post.
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_criar_publicacao_de_aprovado'));
+  assert(canUseToolWithDataScope(restrictedCtx, tool));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('save_editorial_post'));
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['confirmar', 'external_account_id', 'idempotency_key', 'post_id']);
+  assertEquals(schema.properties.confirmar.const, true);
+  assert(!('scheduled_at' in schema.properties), 'nunca recebe data');
+
+  const base = {
+    post_id: '11111111-1111-4111-8111-111111111111',
+    external_account_id: '22222222-2222-4222-8222-222222222222',
+    confirmar: true,
+    idempotency_key: 'criar-pub-0001',
+  };
+  assert(criarPublicacaoSchema.safeParse(base).success);
+  const { confirmar: _c, ...semConfirmar } = base;
+  assert(!criarPublicacaoSchema.safeParse(semConfirmar).success, 'sem confirmar recusa');
+  assert(!criarPublicacaoSchema.safeParse({ ...base, confirmar: false }).success, 'confirmar false recusa');
+  const { idempotency_key: _k, ...semChave } = base;
+  assert(!criarPublicacaoSchema.safeParse(semChave).success, 'sem idempotency_key recusa');
+  assert(!criarPublicacaoSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!criarPublicacaoSchema.safeParse({ ...base, idempotency_key: 'x'.repeat(121) }).success);
+  assert(!criarPublicacaoSchema.safeParse({ ...base, post_id: 'nao-uuid' }).success);
+  assert(!criarPublicacaoSchema.safeParse({ ...base, scheduled_at: '2026-11-20T12:00:00-03:00' }).success, 'data não passa');
+  await assertRejects(() => Promise.resolve(tool.handler({ ...base, confirmar: false }, writeCtx)), Error, 'Invalid input');
 });

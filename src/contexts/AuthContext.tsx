@@ -4,7 +4,14 @@ import { notifyAdmin } from "@/lib/notifyHelpers";
 import { safeSessionStorage, safeStorage } from "@/lib/safeStorage";
 import { definirAutoMiniaturas, definirDonoDasUrls } from "@/lib/miniaturas";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
-import type { AuthError, User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
+import {
+  esquecerTokensMortos,
+  lerSessaoGuardada,
+  sessaoEstaViva,
+  tokenAindaVale,
+  type SessaoGuardada,
+} from "@/integrations/supabase/renovacaoSegura";
 
 export type AppRole = "admin" | "client" | "design" | "traffic" | "manager" | "member";
 
@@ -46,18 +53,38 @@ const PROFILE_MAX_ATTEMPTS = 3;
 const profileBackoffMs = (attempt: number) => 500 * Math.pow(2, attempt - 1);
 
 /**
- * A recarga da sessão falhou por REDE (sem internet, servidor fora, fetch
- * abortado) ou por token inválido de verdade? Só o segundo caso justifica
- * derrubar a pessoa. O primeiro era o defeito: cliente abria o painel no
- * elevador e era deslogado por falta de sinal.
+ * A leitura da sessão falhou por algo PASSAGEIRO (sem internet, servidor fora,
+ * fetch abortado, trava do login ocupada por outra aba) ou por token inválido
+ * de verdade? Só o segundo caso pode tirar a pessoa do painel, e mesmo assim
+ * só depois de reler o storage. O primeiro era o defeito: cliente abria o
+ * painel no elevador e era deslogado por falta de sinal.
  */
-function isNetworkAuthError(error: AuthError | null | undefined): boolean {
+function ehFalhaPassageira(error: unknown): boolean {
   if (!error) return false;
+  const plain = error as { name?: string; message?: string; isAcquireTimeout?: boolean };
+  // Trava do login ocupada (travaDoLogin.ts): a renovação fica para a próxima volta.
+  if (plain.isAcquireTimeout === true) return true;
   if (isAuthRetryableFetchError(error)) return true;
-  // Depois do type guard o TS estreita para never; lê como objeto solto.
-  const plain = error as { name?: string; message?: string };
-  if (plain.name === "AuthRetryableFetchError") return true;
-  return /fetch|network|load failed|timeout/i.test(plain.message || "");
+  if (plain.name === "AuthRetryableFetchError" || plain.name === "AbortError") return true;
+  return /fetch|network|load failed|timeout|timed out/i.test(plain.message || "");
+}
+
+/** Sessão gravada no storage do login, lida sem a trava (só leitura). */
+function sessaoDoStorage(): Promise<SessaoGuardada | null> {
+  const auth = supabase.auth as unknown as { storage?: { getItem: (k: string) => string | null | Promise<string | null> }; storageKey?: string };
+  return lerSessaoGuardada(auth.storage, auth.storageKey || "");
+}
+
+/**
+ * Sai SÓ deste navegador. A conta é compartilhada (iPhone do dono, Windows,
+ * agentes); o signOut sem scope do supabase-js é "global" e derrubaria todos.
+ */
+async function sairSoDesteNavegador(): Promise<void> {
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch (e) {
+    console.warn("[Auth] signOut local falhou:", e);
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -75,6 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * render, que foi exatamente o defeito que existia aqui.
    */
   const sessaoRespondeu = useRef(false);
+  /** Usuário atual, para decidir fora do render (evento SIGNED_OUT). */
+  const userIdRef = useRef<string | null>(null);
+  /** O botão sair está rodando: o SIGNED_OUT dele é de verdade, não precisa reler o storage. */
+  const saindoDeProposito = useRef(false);
 
   /**
    * Busca perfil e papel. Devolve null quando o servidor NÃO respondeu depois
@@ -207,52 +238,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }, 8000);
 
-    // 1. Check existing session — force a refresh to guarantee the token is
-    // signed with the current JWKS (handles signing-key rotation, which the
-    // server reports as "JWT expired" even before the exp claim).
+    // 1. Sessão existente. SÓ lê: o getSession() já renova sozinho (com a
+    // trava) quando faltam menos de 90 s, e o autoRefreshToken cuida do resto.
+    //
+    // 14/11: aqui havia um refreshSession() forçado em TODA abertura, mesmo
+    // com token válido ("por precaução de JWKS"). Várias abas e agentes no
+    // mesmo perfil renovavam o mesmo token ao mesmo tempo; com a rotação de
+    // refresh token ligada, a sessão caía. Não volte a forçar renovação aqui.
     (async () => {
       try {
-        let { data: { session } } = await supabase.auth.getSession();
-        // Token local ainda válido por mais de 1 minuto: abre com ele e renova
-        // em segundo plano (26/09: com o gateway do Supabase lento, a renovação
-        // ficava pendente e o painel parava na logo, mesmo com token bom).
-        const tokenAindaVale = !!session?.expires_at && session.expires_at * 1000 - Date.now() > 60_000;
-        if (session?.refresh_token && tokenAindaVale) {
-          void supabase.auth.refreshSession().then(async ({ error: refErr }) => {
-            if (!refErr || isNetworkAuthError(refErr)) return;
-            // Refresh token inválido ou já rotacionado: saída limpa (SIGNED_OUT cuida da tela).
-            console.warn("[Auth] refresh failed, signing out:", refErr.message);
-            await supabase.auth.signOut();
-          }).catch(() => undefined);
-        } else if (session?.refresh_token) {
-          // Token vencido: espera a renovação, mas no máximo 8 s; depois segue
-          // com a sessão local e o SDK tenta de novo sozinho.
-          const esgotou = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
-          const resposta = await Promise.race([supabase.auth.refreshSession(), esgotou]);
-          const refreshed = resposta ? resposta.data : { session: null };
-          const refErr = resposta ? resposta.error : null;
-          if (!resposta || (refErr && isNetworkAuthError(refErr))) {
-            // Sem rede, servidor fora ou lento demais: a sessão local continua
-            // valendo. O SDK tenta de novo sozinho quando a conexão volta.
-            // Deslogar aqui era o defeito: cliente sem sinal por um segundo perdia o acesso.
-            console.warn("[Auth] refresh sem rede; mantendo a sessão local:", refErr ? refErr.message : "tempo esgotado");
-          } else if (refErr) {
-            // Refresh token inválido ou já rotacionado: saída limpa.
-            console.warn("[Auth] refresh failed, signing out:", refErr.message);
-            sessaoRespondeu.current = true;
-            await supabase.auth.signOut();
-            if (mounted) { setUser(null); setProfile(null); profileRef.current = null; setLoading(false); }
-            return;
+        let session: { user: User } | null = null;
+        let falha: unknown = null;
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          session = data.session?.user ? { user: data.session.user } : null;
+          falha = error;
+        } catch (e) {
+          falha = e;
+        }
+
+        if (!session && falha) {
+          // Antes de qualquer decisão, relê o storage: outra aba pode ter gravado um token novo.
+          const guardada = await sessaoDoStorage();
+          const viva = !!guardada?.user && sessaoEstaViva(guardada);
+          if (ehFalhaPassageira(falha)) {
+            // Sem rede, servidor fora, lento ou trava ocupada: a sessão local
+            // continua valendo e o SDK tenta de novo sozinho. Nunca desloga aqui.
+            if (viva && tokenAindaVale(guardada, 0)) {
+              session = { user: guardada!.user as unknown as User };
+            } else {
+              console.warn("[Auth] sessão ainda não renovou (passageiro); mantendo a guardada:", (falha as Error)?.message);
+            }
+          } else if (viva) {
+            // Token recusado era velho; o storage já tem outro, vivo.
+            console.warn("[Auth] renovação recusada, mas o storage tem sessão nova; seguindo com ela.");
+            session = { user: guardada!.user as unknown as User };
           } else {
-            session = refreshed.session ?? session;
+            // Token morto e storage morto: sai só deste navegador.
+            console.warn("[Auth] sessão morta no servidor e no storage; saindo só deste navegador:", (falha as Error)?.message);
+            sessaoRespondeu.current = true;
+            await sairSoDesteNavegador();
+            if (mounted) { setUser(null); setProfile(null); profileRef.current = null; userIdRef.current = null; setLoading(false); }
+            return;
           }
         }
         if (!mounted) return;
         if (session?.user) {
-          setUser(session.user);
           // A sessao respondeu: daqui para frente a espera e pelo PERFIL, e
           // essa vale a pena esperar. Abrir sem ele mostraria a tela errada.
           sessaoRespondeu.current = true;
+          userIdRef.current = session.user.id;
+          setUser(session.user);
           const p = await getOrCreateProfile(session.user);
           if (mounted) deliverProfile(p);
         } else {
@@ -273,14 +309,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "SIGNED_OUT") {
         sessaoRespondeu.current = true;
-        definirAutoMiniaturas(false);
-        // Nenhuma URL assinada nesta sessão passa para a próxima (miniaturas.ts e fileUrls.ts).
-        definirDonoDasUrls(null);
-        setUser(null);
-        setProfile(null);
-        profileRef.current = null;
-        setProfileError(false);
-        setLoading(false);
+        const limpar = () => {
+          definirAutoMiniaturas(false);
+          // Nenhuma URL assinada nesta sessão passa para a próxima (miniaturas.ts e fileUrls.ts).
+          definirDonoDasUrls(null);
+          userIdRef.current = null;
+          setUser(null);
+          setProfile(null);
+          profileRef.current = null;
+          setProfileError(false);
+          setLoading(false);
+        };
+        if (saindoDeProposito.current) {
+          limpar();
+          return;
+        }
+        // Não foi o botão sair: pode ser o supabase-js largando um token velho
+        // ou o aviso de outra aba. Relê o storage antes de mandar para o login
+        // (fora do callback, que roda dentro da trava do login).
+        setTimeout(async () => {
+          if (!mounted) return;
+          const guardada = await sessaoDoStorage();
+          if (guardada?.user && sessaoEstaViva(guardada) && guardada.user.id === userIdRef.current) {
+            console.warn("[Auth] SIGNED_OUT com sessão viva no storage; mantendo a pessoa no painel.");
+            return;
+          }
+          if (mounted) limpar();
+        }, 0);
       } else if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
         // A sessão respondeu por aqui: daqui para frente a espera é pelo
         // perfil. Sem isso, o relógio de segurança soltava a tela com usuário
@@ -288,6 +343,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // /mesa caía no /dashboard.
         sessaoRespondeu.current = true;
         definirDonoDasUrls(session.user.id);
+        userIdRef.current = session.user.id;
         // Mesmo usuário (só o token renovou ou a aba voltou ao foco): mantém o
         // objeto para as telas não recomeçarem.
         setUser((anterior) =>
@@ -368,13 +424,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    definirAutoMiniaturas(false);
-    definirDonoDasUrls(null);
-    setUser(null);
-    setProfile(null);
-    profileRef.current = null;
-    setProfileError(false);
+    // scope "local": várias pessoas e agentes usam a MESMA conta (iPhone do
+    // dono, Chrome no Windows, app Claude, agentes). Sair aqui encerra só a
+    // sessão deste navegador; as abas dele saem juntas porque dividem o mesmo
+    // storage. O padrão do supabase-js ("global") mataria as sessões de todos.
+    saindoDeProposito.current = true;
+    esquecerTokensMortos();
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } finally {
+      saindoDeProposito.current = false;
+      definirAutoMiniaturas(false);
+      definirDonoDasUrls(null);
+      userIdRef.current = null;
+      setUser(null);
+      setProfile(null);
+      profileRef.current = null;
+      setProfileError(false);
+    }
   };
 
   return (

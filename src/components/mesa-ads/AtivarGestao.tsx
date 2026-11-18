@@ -129,13 +129,13 @@ export default function AtivarGestao({
 
   const ativa = !!(g && g.disponivel);
   return (
-    <section className={juntar(superficie.painel, "min-w-0 px-4 py-3", className)} aria-label="Gestão de campanhas">
+    <section className={juntar(superficie.painel, "min-w-0 p-5", className)} aria-label="Gestão de campanhas">
       <div className="flex min-w-0 flex-wrap items-center">
         <button type="button" className="mb-1 mr-3 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
           <span className="min-w-0">
             <span className="block text-[13px] font-semibold">Gestão de campanhas pelo agente</span>
             <span className="mt-0.5 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
-              {gestao.isLoading ? <span className="h-3 w-40 animate-pulse rounded bg-muted" /> : g ? <Situacao g={g} /> : <span>Situação não lida</span>}
+              {gestao.isLoading ? <span className="h-3 w-40 animate-pulse rounded-full bg-muted" /> : g ? <Situacao g={g} /> : <span>Situação não lida</span>}
               {g && g.conferido_em && <span className="ml-2">conferido {tempoDesde(g.conferido_em)}</span>}
             </span>
           </span>

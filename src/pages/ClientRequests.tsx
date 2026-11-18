@@ -9,7 +9,6 @@ import { useTelaPequena } from "@/components/client/useTelaPequena";
 import { toast } from "sonner";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 import {
-  CabecalhoDePagina,
   CampoDeFormulario,
   Carregando,
   EstadoDeErro,
@@ -18,21 +17,31 @@ import {
   botao,
   campo,
   campoTexto,
-  etiqueta,
+  espaco,
   foco,
   juntar,
-  lista,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
+import { Card, Chip, PageHeader, StatusPill, type Tone } from "@/components/ds";
+import { Bolha, type TomDaBolha } from "@/components/client/pecasOusadas";
 
-const statusBadge: Record<string, { cls: string; label: string }> = {
+const statusBadgeBase: Record<string, { cls: string; label: string }> = {
   new: { cls: "bg-info/10 text-info", label: "Aberto" },
   open: { cls: "bg-info/10 text-info", label: "Aberto" },
   in_progress: { cls: "bg-warning/10 text-warning", label: "Em Andamento" },
   done: { cls: "bg-success/10 text-success", label: "Concluído" },
   completed: { cls: "bg-success/10 text-success", label: "Concluído" },
 };
+
+/** O tom da pílula de estado de cada situação (a aparência; o rótulo vem do mapa acima). */
+const tomDoStatus: Record<string, Tone> = { new: "info", open: "info", in_progress: "warning", done: "success", completed: "success" };
+const statusBadge: Record<string, { tone: Tone; label: string }> = {};
+Object.keys(statusBadgeBase).forEach((k) => {
+  statusBadge[k] = { tone: tomDoStatus[k] || "info", label: statusBadgeBase[k].label };
+});
+
+const tomDaBolhaDoStatus: Record<Tone, TomDaBolha> = { info: "info", warning: "alerta", success: "sucesso", danger: "perigo", accent: "marca", neutral: "neutro" };
 
 const priorityBadge: Record<string, { cls: string; label: string }> = {
   low: { cls: "bg-muted text-muted-foreground", label: "Baixa" },
@@ -135,12 +144,12 @@ export default function ClientRequests() {
   // No celular as 4 opções não cabem lado a lado sem cortar: vira lista.
 
   return (
-    <div className="min-w-0 space-y-5">
-      <CabecalhoDePagina
-        titulo="Pedidos"
-        descricao={todos.length ? `${emAberto} em aberto de ${todos.length}` : undefined}
-        ajuda="Peça um ajuste ou algo novo para a equipe. Cada pedido mostra em que pé está: aberto, em andamento ou concluído."
-        acoes={
+    <div className={espaco.pagina}>
+      <PageHeader
+        title="Pedidos"
+        subtitle={todos.length ? `${emAberto} em aberto de ${todos.length}` : undefined}
+        help="Peça um ajuste ou algo novo para a equipe. Cada pedido mostra em que pé está: aberto, em andamento ou concluído."
+        actions={
           (todos.length > 0 || !isImpersonating) && (
             <>
               {/* O filtro sobe para a linha do título (seletor pequeno não ganha linha própria). */}
@@ -170,6 +179,28 @@ export default function ClientRequests() {
         }
       />
 
+      {/* Celular: os três números numa faixa só; tocar filtra (tocar de novo volta para todos). */}
+      {!isLoading && pequena && todos.length > 0 && (
+        <div role="group" aria-label="Resumo dos pedidos" className="grid min-w-0 grid-cols-3 gap-2">
+          {([
+            { chave: "abertos", rotulo: "Abertos", classe: "bg-accent-solid text-on-accent", apagado: "text-on-accent/80" },
+            { chave: "andamento", rotulo: "Andamento", classe: "bg-foreground text-background", apagado: "text-background/70" },
+            { chave: "concluidos", rotulo: "Concluídos", classe: "bg-card text-foreground shadow-sm", apagado: "text-muted-foreground" },
+          ] as const).map((n) => (
+            <button
+              key={n.chave}
+              type="button"
+              aria-pressed={filtro === n.chave}
+              onClick={() => setFiltro(filtro === n.chave ? "todos" : n.chave)}
+              className={juntar("flex min-w-0 flex-col rounded-[20px] px-3.5 py-3 text-left transition-transform active:scale-[0.98]", n.classe, filtro === n.chave && "ring-2 ring-ring ring-offset-2 ring-offset-background", foco)}
+            >
+              <span className="text-[26px] font-semibold leading-8 tabular-nums tracking-[-0.02em]">{contagem[n.chave]}</span>
+              <span className={juntar("min-w-0 truncate text-[12px] font-medium leading-4", n.apagado)}>{n.rotulo}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {isLoading ? (
         <Carregando linhas={3} rotulo="Carregando pedidos" />
       ) : isError && todos.length === 0 ? (
@@ -191,7 +222,8 @@ export default function ClientRequests() {
       ) : visiveis.length === 0 ? (
         <EstadoVazio compacto titulo="Nenhum pedido neste filtro." />
       ) : (
-        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Seus pedidos">
+        <Card flush>
+        <ul className="min-w-0 divide-y divide-border/70 px-2 py-2 sm:px-3" aria-label="Seus pedidos">
           {visiveis.map((r: any) => {
             const status = statusBadge[r.status] || statusBadge.new;
             const prio = priorityBadge[r.priority] || priorityBadge.normal;
@@ -201,38 +233,45 @@ export default function ClientRequests() {
                   <button
                     type="button"
                     onClick={() => setPedidoAberto(r)}
-                    className={juntar("flex min-h-[56px] w-full min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors active:bg-muted/40", foco)}
+                    className={juntar("flex min-h-[64px] w-full min-w-0 items-center rounded-md px-2 py-3.5 text-left transition-colors active:bg-muted/60", foco)}
                   >
+                    <Bolha tom={tomDaBolhaDoStatus[status.tone]} className="mr-3"><MessageSquarePlus className="h-4 w-4" /></Bolha>
                     <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center">
-                        <span className="mr-2 min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-foreground">{r.title}</span>
-                        <span className={juntar(etiqueta, status.cls)}>{status.label}</span>
-                      </span>
-                      <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
-                        {formatDate(r.created_at)} · Prioridade {prio.label.toLowerCase()}
+                      <span className="block min-w-0 text-[14px] font-medium leading-5 text-foreground line-clamp-2 [overflow-wrap:anywhere]">{r.title}</span>
+                      <span className="mt-1.5 flex min-w-0 items-center">
+                        <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                        <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>
+                          {formatDate(r.created_at)}
+                          {(r.priority === "high" || r.priority === "urgent") && ` · ${prio.label}`}
+                        </span>
                       </span>
                     </span>
-                    <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   </button>
                 </li>
               );
             }
             return (
-              <li key={r.id} className="min-w-0 px-2 py-3.5">
-                <div className="flex min-w-0 items-start justify-between">
-                  <p className="mr-3 min-w-0 flex-1 text-[13px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">{r.title}</p>
-                  <span className={juntar(etiqueta, "mt-0.5", status.cls)}>{status.label}</span>
+              <li key={r.id} className="flex min-w-0 items-start rounded-lg px-3 py-4 transition-colors hover:bg-muted/60">
+                <Bolha tom={tomDaBolhaDoStatus[status.tone]} className="mr-4"><MessageSquarePlus className="h-4 w-4" /></Bolha>
+                <div className="min-w-0 flex-1">
+                  <p className="min-w-0 text-[15px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">{r.title}</p>
+                  {r.description && <p className={juntar(texto.corpo, "mt-1 text-muted-foreground [overflow-wrap:anywhere]")}>{r.description}</p>}
+                  <p className={juntar(texto.auxiliar, "mt-2 flex min-w-0 items-center")}>
+                    {formatDate(r.created_at)}
+                    <span className="mx-1.5" aria-hidden="true">·</span>
+                    Prioridade {prio.label.toLowerCase()}
+                  </p>
                 </div>
-                {r.description && <p className={juntar(texto.corpo, "mt-1 text-muted-foreground [overflow-wrap:anywhere]")}>{r.description}</p>}
-                <p className={juntar(texto.auxiliar, "mt-1.5")}>
-                  {formatDate(r.created_at)}
-                  <span className="mx-1.5" aria-hidden="true">·</span>
-                  Prioridade {prio.label.toLowerCase()}
-                </p>
+                <span className="ml-4 flex shrink-0 items-center">
+                  {(r.priority === "high" || r.priority === "urgent") && <Chip tone={r.priority === "urgent" ? "danger" : "warning"} className="mr-2">{prio.label}</Chip>}
+                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                </span>
               </li>
             );
           })}
         </ul>
+        </Card>
       )}
 
       {/* Celular: "Novo pedido" fixo no pé, ao alcance do polegar. */}
@@ -255,7 +294,7 @@ export default function ClientRequests() {
         {pedidoAberto && (
           <>
             <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-2">
-              <span className={juntar(etiqueta, (statusBadge[pedidoAberto.status] || statusBadge.new).cls)}>{(statusBadge[pedidoAberto.status] || statusBadge.new).label}</span>
+              <StatusPill tone={(statusBadge[pedidoAberto.status] || statusBadge.new).tone}>{(statusBadge[pedidoAberto.status] || statusBadge.new).label}</StatusPill>
               <span className={texto.auxiliar}>
                 {formatDate(pedidoAberto.created_at)} · Prioridade {(priorityBadge[pedidoAberto.priority] || priorityBadge.normal).label.toLowerCase()}
               </span>

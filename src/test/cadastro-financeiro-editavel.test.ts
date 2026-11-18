@@ -15,20 +15,24 @@ const drawer = ler("src/components/admin/EditClientDrawer.tsx");
  * até alguém caçar a linha no banco.
  */
 
+const regra = readFileSync(resolve(process.cwd(), "src/lib/primeiraMensalidade.ts"), "utf8");
+
 describe("o cadastro pergunta em vez de presumir", () => {
-  it("a mensalidade tem a escolha recebida/vai pagar", () => {
-    expect(modal).toContain("mensalidadeRecebida");
+  // 12/11/2026: a escolha ganhou "Dividida" e as contas foram para src/lib/primeiraMensalidade.ts.
+  it("a mensalidade tem a escolha recebida, dividida ou vai pagar", () => {
+    expect(modal).toContain("modoDaPrimeira");
     expect(modal).toContain("Vai pagar");
-    expect(modal).toContain('mensalidadeRecebida ? "paid" : "pending"');
+    expect(modal).toContain("Dividida");
+    expect(regra).toContain('status: recebida ? "paid" : "pending"');
   });
 
   it("mensalidade não recebida nasce pendente e sem data de pagamento", () => {
-    expect(modal).toContain("paid_date: mensalidadeRecebida ? todayStr : null");
-    expect(modal).toContain("paid_amount: mensalidadeRecebida ? planValueNum : null");
+    expect(regra).toContain("paid_date: recebida ? hoje : null");
+    expect(regra).toContain("paid_amount: recebida ? valor : null");
   });
 
   it("recebido continua sendo o padrão — o caso comum não ganha passo extra", () => {
-    expect(modal).toContain("const [mensalidadeRecebida, setMensalidadeRecebida] = useState(true)");
+    expect(modal).toContain('useState<ModoDaPrimeira>("recebida")');
     expect(modal).toContain("const [entradaRecebida, setEntradaRecebida] = useState(true)");
   });
 });

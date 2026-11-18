@@ -37,9 +37,11 @@ import {
 } from "@/lib/comercial";
 import { CampoDeBusca } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "./useEstadoDoComercial";
+import { ProgressBar } from "@/components/ds";
 import Termometro from "./Termometro";
 import { resumoDaOportunidade, totalDoGanho, valorDaOportunidade, type ResumoDaOportunidade } from "./resumoDaOportunidade";
 import JanelaDoGanho from "./JanelaDoGanho";
+import { naConta, escopoDoCrm } from "@/lib/comercial/escopo";
 import {
   FAIXAS_DO_FILTRO,
   LIMITES_DA_TEMPERATURA,
@@ -115,6 +117,14 @@ export const passaNoFiltroDeQuemAtende = (lead: { agente_slug?: string | null },
 const SEM_EVENTOS: EventoDoLead[] = [];
 
 /** 04/11/2026: Ganho e Perdido são colunas, como Fechados e Perdidos no funil do Freela. */
+/** No CRM da empresa o cartão mostra quem cuida do negócio. */
+function nomeDoResponsavelNaConta(id: string | null): string {
+  const e = escopoDoCrm();
+  if (!id) return "Sem responsável";
+  const pessoa = e.modo === "conta" ? e.equipe.filter((p) => p.id === id)[0] : null;
+  return pessoa ? pessoa.nome : "Responsável fora da equipe";
+}
+
 const COLUNAS_DO_QUADRO: EstagioId[] = [...ESTAGIOS_ABERTOS, "ganho", "perdido"];
 
 export default function FunilKanban({
@@ -264,7 +274,8 @@ export default function FunilKanban({
     // Fechar pede contexto: o motivo da perda é o que ensina o próximo lead,
     // e o cliente do ganho é a ponte para o financeiro responder quanto
     // aquele lead virou.
-    if (destino === "ganho" || destino === "perdido") {
+    // No CRM da empresa o ganho não cria cadastro na casa: move direto.
+    if (destino === "perdido" || (destino === "ganho" && !naConta())) {
       setFechamento({ lead, destino });
       return;
     }
@@ -308,6 +319,8 @@ export default function FunilKanban({
       aria-label="Filtros do funil"
     >
         {filtrosAntes}
+        {/* A classe (cliente atual, upsell, novo prospect) é um conceito da casa: no CRM da empresa não aparece. */}
+        {!naConta() && (
         <SeletorCompacto
           rotulo="Classe"
           icone={<ListFilter className="h-3.5 w-3.5" />}
@@ -315,6 +328,8 @@ export default function FunilKanban({
           valor={classe}
           onEscolher={setClasse}
         />
+        )}
+        {!naConta() && (
         <SeletorCompacto
           rotulo="Quem atende"
           modo="lista"
@@ -327,6 +342,7 @@ export default function FunilKanban({
           valor={quemAtende}
           onEscolher={setQuemAtende}
         />
+        )}
         <SeletorCompacto
           rotulo="Temperatura"
           modo="lista"
@@ -367,13 +383,15 @@ export default function FunilKanban({
           <EstadoVazio
             icone={<KanbanSquare className="h-5 w-5" />}
             titulo="O funil está vazio"
-            descricao="Cadastre quem já está em conversa ou traga quem preencheu o diagnóstico."
+            descricao={naConta() ? "Cadastre quem já está em conversa ou busque empresas na Máquina de leads." : "Cadastre quem já está em conversa ou traga quem preencheu o diagnóstico."}
             acao={
               // 16/10/2026: só o ícone (os mesmos do título), nome no title.
               <div className="flex flex-wrap items-center justify-center [&>*]:m-1">
+                {!naConta() && (
                 <button type="button" onClick={onImportar} disabled={importando} className={juntar(botao.icone, "disabled:opacity-50")} aria-label="Trazer do diagnóstico" title="Trazer do diagnóstico">
                   <Download className="h-4 w-4" aria-hidden="true" />
                 </button>
+                )}
                 <button type="button" onClick={onNovo} className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label="Novo lead" title="Novo lead">
                   <Plus className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -493,6 +511,8 @@ function Coluna({
           ? totalDoGanho(leads)
           : estagio === "perdido"
           ? emJogo > 0 ? dinheiro(emJogo) : "vazio"
+          : naConta()
+          ? emJogo > 0 ? dinheiro(emJogo) : "vazio"
           : `${emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}${leads.length > 0 ? ` · ${qualificadas}/${leads.length} qualificadas` : ""}`
       }
       visivelNoCelular={visivelNoCelular}
@@ -554,12 +574,13 @@ function Cartao({
           num círculo, nome, uma linha de apoio (empresa ou valor) e o sinal à
           direita. Classe e próximo passo ficam para dentro do lead. */}
       <div className="flex items-start max-sm:items-center">
-        <GripVertical className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50 max-sm:hidden" aria-hidden="true" />
+        {/* Rodada ousada (15/11/2026): a inicial num círculo em toda largura, valor em número forte,
+            a chance da etapa em barra e o próximo passo em pílula. */}
         <span
           aria-hidden="true"
           className={juntar(
-            "mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold sm:hidden",
-            atrasado ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary",
+            "mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold",
+            atrasado ? "bg-warning-soft text-warning" : lead.stage === "ganho" ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground",
           )}
         >
           {(lead.name.trim().charAt(0) || "?").toUpperCase()}
@@ -568,11 +589,11 @@ function Cartao({
           {/* Nome e termômetro na mesma linha: a temperatura (com o porquê
               no title) é a primeira leitura depois de quem é. */}
           <div className="flex min-w-0 items-center">
-            <p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground max-sm:text-[14px]">
+            <p className="min-w-0 flex-1 truncate text-[14px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
               {lead.name}
             </p>
             {lead.agente_slug === "mercurio" && (
-              <span className="ml-1.5 inline-flex shrink-0 items-center rounded bg-primary/10 px-1 text-[11px] font-medium leading-4 text-primary" title="O Mercúrio atende este lead" data-selo-mercurio="">
+              <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-accent-soft px-1.5 text-[11px] font-medium leading-none text-primary" title="O Mercúrio atende este lead" data-selo-mercurio="">
                 <Bot className="mr-0.5 h-3 w-3" aria-hidden="true" />
                 Mercúrio
               </span>
@@ -582,38 +603,59 @@ function Cartao({
           {lead.company && (
             <p className={juntar(texto.auxiliar, "truncate")}>{lead.company}</p>
           )}
+          {naConta() ? (
+            <p className={juntar("mt-1 flex min-w-0 items-center truncate text-[11px] leading-4 max-sm:hidden", lead.owner_id ? "text-muted-foreground" : "font-medium text-warning")} data-responsavel-no-cartao="">
+              {lead.faixa && (
+                <span
+                  className={juntar("mr-1.5 inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-semibold capitalize leading-none", lead.faixa === "quente" ? "bg-danger-soft text-destructive" : lead.faixa === "morno" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground")}
+                  title={`Nota ${lead.nota ?? 0} de 100${lead.nota_motivos && lead.nota_motivos.length ? `: ${lead.nota_motivos.join("; ")}` : ""}`}
+                  data-faixa-do-lead={lead.faixa}
+                >
+                  {lead.faixa}
+                </span>
+              )}
+              <span className="min-w-0 truncate">{lead.fila_desde && !lead.owner_id ? "Na fila do rodízio" : lead.nutricao && !lead.owner_id ? "Em nutrição" : nomeDoResponsavelNaConta(lead.owner_id)}</span>
+            </p>
+          ) : (
           <p className={juntar("mt-0.5 truncate text-[11px] leading-4 max-sm:hidden", lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
             {rotuloDaClasse(lead.classe)}
           </p>
-          <p className={juntar("mt-1 truncate text-[12px] font-medium tabular-nums text-primary", lead.company ? "max-sm:hidden" : "max-sm:mt-0")} title={valorDaOportunidade(lead)}>
+          )}
+          <p className={juntar("mt-2 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] tabular-nums text-foreground", lead.company ? "max-sm:hidden" : "max-sm:mt-0 max-sm:text-[12px] max-sm:font-medium max-sm:text-muted-foreground")} title={valorDaOportunidade(lead)}>
             {valorDaOportunidade(lead)}
           </p>
-          {/* Resumo rápido: chance da etapa e há quanto tempo está nela. */}
-          <p className="mt-0.5 truncate text-[11px] tabular-nums leading-4 text-muted-foreground max-sm:hidden" title={`Chance de fechar nesta etapa: ${resumo.chance}%`}>
-            {resumo.chance}% · {resumo.tempoNaEtapa}
-          </p>
+          {/* Resumo rápido: chance da etapa (em barra) e há quanto tempo está nela. */}
+          <div className="mt-2 min-w-0 max-sm:hidden" title={`Chance de fechar nesta etapa: ${resumo.chance}%`}>
+            {!fechado && <ProgressBar value={resumo.chance} max={100} height={4} tone={1} label={`Chance de fechar nesta etapa: ${resumo.chance}%`} />}
+            <p className={juntar("truncate text-[11px] tabular-nums leading-4 text-muted-foreground", !fechado && "mt-1.5")}>
+              {resumo.chance}% · {resumo.tempoNaEtapa}
+            </p>
+          </div>
           {/* O compromisso marcado, não uma anotação: é o que diz se este
               lead tem alguém cuidando dele. Com o quando, para não precisar
               abrir o lead para saber se é hoje. */}
-          {lead.stage === "ganho" && !lead.won_client_id && (
-            <p className="mt-1 text-[11px] font-medium leading-4 text-warning" data-falta-cadastrar="">Falta cadastrar o cliente</p>
+          {lead.stage === "ganho" && !lead.won_client_id && !naConta() && (
+            <p className="mt-2 inline-flex h-6 max-w-full items-center rounded-full bg-warning-soft px-2.5 text-[11px] font-medium leading-none text-warning" data-falta-cadastrar="">Falta cadastrar o cliente</p>
           )}
           {fechado ? (
-            lead.lost_reason ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground max-sm:hidden">{lead.lost_reason}</p> : null
+            lead.lost_reason ? <p className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground max-sm:hidden">{lead.lost_reason}</p> : null
           ) : agenda.proxima ? (
             <p
               className={juntar(
-                "mt-1 truncate text-[11px] leading-4 max-sm:hidden",
-                atrasado ? "font-medium text-warning" : "text-muted-foreground",
+                "mt-2 flex h-6 min-w-0 max-w-full items-center rounded-full px-2.5 text-[11px] leading-none max-sm:hidden",
+                atrasado ? "bg-warning-soft font-medium text-warning" : "bg-muted text-muted-foreground",
               )}
               title={`${rotuloDaAtividade(agenda.proxima.kind)}: ${agenda.proxima.title}${resumo.quando ? ` · ${resumo.quando}` : ""}`}
             >
-              {atrasado ? "Atrasado: " : `${rotuloDaAtividade(agenda.proxima.kind)}: `}
-              {agenda.proxima.title}
-              {resumo.quando && !atrasado ? ` · ${resumo.quando}` : ""}
+              <Clock className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 truncate">
+                {atrasado ? "Atrasado: " : `${rotuloDaAtividade(agenda.proxima.kind)}: `}
+                {agenda.proxima.title}
+                {resumo.quando && !atrasado ? ` · ${resumo.quando}` : ""}
+              </span>
             </p>
           ) : (
-            <p className="mt-1 text-[11px] italic leading-4 text-muted-foreground/70 max-sm:hidden">
+            <p className="mt-2 text-[11px] italic leading-4 text-muted-foreground/70 max-sm:hidden">
               sem próximo passo
             </p>
           )}

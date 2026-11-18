@@ -138,8 +138,8 @@ const ClientWelcomeEmail = ({
                 {new URL(PORTAL_URL).hostname}
               </Link>
               {' · '}
-              <Link href="mailto:contato@aceleriq.com.br" style={footerLink}>
-                contato@aceleriq.com.br
+              <Link href="mailto:contato@aceleriq.com" style={footerLink}>
+                contato@aceleriq.com
               </Link>
             </Text>
           </Section>

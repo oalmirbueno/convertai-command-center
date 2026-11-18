@@ -133,7 +133,7 @@ describe("meta de clientes recorrentes lida do Financeiro", () => {
 
   it("o realizado é a contagem do Financeiro, não uma conta sobre o funil", () => {
     // Dez leads ganhos no funil não mudam o número: só a contagem passada,
-    // que vem de financial_entries, vale.
+    // que vem do recebido do Financeiro, vale.
     const leads = Array.from({ length: 10 }, (_, i) =>
       leadDe({ id: `l${i}`, stage: "ganho", closed_at: "2026-08-10T00:00:00Z" }),
     );
@@ -147,11 +147,10 @@ describe("meta de clientes recorrentes lida do Financeiro", () => {
     expect(feito).toBe(3);
   });
 
-  it("a leitura no banco exige regra de recorrência e cliente, sem cancelados", () => {
+  it("recorrente é cliente com mensalidade (renewal) recebida no mês", () => {
     const lib = readFileSync("src/lib/comercial.ts", "utf8");
-    expect(lib).toContain('.not("recurring_rule_id", "is", null)');
-    expect(lib).toContain('.not("client_id", "is", null)');
-    const trecho = lib.slice(lib.indexOf("clientesRecorrentesDoMes"));
-    expect(trecho).toContain('.is("cancelled_at", null)');
+    const trecho = lib.slice(lib.indexOf("export async function recebidoDoMes"), lib.indexOf("export async function receitaDoMes"));
+    expect(trecho).toContain('c.type === "renewal"');
+    expect(trecho).toContain("recorrentes.add(String(c.client_id))");
   });
 });

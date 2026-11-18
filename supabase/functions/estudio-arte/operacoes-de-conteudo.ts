@@ -19,6 +19,9 @@
  *   redator (sem laço). As mudanças seguem o contrato de sempre: ordem clara
  *   vai direto com Desfazer; senão, Confirmar.
  * - adicionar_lamina: lâmina NOVA com outro texto (não a cópia).
+ * - tirar_lamina: os números citados no pedido são lidos em código
+ *   (laminasParaTirar) e viram a reserva da proposta quando o diretor não
+ *   devolve a ação (uma ou várias lâminas no mesmo pedido).
  *
  * Puro (sem Deno): a função e os testes leem o mesmo arquivo.
  * Sem lookbehind, propriedade Unicode ou grupo nomeado em regex (Safari 11).
@@ -56,10 +59,98 @@ export function intencaoDeConteudo(mensagem: string): IntencaoDeConteudo | null 
     /(outro|novo) (tema|assunto|conteudo)\b/.test(m) ||
     /(refaz|refaca|reescrev)[a-z]* tudo\b/.test(m)
   ) return "reescrever_tudo";
-  if (/(tir|remov|apag|exclu|delet)[a-z]* (a |o |essa |esse |esta |este )?(\d+[a-z]* )?(lamina|card|slide)/.test(m)) return "tirar_lamina";
+  if (/(tir|remov|apag|exclu|delet)[a-z]* (as? |os? |ess[ae]s? |est[ae]s? )?(\d+[a-z]* )?(lamina|card|slide)/.test(m)) return "tirar_lamina";
   if (/(reorden|invert)[a-z]*|(muda|troca|mude|troque) a ordem|(move|mova|passa|passe) a (lamina|card|slide)/.test(m)) return "reordenar";
   if (new RegExp(`${VERBO_DE_REESCRITA} (o |a )?${ALVO_DO_CONTEUDO}`).test(m)) return "reescrever_lamina";
   return null;
+}
+
+const VERBO_DE_TIRAR = "(tir|retir|remov|apag|exclu|delet)[a-z]*";
+const NOME_DA_LAMINA = "(laminas?|cards?|slides?)";
+const NUMERO_DA_LAMINA = "(\\d{1,2})(?!\\d)";
+/**
+ * Negação logo antes do verbo de tirar: "não tira", "não precisa mais tirar", "não quero mais tirar", "nunca vamos
+ * tirar", "sem tirar", "nem precisa tirar". Só palavras de apoio conhecidas entre a negação e o verbo (vírgula corta:
+ * "não, tira a lâmina 3" vale como pedido).
+ */
+const APOIO_DA_NEGACAO = "(e|pode|podes|podem|precisa|precisam|precisamos|preciso|quero|queria|quer|querem|queremos|deve|devo|devemos|deveria|vai|vou|vamos|para|pra|de|mais|mesmo|ainda|tem|temos|que|e pra|e para|precisar|voce|voces|a gente|eu|nos|se|e necessario|faz sentido|da|consigo|e preciso)";
+const NEGACAO_ANTES_DO_VERBO = new RegExp(`(^|[^a-z])(nao|nunca|sem|nem|jamais)( ${APOIO_DA_NEGACAO})* $`);
+
+/** Depois do número, o que mostra que ele não é uma lâmina ("3 fotos", "2x", "50%"). */
+const NAO_E_LAMINA = /^([a-z%]| ?(fotos?|imagem|imagens|versao|versoes|vez|vezes|linhas?|palavras?|itens|item|logos?|textos?|opcoes|opcao|por cento)\b)/;
+
+/**
+ * As lâminas que a mensagem manda tirar, pelos números escritos nela (sem rede), na ordem em que aparecem e sem
+ * repetir: "tira a lâmina 3", "tirar lâmina 7 e tirar lâmina 6", "tirar as lâminas 6 e 7", "tira as lâminas 2 a 4".
+ * Cuidadoso de propósito: só número ligado ao verbo de tirar e à palavra lâmina (card, slide); nada de adivinhar
+ * "a última" ou "a do café" (isso é do diretor). Frase negada ("não tira a lâmina 3") ou pergunta não conta.
+ * Número que não é lâmina do trabalho (`ordens`) fica de fora; na dúvida sobre um número, a frase inteira sai.
+ */
+export function laminasParaTirar(mensagem: string, ordens: number[]): number[] {
+  const m = semAcento(mensagem).replace(/[ \t]+/g, " ");
+  const citadas: number[] = [];
+  const cita = (n: number) => { if (ordens.indexOf(n) >= 0 && citadas.indexOf(n) < 0) citadas.push(n); };
+  // Frase a frase (o ponto de "n. 3" não é fim de frase).
+  const frases = m.replace(/([!?\n;]+|\.(?!\d)(?! ?\d))/g, "$1\u0001").split("\u0001");
+  for (const frase of frases) {
+    if (/\?\s*$/.test(frase)) continue;
+    // Escolha ("tira a lâmina 3 ou tira a lâmina 4", "a 3 ou a 4"): a frase inteira não monta lista; a equipe decide.
+    if (/(^|[^a-z])ou([^a-z]|$)/.test(frase) && new RegExp(`(^|[^a-z])${VERBO_DE_TIRAR}`).test(frase)) continue;
+    const verbo = new RegExp(`(^|[^a-z])${VERBO_DE_TIRAR} (fora )?(as? |os? |ess[ae]s? |est[ae]s? )?`, "g");
+    let v: RegExpExecArray | null;
+    while ((v = verbo.exec(frase))) {
+      const antes = frase.slice(0, v.index + v[1].length);
+      if (NEGACAO_ANTES_DO_VERBO.test(antes)) continue;
+      const resto = frase.slice(v.index + v[0].length);
+      // "a 3ª lâmina", "o 2o card".
+      const ordinal = new RegExp(`^${NUMERO_DA_LAMINA}[ªºa-z]{0,2} ${NOME_DA_LAMINA}\\b`).exec(resto);
+      if (ordinal) {
+        cita(Number(ordinal[1]));
+        continue;
+      }
+      // "lâmina 3", "lâminas 6 e 7", "lâminas 2, 4 e a 5", "lâminas 2 a 4".
+      const nome = new RegExp(`^${NOME_DA_LAMINA} (numero |n[.º°]? ?)?`).exec(resto);
+      if (!nome) continue;
+      let pos = nome[0].length;
+      const numeros: number[] = [];
+      let duvida = false;
+      let primeiro = true;
+      while (true) {
+        const ligacao = primeiro ? /^/ : new RegExp(`^ ?(,|e|mais|&|\\+|, e) ?(tambem )?(as? |os? )?(${NOME_DA_LAMINA} )?(?=\\d)`);
+        const l = ligacao.exec(resto.slice(pos));
+        const faixa = primeiro ? null : /^ ?(a|ate|ate a|-) ?(?=\d)/.exec(resto.slice(pos));
+        if (!l && !faixa) break;
+        const depois = pos + (l ? l[0].length : (faixa as RegExpExecArray)[0].length);
+        const n = new RegExp(`^${NUMERO_DA_LAMINA}`).exec(resto.slice(depois));
+        if (!n) {
+          // Sem número depois da palavra lâmina, ou número com mais de dois dígitos ("2026"): não é lâmina.
+          if (primeiro || /^\d/.test(resto.slice(depois))) duvida = true;
+          break;
+        }
+        const fim = depois + n[0].length;
+        if (NAO_E_LAMINA.test(resto.slice(fim))) {
+          duvida = true;
+          break;
+        }
+        const valor = Number(n[1]);
+        if (l) numeros.push(valor);
+        else {
+          const de = numeros[numeros.length - 1];
+          if (valor <= de || valor - de > 10) {
+            duvida = true;
+            break;
+          }
+          for (let k = de + 1; k <= valor; k++) numeros.push(k);
+        }
+        pos = fim;
+        primeiro = false;
+      }
+      // "a lâmina 3 ou 4" é escolha, não lista: a equipe decide.
+      if (/^ ?ou\b/.test(resto.slice(pos))) duvida = true;
+      if (!duvida) numeros.forEach(cita);
+    }
+  }
+  return citadas;
 }
 
 /** As operações que um pedido de reescrita total nunca usa (mudam a quantidade de lâminas). */

@@ -15,15 +15,9 @@ body {
   touch-action: manipulation;
 }
 
-/* GPU acceleration for animated elements */
-.sidebar,
-.notif-panel,
-.modal,
-[data-state="open"] {
-  will-change: transform;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-}
+/* v4: saiu o will-change em tudo que tem data-state="open" (abas, sanfonas,
+   seletores): cada um virava uma camada de composição à toa e pesava a rolagem
+   no celular. Quem anima de verdade (folhas e janelas) já anima só transform. */
 
 /* ═══ MOBILE (< 768px) ═══ */
 @media (max-width: 768px) {

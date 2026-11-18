@@ -24,6 +24,8 @@ import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMess
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
 import FaixaDeAchados from "@/components/achados/FaixaDeAchados";
+import { AnelDeProgresso } from "@/components/execucao/Visuais";
+import PrimeiraLeitura, { EsqueletoDeCartoes } from "@/components/execucao/PrimeiraLeitura";
 import { useAchados } from "@/hooks/useAchados";
 import RadarDeIdeias from "@/components/central/RadarDeIdeias";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
@@ -194,6 +196,9 @@ interface DraftPreview {
   clientName: string;
   draft: any;
 }
+
+/** v4 (15/11): leituras que a aba Carteira espera responder UMA vez antes de aparecer (ver PrimeiraLeitura). */
+const LEITURAS_DA_CARTEIRA = [["achados"], ["dia-prioritario"], ["cycle-rituals-central"], ["exp-pending-approvals"], ["exp-ads-wallets"]] as const;
 
 export default function AdminExperience({ cycleReview = false }: { cycleReview?: boolean }) {
   const navigate = useNavigate();
@@ -2430,31 +2435,33 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             // 16/10/2026 (dono, celular: "muito poluído"): abaixo de 640 px a saudação some e fica só o ritual do dia.
             descricao={<span data-faixa-da-central=""><span className="hidden sm:inline">{greeting}, {(profile?.full_name || "").split(" ")[0] || "time"} · {weekday}, dia</span><span className="sm:hidden">Dia</span> de <span className="font-medium text-primary">{todayRitual.label}</span></span>}
             acoes={
+              /* v4 (15/11, passada estrutural): UMA ação principal (gerar as mensagens do dia), o agente, e o resto no "…". */
               <>
-                <button type="button" onClick={() => void refreshCentral()} aria-label="Atualizar os dados" title={refreshing ? "Atualizando..." : `Dados de ${lastSyncLabel}. Toque para ler de novo`} className={botao.icone}>
-                  <RefreshCw className={`h-[18px] w-[18px] ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-                </button>
-                {activeTab !== "radar" && (
-                  <button type="button" onClick={() => setTelaCheia((v) => !v)} aria-pressed={telaCheia} aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"} title={telaCheia ? "Sair da tela cheia" : "Tela cheia"} className={juntar(botao.icone, "max-sm:hidden")}>
-                    {telaCheia ? <Minimize2 className="h-[18px] w-[18px]" aria-hidden="true" /> : <Maximize2 className="h-[18px] w-[18px]" aria-hidden="true" />}
-                  </button>
-                )}
                 <AgenteDaCentral />
-                {profile?.role === "admin" && (
-                  <Link to="/central/mensagens" className={juntar(botao.icone, "relative", mensagensProntas > 0 && "text-primary")} aria-label={`Mensagens da semana${mensagensProntas ? `: ${mensagensProntas} prontas` : ""}`} title={mensagensProntas ? `Mensagens da semana: ${mensagensProntas} prontas para aprovar` : "Mensagens da semana"} data-atalho-mensagens="">
+                {profile?.role === "admin" && mensagensProntas > 0 && (
+                  <Link to="/central/mensagens" className={juntar(botao.icone, "relative text-primary")} aria-label={`Mensagens da semana: ${mensagensProntas} prontas`} title={`Mensagens da semana: ${mensagensProntas} prontas para aprovar`} data-atalho-mensagens="">
                     <MessagesSquare className="h-[18px] w-[18px]" aria-hidden="true" />
-                    {mensagensProntas > 0 && <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none tabular-nums text-primary-foreground" aria-hidden="true">{mensagensProntas}</span>}
+                    <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none tabular-nums text-primary-foreground" aria-hidden="true">{mensagensProntas}</span>
                   </Link>
                 )}
+                <MenuMais
+                  rotulo="Mais ações da Central"
+                  itens={[
+                    { rotulo: refreshing ? "Atualizando…" : "Atualizar os dados", icone: <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />, dica: `Dados de ${lastSyncLabel}`, aoEscolher: () => void refreshCentral() },
+                    activeTab !== "radar" && { rotulo: telaCheia ? "Sair da tela cheia" : "Tela cheia", icone: telaCheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => setTelaCheia((v) => !v) },
+                    profile?.role === "admin" && { rotulo: "Mensagens da semana", icone: <MessagesSquare className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => navigate("/central/mensagens") },
+                  ]}
+                />
                 <button
                   type="button"
                   data-tour="central-gerador"
                   aria-label="Gerar mensagens de hoje"
                   title="Gerar mensagens de hoje"
                   onClick={() => { setGenClientId(reviewClientId || "__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
-                  className={juntar(botao.icone, "text-primary")}
+                  className={juntar(botao.primario, "ml-1 h-10 shrink-0 rounded-full px-4 text-[13px] font-semibold max-sm:h-9 max-sm:w-9 max-sm:px-0")}
                 >
-                  <Sparkles className="h-[18px] w-[18px]" aria-hidden="true" />
+                  <Sparkles className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                  <span className="max-sm:sr-only">Gerar mensagens</span>
                 </button>
               </>
             }
@@ -2493,7 +2500,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           { chave: "pagamentos", valor: financialAlerts, rotulo: financialAlerts === 1 ? "pagamento vencido" : "pagamentos vencidos", icone: <BadgeDollarSign className="h-3.5 w-3.5" />, cor: "text-destructive", tab: "carteira" },
           { chave: "rascunhos", valor: draftReports.length, rotulo: draftReports.length === 1 ? "rascunho na fila" : "rascunhos na fila", icone: <FileText className="h-3.5 w-3.5" />, cor: "text-primary", tab: "fila" },
           { chave: "oportunidades", valor: opportunities.length, rotulo: opportunities.length === 1 ? "oportunidade" : "oportunidades", icone: <Lightbulb className="h-3.5 w-3.5" />, cor: "text-info", tab: "radar" },
-        ].filter((n) => n.valor > 0);
+        // v4 (15/11, passada estrutural): a ficha some na aba que já mostra aquele número (achados, saúde, fila, radar); só aponta para as OUTRAS abas.
+        // Rascunhos e oportunidades já são o contador da própria aba (Fila, Radar): não repetem aqui.
+        ].filter((n) => n.valor > 0 && n.tab !== activeTab && n.tab === "carteira");
         // 16/10/2026 (dono, celular: "cara de aplicativo"): abaixo de 640 px a linha das abas gruda no
         // topo da área (a raiz se estende até a borda para o fundo cobrir o que rola por baixo) e só os
         // dois números mais importantes ficam à vista; o resto aparece do celular deitado para cima.
@@ -2516,7 +2525,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     title={`${f.valor} ${f.rotulo}`}
                     aria-label={`${f.valor} ${f.rotulo}`}
                     onClick={() => setActiveTab(f.tab)}
-                    className={juntar("inline-flex h-8 shrink-0 items-center rounded-full px-2 text-[12px] font-semibold tabular-nums transition-colors hover:bg-muted", f.cor, i >= 2 && "hidden sm:inline-flex", foco)}
+                    className={juntar("toque-compacto ml-1 inline-flex h-7 shrink-0 items-center rounded-full border border-border bg-card px-2.5 max-sm:ml-0 max-sm:border-0 max-sm:bg-transparent max-sm:px-1.5 text-[12px] font-semibold tabular-nums transition-colors hover:bg-muted", f.cor, i >= 2 && "hidden sm:inline-flex", foco)}
                   >
                     <span className="mr-1 inline-flex" aria-hidden="true">{f.icone}</span>{f.valor}
                   </button>
@@ -2536,6 +2545,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           <RegiaoRolavel modo="lg" rotulo="Carteira" memoria="central:carteira" className="lg:pb-4 lg:pr-1">
             {/* 16/10/2026 (dono): "colocar abas onde a gente muda do Dia Prioritário para a Saúde da
                 carteira, do lado, para não ficar muito extenso". */}
+            {/* v4 (15/11): a aba aparece inteira depois da primeira leitura (os achados chegavam depois e empurravam o resto). */}
+            <PrimeiraLeitura chaves={LEITURAS_DA_CARTEIRA} aguardar={carregandoClientes} limiteMs={2500} esqueleto={<EsqueletoDeCartoes rotulo="Carregando a carteira" alturas={[28, 150, 32, 120, 180]} />}>
             {/* 20/10/2026: achados com número, frase curta e uma ação, acima das partes da carteira. */}
             <FaixaDeAchados
               className="mb-4"
@@ -2572,7 +2583,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               ) : healthRows.length === 0 ? (
                 <EstadoVazio compacto titulo="Nenhum cliente ativo na carteira." />
               ) : (
-                <ul className="divide-y divide-border border-y border-border">
+                <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden px-2 py-1 sm:px-3")}>
                   {healthRows.map((row) => {
                     const meta = levelMeta[row.level];
                     const open = expandedHealth === row.client.id;
@@ -2581,8 +2592,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         {/* 16/10/2026 (dono, celular: "lista de app"): abaixo de 640 px a linha ganha a foto
                             com o ponto da saúde, o nome e uma linha de apoio (o alerta principal ou a faixa). */}
                         <button type="button" aria-expanded={open} onClick={() => setExpandedHealth(open ? null : row.client.id)} className={juntar(linhaDeLista, "max-sm:min-h-[60px]")}>
-                          <span className={`mr-3 hidden h-2 w-2 shrink-0 rounded-full sm:block ${meta.dot}`} aria-hidden="true" />
-                          <span className="relative mr-3 inline-flex shrink-0 sm:hidden" aria-hidden="true">
+                          {/* v4 (15/11): a foto com o ponto da saúde vale em toda largura (antes só no celular). */}
+                          <span className="relative mr-3 inline-flex shrink-0" aria-hidden="true">
                             <FotoDoCliente nome={nomeDoCliente(row.client)} fotos={fotosDe({ id: String(row.client.id), nome: nomeDoCliente(row.client), avatar_url: row.client.avatar_url })} tamanho="md" />
                             <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background ${meta.dot}`} />
                           </span>
@@ -2596,9 +2607,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           {row.alerts.slice(0, 1).map((a) => (
                             <span key={a.label} className={juntar(etiqueta, "ml-2 hidden bg-destructive/10 text-destructive sm:inline-flex")}>{a.label}</span>
                           ))}
-                          <span className={`ml-3 w-10 shrink-0 text-right text-[13px] font-semibold tabular-nums ${meta.cls}`}>
-                            {row.score === null ? "s/ dado" : row.score}
-                          </span>
+                          {/* v4 (15/11): a nota num anel (0 a 100), na cor da faixa. */}
+                          {row.score === null ? (
+                            <span className={`ml-3 w-11 shrink-0 text-right text-[12px] font-semibold tabular-nums ${meta.cls}`}>s/ dado</span>
+                          ) : (
+                            <AnelDeProgresso valor={row.score} total={100} tamanho={40} espessura={4} cor="currentColor" rotulo={`Saúde: ${row.score} de 100`} className={`ml-3 ${meta.cls}`}>{row.score}</AnelDeProgresso>
+                          )}
                           <ChevronDown className={`ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
                         </button>
                         {open && (
@@ -2646,6 +2660,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               )}
               </div>
             )}
+            </PrimeiraLeitura>
           </RegiaoRolavel>
         )}
 
@@ -2772,8 +2787,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                 aria-label={`Gerar ${r.label} (${status.label})`}
                                 title={`Gerar ${r.label} · ${status.label} · ${r.cadence}`}
                                 className={juntar(
-                                  "group flex h-full w-full min-w-0 flex-col items-start rounded-xl px-3 py-2.5 text-left transition-colors",
-                                  quando.destaque ? "bg-primary/[0.08] hover:bg-primary/[0.12]" : "bg-muted/40 hover:bg-muted/70",
+                                  "group flex h-full w-full min-w-0 flex-col items-start rounded-md border px-3 py-3 text-left transition-colors",
+                                  quando.destaque ? "border-transparent bg-accent-soft hover:bg-primary/[0.14]" : "border-border bg-card shadow-card hover:bg-muted/40",
                                   foco,
                                 )}
                               >
@@ -2870,7 +2885,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               )}
                             </div>
                             <div className="mt-3 max-w-[62ch] min-w-0">
-                              <div className="rounded-xl rounded-tl-md bg-primary/[0.07] px-4 pb-1.5 pt-3">
+                              <div className="rounded-lg rounded-tl-sm bg-accent-soft px-4 pb-1.5 pt-3">
                                 <p className="whitespace-pre-line text-[13px] leading-relaxed text-foreground">{textoParaCopiar}</p>
                                 <div className="-mr-2 mt-1 flex items-center justify-end">
                                   {escrita && <span className="mr-auto flex items-center text-[11px] text-primary" title={`Escrita pela IA${escrita.model ? ` (${escrita.model})` : ""}`}><Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />IA</span>}
@@ -3010,25 +3025,25 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         : "Queremos saber como estão as coisas por aí."
                     }\n\nSe fizer sentido, a gente conversa sobre o próximo passo — pode ser um acompanhamento contínuo ou um trabalho pontual, o que fizer mais sentido para o momento de vocês.\n\nTopa conversar esta semana?`;
                   return (
-                    <div className="grid min-w-0 items-start gap-y-6 lg:grid-cols-3 lg:gap-x-8" data-avulsos-colunas>
+                    <div className="grid min-w-0 items-start gap-3 lg:grid-cols-3" data-avulsos-colunas>
                       {colunas.map(({ chave, rotulo, Icone, cor, vazio }) => {
                         const daColuna = linhas.filter((l) => l.grupo === chave);
                         return (
                           // 16/10/2026 (dono, celular: "menos informação"): grupo vazio some abaixo de 640 px.
-                          <section key={chave} aria-label={rotulo} className={juntar("min-w-0", daColuna.length === 0 && "max-sm:hidden")} data-coluna-avulsos={chave}>
-                            <h3 className="mb-2 flex min-w-0 items-center text-[12px] font-semibold text-foreground">
+                          <section key={chave} aria-label={rotulo} className={juntar("min-w-0 rounded-lg bg-muted/50 p-2", daColuna.length === 0 && "max-sm:hidden")} data-coluna-avulsos={chave}>
+                            <h3 className="mb-2 flex min-w-0 items-center px-1.5 pt-1 text-[13px] font-semibold text-foreground">
                               <Icone className={juntar("mr-1.5 h-4 w-4 shrink-0", cor)} aria-hidden="true" />
                               <span className="min-w-0 truncate">{rotulo}</span>
-                              <span className="ml-1.5 tabular-nums text-muted-foreground">{daColuna.length}</span>
+                              <span className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-card px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{daColuna.length}</span>
                             </h3>
                             {daColuna.length === 0 ? (
-                              <p className={texto.auxiliar}>{vazio}</p>
+                              <p className={juntar(texto.auxiliar, "px-1.5 pb-2")}>{vazio}</p>
                             ) : (
-                              <ul className="space-y-1">
+                              <ul className="space-y-2">
                                 {daColuna.map(({ client, ativos, entregues, dias }) => {
                                   const nome = nomeDoCliente(client);
                                   return (
-                                    <li key={client.id} className="group flex min-w-0 items-center rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40 max-sm:py-2">
+                                    <li key={client.id} className="group flex min-w-0 items-center rounded-md border border-border bg-card px-3 py-2.5 shadow-card">
                                       <button type="button" onClick={() => openClientProfile(client.id)} title={`Abrir o cadastro de ${nome}`} className={juntar("flex min-w-0 flex-1 items-center text-left", foco)}>
                                         <FotoDoCliente nome={nome} fotos={fotosDe({ id: String(client.id), nome, avatar_url: client.avatar_url })} tamanho="sm" />
                                         <span className="ml-2.5 min-w-0 flex-1">
@@ -3379,7 +3394,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                       <EventIcon className={`h-3.5 w-3.5 ${corDoEvento[event.icon]}`} />
                                     </span>
                                     <button type="button" onClick={() => abrir(event)} title={event.link ? "Abrir" : `Abrir o perfil de ${nome}`}
-                                      className={juntar("group flex w-full min-w-0 items-center rounded-xl p-2 text-left transition-colors hover:bg-muted/50 max-sm:px-1.5 max-sm:py-1", esquerda && "md:flex-row-reverse md:text-right", foco)}>
+                                      className={juntar("group flex w-full min-w-0 items-center rounded-md p-2 text-left transition-colors hover:bg-muted/50 max-sm:px-1.5 max-sm:py-1", esquerda && "md:flex-row-reverse md:text-right", foco)}>
                                       {event.midia ? <MiniaturaDoEvento midia={event.midia} /> : null}
                                       <span className={juntar("min-w-0 flex-1", event.midia ? (esquerda ? "ml-3 md:ml-0 md:mr-3" : "ml-3") : "")}>
                                         <span className="line-clamp-2 text-[13px] leading-snug text-foreground">{event.text}</span>
@@ -3619,7 +3634,7 @@ function MiniaturaDoEvento({ midia }: { midia: MidiaDoEvento }) {
   return (
     <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg bg-muted text-muted-foreground" aria-hidden="true">
       <Icone className="h-4 w-4" />
-      {ext && ext.length <= 5 && <span className="mt-0.5 text-[11px] font-semibold uppercase">{ext}</span>}
+      {ext && ext.length <= 5 && <span className="mt-0.5 text-[11px] font-semibold">{ext.toUpperCase()}</span>}
     </span>
   );
 }

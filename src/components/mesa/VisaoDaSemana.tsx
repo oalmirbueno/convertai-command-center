@@ -65,7 +65,7 @@ function CartaoDoHype({
 
   return (
     // Item de grade (cartão com função): o cartão sólido do sistema.
-    <article className={juntar("flex min-w-0 flex-col p-3.5", superficie.painel, marcado ? "border-primary" : "")} data-cartao-da-semana={item.chave} data-juntado={marcado ? "" : undefined}>
+    <article className={juntar("flex min-w-0 flex-col p-5", superficie.painel, marcado ? "border-primary" : "")} data-cartao-da-semana={item.chave} data-juntado={marcado ? "" : undefined}>
       <div className="flex min-w-0 items-start">
         {juntando && (
           <span className="mr-2 flex h-5 items-center">
@@ -73,9 +73,9 @@ function CartaoDoHype({
           </span>
         )}
         {/* Título numa linha (28/09); inteiro no title. */}
-        <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug" title={hype.titulo}>{hype.titulo}</h3>
+        <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug" title={hype.titulo}>{hype.titulo}</h3>
         {nota !== null && (
-          <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${corDaNota(nota)}`} title="Quanto serve a este cliente, de 0 a 10">
+          <span className={`ml-2 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold tabular-nums ${corDaNota(nota)}`} title="Quanto serve a este cliente, de 0 a 10">
             {nota.toLocaleString("pt-BR")}
           </span>
         )}
@@ -119,7 +119,7 @@ function CartaoDoHype({
       <div className="mt-auto flex items-center justify-between pt-2.5">
         <button type="button" onClick={() => setDetalhes((v) => !v)} aria-expanded={detalhes} className="toque-compacto inline-flex items-center text-[12px] font-medium text-primary hover:underline">
           {detalhes ? "Menos" : "Como usar"}
-          <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${detalhes ? "rotate-180" : ""}`} aria-hidden="true" />
+          <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform duration-200 ${detalhes ? "rotate-180" : ""}`} aria-hidden="true" />
         </button>
         <AcoesDeCriar titulo={hype.titulo} rotuloDoConteudo={temPauta ? "Usar a pauta" : "Criar conteúdo"} partes={() => partesDoPedido(catalogo, 0)} executar={criarConteudo} onCampanha={onCriarCampanha} />
       </div>

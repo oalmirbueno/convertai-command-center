@@ -467,7 +467,7 @@ function MesaRedonda({
                 <button
                   type="button"
                   onClick={() => onConversar(m.id)}
-                  className={juntar(superficie.painel, "toque-compacto flex w-full min-w-0 items-start p-3 text-left transition-colors hover:bg-muted/40", m.id === vencedor ? "border-primary" : "")}
+                  className={juntar(superficie.painel, "toque-compacto flex w-full min-w-0 items-start p-4 sm:p-5 text-left transition-colors hover:bg-muted/40", m.id === vencedor ? "border-primary" : "")}
                   aria-label={`${m.nome}: ${estado}. Conversar`}
                   data-cadeira={m.id}
                   data-falando={falando ? "sim" : "nao"}
@@ -803,7 +803,7 @@ function Decisao({ sessao, finais, onRelido }: { sessao: SessaoDoConselho; finai
     ) : undefined;
 
   return (
-    <section aria-label="Decisão do dono" className={juntar(superficie.painel, "min-w-0 p-4")} data-decisao="">
+    <section aria-label="Decisão do dono" className={juntar(superficie.painel, "min-w-0 p-5")} data-decisao="">
       <CabecalhoDeSecao titulo="Decisão" acao={acoesDoTitulo} />
       {d && (
         <p className="mt-2 text-[13px] text-foreground" data-decidido="">
@@ -904,7 +904,7 @@ function CartaoDoUsar({ sessao, onUsar, rotuloDoUsar }: { sessao: SessaoDoConsel
     }
   };
   return (
-    <section aria-label="Pedido para a mesa" className={juntar(superficie.painel, "min-w-0 p-4")} data-acao-do-conselho="">
+    <section aria-label="Pedido para a mesa" className={juntar(superficie.painel, "min-w-0 p-5")} data-acao-do-conselho="">
       <h3 className={juntar(texto.tituloSecao, "truncate")}>Pedido para a mesa</h3>
       <p className="mt-2 whitespace-pre-line text-[13px] leading-5 text-foreground">{acao.texto}</p>
       <div className="-m-1 mt-2 flex min-w-0 flex-wrap items-center justify-end [&>*]:m-1">

@@ -15,9 +15,9 @@ import { usePaginasDaPrevia } from "./ContextoDasPrevias";
  */
 
 export const ESTADOS: Record<StatusDaExecucao, { rotulo: string; classe: string; borda: string }> = {
-  na_fila: { rotulo: "Na fila", classe: "bg-amber-500/15 text-amber-700 dark:text-amber-300", borda: "#f59e0b" },
-  rodando: { rotulo: "Rodando", classe: "bg-sky-500/15 text-sky-700 dark:text-sky-300", borda: "#0ea5e9" },
-  pronto: { rotulo: "Pronto", classe: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300", borda: "#10b981" },
+  na_fila: { rotulo: "Na fila", classe: "bg-warning-soft text-warning", borda: "#f59e0b" },
+  rodando: { rotulo: "Rodando", classe: "bg-info-soft text-info", borda: "#0ea5e9" },
+  pronto: { rotulo: "Pronto", classe: "bg-success-soft text-success", borda: "#10b981" },
   erro: { rotulo: "Erro", classe: "bg-destructive/15 text-destructive", borda: "#ef4444" },
   aguardando: { rotulo: "Aguardando", classe: "bg-violet-500/15 text-violet-700 dark:text-violet-300", borda: "#8b5cf6" },
 };
@@ -456,7 +456,7 @@ function PorNoArDoNo({ execucao }: { execucao: ExecucaoDoLab }) {
         <ol className="min-w-0 space-y-0.5">
           {PASSOS_NO_AR.map((p, i) => (
             <li key={p.valor} className={juntar(texto.auxiliar, "flex items-center", i === atual ? "font-medium text-foreground" : i < atual ? "text-muted-foreground" : "text-muted-foreground/60")} data-passo-no-ar={p.valor} aria-current={i === atual ? "step" : undefined}>
-              {i < atual || estado === "feito" ? <CheckCircle2 className="mr-1 h-3 w-3 text-emerald-600" aria-hidden="true" /> : i === atual ? <Clock className="mr-1 h-3 w-3 text-amber-600" aria-hidden="true" /> : <span className="mr-1 inline-block h-3 w-3 rounded-full border border-border" aria-hidden="true" />}
+              {i < atual || estado === "feito" ? <CheckCircle2 className="mr-1 h-3 w-3 text-success" aria-hidden="true" /> : i === atual ? <Clock className="mr-1 h-3 w-3 text-warning" aria-hidden="true" /> : <span className="mr-1 inline-block h-3 w-3 rounded-full border border-border" aria-hidden="true" />}
               {p.rotulo}
               {p.valor === "com_agente" && s.operador ? ` (${s.operador === "default" ? "Hermes" : s.operador})` : ""}
             </li>

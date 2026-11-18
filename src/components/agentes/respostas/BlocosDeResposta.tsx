@@ -447,7 +447,7 @@ export function FluxoDaResposta({ bloco }: { bloco: BlocoFluxo }) {
     </span>
   );
   return (
-    <div data-bloco="fluxo" className={juntar(superficie.painel, "min-w-0 p-3")}>
+    <div data-bloco="fluxo" className={juntar(superficie.painel, "min-w-0 p-4 sm:p-5")}>
       <TituloDoBloco lado={selo}>{bloco.titulo || (proposta ? "Plano" : "Fluxo")}</TituloDoBloco>
       <ol className="min-w-0" aria-label={proposta ? "Passos propostos" : "Passos registrados"}>
         {camadas.map((camada, n) => (

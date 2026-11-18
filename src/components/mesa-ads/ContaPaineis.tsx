@@ -7,6 +7,8 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, dataEHora } from "@/lib/mesa/api";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { juntar, superficie } from "@/components/sistema/estilos";
+import { CartaoDeIndicador } from "@/components/mesa/ousado";
+import { ProgressBar, StatusPill } from "@/components/ds";
 import { brl, decimal, inteiro, partesDaAnaliseDaConta, porcento, type MetricasDaConta } from "./adsApi";
 import { CabecalhoDaParte, Foto, useParteRecolhida } from "./Comuns";
 import type { PeriodoDaConsulta } from "./periodoDaConta";
@@ -39,28 +41,9 @@ import {
 
 // ------------------------------------------------------------------ resumo
 
-function Seta({ valor, bomQuandoSobe }: { valor: number | null; bomQuandoSobe: boolean }) {
-  if (valor === null || valor === 0) return null;
-  const sobe = valor > 0;
-  const bom = sobe === bomQuandoSobe;
-  return (
-    <span className={`ml-1 whitespace-nowrap text-[11px] font-medium tabular-nums ${bom ? "text-success" : "text-destructive"}`} title="Comparado ao período anterior do mesmo tamanho">
-      {sobe ? "+" : ""}
-      {Math.round(valor)}%
-    </span>
-  );
-}
-
-function Kpi({ rotulo, valor, variacao, bomQuandoSobe = true, dica }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string }) {
-  return (
-    <div className={juntar(superficie.painel, "min-w-0 px-3 py-2")} title={dica}>
-      <dt className="truncate text-[11px] text-muted-foreground">{rotulo}</dt>
-      <dd className="mt-0.5 flex min-w-0 items-baseline">
-        <span className="truncate text-[15px] font-semibold tabular-nums">{valor}</span>
-        {variacao !== undefined && <Seta valor={variacao} bomQuandoSobe={bomQuandoSobe} />}
-      </dd>
-    </div>
-  );
+function Kpi({ rotulo, valor, variacao, bomQuandoSobe = true, dica, variante }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string; variante?: "solido" | "tinta" }) {
+  // Rodada ousada (15/11/2026): número grande em cartão; o investimento é o cartão sólido e o resultado o de tinta.
+  return <CartaoDeIndicador lista rotulo={rotulo} valor={valor} variacao={variacao} bomQuandoSobe={bomQuandoSobe} dica={dica} variante={variante} />;
 }
 
 /** Resumo do período: investimento, resultado pelo objetivo, custo, CTR, CPM, alcance, frequência e ROAS. */
@@ -69,9 +52,9 @@ export function ResumoDaConta({ totais, extras }: { totais: MetricasDaConta; ext
   const v = (k: keyof Comparacao) => (c ? c[k] : null);
   return (
     <section aria-label="Resumo do período" className="min-w-0">
-      <dl className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
-        <Kpi rotulo="Investimento" valor={brl(totais.gasto)} variacao={v("gasto_pct")} dica="Quanto a Meta cobrou no período." />
-        <Kpi rotulo={extras.resultado_rotulo} valor={inteiro(totais.resultados)} variacao={v("resultados_pct")} dica="O resultado que conta para o objetivo das campanhas com mais investimento." />
+      <dl className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
+        <Kpi variante="solido" rotulo="Investimento" valor={brl(totais.gasto)} variacao={v("gasto_pct")} dica="Quanto a Meta cobrou no período." />
+        <Kpi variante="tinta" rotulo={extras.resultado_rotulo} valor={inteiro(totais.resultados)} variacao={v("resultados_pct")} dica="O resultado que conta para o objetivo das campanhas com mais investimento." />
         <Kpi rotulo="Custo por resultado" valor={brl(totais.custo_por_resultado)} variacao={v("custo_por_resultado_pct")} bomQuandoSobe={false} />
         <Kpi rotulo="CTR do link" valor={porcento(totais.ctr_saida !== null ? totais.ctr_saida : totais.ctr)} variacao={v("ctr_link_pct")} />
         <Kpi rotulo="CPM" valor={brl(totais.cpm)} variacao={v("cpm_pct")} bomQuandoSobe={false} dica="Custo por mil impressões." />
@@ -93,15 +76,17 @@ export function ResumoDaConta({ totais, extras }: { totais: MetricasDaConta; ext
 export function SaldosDasContas({ contas }: { contas: SaldoDaConta[] }) {
   if (!contas.length) return null;
   return (
-    <section aria-label="Saldo das contas" className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+    <section aria-label="Saldo das contas" className="grid min-w-0 grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2">
       {contas.map((c) => (
-        <div key={c.external_account_id} className={juntar(superficie.painel, "min-w-0 px-3 py-2.5")}>
-          <p className="flex min-w-0 items-center text-[13px] font-semibold">
-            <Wallet className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <div key={c.external_account_id} className={juntar(superficie.painel, "min-w-0 p-5 sm:p-6")}>
+          <p className="flex min-w-0 items-center text-[15px] font-semibold leading-6">
+            <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary"><Wallet className="h-4 w-4" /></span>
             <span className="min-w-0 flex-1 truncate">{c.nome || `Conta ${c.numero}`}</span>
-            {c.status && <span className="ml-2 shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-normal text-muted-foreground">{c.status}</span>}
+            {c.status && <StatusPill className="ml-2" tone={/ativ|active/i.test(c.status) ? "success" : "neutral"}>{c.status}</StatusPill>}
           </p>
-          <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] sm:grid-cols-4">
+          {/* A barra só aparece quando a conta tem limite: gasto total sobre o limite, dado que a Meta já mandou. */}
+          {c.limite_de_gasto !== null && c.limite_de_gasto > 0 && <ProgressBar className="mt-4" striped value={c.gasto_total || 0} max={c.limite_de_gasto} label={`Gasto total de ${brl(c.gasto_total)} sobre o limite de ${brl(c.limite_de_gasto)}`} />}
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-[12px] sm:grid-cols-4 [&_dd]:mt-0.5 [&_dd]:text-[13px] [&_dd]:font-semibold [&_dd]:text-foreground">
             <div className="min-w-0">
               <dt className="truncate text-muted-foreground">Saldo disponível</dt>
               <dd className="truncate font-medium tabular-nums">{c.saldo_disponivel !== null ? brl(c.saldo_disponivel) : c.pre_paga === false ? "pós-pago" : "-"}</dd>
@@ -120,7 +105,7 @@ export function SaldosDasContas({ contas }: { contas: SaldoDaConta[] }) {
             </div>
           </dl>
           {(c.pagamento || c.coletado_em) && (
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">
+            <p className="mt-3 truncate text-[12px] text-muted-foreground">
               {[c.pagamento, c.empresa, c.coletado_em ? `lida ${dataEHora(c.coletado_em)}` : ""].filter(Boolean).join(" · ")}
             </p>
           )}
@@ -148,25 +133,25 @@ export function TendenciaDiaria({ serie, rotulo }: { serie: PontoDaConta[]; rotu
   const maiorRes = Math.max.apply(null, serie.map((p) => p.resultados).concat([1]));
   const pontos = serie.map((p, i) => `${(i + 0.5) * passo},${A - (p.resultados / maiorRes) * (A - 8) - 4}`).join(" ");
   return (
-    <section aria-label="Tendência diária" className="min-w-0 pt-1">
-      <div className="flex min-w-0 flex-wrap items-center text-[11px] text-muted-foreground">
-        <TrendingUp className="mr-1.5 h-3.5 w-3.5 text-primary" />
-        <span className="mr-3 font-medium">Por dia</span>
-        <span className="mr-3 inline-flex items-center"><span className="mr-1 inline-block h-2 w-3 rounded-sm bg-primary/60" />Investimento</span>
-        <span className="inline-flex items-center"><span className="mr-1 inline-block h-2 w-2 rounded-full bg-foreground" />{rotulo}</span>
+    <section aria-label="Tendência diária" className={juntar(superficie.painel, "min-w-0 p-5 sm:p-6")}>
+      <div className="flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
+        <TrendingUp className="mr-2 h-4 w-4 text-primary" />
+        <span className="mr-auto text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">Por dia</span>
+        <span className="mr-4 inline-flex items-center"><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-primary" />Investimento</span>
+        <span className="inline-flex items-center"><span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: "hsl(var(--chart-2))" }} />{rotulo}</span>
       </div>
-      <svg viewBox={`0 0 ${L} ${A}`} preserveAspectRatio="none" className="mt-2 block h-28 w-full" role="img" aria-label={`Investimento e ${rotulo.toLowerCase()} por dia`}>
+      <svg viewBox={`0 0 ${L} ${A}`} preserveAspectRatio="none" className="mt-5 block h-40 w-full" role="img" aria-label={`Investimento e ${rotulo.toLowerCase()} por dia`}>
         {serie.map((p, i) => {
           const h = Math.max(1, (p.gasto / maiorGasto) * (A - 4));
           return (
-            <rect key={p.dia} x={i * passo + passo * 0.15} y={A - h} width={passo * 0.7} height={h} rx={1.5} className="fill-primary/50">
+            <rect key={p.dia} x={i * passo + passo * 0.2} y={A - h} width={passo * 0.6} height={h} rx={Math.min(passo * 0.3, 6)} className="fill-primary">
               <title>{`${dataCurta(p.dia)}: ${brl(p.gasto)}, ${inteiro(p.resultados)} ${rotulo.toLowerCase()}`}</title>
             </rect>
           );
         })}
-        <polyline points={pontos} fill="none" className="stroke-foreground" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+        <polyline points={pontos} fill="none" stroke="hsl(var(--chart-2))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="mt-1 flex justify-between text-[11px] tabular-nums text-muted-foreground">
+      <div className="mt-2 flex justify-between text-[12px] tabular-nums text-muted-foreground">
         <span>{dataCurta(serie[0].dia)}</span>
         <span>{dataCurta(serie[serie.length - 1].dia)}</span>
       </div>
@@ -202,15 +187,15 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
       {q.isError && <AvisoDeErro erro={q.error} />}
       {aberto && q.isLoading && <div className="mt-3 h-24 animate-pulse rounded-lg bg-muted/60" aria-busy="true" />}
       {d && (
-        <div className="mt-3 min-w-0 space-y-3">
-          <dl className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
-            <Kpi rotulo="Alcance somado (aprox.)" valor={inteiro(d.somado.alcance_aprox)} dica={d.somado.explicacao} />
+        <div className="mt-4 min-w-0 space-y-5">
+          <dl className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
+            <Kpi variante="solido" rotulo="Alcance somado (aprox.)" valor={inteiro(d.somado.alcance_aprox)} dica={d.somado.explicacao} />
             <Kpi rotulo="Interações somadas" valor={inteiro(d.somado.interacoes)} dica={d.somado.explicacao} />
             <Kpi rotulo="Seguidores" valor={inteiro(d.organico.seguidores)} variacao={null} dica={d.organico.seguidores_variacao !== null ? `Variação no período: ${d.organico.seguidores_variacao > 0 ? "+" : ""}${d.organico.seguidores_variacao}` : undefined} />
             <Kpi rotulo={`${d.anuncios.resultado_rotulo} (anúncios)`} valor={inteiro(d.anuncios.resultados)} dica={`Custo por resultado: ${brl(d.anuncios.custo_por_resultado)}`} />
           </dl>
-          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="min-w-0 rounded-md bg-muted/50 p-3 text-[12px]">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
+            <div className="min-w-0 rounded-md bg-muted/60 p-4 text-[13px] leading-5">
               <p className="text-[12px] font-semibold text-muted-foreground">Orgânico</p>
               <p className="mt-1 tabular-nums">
                 {inteiro(d.organico.posts)} posts ({inteiro(d.organico.posts_medidos)} com alcance medido) · alcance semanal {inteiro(d.organico.alcance_semanas)}
@@ -219,7 +204,7 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
                 {inteiro(d.organico.curtidas)} curtidas · {inteiro(d.organico.comentarios)} comentários · {inteiro(d.organico.salvos)} salvamentos · {inteiro(d.organico.compartilhamentos)} compartilhamentos
               </p>
             </div>
-            <div className="min-w-0 rounded-md bg-muted/50 p-3 text-[12px]">
+            <div className="min-w-0 rounded-md bg-muted/60 p-4 text-[13px] leading-5">
               <p className="text-[12px] font-semibold text-muted-foreground">Anúncios</p>
               {d.anuncios.conectada ? (
                 <p className="mt-1 tabular-nums">
@@ -234,10 +219,10 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
           {d.organico.melhores.length > 0 && (
             <div className="min-w-0">
               <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Posts que mais alcançaram</p>
-              <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6">
+              <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-6">
                 {d.organico.melhores.map((p) => (
                   <a key={p.id} href={p.link || undefined} target="_blank" rel="noreferrer" className="block min-w-0" title={p.legenda}>
-                    <div className="relative w-full overflow-hidden rounded-lg border border-border bg-secondary/40" style={{ paddingTop: "100%" }}>
+                    <div className="relative w-full overflow-hidden rounded-lg border border-border bg-muted/40" style={{ paddingTop: "100%" }}>
                       <div className="absolute inset-0">
                         <Foto src={p.imagem_url} alt={p.legenda || "Post"} className="h-full w-full" />
                       </div>
@@ -271,7 +256,7 @@ function ListaDeItens({ titulo, tom, itens, porItem, vazio }: { titulo: string; 
         <ul className="mt-1.5 space-y-2">
           {itens.slice(0, 8).map((i) => (
             <li key={`${i.canal}-${i.id}`} className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-2 text-[12px] leading-snug">
-              <div className="relative w-10 overflow-hidden rounded border border-border bg-secondary/40" style={{ paddingTop: "100%" }}>
+              <div className="relative w-10 overflow-hidden rounded-sm border border-border bg-muted/40" style={{ paddingTop: "100%" }}>
                 <div className="absolute inset-0">
                   <Foto src={i.imagem_url} alt={i.nome} className="h-full w-full" />
                 </div>
@@ -351,13 +336,13 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
       {l && !evolucaoVazia(l) && (
         <>
           {l.explicacao && l.explicacao.resumo && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{l.explicacao.resumo}</p>}
-          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
             <ListaDeItens titulo="Vencedores" tom="text-success" itens={l.vencedores} porItem={l.explicacao ? l.explicacao.porItem : {}} vazio="Nenhum anúncio abaixo da média com volume." />
             <ListaDeItens titulo="Manter" tom="text-foreground" itens={l.manter} porItem={l.explicacao ? l.explicacao.porItem : {}} vazio="Nada neste grupo." />
             <ListaDeItens titulo="Descartar" tom="text-destructive" itens={l.descartar} porItem={l.explicacao ? l.explicacao.porItem : {}} vazio="Nada para cortar agora." />
           </div>
           {(l.destaques.length > 0 || l.abaixo.length > 0 || l.sinais.length > 0) && (
-            <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
               <ListaDeItens titulo="Posts que funcionaram" tom="text-success" itens={l.destaques} porItem={l.explicacao ? l.explicacao.porItem : {}} vazio="Nenhum post acima da média." />
               <ListaDeItens titulo="Sinais do público" tom="text-info" itens={l.sinais} porItem={l.explicacao ? l.explicacao.porItem : {}} vazio="Sem sinal fora do comum." />
               <ListaDeItens titulo="Posts que não funcionaram" tom="text-warning" itens={l.abaixo} porItem={l.explicacao ? l.explicacao.porItem : {}} vazio="Nenhum post muito abaixo da média." />
@@ -372,7 +357,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
           {l.proximos_testes.length > 0 && (
             <div className="min-w-0">
               <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Próximos testes</p>
-              <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+              <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
                 {l.proximos_testes.map((t, k) => (
                   <li key={`${t.titulo}-${k}`} className={juntar(superficie.poco, "min-w-0 p-3 text-[12px] leading-snug")}>
                     <p className="font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
@@ -392,7 +377,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
               <ul className="mt-1.5 space-y-1.5">
                 {l.aprendizados.map((a, k) => (
                   <li key={k} className="min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]">
-                    <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>{a.tipo}</span>
+                    <span className={`mr-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-danger-soft text-destructive" : "bg-success-soft text-success"}`}>{a.tipo}</span>
                     <span className="mr-1 text-[11px] text-muted-foreground">{a.canal === "organico" ? "orgânico" : "anúncios"}:</span>
                     {a.texto}
                   </li>

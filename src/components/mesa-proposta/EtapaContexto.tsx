@@ -734,12 +734,12 @@ export default function EtapaContexto({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (semTabela) return <EstadoVazio titulo="A Mesa Proposta ainda não foi ligada neste painel." descricao="Avise o administrador." />;
+  if (semTabela) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="A Mesa Proposta ainda não foi ligada neste painel." descricao="Avise o administrador." />;
   if (!proposta) {
     const vivas = propostas.filter((p) => !p.arquivada_em).length;
     return (
       <div className="min-w-0" data-etapa-proposta="contexto">
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<FilePlus2 className="h-5 w-5" />}
           titulo={vivas ? "Escolha uma proposta ou crie uma nova." : "Nenhuma proposta para este cliente ainda."}
           descricao="Venda nova ou upsell, sem custo."

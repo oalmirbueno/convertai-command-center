@@ -261,14 +261,14 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
   const Pasta = ({ nome, detalhe, onClick, onSoltar }: { nome: string; detalhe?: string; onClick: () => void; onSoltar: () => void }) => (
     <li onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onSoltar(); }}>
       {/* Pasta é item de grade (cartão com função): o cartão sólido do sistema. */}
-      <button type="button" onClick={onClick} className={juntar(superficie.painel, "flex w-full min-w-0 items-center px-3 py-2.5 text-left hover:border-primary/60")}>
+      <button type="button" onClick={onClick} className={juntar(superficie.painel, "flex w-full min-w-0 items-center px-4 py-3.5 text-left hover:border-primary/60")}>
         <Folder className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{nome}</span>
         {detalhe && <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">{detalhe}</span>}
       </button>
     </li>
   );
-  const grade = modo === "grade" ? "grid min-w-0 grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5 desk:grid-cols-7" : "min-w-0 space-y-0.5";
+  const grade = modo === "grade" ? "grid min-w-0 grid-cols-3 gap-3 sm:gap-4 sm:grid-cols-4 lg:grid-cols-5 desk:grid-cols-7" : "min-w-0 space-y-0.5";
 
   return (
     <div className="min-w-0 space-y-3" data-tela-arquivos="">
@@ -310,7 +310,7 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
           </nav>
           {nos.isLoading && <p className={juntar(texto.auxiliar, "flex items-center")}><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo as pastas...</p>}
           {pastas.length > 0 && (
-            <ul className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-3 desk:grid-cols-4">
+            <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 desk:grid-cols-4">
               {pastas.map((p) => (
                 <Pasta key={p.id} nome={p.name} onClick={() => setPasta(p.id)} onSoltar={() => arrastado && void moverNo(arrastado, p.id)} />
               ))}
@@ -361,7 +361,7 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
             )}
           </nav>
           {arquivos.isLoading && <p className={juntar(texto.auxiliar, "flex items-center")}><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo os arquivos...</p>}
-          <ul className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-3 desk:grid-cols-4">
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 desk:grid-cols-4">
             {pastasDeArquivos.map(([id, n]) => (
               <Pasta key={id} nome={rotuloDaPasta(id)} detalhe={String(n)} onClick={() => setPastaDeArquivos(id)} onSoltar={() => arrastado && void moverArquivo(arrastado, id)} />
             ))}

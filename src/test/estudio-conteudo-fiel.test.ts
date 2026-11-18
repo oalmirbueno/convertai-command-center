@@ -62,6 +62,7 @@ import {
   blocoDaReescritaTotal,
   coberturaDaReescrita,
   intencaoDeConteudo,
+  laminasParaTirar,
   mudancasDaReescrita,
 } from "../../supabase/functions/estudio-arte/operacoes-de-conteudo";
 import {
@@ -410,6 +411,53 @@ describe("F. operações de conteúdo na conversa", () => {
     expect(pedidoMexeNoTexto("troca o tema")).toBe(true);
     expect(INSTRUCOES_CONVERSA).toContain("OPERAÇÕES DE CONTEÚDO");
     expect(blocoDaReescritaTotal(4, [1, 2, 3, 4])).toContain("nunca use duplicar_lamina");
+  });
+
+  it("tirar lâminas: a intenção e os números citados no pedido, sem inventar", () => {
+    const sete = [1, 2, 3, 4, 5, 6, 7];
+    for (const pedido of ["tira a lâmina 3", "tirar lâmina 7 e tirar lâmina 6", "tirar as lâminas 6 e 7", "Confirmo: pode tirar as lâminas 6 e 7 agora. Não gerar nada."]) {
+      expect(intencaoDeConteudo(pedido), pedido).toBe("tirar_lamina");
+    }
+    expect(laminasParaTirar("tira a lâmina 3", sete)).toEqual([3]);
+    expect(laminasParaTirar("tirar lâmina 7 e tirar lâmina 6", sete)).toEqual([7, 6]);
+    expect(laminasParaTirar("tirar as lâminas 6 e 7", sete)).toEqual([6, 7]);
+    expect(laminasParaTirar("Confirmo: pode tirar as lâminas 6 e 7 agora. Não gerar nada.", sete)).toEqual([6, 7]);
+    // Outras formas de escrever a mesma lista.
+    expect(laminasParaTirar("Remove os cards 2, 4 e o 5, por favor", sete)).toEqual([2, 4, 5]);
+    expect(laminasParaTirar("apaga as lâminas 6,7", sete)).toEqual([6, 7]);
+    expect(laminasParaTirar("exclui as lâminas 5 a 7", sete)).toEqual([5, 6, 7]);
+    expect(laminasParaTirar("tira a 3ª lâmina", sete)).toEqual([3]);
+    expect(laminasParaTirar("retira o slide nº 2\ne tira a lâmina 2 e a lâmina 4", sete)).toEqual([2, 4]);
+    // Número que não existe no trabalho fica de fora.
+    expect(laminasParaTirar("tira as lâminas 6 e 9", sete)).toEqual([6]);
+    expect(laminasParaTirar("tira a lâmina 8", sete)).toEqual([]);
+    expect(laminasParaTirar("tira a lâmina 12", [1, 2])).toEqual([]);
+    expect(laminasParaTirar("tira a lâmina 2026", sete)).toEqual([]);
+    // Não é pedido de tirar lâmina: nada montado.
+    expect(laminasParaTirar("muda a cor da lâmina 3", sete)).toEqual([]);
+    expect(laminasParaTirar("tira o texto da lâmina 3", sete)).toEqual([]);
+    expect(laminasParaTirar("tira a última lâmina", sete)).toEqual([]);
+    expect(laminasParaTirar("tira a lâmina do café", sete)).toEqual([]);
+    expect(laminasParaTirar("", sete)).toEqual([]);
+    // Negação, pergunta e escolha não viram ação.
+    expect(laminasParaTirar("não tira a lâmina 3", sete)).toEqual([]);
+    expect(laminasParaTirar("Não quero tirar a lâmina 3, só mudar a cor", sete)).toEqual([]);
+    expect(laminasParaTirar("muda a cor sem tirar a lâmina 3", sete)).toEqual([]);
+    expect(laminasParaTirar("posso tirar a lâmina 3?", sete)).toEqual([]);
+    expect(laminasParaTirar("tira a lâmina 3 ou 4", sete)).toEqual([]);
+    // Escolha entre dois verbos: a frase inteira não monta lista.
+    expect(laminasParaTirar("Tira a lâmina 3 ou tira a lâmina 4", [1, 2, 3, 4])).toEqual([]);
+    expect(laminasParaTirar("tira a lâmina 3 ou a 4", sete)).toEqual([]);
+    // Negação com palavras de apoio ("precisa mais", "quero mais").
+    expect(laminasParaTirar("Não precisa mais tirar a lâmina 3", [1, 2, 3])).toEqual([]);
+    expect(laminasParaTirar("não quero mais tirar a lâmina 3", sete)).toEqual([]);
+    expect(laminasParaTirar("nem precisa tirar a lâmina 3", sete)).toEqual([]);
+    expect(laminasParaTirar("Não, tira a lâmina 3", sete)).toEqual([3]);
+    // Número depois da lista que não é lâmina: na dúvida, a frase inteira fica de fora.
+    expect(laminasParaTirar("tira a lâmina 3 e 2 fotos", sete)).toEqual([]);
+    // Só o que está ligado ao verbo de tirar: o resto do pedido não entra.
+    expect(laminasParaTirar("tira a lâmina 3 e muda a cor da lâmina 5", sete)).toEqual([3]);
+    expect(laminasParaTirar("tira a lâmina 3 e a 3 de novo", sete)).toEqual([3]);
   });
 
   it('"muda todo o conteúdo": todas as lâminas mudam de texto e a quantidade não aumenta', () => {

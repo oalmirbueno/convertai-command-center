@@ -303,7 +303,7 @@ export default function GeradorDeDestaques({
                     <ImagePlus className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
-                {feita && <span className={juntar(etiqueta, "ml-1.5 bg-success/15 text-success")}>capa</span>}
+                {feita && <span className={juntar(etiqueta, "ml-1.5 bg-success-soft text-success")}>capa</span>}
                 <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => onLista(lista.filter((_, k) => k !== i))} aria-label={`Tirar ${d.nome}`} title={`Tirar ${d.nome}`}>
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -361,7 +361,7 @@ export default function GeradorDeDestaques({
           </Link>
         </div>
       ) : estiloRecolhido ? null : (
-        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
           <div className="min-w-0 space-y-2">
             <SeletorCompacto
               rotulo="Estilo do conjunto"

@@ -7,13 +7,15 @@ import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, Secao, SeletorCompacto, botao, etiqueta, foco, juntar, lista, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, Carregando, EstadoVazio, Secao, SeletorCompacto, botao, espaco, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { PageHeader, PillTabs, StatusPill, type Tone } from "@/components/ds";
+import { Bolha } from "@/components/client/pecasOusadas";
 // Frente DOC (29/09): o registro de cada entrega aparece em destaque para o cliente.
 import { ehRegistroDeEntrega, tituloDoRegistro } from "@/lib/documentos/registrarEntrega";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink } from "lucide-react";
+import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink, ChevronRight } from "lucide-react";
 import CarouselSlider from "@/components/shared/CarouselSlider";
 import JanelaDoCelular from "@/components/sistema/JanelaDoCelular";
 import { useTelaPequena } from "@/components/client/useTelaPequena";
@@ -44,11 +46,11 @@ const isImage = (name: string) => {
 
 const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
 
-const approvalBadge: Record<string, { cls: string; label: string }> = {
-  pending: { cls: "bg-warning/10 text-warning", label: "Pendente" },
-  approved: { cls: "bg-success/10 text-success", label: "Aprovado" },
-  rejected: { cls: "bg-destructive/10 text-destructive", label: "Ajuste Solicitado" },
-  none: { cls: "bg-muted text-muted-foreground", label: "Sem status" },
+const approvalBadge: Record<string, { tone: Tone; label: string }> = {
+  pending: { tone: "warning", label: "Pendente" },
+  approved: { tone: "success", label: "Aprovado" },
+  rejected: { tone: "danger", label: "Ajuste Solicitado" },
+  none: { tone: "neutral", label: "Sem status" },
 };
 
 function ClientFileThumb({ file }: { file: any }) {
@@ -63,7 +65,7 @@ function ClientFileThumb({ file }: { file: any }) {
   });
 
   return (
-    <div className="w-14 h-14 rounded-lg bg-secondary border border-border overflow-hidden flex items-center justify-center shrink-0 relative">
+    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
       {url && kind === "image" ? (
         <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
       ) : url && kind === "video" ? (
@@ -255,7 +257,7 @@ export default function ClientDocuments() {
                 </div>
               )}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
-                <div className="rounded-md bg-destructive/5 px-3 py-2">
+                <div className="rounded-md bg-danger-soft px-4 py-3">
                   <p className={juntar(texto.auxiliar, "mb-0.5")}>Pedido de ajuste anterior</p>
                   <p className="text-[12px] text-foreground">{previewFile.feedback}</p>
                 </div>
@@ -264,22 +266,37 @@ export default function ClientDocuments() {
   );
 
   return (
-    <div className="min-w-0 space-y-5">
-      <CabecalhoDePagina
-        titulo="Documentos"
-        descricao={
+    <div className={espaco.pagina}>
+      <PageHeader
+        title="Documentos"
+        subtitle={
           [
             visibleFiles.length ? `${visibleFiles.length} ${visibleFiles.length === 1 ? "item" : "itens"}` : "",
             isReadOnly ? "somente leitura" : "",
           ].filter(Boolean).join(" · ") || undefined
         }
-        ajuda={
+        help={
           <>
             Tudo o que a equipe liberou para você: materiais, entregas e documentos. Toque num item para ver, baixar ou, quando estiver pendente, aprovar ou pedir ajuste.
             {isReadOnly && " Somente leitura: aprovar e pedir ajuste ficam bloqueados enquanto você vê como cliente."}
           </>
         }
       />
+
+      {/* v4 F2 (passada estrutural): as pastas viraram abas em pílula com a contagem (como as referências),
+          no lugar dos azulejos grandes; tocar abre a pasta. */}
+      {folderSummaries.length > 1 && (
+        <div className="min-w-0">
+          <PillTabs
+            label="Pastas"
+            value={activeFolder as string}
+            onChange={(v) => selectFolder(v as FolderId | "todos")}
+            tabs={[{ value: "todos", label: "Tudo", count: visibleFiles.length }].concat(
+              folderSummaries.map((entry) => ({ value: entry.folder.id as string, label: entry.folder.label, count: entry.total })),
+            )}
+          />
+        </div>
+      )}
 
       {/* Uma barra só: projeto, pasta (com quantos itens tem em cada uma) e tipo.
           Antes eram duas linhas de filtro. */}
@@ -296,7 +313,8 @@ export default function ClientDocuments() {
               className="max-w-[180px] sm:max-w-[240px]"
             />
           )}
-          {visibleFiles.length > 0 && (
+          {/* Com os azulejos de pasta em cima, o seletor "Pasta" seria a mesma coisa duas vezes. */}
+          {visibleFiles.length > 0 && folderSummaries.length <= 1 && (
             <SeletorCompacto
               rotulo="Pasta"
               icone={<FolderOpen className="h-3.5 w-3.5" />}
@@ -330,23 +348,23 @@ export default function ClientDocuments() {
           descricao={`${registrosDeEntrega.length} ${registrosDeEntrega.length === 1 ? "documento" : "documentos"}`}
           ajuda="O documento de cada entrega da equipe: o que foi feito, com as imagens reais e os números com a fonte. Toque para abrir."
         >
-          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Registros de entrega">
+          <ul className={juntar(superficie.painel, "min-w-0 space-y-0.5 px-2 py-2 sm:px-3")} aria-label="Registros de entrega">
             {registrosDeEntrega.map((f: any) => (
               <li
                 key={f.id}
                 role="button"
                 tabIndex={0}
                 aria-label={`Abrir ${f.file_name}`}
-                className={juntar(lista.linha, "cursor-pointer", foco)}
+                className={juntar("flex min-w-0 cursor-pointer items-center rounded-lg px-3 py-3.5 transition-colors hover:bg-muted/60", foco)}
                 onClick={() => setPreviewFile(f)}
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >
-                <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <Bolha tom="marca"><FileText className="h-4 w-4" /></Bolha>
                 <div className="ml-3 min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-medium text-foreground">{tituloDoRegistro(f)}</p>
-                  <p className={juntar(texto.auxiliar, "truncate")}>{formatDate(f.created_at)}</p>
+                  <p className="truncate text-[13px] font-medium leading-5 text-foreground">{tituloDoRegistro(f)}</p>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{formatDate(f.created_at)}</p>
                 </div>
-                {f.approval_status === "pending" && <span className={juntar(etiqueta, "ml-2", approvalBadge.pending.cls)}>{approvalBadge.pending.label}</span>}
+                {f.approval_status === "pending" && <StatusPill tone={approvalBadge.pending.tone} className="ml-2">{approvalBadge.pending.label}</StatusPill>}
               </li>
             ))}
           </ul>
@@ -363,7 +381,7 @@ export default function ClientDocuments() {
           descricao="Quando a equipe liberar um material ou pedir sua aprovação, ele aparece aqui na hora."
         />
       ) : (
-        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Documentos">
+        <ul className={juntar(superficie.painel, "min-w-0 space-y-0.5 px-2 py-2 sm:px-3")} aria-label="Documentos">
           {filteredFiles.map((f: any) => {
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
 
@@ -373,26 +391,30 @@ export default function ClientDocuments() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Ver ${f.file_name}`}
-                className={juntar("min-w-0 cursor-pointer rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40", foco)}
+                className={juntar("min-w-0 cursor-pointer rounded-lg px-3 py-3.5 transition-colors hover:bg-muted/60", foco)}
                 onClick={() => setPreviewFile(f)}
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >
                 <div className="flex min-w-0 items-center">
                   <ClientFileThumb file={f} />
-                  <div className="ml-3 min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-medium text-foreground">
+                  <div className="ml-4 min-w-0 flex-1">
+                    <p className="text-[13px] font-medium leading-5 text-foreground [overflow-wrap:anywhere] max-sm:line-clamp-2 sm:truncate">
                       {f.file_name}
                       {f.version > 1 && <span className="ml-1 text-[11px] text-muted-foreground">v{f.version}</span>}
                     </p>
-                    <p className={juntar(texto.auxiliar, "truncate")}>
+                    <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
                       {/* Celular: uma linha de apoio só (data e projeto); a pasta fica nos filtros. */}
                       <span className="hidden sm:inline">{fileLocationLabel(f)} · </span>
                       {f.project?.name || "Sem projeto"} · {formatDate(f.created_at)}
                     </p>
+                    {f.approval_status !== "none" && (
+                      <StatusPill tone={badge.tone} className="mt-1.5 sm:hidden">{badge.label}</StatusPill>
+                    )}
                   </div>
                   {f.approval_status !== "none" && (
-                    <span className={juntar(etiqueta, "ml-2", badge.cls)}>{badge.label}</span>
+                    <StatusPill tone={badge.tone} className="ml-2 max-sm:hidden">{badge.label}</StatusPill>
                   )}
+                  <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground sm:hidden" aria-hidden="true" />
                   {/* No celular o Baixar fica na folha do item (um toque por linha). */}
                   <button
                     type="button"
@@ -442,7 +464,7 @@ export default function ClientDocuments() {
                 <button
                   type="button"
                   disabled={isReadOnly}
-                  className={juntar(botao.primario, "h-12 w-full flex-1 bg-success text-[14px] text-white hover:bg-success/90")}
+                  className={juntar(botao.primario, "h-12 w-full flex-1 bg-accent-solid text-[14px] font-semibold text-on-accent hover:bg-accent-solid/90")}
                   onClick={() => { if (!isReadOnly) { setConfirmApprove(previewFile.id); setPreviewFile(null); } }}
                 >
                   Aprovar
@@ -466,12 +488,12 @@ export default function ClientDocuments() {
           )}
           {previewFile?.approval_status === "pending" && (
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
-              <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
+              <Button variant="outline" className="rounded-full border-destructive/40 text-destructive hover:bg-destructive/10"
                 disabled={isReadOnly}
                 onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); } }}>
                 Pedir ajuste
               </Button>
-              <Button className="bg-success hover:bg-success/90 text-white"
+              <Button className="rounded-full bg-accent-solid px-6 font-semibold text-on-accent hover:bg-accent-solid/90"
                 disabled={isReadOnly}
                 onClick={() => { if (!isReadOnly) { setConfirmApprove(previewFile.id); setPreviewFile(null); } }}>
                 Aprovar
@@ -489,7 +511,7 @@ export default function ClientDocuments() {
           <p className="text-[13px] text-muted-foreground">Esta ação não pode ser desfeita.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmApprove(null)}>Cancelar</Button>
-            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting || isReadOnly}>
+            <Button className="rounded-full bg-accent-solid px-6 font-semibold text-on-accent hover:bg-accent-solid/90" onClick={handleApprove} disabled={submitting || isReadOnly}>
               {submitting ? "Aprovando..." : "Confirmar"}
             </Button>
           </DialogFooter>

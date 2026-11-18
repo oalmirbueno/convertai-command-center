@@ -39,6 +39,7 @@ const CATEGORIA: Record<string, CategoriaDoAviso> = {
   perfis_instagram: "publicacao",
   delivery: "entrega",
   agendamento_atrasado: "alerta",
+  login_senha_errada: "alerta",
   publicacao_falhou: "alerta",
   automacao_incidente: "alerta",
   dia_prioritario: "projeto",

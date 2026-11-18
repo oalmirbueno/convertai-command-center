@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export { podeRetirarDaAprovacao } from "../../supabase/functions/mcp-server/modulos/workspace-link-regras";
+
 export type FileApprovalDecision = "approved" | "rejected";
 export type FileReleaseMode = "client_shared" | "approval";
 
@@ -39,6 +41,19 @@ export function reviewFileAgency(
     p_decision: decision,
     p_feedback: feedback?.trim() || null,
   });
+}
+
+export function retirarDaAprovacao(fileId: string) {
+  return runApprovalRpc("withdraw_file_client_approval", { p_file_id: fileId });
+}
+
+export function mensagemDaRetirada(erro: unknown): string {
+  if (erro instanceof Error && erro.message) return erro.message;
+  if (erro && typeof erro === "object" && "message" in erro) {
+    const message = (erro as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
+  }
+  return "Tente novamente.";
 }
 
 export function releaseFileToClient(fileId: string, mode: FileReleaseMode) {

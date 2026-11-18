@@ -194,7 +194,7 @@ export default function AreaDoTrending({ consulta, onConsulta, assuntosExtras, j
         {descartadas.length > 0 && (
           <div className="min-w-0 pt-2">
             <button type="button" className={juntar(botao.barra, "-ml-2")} onClick={() => setVerDescartadas(!verDescartadas)} aria-expanded={verDescartadas}>
-              <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", verDescartadas ? "rotate-180" : "")} aria-hidden="true" />
+              <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform duration-200", verDescartadas ? "rotate-180" : "")} aria-hidden="true" />
               {verDescartadas ? "Esconder descartadas" : `Mostrar descartadas (${descartadas.length})`}
             </button>
             {verDescartadas && <ul className={juntar(lista.aberta, lista.divisoria, "opacity-70")} aria-label="Notícias descartadas">{descartadas.map(linhaDaNoticia)}</ul>}

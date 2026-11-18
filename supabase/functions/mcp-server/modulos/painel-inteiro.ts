@@ -20,6 +20,7 @@ import { MCP_VERSION } from '../../_shared/mcp-release.ts';
 import {
   baseDosAgentes,
   campanhasDoMes,
+  errosDoEstudio,
   hypeDoMes,
   laboratorio,
   membros,
@@ -31,6 +32,7 @@ import {
   trabalhosDoEstudio,
 } from './painel-leituras.ts';
 import { guiaDoPainel } from './guia-do-painel.ts';
+import { MAX_DIAS_DA_CAMPANHA, validarPeriodoDaCampanha } from '../../_shared/arquivo-da-campanha.ts';
 import { PRAZO_ESCRITA_MS, PRAZO_LEITURA_MS, RECUOS_MS, registroDoMcp } from './robustez.ts';
 import { cacheDoMcp } from './leitura-enxuta.ts';
 
@@ -114,7 +116,7 @@ const panoramaDaCasaTool = leitura(
   {
     name: 'aceleriq_panorama_da_casa',
     title: 'Panorama da casa numa chamada',
-    description: 'Visão do dia da agência inteira numa chamada: clientes, tarefas abertas/atrasadas/de hoje, Execução (aprovações 30 dias e runs 24 h por situação), funil comercial por etapa e valor mensal em aberto, campanhas ativas, fila do Estúdio, pedidos de clientes e Laboratório (saldo e execuções). Só credencial sem restrição de cliente. Guardado por 30 s.',
+    description: 'Visão do dia da agência inteira numa chamada: clientes, tarefas abertas/atrasadas/de hoje, Execução (aprovações 30 dias e runs 24 h por situação), funil comercial por etapa e valor mensal em aberto, campanhas ativas, fila do Estúdio (detalhe dos erros: aceleriq_estudio_erros), pedidos de clientes e Laboratório (saldo e execuções). Só credencial sem restrição de cliente. Guardado por 30 s.',
     scopes: LEITURA_GERAL,
     cacheSeg: 30,
   },
@@ -127,16 +129,17 @@ const campanhasTool = leitura(
   {
     name: 'aceleriq_mes_campanhas',
     title: 'Mês: campanhas',
-    description: 'Campanhas da Mesa (aba Campanhas do Mês). Sem campanha_id: lista paginada e enxuta (nome, objetivo, período, situação). Com campanha_id: a campanha inteira (briefing com linha do tempo, mercado, trilha e produtos) e o que pende dela: conteúdos da série, artes do Estúdio, stories, criativos da Mesa Ads e sons da trilha. Para mudar, use aceleriq_mesa_campanha_acao.',
+    description: 'Campanhas da Mesa (aba Campanhas do Mês). Sem campanha_id: lista paginada e enxuta (nome, objetivo, período, situação), sem as arquivadas (incluir_arquivadas=true mostra). Com campanha_id: a campanha inteira (briefing com linha do tempo, mercado, trilha e produtos) e o que pende dela: conteúdos da série, artes do Estúdio, stories, criativos da Mesa Ads e sons da trilha. Para mudar, use aceleriq_mesa_campanha_acao.',
     scopes: LEITURA_EDITORIAL,
     cacheSeg: 15,
   },
-  z.object({ client_id: UUID, campanha_id: UUID.optional(), so_ativas: z.boolean().optional(), limite: LIMITE, cursor: CURSOR, detalhe: DETALHE }).strict(),
+  z.object({ client_id: UUID, campanha_id: UUID.optional(), so_ativas: z.boolean().optional(), incluir_arquivadas: z.boolean().optional(), limite: LIMITE, cursor: CURSOR, detalhe: DETALHE }).strict(),
   {
     properties: {
       client_id: J_UUID('Cliente.'),
       campanha_id: J_UUID('Uma campanha só, com tudo o que pende dela.'),
-      so_ativas: { type: 'boolean', description: 'Só campanhas que ainda não acabaram.' },
+      so_ativas: { type: 'boolean', description: 'Só campanhas que ainda não acabaram (nunca as arquivadas).' },
+      incluir_arquivadas: { type: 'boolean', description: 'Inclui as campanhas arquivadas na lista (padrão: não). Ignorado com so_ativas.' },
       limite: J_LIMITE, cursor: J_CURSOR, detalhe: J_DETALHE,
     },
     required: ['client_id'],
@@ -207,6 +210,40 @@ const estudioTool = leitura(
     required: ['client_id'],
   },
   (i, ctx) => trabalhosDoEstudio(i, ctx),
+);
+
+/** Acima do teto vira o teto (e abaixo de 1 vira 1): acomoda em vez de recusar, como os limites do mcp-tools. */
+const ACOMODAR = (max: number) => z.preprocess((v) => {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(Math.max(Math.floor(n), 1), max) : v;
+}, z.number().int().optional());
+
+const estudioErrosTool = leitura(
+  {
+    name: 'aceleriq_estudio_erros',
+    title: 'Estúdio: erros da fila de geração',
+    description: 'As lâminas da fila do Estúdio que deram erro nos últimos N dias (padrão 7, a mesma janela do estudio_fila do panorama da casa): cliente, peça (trabalho_id e título curto), lâmina, etapa, código e o motivo em pt-BR simples, quando foi, `resolvido_depois` (outra rodada do mesmo trabalho terminou como feito depois) e `orfao` (sem cliente ou trabalho inexistente). Sem client_id lista a casa inteira (credencial sem restrição). so_pendentes=true tira os já resolvidos. Só leitura; completo traz o texto original do gerador. Guardado por 30 s.',
+    scopes: LEITURA_EDITORIAL,
+    cacheSeg: 30,
+  },
+  z.object({
+    client_id: UUID.optional(),
+    dias: ACOMODAR(30),
+    limite: ACOMODAR(100),
+    so_pendentes: z.boolean().optional(),
+    detalhe: DETALHE,
+  }).strict(),
+  {
+    properties: {
+      client_id: J_UUID('Cliente (opcional; sem ele, a casa inteira).'),
+      dias: { type: 'integer', minimum: 1, maximum: 30, description: 'Janela em dias (padrão 7).' },
+      limite: { type: 'integer', minimum: 1, maximum: 100, description: 'Quantos erros no máximo (padrão 50, mais recentes primeiro).' },
+      so_pendentes: { type: 'boolean', description: 'Só os que ainda não foram resolvidos por outra rodada.' },
+      detalhe: J_DETALHE,
+    },
+  },
+  (i, ctx) => errosDoEstudio(i, ctx),
 );
 
 const siteTool = leitura(
@@ -314,6 +351,8 @@ const guiaTool: ToolDefinition = {
 const ACOES_DA_CAMPANHA = [
   'mudanca_planejar', 'mudanca_confirmar', 'mudanca_desfazer', 'versao_voltar',
   'reorganizar', 'mercado', 'roteiro_video', 'trilha_estado', 'trilha_gerar', 'pecas_para_ads',
+  // 16/11/2026: sem IA e sem custo (fora de ACOES_COM_CUSTO).
+  'arquivar', 'desarquivar', 'periodo',
 ] as const;
 type AcaoDaCampanha = (typeof ACOES_DA_CAMPANHA)[number];
 
@@ -350,6 +389,8 @@ export const ENTRADA_DA_ACAO = z.object({
   extra: z.string().max(600).optional(),
   loop: z.boolean().optional(),
   pecas: z.array(PECA_PARA_ADS).min(1).max(20).optional(),
+  periodo_inicio: DATA.optional(),
+  periodo_fim: DATA.optional(),
   confirmar_custo: z.boolean().optional(),
   idempotency_key: CHAVE_IDEMPOTENTE,
 }).strict();
@@ -365,6 +406,10 @@ export function faltaNaAcao(i: EntradaDaAcao): string | null {
   if (i.acao === 'versao_voltar' && !i.versao_id) return 'versao_voltar precisa de versao_id.';
   if (i.acao === 'roteiro_video' && !i.tema_id) return 'roteiro_video precisa de tema_id (a peça de vídeo da série).';
   if (i.acao === 'pecas_para_ads' && !i.pecas?.length) return 'pecas_para_ads precisa de `pecas` (trabalho_id e formato de cada arte pronta).';
+  if (i.acao === 'periodo') {
+    const p = validarPeriodoDaCampanha(i.periodo_inicio, i.periodo_fim);
+    if (!p.ok) return `periodo: ${p.mensagem} Mande periodo_inicio e periodo_fim (AAAA-MM-DD, fim >= início, até ${MAX_DIAS_DA_CAMPANHA} dias).`;
+  }
   return null;
 }
 
@@ -383,6 +428,9 @@ export function corpoDaAcao(i: EntradaDaAcao, clientId: string): { funcao: 'agen
     case 'trilha_estado': return { funcao: 'agente-calendario', acao: 'campanha_trilha', corpo: { ...base, operacao: 'estado' } };
     case 'trilha_gerar': return { funcao: 'agente-calendario', acao: 'campanha_trilha', corpo: { ...base, operacao: 'gerar_trilha', confirmado: true, ...so(['duracao', 'opcoes', 'tema', 'extra', 'loop']) } };
     case 'pecas_para_ads': return { funcao: 'mesa-ads', acao: 'criativos_da_campanha_mesa', corpo: { client_id: clientId, campanha_id: i.campanha_id, pecas: i.pecas } };
+    case 'arquivar': return { funcao: 'agente-calendario', acao: 'campanha_arquivar', corpo: { ...base, arquivar: true } };
+    case 'desarquivar': return { funcao: 'agente-calendario', acao: 'campanha_arquivar', corpo: { ...base, arquivar: false } };
+    case 'periodo': return { funcao: 'agente-calendario', acao: 'campanha_periodo', corpo: { ...base, periodo_inicio: i.periodo_inicio, periodo_fim: i.periodo_fim } };
   }
 }
 
@@ -397,12 +445,15 @@ const PROXIMO: Record<AcaoDaCampanha, string> = {
   trilha_estado: 'Para gerar: acao=trilha_gerar com confirmar_custo=true (o custo está em `custos`).',
   trilha_gerar: 'As trilhas ficam na aba Trilha da campanha; escolher a final é na tela.',
   pecas_para_ads: 'As peças viraram criativos em rascunho na Mesa Ads (mesmo trabalho do Estúdio). Nada foi à Meta.',
+  arquivar: 'A campanha saiu da lista padrão e não é mais a campanha do mês. O status ficou como estava; volte com acao=desarquivar. Veja as arquivadas com aceleriq_mes_campanhas incluir_arquivadas=true.',
+  desarquivar: 'A campanha voltou para a lista com o status que tinha.',
+  periodo: 'O período mudou. Se a resposta trouxer avisos, a linha do tempo das peças ficou com as datas antigas: use acao=reorganizar (com confirmar_custo=true) para redistribuir.',
 };
 
 const campanhaAcaoTool: ToolDefinition = {
   name: 'aceleriq_mesa_campanha_acao',
   title: 'Campanha da Mesa: agir',
-  description: 'As ações novas da campanha, como na tela: mudanca_planejar (o agente planeja a mudança, sem aplicar) e mudanca_confirmar/mudanca_desfazer, versao_voltar, reorganizar (linha do tempo da introdução ao encerramento; aplicar=true confirma o não protegido), mercado (pesquisa com fonte), roteiro_video (de uma peça), trilha_estado e trilha_gerar, pecas_para_ads (artes prontas viram criativos em rascunho na Mesa Ads). Peça aprovada ou publicada nunca muda. IA paga (mudanca_planejar, reorganizar, mercado, roteiro_video, trilha_gerar) exige confirmar_custo=true. Exige OAuth ou chave de dono admin/gestor; idempotency_key evita repetir.',
+  description: 'As ações novas da campanha, como na tela: mudanca_planejar (o agente planeja a mudança, sem aplicar) e mudanca_confirmar/mudanca_desfazer, versao_voltar, reorganizar (linha do tempo da introdução ao encerramento; aplicar=true confirma o não protegido), mercado (pesquisa com fonte), roteiro_video (de uma peça), trilha_estado e trilha_gerar, pecas_para_ads (artes prontas viram criativos em rascunho na Mesa Ads), arquivar/desarquivar (tira ou volta a campanha da lista padrão; o status não muda) e periodo (periodo_inicio e periodo_fim AAAA-MM-DD, até 62 dias; não redistribui a linha do tempo, isso é reorganizar). Arquivar, desarquivar e periodo não usam IA nem custo. Peça aprovada ou publicada nunca muda. IA paga (mudanca_planejar, reorganizar, mercado, roteiro_video, trilha_gerar) exige confirmar_custo=true. Exige OAuth ou chave de dono admin/gestor; idempotency_key evita repetir.',
   scopes: ['mesas:write'],
   longRunning: true,
   annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
@@ -437,6 +488,8 @@ const campanhaAcaoTool: ToolDefinition = {
           additionalProperties: false,
         },
       },
+      periodo_inicio: { type: 'string', description: 'periodo: AAAA-MM-DD do início.' },
+      periodo_fim: { type: 'string', description: 'periodo: AAAA-MM-DD do fim (mesmo dia ou depois do início, até 62 dias).' },
       confirmar_custo: { type: 'boolean', description: 'true nas ações com IA paga.' },
       idempotency_key: J_CHAVE,
     },
@@ -469,6 +522,7 @@ export const FERRAMENTAS_DO_PAINEL_INTEIRO: readonly ToolDefinition[] = [
   hypeTool,
   templatesTool,
   estudioTool,
+  estudioErrosTool,
   siteTool,
   laboratorioTool,
   baseTool,

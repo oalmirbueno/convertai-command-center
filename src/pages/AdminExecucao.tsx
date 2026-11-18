@@ -10,10 +10,11 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock, ExternalLink,
-  FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
+  Activity, AlertTriangle, Bot, Building2, CheckCircle2, ChevronRight, ClipboardCopy, Clock, ExternalLink,
+  FolderPlus, Network, FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import type { MovimentoDoOrganograma, NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
+import { AGENTE_NOVO, ordemParaGravar, passoNoGrupo, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
 import ListaPaginada from "@/components/execucao/ListaPaginada";
 import TarefaDaExecucao from "@/components/execucao/TarefaDaExecucao";
@@ -46,12 +47,13 @@ import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-context
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
 import { excluirTarefa } from "@/lib/taskDelete";
 import DonoDaTarefa from "@/components/execucao/DonoDaTarefa";
+import PrimeiraLeitura, { EsqueletoDeCartoes } from "@/components/execucao/PrimeiraLeitura";
 import { registrarDecisaoDoDono, type ClienteDaDecisao } from "@/lib/decisaoDoVinculo";
 import { lazyDiscreto, quandoOcioso } from "@/lib/lazyComPreCarga";
 import {
   AjudaRecolhida, AreaDeTrabalho, BarraDeControles, CabecalhoDePagina, CampoDeBusca, Carregando,
-  EstadoDeErro, EstadoVazio, Etapas, Painel, RegiaoRolavel, Secao, SeletorCompacto, botao, etiqueta,
-  juntar, superficie, texto, useAreaDeTrabalho, useEstadoDaTela,
+  EstadoDeErro, EstadoVazio, Etapas, MenuMais, Painel, RegiaoRolavel, Secao, SeletorCompacto, botao, etiqueta,
+  foco, juntar, superficie, texto, useAreaDeTrabalho, useEstadoDaTela,
 } from "@/components/sistema";
 
 /**
@@ -67,6 +69,7 @@ const CentralPerformanceMeta = lazyDiscreto("execucao/performance", () => import
 const OrganogramaAgentes = lazyDiscreto("execucao/hierarquia", () => import("@/components/execucao/OrganogramaAgentes"), sempre);
 const RelatorioVisual = lazyDiscreto("execucao/relatorios", () => import("@/components/execucao/RelatorioVisual"), sempre);
 const PerfilDoAgente = lazyDiscreto("execucao/perfil-do-agente", () => import("@/components/execucao/PerfilDoAgente"), (p) => Boolean(p.operador));
+const EditarAgente = lazyDiscreto("execucao/editar-agente", () => import("@/components/execucao/EditarAgente"), (p) => Boolean(p.agente));
 const DiarioDaExecucao = lazyDiscreto("execucao/diario", () => import("@/components/execucao/DiarioDaExecucao"), (p) => p.aberto);
 const DefinirResponsavel = lazyDiscreto("execucao/responsavel", () => import("@/components/execucao/DefinirResponsavel"), (p) => p.aberto);
 const TaskDetailDrawer = lazyDiscreto("execucao/tarefa", () => import("@/components/admin/TaskDetailDrawer"), sempre);
@@ -153,6 +156,9 @@ type Operador = {
   area: string | null;
   parent_slug: string | null;
   last_run_at: string | null;
+  /** Onde o agente roda: hermes, grok ou paperclip (10/11/2026). */
+  origem?: string | null;
+  display_order?: number | null;
 };
 
 /**
@@ -237,6 +243,9 @@ const AREAS_FECHADAS = "aceleriq-execucao-areas-fechadas";
  * Padrões ESTÁVEIS das leituras (26/10). `data: x = []` cria uma lista nova a cada desenho
  * enquanto a leitura não chega, e todo useMemo que depende dela recalcula sem motivo.
  */
+/** v4 (15/11): leituras que a região espera responder UMA vez antes de aparecer (ver PrimeiraLeitura). */
+const LEITURAS_DO_RESUMO = [["operador-vinculos"], ["operador-tarefas"], ["operador-runs"], ["operadores-internos"], ["operador-tarefas-disponiveis"]] as const;
+const LEITURAS_DO_TRABALHO = [...LEITURAS_DO_RESUMO, ["operador-humanos"], ["execucao-pedidos"], ["aprovacoes-explicadas"], ["propostas-responsavel"], ["pedidos-de-acesso"]] as const;
 const SEM_LINHAS: any[] = [];
 const SEM_OPERADORES: Operador[] = [];
 const SEM_VINCULOS: Vinculo[] = [];
@@ -312,6 +321,8 @@ export default function AdminExecucao() {
   const { data: equipe = [] } = useTeamMembers();
   const { data: projetos = [] } = useProjects();
   const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
+  // Hierarquia editável (10/11/2026): o agente na janela de editar.
+  const [agenteEmEdicao, setAgenteEmEdicao] = useState<Operador | null>(null);
   // Ida e volta (16/10): o diário aberto pelo perfil do agente devolve para o perfil ao fechar.
   const [voltarAoAgente, setVoltarAoAgente] = useState<Operador | null>(null);
   const [abaDoAgente, setAbaDoAgente] = useState<string | null>(null);
@@ -319,6 +330,7 @@ export default function AdminExecucao() {
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const [reconciliando, setReconciliando] = useState(false);
+  const [janelaDoMenu, setJanelaDoMenu] = useState<"projeto" | "departamentos" | null>(null);
   const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string; contextoInicial?: { cliente: { id: string; nome: string }; pedido: string }; textoInicial?: string; aba?: string } | null>(null);
   const [responsavelAberto, setResponsavelAberto] = useState<
     { taskId: string; titulo?: string; atual?: string | null } | null>(null);
@@ -381,7 +393,7 @@ export default function AdminExecucao() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("internal_operators")
-        .select("id, slug, display_name, role, status, scope, is_coordinator, last_run_at, area, parent_slug")
+        .select("id, slug, display_name, role, status, scope, is_coordinator, last_run_at, area, parent_slug, origem, display_order")
         // A ordem do organograma sai do banco: o Hermes reordena por RPC e
         // o painel obedece, sem deploy no meio.
         .order("display_order", { ascending: true })
@@ -1197,10 +1209,33 @@ export default function AdminExecucao() {
         agora: agora ? agora.texto : null,
         agoraDesde: agora ? agora.desde : null,
         ultimaVez: o.last_run_at,
+        funcao: o.role,
+        origem: o.origem ?? null,
+        aposentado: ["retired", "inactive"].includes(o.status),
+        excluido: o.status === "inactive",
+        porta: o.slug === "default",
       };
     }),
     [operadores, vinculosAtivos, agoraDoAgente],
   );
+
+  /** Grava a ordem (e a área de quem mudou de área) e relê os agentes. Só o admin passa no banco. */
+  const moverAgentes = async (itens: ItemDeOrdem[]) => {
+    if (itens.length === 0) return;
+    const { error } = await (supabase as any).rpc("operadores_reordenar", { _itens: itens });
+    if (error) { toast.error(String(error.message || "").includes("SO_ADMIN") ? "Só o administrador organiza os agentes." : "Não foi possível mover o agente."); return; }
+    await queryClient.invalidateQueries({ queryKey: ["operadores-internos"] });
+  };
+  /** As setas da janela de editar (o arrastar do celular): um passo dentro do grupo à vista. */
+  const moverNaArea = async (id: string, sentido: -1 | 1) => {
+    const o = operadores.find((x) => x.id === id);
+    if (!o) return;
+    const aVista = operadores.filter((x) => !["retired", "inactive"].includes(x.status) || x.id === id);
+    const grupo = o.is_coordinator ? aVista.filter((x) => x.is_coordinator) : aVista.filter((x) => !x.is_coordinator && (x.area?.trim() || "") === (o.area?.trim() || ""));
+    const lista = passoNoGrupo(grupo, id, sentido);
+    if (!lista) { toast.info(sentido < 0 ? "Já é o primeiro da área." : "Já é o último da área."); return; }
+    await moverAgentes(ordemParaGravar(lista, id));
+  };
 
   /** A última ação real de cada agente, com prova (lateral). */
   const funcionando = useMemo(
@@ -1261,6 +1296,9 @@ export default function AdminExecucao() {
   const COR_DO_ESTADO: Record<string, string> = {
     done: "bg-success", blocked: "bg-destructive", review: "bg-warning", awaiting_input: "bg-warning", in_progress: "bg-info", queued: "bg-muted-foreground/60",
   };
+  const PASTEL_DO_ESTADO: Record<string, string> = {
+    done: "bg-success-soft text-success", blocked: "bg-danger-soft text-destructive", review: "bg-warning-soft text-warning", awaiting_input: "bg-warning-soft text-warning", in_progress: "bg-info-soft text-info",
+  };
   const Cartao = ({ v }: { v: Vinculo }) => {
     const t = tarefaDoVinculo(v, tarefas);
     const op = opDe(v.operator_id);
@@ -1297,36 +1335,38 @@ export default function AdminExecucao() {
         }}
         onContextMenu={(e) => { e.preventDefault(); setMenuCartao({ x: e.clientX, y: e.clientY, v }); }}
         className={juntar(
-          superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col p-3 transition-colors hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col p-5 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           destacado && "ring-2 ring-primary/50",
         )}
       >
-        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className={juntar("h-2 w-2 shrink-0 rounded-full", COR_DO_ESTADO[v.status] || "bg-muted-foreground/60")} aria-hidden="true" />
-          <span className="font-medium text-foreground/80">{STATUS_ROTULO[v.status] || v.status}</span>
+        {/* v4 (15/11, passada estrutural): cartão de quadro como nas referências: selo pastel do estado, título, cliente, e no pé a pessoa, o prazo em ficha e as ações em círculo. A data da atualização foi para o "ver mais". */}
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className={juntar(etiqueta, "h-6 px-2.5", PASTEL_DO_ESTADO[v.status] || "bg-muted text-muted-foreground")}>
+            <span className={juntar("mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full", COR_DO_ESTADO[v.status] || "bg-muted-foreground/60")} aria-hidden="true" />
+            {STATUS_ROTULO[v.status] || v.status}
+          </span>
           {origem !== "interno" && (
-            <span className={juntar("rounded px-1.5 py-px font-medium", origem === "aguardando_almir" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive")}>
+            <span className={juntar(etiqueta, "h-6 px-2.5", origem === "aguardando_almir" ? "bg-warning-soft text-warning" : "bg-danger-soft text-destructive")}>
               {ROTULO_ORIGEM[origem]}
             </span>
           )}
-          <span className="ml-auto shrink-0 tabular-nums">{dataCurta(v.updated_at)}</span>
         </div>
 
-        {/* 26/10: "Cliente · Área" em cima e o assunto embaixo (lê-se "Cliente · Área · assunto"); o código fica em "ver mais". */}
-        <p className="mt-1.5 truncate text-[12px] text-primary/90" title={nome.texto}>{nome.cliente} · {nome.area}</p>
-        <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
+        {/* 26/10: "Cliente · Área" e o assunto (lê-se "Cliente · Área · assunto"); o código fica em "ver mais". */}
+        <p className="mt-3 line-clamp-2 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
           {nome.assunto}
         </p>
+        <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground" title={nome.texto}>{nome.cliente} · {nome.area}</p>
 
-        {aviso && <p className={juntar("mt-1.5 line-clamp-2 text-[12px]", aviso.tom)}>{aviso.texto}</p>}
+        {aviso && <p className={juntar("mt-2 line-clamp-2 text-[12px] leading-4", aviso.tom)}>{aviso.texto}</p>}
 
-        <div className="mt-auto flex min-w-0 items-center gap-2 pt-2.5 text-[12px] text-muted-foreground">
-          <span className="inline-flex min-w-0 items-center gap-1.5" title={`humano: ${t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}`}>
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-foreground" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
+        <div className="mt-auto flex min-w-0 items-center gap-2 pt-4 text-[12px] text-muted-foreground">
+          <span className="inline-flex min-w-0 items-center gap-2" title={`humano: ${t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}`}>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-semibold text-primary" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
             <span className="truncate">{op?.display_name || "?"}</span>
           </span>
           {t?.due_date && (
-            <span className={juntar("inline-flex shrink-0 items-center rounded-md px-1.5 tabular-nums", prazoVencido ? "bg-destructive/15 font-semibold text-destructive" : "bg-muted")} title="prazo">
+            <span className={juntar("inline-flex h-6 shrink-0 items-center rounded-full border px-2 tabular-nums", prazoVencido ? "border-destructive/40 bg-danger-soft font-semibold text-destructive" : "border-border")} title="prazo">
               <Clock className="mr-1 h-3 w-3" aria-hidden="true" /> {String(t.due_date).split("-").reverse().slice(0, 2).join("/")}
             </span>
           )}
@@ -1335,33 +1375,34 @@ export default function AdminExecucao() {
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); void abrirDecisaoDoVinculo(v.id); }}
-                className="inline-flex h-7 items-center rounded-md bg-warning/15 px-2 text-[12px] font-medium text-warning hover:bg-warning/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-[12px] font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 title="aprovação necessária: decidir"
               >
-                <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" /> decidir
+                <ShieldAlert className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> decidir
               </button>
             )}
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setDiarioAberto({ linkId: v.id, titulo: nome.texto }); }}
-              className="inline-flex h-7 items-center rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              title="Conversar com o agente nesta execução: instrução, contexto, correção"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              title="Diário: conversar com o agente nesta execução (instrução, contexto, correção)"
+              aria-label="diário"
             >
-              diário
+              <MessageSquareReply className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </span>
         </div>
 
         {temMais && (
           <details
-            className="mt-2 border-t border-border/50 pt-1.5"
+            className="mt-3"
             /* Abrir o detalhe NÃO pode abrir a tarefa: o cartão inteiro é
                clicável, e o clique aqui é outra intenção. */
             onClick={(e) => e.stopPropagation()}
           >
             <summary className="cursor-pointer list-none text-[11px] text-muted-foreground marker:hidden hover:text-foreground">ver mais</summary>
             <div className="mt-1.5 space-y-1.5 text-[12px] text-muted-foreground">
-              <p>humano: <span className="font-medium text-foreground/80">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span>{t?.project?.name ? ` · projeto ${t.project.name}` : ""}{nome.codigo ? ` · código ${nome.codigo}` : ""}</p>
+              <p>atualizado {dataCurta(v.updated_at)} · humano: <span className="font-medium text-foreground/80">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span>{t?.project?.name ? ` · projeto ${t.project.name}` : ""}{nome.codigo ? ` · código ${nome.codigo}` : ""}</p>
               {v.last_action && <p className="text-foreground/85">{falarComoGente(v.last_action).humano}</p>}
               {v.last_evidence && (() => {
                 // Traduz UMA vez: o cartão é redesenhado a cada atualização da fila.
@@ -1651,28 +1692,39 @@ export default function AdminExecucao() {
       ) : linhasDeAtencao.length === 0 ? (
         <EstadoVazio compacto titulo="Nada esperando você agora." />
       ) : (
-        <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
-          {linhasDeAtencao.map((l) => (
-            <li key={l.chave}>
-              <button
-                type="button"
-                onClick={() => irParaVisao(l.visao)}
-                className="flex w-full min-w-0 items-center px-3.5 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              >
-                <span className={juntar("mr-2.5 h-1.5 w-1.5 shrink-0 rounded-full", l.ponto)} aria-hidden="true" />
-                <span className={juntar("min-w-0 flex-1 text-[13px] font-medium", l.tom)}>{l.texto}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        /* v4 (15/11, passada estrutural): UM cartão de tinta com o número grande e as frases dentro (sem círculo e sem traço por linha), como o cartão de destaque das referências. */
+        <div className={juntar(superficie.painel, superficie.tinta, "overflow-hidden p-5")}>
+          <p className="flex min-w-0 items-end">
+            <span className="text-[48px] font-medium leading-[48px] tracking-[-0.04em] tabular-nums text-foreground">{contagemDasAbas.decisoes ?? linhasDeAtencao.length}</span>
+            <span className="mb-1 ml-2.5 min-w-0 text-[13px] leading-4 text-muted-foreground">esperando<br />você</span>
+          </p>
+          <ul className="-mx-2 mt-4">
+            {linhasDeAtencao.map((l) => (
+              <li key={l.chave}>
+                <button
+                  type="button"
+                  onClick={() => irParaVisao(l.visao)}
+                  className="group flex w-full min-w-0 items-center rounded-full px-2 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  <span className={juntar("mr-2.5 h-2 w-2 shrink-0 rounded-full", l.ponto)} aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground" title={l.texto}>{l.texto}</span>
+                  <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {(numeros.andamento > 0 || numeros.feitas > 0) && (
-        <p className={juntar(texto.auxiliar, "mt-2 flex flex-wrap items-center")} data-estados-da-execucao="">
-          <button type="button" onClick={() => irParaVisao("in_progress")} className="mr-3 inline-flex items-center hover:text-foreground" title="Ver o que está andando">
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-info" aria-hidden="true" />{numeros.andamento} andando
+        /* Os dois estados que não pedem nada: um cartão claro e o sólido da marca, com o número grande. */
+        <p className="mt-3 grid min-w-0 grid-cols-2 gap-3" data-estados-da-execucao="">
+          <button type="button" onClick={() => irParaVisao("in_progress")} className={juntar(superficie.painel, "flex min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)} title="Ver o que está andando">
+            <span className="block truncate text-[28px] font-medium leading-9 tracking-[-0.03em] tabular-nums text-foreground">{numeros.andamento}</span>{" "}
+            <span className="mt-1 block truncate text-[12px] font-medium leading-4 text-muted-foreground">andando</span>
           </button>
-          <button type="button" onClick={() => irParaVisao("done")} className="inline-flex items-center hover:text-foreground" title="Ver o que foi feito com prova">
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />{numeros.feitas} feito com prova
+          <button type="button" onClick={() => irParaVisao("done")} className={juntar(superficie.painel, superficie.destaque, "flex min-w-0 flex-col p-4 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)} title="Ver o que foi feito com prova">
+            <span className="block truncate text-[28px] font-medium leading-9 tracking-[-0.03em] tabular-nums text-foreground">{numeros.feitas}</span>{" "}
+            <span className="mt-1 block truncate text-[12px] font-medium leading-4 text-muted-foreground">feito com prova</span>
           </button>
         </p>
       )}
@@ -1897,6 +1949,10 @@ export default function AdminExecucao() {
       nos={nosDoOrganograma}
       movimentos={movimentosDoOrganograma}
       nomeDoDono={profile?.full_name || "Você"}
+      podeOrganizar={profile?.role === "admin"}
+      aoEditar={(no) => { const op = operadores.find((o) => o.id === no.id); if (op) setAgenteEmEdicao(op); }}
+      aoMover={(itens) => void moverAgentes(itens)}
+      aoCriar={() => setAgenteEmEdicao({ ...AGENTE_NOVO, last_run_at: null })}
       aoAbrir={(no) => {
         const op = operadores.find((o) => o.id === no.id);
         if (op) setAgenteAberto(op);
@@ -1995,7 +2051,7 @@ export default function AdminExecucao() {
       />
       {esperandoVoce.length > 0 ? (
         // No celular, o pé da mesa (fixo embaixo) sobe acima do botão "Atenção" da lateral, para um não cobrir o outro.
-        <Secao nivel={3} titulo="Tarefas esperando você" descricao={`${esperandoVoce.length}`} className="max-sm:[&_[data-decidir-no-pe]]:bottom-[64px]">
+        <Secao nivel={3} titulo="Tarefas esperando você" className="max-sm:[&_[data-decidir-no-pe]]:bottom-[64px]">
           <MesaDeDecisao rotulo="Tarefas esperando você" itens={itensDosVinculos(esperandoVoce)} onDecidir={decidirVinculo} />
         </Secao>
       ) : pedidosVisiveis.length === 0 ? (
@@ -2188,6 +2244,8 @@ export default function AdminExecucao() {
             rotulo="Trabalho dos agentes"
             memoria={`execucao:${aba === "feito" ? "feito" : visao}`}
           >
+            {/* v4 (15/11): a região aparece inteira depois da primeira resposta de todas as leituras; antes cada uma empurrava a outra. */}
+            <PrimeiraLeitura chaves={LEITURAS_DO_TRABALHO} aguardar={carregandoVinculos && vinculos.length === 0} esqueleto={<EsqueletoDeCartoes rotulo="Carregando o trabalho dos agentes" alturas={[44, 360, 44, 420]} />}>
             <div className="space-y-6 lg:pb-6 lg:pr-1">
               {aba === "feito" && <OQueFoiFeito />}
               {aba === "decisoes" && <PedidosDeAcesso />}
@@ -2196,6 +2254,7 @@ export default function AdminExecucao() {
                   espera o agente. Sem isto, autorizar parecia concluir. */}
               {aba === "decisoes" && <OrdensAutorizadas />}
             </div>
+            </PrimeiraLeitura>
           </RegiaoRolavel>
         )}
       </div>
@@ -2226,32 +2285,18 @@ export default function AdminExecucao() {
           </>
         }
         acoes={
-          <div className="flex items-center gap-0.5">
-            {profile?.role === "admin" && (
-              <>
-              <Departamentos agentes={operadores} />
-              <button
-                type="button"
-                onClick={() => void reconciliarExecucoes()}
-                disabled={reconciliando}
-                title={reconciliando ? "Reconciliando…" : "Reconciliar: registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."}
-                aria-label="Reconciliar execuções"
-                className={botao.icone}
-              >
-                <Wrench className={juntar("h-4 w-4", reconciliando && "animate-pulse")} aria-hidden="true" />
-              </button>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => void atualizarTudo()}
-              disabled={atualizando}
-              aria-label="Atualizar"
-              title={dataUpdatedAt ? `Atualizar · atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Atualizar · aguardando a primeira leitura"}
-              className={botao.icone}
-            >
-              <RefreshCw className={juntar("h-4 w-4", atualizando && "animate-spin")} aria-hidden="true" />
-            </button>
+          /* v4 (15/11, passada estrutural): cinco ícones soltos viravam ruído. Fica a tela cheia e um "…" com o resto. */
+          <div className="flex items-center gap-1">
+            {profile?.role === "admin" && <Departamentos agentes={operadores} janela={janelaDoMenu} aoFechar={() => setJanelaDoMenu(null)} />}
+            <MenuMais
+              rotulo="Mais ações da Execução"
+              itens={[
+                { rotulo: atualizando ? "Atualizando…" : "Atualizar", icone: <RefreshCw className={juntar("h-4 w-4", atualizando && "animate-spin")} aria-hidden="true" />, desativado: atualizando, dica: dataUpdatedAt ? `Atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Aguardando a primeira leitura", aoEscolher: () => void atualizarTudo() },
+                profile?.role === "admin" && { rotulo: "Novo projeto", icone: <FolderPlus className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => setJanelaDoMenu("projeto") },
+                profile?.role === "admin" && { rotulo: "Departamentos", icone: <Network className="h-4 w-4" aria-hidden="true" />, aoEscolher: () => setJanelaDoMenu("departamentos") },
+                profile?.role === "admin" && { rotulo: reconciliando ? "Reconciliando…" : "Reconciliar execuções", icone: <Wrench className="h-4 w-4" aria-hidden="true" />, desativado: reconciliando, separadorAntes: true, dica: "Registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico.", aoEscolher: () => void reconciliarExecucoes() },
+              ]}
+            />
             <BotaoDeTelaCheia tela={telaCheia} className="h-9 px-2.5" />
           </div>
         }
@@ -2297,10 +2342,12 @@ export default function AdminExecucao() {
         memoria="execucao-resumo"
         rotuloDaLateral="Atenção"
         iconeDaLateral={<ListChecks className="h-4 w-4" />}
-        lateral={aba === "performance" || aba === "central" ? undefined :
+        // v4 (15/11, passada estrutural): em Relatórios a faixa de números da própria aba já é o resumo; a lateral repetia os mesmos números.
+        lateral={aba === "performance" || aba === "central" || aba === "relatorios" ? undefined :
           <>
             <FecharResumo />
             <RegiaoRolavel modo="sempre" rotulo="Áreas e incidentes" memoria="execucao:areas" className="lg:pr-1">
+              <PrimeiraLeitura chaves={LEITURAS_DO_RESUMO} aguardar={carregandoVinculos && vinculos.length === 0} esqueleto={<EsqueletoDeCartoes rotulo="Carregando o resumo" alturas={[48, 300, 92, 260]} className="pb-4" />}>
               <div className="space-y-6 pb-4">
                 <div aria-label="O que pede a sua atenção" role="group">
                   {atencao}
@@ -2312,6 +2359,7 @@ export default function AdminExecucao() {
                 />
                 {areasEIncidentes}
               </div>
+              </PrimeiraLeitura>
             </RegiaoRolavel>
           </>
         }
@@ -2378,6 +2426,14 @@ export default function AdminExecucao() {
           )}
         />
       )}
+
+      <EditarAgente
+        agente={agenteEmEdicao}
+        todos={operadores}
+        aoFechar={() => setAgenteEmEdicao(null)}
+        aoMudar={() => queryClient.invalidateQueries({ queryKey: ["operadores-internos"] })}
+        aoMoverNaArea={moverNaArea}
+      />
 
       <DefinirResponsavel
         taskId={responsavelAberto?.taskId ?? null}

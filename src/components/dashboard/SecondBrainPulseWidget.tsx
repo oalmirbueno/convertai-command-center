@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertCircle, Brain, GitCommit, Inbox, RefreshCw, Radio } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, GitCommit, Inbox, RefreshCw } from "lucide-react";
+import { Card, StatusPill } from "@/components/ds";
 import { Button } from "@/components/ui/button";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 interface PulseResponse {
   configured: boolean;
@@ -56,10 +56,27 @@ async function fetchPulse(): Promise<PulseResponse> {
   return data as PulseResponse;
 }
 
-function relTime(iso?: string): string {
+const ha = (iso?: string) => { const c = curto(iso); return c === "agora" || c === "-" || c.includes("/") ? c : `há ${c}`; };
+
+/** Tempo curto para linhas estreitas: "agora", "12 min", "3 h", "2 d", depois "15/11". */
+function curto(iso?: string): string {
   if (!iso) return "-";
-  try { return formatDistanceToNow(new Date(iso), { addSuffix: true, locale: ptBR }); }
-  catch { return "-"; }
+  const d = new Date(iso); const ms = Date.now() - d.getTime();
+  if (Number.isNaN(ms)) return "-";
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `${min} min`;
+  if (min < 60 * 24) return `${Math.floor(min / 60)} h`;
+  if (min < 60 * 24 * 7) return `${Math.floor(min / 1440)} d`;
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+/** Nome da proposta sem a data do começo (a data vira um rótulo curto ao lado). */
+function nomeDaProposta(caminho: string): { nome: string; data: string | null } {
+  const arquivo = caminho.split("/").slice(-1)[0].replace(/\.md$/i, "");
+  const m = /^(\d{4})-(\d{2})-(\d{2})[-_T ]?(.*)$/.exec(arquivo);
+  if (!m) return { nome: arquivo, data: null };
+  return { nome: (m[4] || arquivo).replace(/[-_]+/g, " ").trim() || arquivo, data: `${m[3]}/${m[2]}` };
 }
 
 export default function SecondBrainPulseWidget() {
@@ -70,49 +87,49 @@ export default function SecondBrainPulseWidget() {
     refetchOnWindowFocus: true,
     staleTime: 10_000,
   });
+  const [todosCommits, setTodosCommits] = useState(false);
+  const [todasPropostas, setTodasPropostas] = useState(false);
+
+  const poco = "min-w-0 rounded-2xl bg-muted/60 p-4";
+  const rotulo = "mb-3 flex items-center text-[12px] font-medium text-muted-foreground";
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-primary" />
-          <p className="label-sm">Segundo Cérebro · Pulse</p>
-          {data?.configured && (
-            <span className="flex items-center gap-1 text-[10px] text-success font-mono">
-              <Radio className="w-3 h-3 animate-pulse" />
-              ao vivo
-            </span>
-          )}
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="h-7 px-2 text-[11px]"
-        >
-          <RefreshCw className={`w-3 h-3 mr-1 ${isFetching ? "animate-spin" : ""}`} />
-          Atualizar
+    <Card
+      title="Segundo Cérebro"
+      collapsible="dashboard:segundo-cerebro"
+      subtitle={
+        data && !data.configured ? (
+          "Bridge não configurado"
+        ) : data ? (
+          <span className="inline-flex items-center">
+            {data.configured && <StatusPill tone="success" pulse className="mr-2">ao vivo</StatusPill>}
+            Atualizado {ha(data.fetched_at)}
+          </span>
+        ) : undefined
+      }
+      action={
+        <Button size="icon" variant="ghost" onClick={() => refetch()} disabled={isFetching} aria-label="Atualizar" title="Atualizar" className="h-9 w-9 rounded-full">
+          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
         </Button>
-      </div>
-
-      {isLoading && <p className="text-xs text-muted-foreground">Sincronizando…</p>}
+      }
+    >
+      {isLoading && <p className="text-[12px] text-muted-foreground">Sincronizando…</p>}
 
       {error && (
-        <p className="text-xs text-destructive">
+        <p className="text-[12px] text-destructive">
           Falha ao consultar o bridge: {(error as Error).message}
         </p>
       )}
 
       {data && !data.configured && (
-        <p className="text-xs text-muted-foreground">
-          Bridge não configurado. Defina os segredos <code className="font-mono">SECOND_BRAIN_GITHUB_*</code>.
+        <p className="text-[12px] leading-4 text-muted-foreground [overflow-wrap:anywhere]">
+          Defina os segredos <code className="font-mono">SECOND_BRAIN_GITHUB_*</code>.
         </p>
       )}
 
       {data?.configured && data.error === "bridge_unavailable" && (
-        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/25 p-3 text-xs text-muted-foreground">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <div className={`${poco} flex items-start text-[12px] text-muted-foreground`}>
+          <AlertCircle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
           <div>
             <p className="text-foreground">Segundo Cérebro temporariamente indisponível.</p>
             <p className="mt-0.5">O painel continua ativo e tentará sincronizar novamente automaticamente.</p>
@@ -121,74 +138,86 @@ export default function SecondBrainPulseWidget() {
       )}
 
       {data?.configured && data.pulse && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        // Hotfix 15/11: o cartão fica na coluna estreita do Dashboard. As três partes
+        // empilham em linhas quando falta largura (auto-fit) e nada rola por dentro.
+        <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(240px,100%),1fr))] gap-3">
           {/* HEAD */}
-          <div className="border border-border/60 rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">HEAD</p>
+          <div className={poco}>
+            <p className={rotulo}>
+              <GitCommit className="mr-1.5 h-3 w-3" /> Último commit
+            </p>
             {data.pulse.head ? (
               <>
-                <p className="font-mono text-sm text-foreground">{data.pulse.head.short}</p>
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{data.pulse.head.message}</p>
-                <p className="text-[10px] text-muted-foreground mt-2">
-                  {data.pulse.head.author ?? "-"} · {relTime(data.pulse.head.committed_at)}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  branch <span className="font-mono">{data.pulse.branch}</span> · {data.pulse.latency_ms}ms {data.pulse.cached ? "· cache" : ""}
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0 rounded-full bg-primary px-2.5 py-0.5 font-mono text-[12px] font-semibold text-primary-foreground">{data.pulse.head.short}</span>
+                  <span className="min-w-0 truncate text-[12px] text-muted-foreground">{ha(data.pulse.head.committed_at)}</span>
+                </div>
+                <p className="mt-2 line-clamp-2 break-words text-[13px] leading-5 text-foreground">{data.pulse.head.message}</p>
+                <p className="mt-1.5 truncate text-[11px] text-muted-foreground" title={`${data.pulse.latency_ms}ms${data.pulse.cached ? " · cache" : ""}`}>
+                  {data.pulse.head.author ?? "-"} · <span className="font-mono">{data.pulse.branch}</span>
                 </p>
               </>
             ) : (
-              <p className="text-xs text-muted-foreground">Sem commits.</p>
+              <p className="text-[12px] text-muted-foreground">Sem commits.</p>
             )}
           </div>
 
           {/* Recent commits */}
-          <div className="border border-border/60 rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-              <GitCommit className="w-3 h-3" /> Commits recentes
-            </p>
-            <div className="space-y-1.5 max-h-40 overflow-auto pr-1">
-              {data.commits.length === 0 && <p className="text-xs text-muted-foreground">-</p>}
-              {data.commits.map((c) => (
-                <a
-                  key={c.sha}
-                  href={c.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block text-xs hover:bg-muted/40 rounded px-1.5 py-1 transition-colors"
-                >
-                  <span className="font-mono text-primary/80">{c.short}</span>{" "}
-                  <span className="text-foreground line-clamp-1">{c.message}</span>
-                  <span className="block text-[10px] text-muted-foreground">
-                    {c.author ?? "-"} · {relTime(c.committed_at)}
-                  </span>
-                </a>
+          <div className={poco}>
+            <p className={rotulo}>Commits recentes</p>
+            {data.commits.length === 0 && <p className="text-[12px] text-muted-foreground">-</p>}
+            <ul className="min-w-0 space-y-1">
+              {(todosCommits ? data.commits : data.commits.slice(0, 3)).map((c) => (
+                <li key={c.sha} className="min-w-0">
+                  <a
+                    href={c.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block min-w-0 rounded-lg px-2 py-1.5 text-[12px] leading-[18px] transition-colors hover:bg-card"
+                  >
+                    <span className="block truncate text-foreground" title={c.message}>{c.message}</span>
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="font-mono">{c.short}</span>
+                      <span aria-hidden>·</span>
+                      <span className="truncate">{curto(c.committed_at)}</span>
+                    </span>
+                  </a>
+                </li>
               ))}
-            </div>
+            </ul>
+            {data.commits.length > 3 && (
+              <button type="button" onClick={() => setTodosCommits((v) => !v)} className="mt-1 px-2 text-[12px] font-medium text-foreground underline-offset-2 hover:underline">
+                {todosCommits ? "Ver menos" : `Ver mais ${data.commits.length - 3}`}
+              </button>
+            )}
           </div>
 
           {/* Inbox */}
-          <div className="border border-border/60 rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-              <Inbox className="w-3 h-3" /> Inbox pendente
-              <span className="ml-auto font-mono text-foreground">{data.pulse.inbox_pending}</span>
+          <div className={poco}>
+            <p className={rotulo}>
+              <Inbox className="mr-1.5 h-3 w-3" /> Inbox pendente
+              <span className="ml-auto text-[20px] font-semibold leading-6 tabular-nums text-foreground">{data.pulse.inbox_pending}</span>
             </p>
-            <div className="space-y-1 max-h-40 overflow-auto pr-1">
-              {data.inbox.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma proposta aguardando.</p>}
-              {data.inbox.map((i) => (
-                <p key={i.sha} className="text-[11px] font-mono text-muted-foreground truncate">
-                  {i.path.split("/").slice(-1)[0]}
-                </p>
-              ))}
-            </div>
+            {data.inbox.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhuma proposta aguardando.</p>}
+            <ul className="min-w-0 space-y-1">
+              {(todasPropostas ? data.inbox : data.inbox.slice(0, 3)).map((i) => {
+                const { nome, data: quando } = nomeDaProposta(i.path);
+                return (
+                  <li key={i.sha} className="flex min-w-0 items-center gap-2 px-2 py-1 text-[12px]">
+                    <span className="min-w-0 flex-1 truncate text-foreground" title={i.path}>{nome}</span>
+                    {quando && <span className="shrink-0 text-[11px] text-muted-foreground">{quando}</span>}
+                  </li>
+                );
+              })}
+            </ul>
+            {data.inbox.length > 3 && (
+              <button type="button" onClick={() => setTodasPropostas((v) => !v)} className="mt-1 px-2 text-[12px] font-medium text-foreground underline-offset-2 hover:underline">
+                {todasPropostas ? "Ver menos" : `Ver mais ${data.inbox.length - 3}`}
+              </button>
+            )}
           </div>
         </div>
       )}
-
-      {data && (
-        <p className="text-[10px] text-muted-foreground mt-3">
-          Atualizado {relTime(data.fetched_at)}
-        </p>
-      )}
-    </div>
+    </Card>
   );
 }

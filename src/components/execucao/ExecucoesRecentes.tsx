@@ -90,7 +90,7 @@ function ExecucoesRecentes({ runs, agentes, vinculos, tarefas, destaque, aoConve
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold" title={agente?.display_name || "Agente"} aria-hidden="true">{(agente?.display_name || "A").slice(0, 1)}</span>
         <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-medium">{titulo}</p><p className="truncate text-[12px] text-muted-foreground">{agente?.display_name || "Agente"}{nomeCliente ? ` · ${nomeCliente}` : " · operação interna"} · {new Date(r.heartbeat_at || r.started_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p></div>
         <span className={juntar("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", ruim ? "bg-warning/15 text-warning" : r.status === "done" && !rodada ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>{destravada ? ROTULO_DESTRAVADA[destravada.acao || ""] || "Resolvida por você" : rodada ? "Rodada concluída" : estadoDaExecucao(r.status)}</span>
-      </>}>{() => <div className="max-h-[50vh] space-y-3 overflow-y-auto border-t border-border/60 p-4">
+      </>}>{() => <div className="space-y-3 border-t border-border/60 p-4 lg:max-h-[50vh] lg:overflow-y-auto">
         <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground"><Clock className="h-3 w-3" />Último registro: {new Date(r.heartbeat_at || r.started_at).toLocaleString("pt-BR")}</p>
         {d.action && <p className="whitespace-pre-wrap text-[13px] font-medium">{d.action}</p>}
         {/* 19/10 (dono: "quando vem assim fica muito confuso"): FEITO / TRAVADO / PRÓXIMO PASSO em blocos, o travado primeiro. */}

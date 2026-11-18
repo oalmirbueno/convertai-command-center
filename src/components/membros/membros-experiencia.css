@@ -15,7 +15,8 @@
   --card-foreground: 145 15% 10%;
   --popover: 0 0% 100%;
   --popover-foreground: 145 15% 10%;
-  --primary: 120 100% 25%;
+  /* v4: um tom mais escuro para o verde passar de 4,5:1 também sobre fundo verde-claro. */
+  --primary: 120 100% 22%;
   --primary-foreground: 0 0% 100%;
   --secondary: 120 9% 94%;
   --secondary-foreground: 140 7% 36%;
@@ -106,7 +107,7 @@
   min-height: 44px;
   padding: 10px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
@@ -123,10 +124,9 @@
   text-decoration: none;
 }
 .membros-marca > span {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: hsl(var(--muted-foreground));
 }
 .membros-topo-busca {
@@ -362,10 +362,9 @@
   border: 1px solid #ffffff35;
   background: #ffffff0d;
   color: #e6f5df;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 550;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   margin-bottom: 16px;
 }
 .membros-destaque-titulo {
@@ -384,7 +383,7 @@
 }
 .membros-destaque-acao {
   margin-top: 22px;
-  border-radius: 10px;
+  border-radius: 999px;
   min-height: 46px;
   padding-inline: 20px;
 }
@@ -448,7 +447,7 @@
   flex: none;
   width: 40px;
   height: 40px;
-  border-radius: 11px;
+  border-radius: 12px;
   background: hsl(var(--primary) / 0.07);
   color: hsl(var(--primary));
 }
@@ -623,8 +622,7 @@
 }
 .membros-capa-assinatura {
   font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   opacity: 0.8;
 }
 .membros-capa-assinatura > span {
@@ -646,9 +644,8 @@
 }
 .membros-capa-editorial > span {
   display: block;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.01em;
   color: #bfd1c0;
 }
 .membros-capa-editorial > span:last-child {
@@ -834,9 +831,8 @@
 }
 .membros-curso-categoria {
   display: block;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.01em;
   margin-bottom: 8px;
   color: #c5e8c7;
 }
@@ -1242,7 +1238,7 @@
 .bolso-referencia-envio { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 .bolso-referencia-envio input { width: min(100%, 300px); font-size: 12px; }
 .bolso-referencias { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; }
-.bolso-referencia { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid hsl(var(--border)); border-radius: 11px; min-width: 0; }
+.bolso-referencia { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid hsl(var(--border)); border-radius: 12px; min-width: 0; }
 .bolso-referencia > div { display: grid; place-items: center; flex: none; width: 48px; height: 48px; border-radius: 7px; overflow: hidden; background: hsl(var(--muted)); }
 .bolso-referencia img { width: 100%; height: 100%; object-fit: contain; }
 .bolso-referencia > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
@@ -1815,8 +1811,7 @@
   font-size: 11px;
   line-height: 1.5;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: hsl(var(--muted-foreground));
 }
 .bolso-saldo-grande {

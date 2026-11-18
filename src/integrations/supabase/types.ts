@@ -5963,6 +5963,11 @@ export type Database = {
           publicar_em_confirmado_por: string | null
           publicar_em_desfeito_em: string | null
           qualidade: string | null
+          revisado_em: string | null
+          revisado_por: string | null
+          revisao_arquivo_id: string | null
+          revisao_decisao: string | null
+          revisao_nota: string | null
           status: string
           task_id: string | null
           tipo: string
@@ -6001,6 +6006,11 @@ export type Database = {
           publicar_em_confirmado_por?: string | null
           publicar_em_desfeito_em?: string | null
           qualidade?: string | null
+          revisado_em?: string | null
+          revisado_por?: string | null
+          revisao_arquivo_id?: string | null
+          revisao_decisao?: string | null
+          revisao_nota?: string | null
           status?: string
           task_id?: string | null
           tipo?: string
@@ -6039,6 +6049,11 @@ export type Database = {
           publicar_em_confirmado_por?: string | null
           publicar_em_desfeito_em?: string | null
           qualidade?: string | null
+          revisado_em?: string | null
+          revisado_por?: string | null
+          revisao_arquivo_id?: string | null
+          revisao_decisao?: string | null
+          revisao_nota?: string | null
           status?: string
           task_id?: string | null
           tipo?: string
@@ -6063,6 +6078,13 @@ export type Database = {
             columns: ["modelo_imagem_id"]
             isOneToOne: false
             referencedRelation: "ia_modelos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estudio_trabalhos_revisado_por_fkey"
+            columns: ["revisado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -10878,6 +10900,7 @@ export type Database = {
           first_access_used_at: string | null
           full_name: string
           id: string
+          modo_aprovacao_do_cliente: string
           onboarding_done: boolean
           ops_client_id: string | null
           overdue_since: string | null
@@ -10908,6 +10931,7 @@ export type Database = {
           first_access_used_at?: string | null
           full_name: string
           id: string
+          modo_aprovacao_do_cliente?: string
           onboarding_done?: boolean
           ops_client_id?: string | null
           overdue_since?: string | null
@@ -10938,6 +10962,7 @@ export type Database = {
           first_access_used_at?: string | null
           full_name?: string
           id?: string
+          modo_aprovacao_do_cliente?: string
           onboarding_done?: boolean
           ops_client_id?: string | null
           overdue_since?: string | null
@@ -15048,6 +15073,14 @@ export type Database = {
         Returns: undefined
       }
       agencia_dados_sugestoes: { Args: never; Returns: Json }
+      ajustar_formato_publicacao_aprovada: {
+        Args: {
+          p_content_type: string
+          p_expected_version: number
+          p_post_id: string
+        }
+        Returns: Json
+      }
       aprovacao_email_tick: { Args: never; Returns: Json }
       aprovar_pelo_cliente: {
         Args: { p_file_id: string; p_nota?: string }
@@ -15504,6 +15537,14 @@ export type Database = {
         Returns: boolean
       }
       dossie_registrar_avancos_todos: { Args: never; Returns: number }
+      editar_legenda_publicacao_aprovada: {
+        Args: {
+          p_caption: string
+          p_expected_version: number
+          p_publication_id: string
+        }
+        Returns: Json
+      }
       editorial_alerta_agendamento_atrasado: { Args: never; Returns: Json }
       editorial_autopublish_tick: { Args: never; Returns: Json }
       editorial_can_publish_client: {
@@ -16825,6 +16866,10 @@ export type Database = {
         Returns: Json
       }
       retry_autopublish: { Args: { p_publication_id: string }; Returns: Json }
+      revisar_trabalho_interno: {
+        Args: { p_decisao: string; p_nota?: string; p_trabalho_id: string }
+        Returns: Json
+      }
       review_file_agency: {
         Args: { p_decision: string; p_feedback?: string; p_file_id: string }
         Returns: {

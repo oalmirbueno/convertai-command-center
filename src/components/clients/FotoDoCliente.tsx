@@ -73,7 +73,7 @@ function Desenho({ nome, lista, tamanho = "md", lado, forma = "redonda", tituloS
   if (atual.tipo === "logo") {
     return (
       <div
-        className={`${base} flex items-center justify-center bg-white ring-1 ring-border ${lado ? "" : t.borda}`}
+        className={`${base} flex items-center justify-center ${atual.fundo === "escuro" ? "bg-neutral-900" : "bg-white"} ring-1 ring-border ${lado ? "" : t.borda}`}
         style={lado ? { ...estilo, padding: Math.max(2, Math.round(lado * 0.1)) } : undefined}
       >
         <img key={atual.url} src={atual.url} alt={texto} loading="lazy" onError={() => quebrou(atual.url)} className="h-full w-full object-contain" />

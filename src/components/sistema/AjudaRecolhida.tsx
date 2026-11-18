@@ -95,7 +95,7 @@ export default function AjudaRecolhida({
           onMouseLeave={sair}
           data-ajuda-recolhida=""
           className={juntar(
-            "toque-compacto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground",
+            "toque-compacto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/80 transition-colors hover:bg-muted hover:text-foreground",
             aberto && "text-foreground",
             foco,
             className,

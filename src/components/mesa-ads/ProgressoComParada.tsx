@@ -45,7 +45,7 @@ export default function ProgressoComParada({
           <Square className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
       {parando && <p className="mt-1 text-[12px] text-muted-foreground">O que já está saindo termina e fica; o resto não é gerado nem cobrado.</p>}

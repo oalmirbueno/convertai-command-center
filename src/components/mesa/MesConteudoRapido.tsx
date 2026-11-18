@@ -1,3 +1,4 @@
+import { campanhaArquivada } from "../../../supabase/functions/_shared/arquivo-da-campanha";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarCheck2, CalendarSearch, ExternalLink, Plus, Zap } from "lucide-react";
@@ -74,7 +75,7 @@ export default function MesConteudoRapido({
   const [resultado, setResultado] = useState<Resultado | null>(null);
 
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), enabled: aberto, queryFn: () => lerCampanhas(clientId) });
-  const ativas = (campanhas.data || []).filter((c) => c.status !== "encerrada");
+  const ativas = (campanhas.data || []).filter((c) => c.status !== "encerrada" && !campanhaArquivada(c));
 
   const recomecar = () => {
     setResultado(null);
@@ -187,7 +188,7 @@ export default function MesConteudoRapido({
           </div>
         ) : (
           <div className="min-w-0 space-y-3">
-            <div className="rounded-xl bg-muted/50 p-2 focus-within:ring-1 focus-within:ring-primary/40">
+            <div className="rounded-lg bg-muted/50 p-2 focus-within:ring-1 focus-within:ring-primary/40">
               <Textarea
                 value={pedido}
                 onChange={(e) => setPedido(e.target.value)}
@@ -203,7 +204,7 @@ export default function MesConteudoRapido({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
               <div className="min-w-0">
                 <p className="mb-1 text-[11px] font-medium text-muted-foreground">Dia</p>
                 <div className="flex min-w-0">
@@ -222,7 +223,7 @@ export default function MesConteudoRapido({
               </div>
               <div className="min-w-0">
                 <p className="mb-1 text-[11px] font-medium text-muted-foreground">Formato</p>
-                <div role="radiogroup" aria-label="Formato" className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-0.5">
+                <div role="radiogroup" aria-label="Formato" className="grid grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5">
                   {([["", "Agente escolhe"], ["estatico", "Estático"], ["carrossel", "Carrossel"]] as const).map(([v, r]) => (
                     <button
                       key={v || "auto"}
@@ -231,7 +232,7 @@ export default function MesConteudoRapido({
                       aria-checked={formato === v}
                       disabled={rodando}
                       onClick={() => setFormato(v)}
-                      className={`min-w-0 truncate rounded-md px-1.5 py-1.5 text-[12px] font-medium ${formato === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+                      className={`toque-compacto min-w-0 truncate rounded-full px-2 py-1.5 text-[12px] font-medium transition-colors ${formato === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
                     >
                       {r}
                     </button>
@@ -240,7 +241,7 @@ export default function MesConteudoRapido({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-3">
               {ativas.length > 0 && (
                 <Select value={campanhaId} onValueChange={setCampanhaId} disabled={rodando}>
                   <SelectTrigger className="h-9 min-w-0 text-[12px]" aria-label="Campanha"><SelectValue /></SelectTrigger>

@@ -96,7 +96,7 @@ function Escolhas<T extends SugestaoDeBio | SugestaoDeNome>({
             )}
           >
             <span className="flex min-w-0 items-center">
-              {doJev === s.id && <span className={juntar(etiqueta, "mr-1.5 bg-success/15 text-success")}>Escolha do Jev{typeof probabilidades[s.id] === "number" ? ` ${Math.round(probabilidades[s.id] * 100)}%` : ""}</span>}
+              {doJev === s.id && <span className={juntar(etiqueta, "mr-1.5 bg-success-soft text-success")}>Escolha do Jev{typeof probabilidades[s.id] === "number" ? ` ${Math.round(probabilidades[s.id] * 100)}%` : ""}</span>}
               <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">{s.caracteres}</span>
             </span>
             <span className="mt-0.5 block whitespace-pre-line text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{s.texto}</span>
@@ -143,7 +143,7 @@ export default function BioENome({ perfil, analise, onAnalise }: { perfil: Perfi
 
   return (
     <div className="min-w-0 space-y-3" data-bio-e-nome="">
-      <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
         <Lado titulo="Nome hoje" valor={perfil.nome} limite={LIMITES_DO_PERFIL.nome} vazio="Sem nome" />
         <Lado titulo="Bio hoje" valor={perfil.bio} limite={LIMITES_DO_PERFIL.bio} vazio="Sem bio" />
       </div>
@@ -214,7 +214,7 @@ export default function BioENome({ perfil, analise, onAnalise }: { perfil: Perfi
           {sugestoes.bios.length > 0 && (
             <div className="min-w-0 space-y-2">
               <p className={texto.rotulo}>Bio: antes e depois</p>
-              <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
                 <Lado titulo="Antes" valor={perfil.bio} limite={LIMITES_DO_PERFIL.bio} vazio="Sem bio" />
                 <div className="min-w-0">
                   <Lado titulo="Depois" valor={bioNova ? bioNova.texto : ""} limite={LIMITES_DO_PERFIL.bio} vazio="Escolha uma sugestão" destaque />
@@ -233,7 +233,7 @@ export default function BioENome({ perfil, analise, onAnalise }: { perfil: Perfi
             <div className="min-w-0 space-y-2">
               <p className={texto.rotulo}>Nome: antes e depois</p>
               {(v.nome_pode_melhorar || (jevNome && jevNome !== "atual")) ? null : <p className={texto.auxiliar}>O Nome de hoje já ajuda a busca: troque só se preferir.</p>}
-              <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
                 <Lado titulo="Antes" valor={perfil.nome} limite={LIMITES_DO_PERFIL.nome} vazio="Sem nome" />
                 <div className="min-w-0">
                   <Lado titulo="Depois" valor={nomeNovo ? nomeNovo.texto : ""} limite={LIMITES_DO_PERFIL.nome} vazio="Escolha uma sugestão" destaque />

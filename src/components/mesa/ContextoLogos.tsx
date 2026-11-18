@@ -263,7 +263,7 @@ function QuadroDaLogo({
   const altura = compacto ? "h-24 sm:h-28" : "h-32";
   if (!imagem) {
     return (
-      <div className={`flex ${altura} w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted text-[12px] text-muted-foreground`}>
+      <div className={`flex ${altura} w-full items-center justify-center rounded-lg bg-muted text-[12px] font-medium text-muted-foreground ${carregando ? "" : "ds-hatch"}`}>
         {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sem logo"}
       </div>
     );
@@ -466,7 +466,7 @@ export default function LogosDaMarca({
 
   return (
     <div className="min-w-0 space-y-2">
-      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 min-[400px]:grid-cols-2">
         {tiles.map((t) => {
           const indice = t.imagem ? ampliaveis.findIndex((a) => a.caminho === t.imagem!.caminho) : -1;
           return (
@@ -488,7 +488,7 @@ export default function LogosDaMarca({
                       onClick={() => setFundos((f) => ({ ...f, [t.qual]: PROXIMO_FUNDO[f[t.qual] || fundoDe(t.qual)] }))}
                       title={`Fundo ${NOME_DO_FUNDO[fundoDe(t.qual)]}${fundos[t.qual] ? "" : " (automático, pela cor da logo)"}: trocar para ${NOME_DO_FUNDO[PROXIMO_FUNDO[fundoDe(t.qual)]]}`}
                       aria-label={`Conferir a ${t.rotulo.toLowerCase()} em fundo ${NOME_DO_FUNDO[PROXIMO_FUNDO[fundoDe(t.qual)]]}`}
-                      className="mr-0.5 flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted"
+                      className="mr-0.5 flex h-7 w-7 items-center justify-center rounded-full hover:bg-muted"
                     >
                       <span
                         className="h-3.5 w-3.5 rounded-full border border-border"

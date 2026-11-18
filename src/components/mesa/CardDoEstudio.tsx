@@ -216,7 +216,7 @@ function Conferencia({
         <ScanSearch className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="sr-only">Conferência</span>
         <span className="flex min-w-0 flex-1 flex-wrap gap-y-0.5">{v && <SelosDaConferencia v={v} />}</span>
-        <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} aria-hidden="true" />
+        <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${aberta ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
       {decisao && !conferindo && <AindaComErro motivos={decisao.motivos} acaoCorrigir={acaoCorrigir} />}
       {aberta && v && (
@@ -297,6 +297,7 @@ export default function CardDoEstudio({
   instrucaoInicial,
   onDesfazerVersao,
   gif,
+  arteFinal,
 }: {
   conversaId: string | null;
   direcao: CardDaDirecao;
@@ -340,6 +341,8 @@ export default function CardDoEstudio({
   onDesfazerVersao?: (versao: number) => Promise<unknown>;
   /** 05/11/2026: "Fazer GIF"; quem não passa (Estúdio Ads) segue igual. */
   gif?: ReactNode;
+  /** 12/11/2026: "Enviar arte final pronta" (arquivo feito fora entra direto na lâmina, sem Gerar). Separado da referência. */
+  arteFinal?: ReactNode;
 }) {
   const { clientId } = useMesa();
   // Frente RO, fase 2: imagens no Ajustar e a proposta para o pedido vago.
@@ -785,11 +788,11 @@ export default function CardDoEstudio({
                 aria-expanded={pedidosAbertos}
                 aria-label={`Pedidos anteriores (${pedidosAnteriores.length})`}
                 title="Pedidos anteriores"
-                className="flex h-7 items-center rounded-md px-1 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="flex h-7 items-center rounded-full px-2 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <MessagesSquare className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
                 <span className="tabular-nums" aria-hidden="true">{pedidosAnteriores.length}</span>
-                <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${pedidosAbertos ? "rotate-180" : ""}`} aria-hidden="true" />
+                <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform duration-200 ${pedidosAbertos ? "rotate-180" : ""}`} aria-hidden="true" />
               </button>
               {pedidosAbertos && (
                 <ul className="mt-1 space-y-1.5">
@@ -808,12 +811,14 @@ export default function CardDoEstudio({
         </section>
       )}
 
+      {arteFinal}
+
       {ordenadas.length > 0 && gif}
 
       {/* Versões: clique mostra a versão na lâmina grande */}
       {ordenadas.length > 0 && aba === "versoes" && (
         <section ref={blocoDeVersoes} className="scroll-mt-2" aria-label={`Versões (${ordenadas.length})`}>
-          <ul className="grid grid-cols-4 gap-2">
+          <ul className="grid grid-cols-4 gap-2 sm:gap-3">
             {ordenadas.slice().reverse().map((v) => (
               <li key={v.versao} className="min-w-0">
                 <button

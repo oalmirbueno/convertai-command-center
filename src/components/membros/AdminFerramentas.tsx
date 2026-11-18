@@ -419,7 +419,7 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
               </AjudaRecolhida>
             </header>
             <div className="membros-tabela-rolagem">
-              <table className="membros-tabela">
+              <table className="membros-tabela membros-tabela-licencas">
                 <thead>
                   <tr>
                     <th>Pessoa e produto</th>

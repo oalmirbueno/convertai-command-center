@@ -184,7 +184,7 @@ export default function AjustesDoMockup({
                   </button>
                 </div>
                 {variacoes ? (
-                  <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
                     {variacoes.map((v) => {
                       const atual = v.fundo === rascunho.fundo && v.segunda === rascunho.segunda;
                       return (
@@ -250,7 +250,7 @@ export default function AjustesDoMockup({
                         aria-pressed={ligado}
                         title={p.rotulo}
                         onClick={() => mudar({ posicaoX: p.x, posicaoY: p.y })}
-                        className={juntar("toque-compacto h-7 w-7 rounded border border-border", ligado ? "bg-primary" : "bg-transparent hover:bg-muted")}
+                        className={juntar("toque-compacto h-7 w-7 rounded-sm border border-border", ligado ? "bg-primary" : "bg-transparent hover:bg-muted")}
                       />
                     );
                   })}

@@ -507,9 +507,9 @@ export default function EstudioDeMockups({
   if (catalogo.isLoading) return <Carregando rotulo="Abrindo o catálogo de mockups" />;
   if (catalogo.isError) return <EstadoDeErro titulo="O catálogo não abriu" acao={<button className={botao.secundario} onClick={() => void catalogo.refetch()}>Tentar de novo</button>} />;
   if (catalogo.data && catalogo.data.semBanco) {
-    return <EstadoVazio icone={<ImageOff className="h-5 w-5" />} titulo="O catálogo de mockups ainda não foi ativado" descricao="Falta aplicar a migration do estúdio e subir o primeiro lote." />;
+    return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<ImageOff className="h-5 w-5" />} titulo="O catálogo de mockups ainda não foi ativado" descricao="Falta aplicar a migration do estúdio e subir o primeiro lote." />;
   }
-  if (!itens.length) return <EstadoVazio icone={<ImageOff className="h-5 w-5" />} titulo="Nenhum mockup no catálogo ainda" />;
+  if (!itens.length) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<ImageOff className="h-5 w-5" />} titulo="Nenhum mockup no catálogo ainda" />;
 
   const semLogo = !logos.isLoading && !logosProntas.length;
   const enviadas = (aplicacoes.data || []).filter((a) => a.status === "enviado").length;
@@ -669,7 +669,7 @@ export default function EstudioDeMockups({
             <SeletorDeCor rotulo="Segunda cor" cores={cores} valor={geral.segunda} onEscolher={(i) => mudarGeral({ segunda: i })} />
             <label className="grid min-w-0">
               <span className={juntar(texto.rotulo, "mb-1.5")}>Textura</span>
-              <select className="block h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[13px]" value={geral.textura} onChange={(e) => mudarGeral({ textura: e.target.value })}>
+              <select className="block h-9 w-full min-w-0 rounded-md border border-input bg-card px-2 text-[13px]" value={geral.textura} onChange={(e) => mudarGeral({ textura: e.target.value })}>
                 <option value="">Sem textura</option>
                 {(texturas.data || []).map((t) => (
                   <option key={t.id} value={t.id}>
@@ -712,7 +712,7 @@ export default function EstudioDeMockups({
               <Faixa rotulo="Brilho da marca" min={0.6} max={1.4} passo={0.02} valor={geral.brilho} mostrar={(v) => `${Math.round(v * 100)}%`} onMudar={(v) => mudarGeral({ brilho: v })} />
               <label className="grid min-w-0">
                 <span className={juntar(texto.rotulo, "mb-1.5")}>Versão da logo</span>
-                <select className="block h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[13px]" value={geral.variante} onChange={(e) => mudarGeral({ variante: e.target.value as AjustesDoMockup["variante"] })}>
+                <select className="block h-9 w-full min-w-0 rounded-md border border-input bg-card px-2 text-[13px]" value={geral.variante} onChange={(e) => mudarGeral({ variante: e.target.value as AjustesDoMockup["variante"] })}>
                   <option value="auto">Automática (contraste)</option>
                   <option value="original">Do kit</option>
                   <option value="branca">Branca</option>
@@ -721,7 +721,7 @@ export default function EstudioDeMockups({
               </label>
               <label className="grid min-w-0">
                 <span className={juntar(texto.rotulo, "mb-1.5")}>Arte</span>
-                <select className="block h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[13px]" value={geral.modo} onChange={(e) => mudarGeral({ modo: e.target.value as AjustesDoMockup["modo"] })}>
+                <select className="block h-9 w-full min-w-0 rounded-md border border-input bg-card px-2 text-[13px]" value={geral.modo} onChange={(e) => mudarGeral({ modo: e.target.value as AjustesDoMockup["modo"] })}>
                   <option value="logo">Logo</option>
                   <option value="padrao">Padrão repetido</option>
                 </select>
@@ -730,7 +730,7 @@ export default function EstudioDeMockups({
                 <>
                   <label className="grid min-w-0">
                     <span className={juntar(texto.rotulo, "mb-1.5")}>Fundo da cena</span>
-                    <select className="block h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[13px]" value={geral.fundoCena} onChange={(e) => mudarGeral({ fundoCena: e.target.value as TipoDeFundoDaCena })}>
+                    <select className="block h-9 w-full min-w-0 rounded-md border border-input bg-card px-2 text-[13px]" value={geral.fundoCena} onChange={(e) => mudarGeral({ fundoCena: e.target.value as TipoDeFundoDaCena })}>
                       {(Object.keys(ROTULOS_DO_FUNDO) as TipoDeFundoDaCena[]).map((id) => (
                         <option key={id} value={id}>
                           {ROTULOS_DO_FUNDO[id]}
@@ -744,7 +744,7 @@ export default function EstudioDeMockups({
             </div>
           ) : null}
           {!listaParaAplicar.length ? (
-            <EstadoVazio titulo="Nenhum mockup marcado" acao={<button className={botao.secundario} onClick={() => setEtapa("categorias")}>Escolher categorias</button>} />
+            <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhum mockup marcado" acao={<button className={botao.secundario} onClick={() => setEtapa("categorias")}>Escolher categorias</button>} />
           ) : (
             <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 desk:grid-cols-4">
               {listaParaAplicar.map((id) => {
@@ -837,7 +837,7 @@ export default function EstudioDeMockups({
           }
         >
           {!escolhidos.length ? (
-            <EstadoVazio titulo="Nada escolhido ainda" acao={<button className={botao.secundario} onClick={() => setEtapa("aplicar")}>Voltar para Aplicar</button>} />
+            <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nada escolhido ainda" acao={<button className={botao.secundario} onClick={() => setEtapa("aplicar")}>Voltar para Aplicar</button>} />
           ) : (
             <>
               <div className="mb-2 flex min-w-0 flex-wrap items-center">
@@ -852,7 +852,7 @@ export default function EstudioDeMockups({
               <ul className="-mx-2 min-w-0 divide-y divide-border/50">
                 {escolhidos.map((e) => (
                   <li key={`${e.origem}:${e.id}`} className="flex min-w-0 flex-wrap items-center rounded-lg px-2 py-2.5">
-                    <span className="mr-3 inline-block h-12 w-16 shrink-0 overflow-hidden rounded bg-muted">
+                    <span className="mr-3 inline-block h-12 w-16 shrink-0 overflow-hidden rounded-sm bg-muted">
                       {e.origem === "catalogo" && prontos[e.id] ? <img src={prontos[e.id].url} alt="" className="h-full w-full object-cover" /> : null}
                     </span>
                     <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{e.nome}</span>

@@ -7,8 +7,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, etiqueta, GrupoDeCampos, juntar, RegiaoRolavel, SeletorCompacto, texto,
+  AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, juntar, RegiaoRolavel, SeletorCompacto, texto,
+  superficie,
 } from "@/components/sistema";
+import { Avatar, OverflowMenu, StatusPill } from "@/components/ds";
 import { useFreelaContatos, useFreelaPropostas } from "./dadosFreela";
 import { normalizar, somaPorMoeda, totalEmTexto } from "@/lib/freela/freelaLib";
 import type { Tables } from "@/integrations/supabase/types";
@@ -175,8 +177,8 @@ export default function AbaContatos() {
 
   return (
     <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
-      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
-        <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por nome, empresa, e-mail ou WhatsApp" rotulo="Buscar contato" className="min-w-[180px] flex-1 sm:max-w-[420px]" />
+      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2 pb-1">
+        <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por nome, empresa, e-mail ou WhatsApp" rotulo="Buscar contato" className="min-w-[180px] flex-1 max-sm:order-1 sm:max-w-[420px]" />
         <SeletorCompacto
           opcoes={[
             { valor: "ativos", rotulo: "Ativos" },
@@ -186,10 +188,11 @@ export default function AbaContatos() {
           valor={mostrarArquivados}
           onEscolher={setMostrarArquivados}
           rotulo="Mostrar"
+          className="max-sm:order-3"
         />
-        <p className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>{lista.length} {lista.length === 1 ? "contato" : "contatos"}</p>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <AjudaRecolhida rotulo="Sobre os contatos">Pessoas e empresas atendidas por fora da agência. Daqui nascem as propostas; quando fecha, vira cliente no funil.</AjudaRecolhida>
+        <p className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums max-sm:order-4")}>{lista.length} {lista.length === 1 ? "contato" : "contatos"}</p>
+        <div className="ml-auto flex shrink-0 items-center max-sm:order-2 [&>*+*]:ml-2">
+          <AjudaRecolhida rotulo="Sobre os contatos" className="max-sm:hidden">Pessoas e empresas atendidas por fora da agência. Daqui nascem as propostas; quando fecha, vira cliente no funil.</AjudaRecolhida>
           <button type="button" onClick={abrirNovo} className={botao.primario}>
             <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
             <span className="hidden sm:inline">Novo contato</span>
@@ -206,42 +209,41 @@ export default function AbaContatos() {
             descricao={busca ? "Tente outro termo de busca." : "Cadastre o primeiro contato do freela."}
           />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className={juntar(superficie.painel, "overflow-hidden py-1.5 [&>li]:px-4 sm:[&>li]:px-6")}>
             {lista.map((c) => (
-              <li key={c.id} className="flex min-w-0 items-center gap-2 px-1 py-2.5">
-                <div className="mr-1 min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <p className={juntar(texto.corpo, "truncate font-medium")}>{c.nome}</p>
-                    {!!c.archived_at && <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Arquivado</span>}
-                    {c.promoted_client_id && <span className={juntar(etiqueta, "bg-success/15 text-success")} title={c.promoted_client_id}>Cliente da agência · {c.promoted_client_id.slice(0, 8)}</span>}
+              <li key={c.id} className="flex min-w-0 items-center py-3 transition-colors hover:bg-muted/40">
+                <Avatar name={c.nome} tone={c.promoted_client_id ? "accent" : "neutral"} className="mr-3" />
+                <div className="mr-3 min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center">
+                    <p className={juntar(texto.corpo, "mr-2 truncate font-medium")}>{c.nome}</p>
+                    {!!c.archived_at && <StatusPill className="mr-1.5">Arquivado</StatusPill>}
+                    {c.promoted_client_id && <StatusPill tone="success" className="max-sm:hidden" title={c.promoted_client_id}>Cliente da agência · {c.promoted_client_id.slice(0, 8)}</StatusPill>}
                   </div>
-                  <p className={juntar(texto.auxiliar, "truncate")}>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
                     {[c.empresa, c.email, c.whatsapp, c.pais].filter(Boolean).join(" · ") || "Sem dados de contato"}
                   </p>
-                  <p className={juntar(texto.auxiliar, "truncate tabular-nums")}>{resumoDasPropostas(c.id)}</p>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>{resumoDasPropostas(c.id)}</p>
                 </div>
                 {!c.archived_at && (
-                  <Link to="/freela/propostas" className={juntar(botao.barra, "inline-flex items-center")} aria-label={`Ver o funil de ${c.nome}`}>
-                    <KanbanSquare className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                  <Link to="/freela/propostas" className={juntar(botao.secundario, "h-8 px-3 text-[12px] max-sm:w-8 max-sm:px-0")} aria-label={`Ver o funil de ${c.nome}`}>
+                    <KanbanSquare className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
                     <span className="hidden sm:inline">Funil</span>
                   </Link>
                 )}
-                {!c.promoted_client_id && !c.archived_at && (
-                  <button type="button" onClick={() => void promover(c)} className={botao.barra} aria-label={`Promover ${c.nome} a cliente`} title="Promover a cliente">
-                    <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                )}
-                <button type="button" onClick={() => abrirEdicao(c)} className={botao.barra} aria-label={`Editar ${c.nome}`}>
-                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void alternarArquivo(c)}
-                  className={botao.barra}
-                  aria-label={c.archived_at ? `Desarquivar ${c.nome}` : `Arquivar ${c.nome}`}
-                >
-                  {c.archived_at ? <ArchiveRestore className="h-3.5 w-3.5" aria-hidden="true" /> : <Archive className="h-3.5 w-3.5" aria-hidden="true" />}
-                </button>
+                <OverflowMenu
+                  className="ml-1"
+                  label={`Mais ações de ${c.nome}`}
+                  items={[
+                    !c.promoted_client_id && !c.archived_at && { label: "Promover a cliente", icon: <UserPlus className="h-3.5 w-3.5" />, onSelect: () => void promover(c) },
+                    { label: "Editar", icon: <Pencil className="h-3.5 w-3.5" />, onSelect: () => abrirEdicao(c) },
+                    {
+                      label: c.archived_at ? "Desarquivar" : "Arquivar",
+                      icon: c.archived_at ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />,
+                      separatorBefore: true,
+                      onSelect: () => void alternarArquivo(c),
+                    },
+                  ]}
+                />
               </li>
             ))}
           </ul>

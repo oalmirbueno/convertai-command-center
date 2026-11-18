@@ -33,6 +33,7 @@ import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, t
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { NumerosAbertos } from "./ousado";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { salvarRegraDoDia } from "./agendaInteligenteApi";
 import { regraDoCliente } from "../../../supabase/functions/_shared/agenda-inteligente";
@@ -267,7 +268,7 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, -1))} aria-label="Mês anterior">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <p className="mx-1 min-w-[120px] text-center text-[15px] font-semibold capitalize">{rotuloDoMes(mes)}</p>
+          <p className="mx-1 min-w-[120px] text-center text-[15px] font-semibold first-letter:[text-transform:uppercase]">{rotuloDoMes(mes)}</p>
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, 1))} aria-label="Próximo mês">
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -278,9 +279,10 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         <div className={juntar("flex w-full flex-col items-stretch sm:ml-3 sm:w-auto sm:items-end", ACAO_NO_PE_DO_CELULAR)} data-acao-no-pe="">
           <div className="flex min-w-0 flex-row items-center justify-end [&>*+*]:ml-2">
             <BotaoDocumentoDaEntrega pedido={pedidoDoDocumento} variante="discreto" />
-            <Button type="button" className="gap-0 px-3 max-sm:h-11 max-sm:min-w-[120px] max-sm:px-4" onClick={() => void enviarTudo()} disabled={!total || !!progresso} title={total ? `Enviar ${total} para aprovação` : "Nada para enviar"}>
+            <Button type="button" className="h-10 gap-0 rounded-full px-4 text-[13px] font-semibold max-sm:h-11 max-sm:min-w-[120px]" onClick={() => void enviarTudo()} disabled={!total || !!progresso} title={total ? `Enviar ${total} para aprovação` : "Nada para enviar"}>
               {progresso ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
-              {total > 0 && <span className="ml-1.5 tabular-nums" aria-hidden="true">{total}</span>}
+              {/* v4 E2: a ação principal da aba com nome. */}
+              <span className="ml-1.5 tabular-nums" aria-hidden="true">{total > 0 ? `Enviar ${total}` : "Enviar"}</span>
               <span className="sr-only">{total ? `Enviar ${total} para aprovação` : "Nada para enviar"}</span>
             </Button>
           </div>
@@ -319,7 +321,7 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
             lista faz parte da página, sem caixa com rolagem prendendo o dedo. */}
         {itens.length > 0 && (
           <RegiaoRolavel modo="lg" rotulo="Artes do mês" sobre="cartao" memoria={`mesa:entrega:${clientId}:${mes}`}>
-          <ul className="divide-y divide-border">
+          <ul className="space-y-0.5 p-1.5">
             {itens.map((i) => {
               const t = trabalhoDe(i);
               return (
@@ -389,9 +391,9 @@ function LinhaDaArte({
   const agenda = t ? linkDaAgenda(clientId, t, pub) : null;
   const quando = pub?.scheduled_at || t?.publicar_em || null;
   return (
-    <li className="flex min-w-0 items-center px-3 py-2.5 hover:bg-muted">
+    <li className="flex min-w-0 items-center rounded-lg px-2 py-2 transition-colors hover:bg-muted">
       <button type="button" onClick={() => onAbrir(i.id)} className="flex min-w-0 flex-1 items-center text-left" aria-label={`Abrir ${i.title} no Estúdio`}>
-        <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="mr-3 h-16 w-12 shrink-0 rounded-md border border-border" />
+        <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="mr-3 h-16 w-12 shrink-0 rounded-lg" />
         <span className="min-w-0 flex-1">
           <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{i.title}</span>
           <span className="mt-0.5 block text-[12px] text-muted-foreground">
@@ -402,7 +404,7 @@ function LinhaDaArte({
         </span>
       </button>
       <span className="ml-3 flex shrink-0 flex-col items-end">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+        <span className={`rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
         {entregue && pub?.status !== "published" && (
           <button
             type="button"
@@ -420,7 +422,7 @@ function LinhaDaArte({
           </a>
         )}
         {agenda && (
-          <Link to={agenda} className="toque-compacto mt-1 inline-flex h-6 w-6 items-center justify-center rounded-md text-primary hover:bg-muted" aria-label="Agenda" title="Abrir na Agenda">
+          <Link to={agenda} className="toque-compacto mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-primary hover:bg-muted" aria-label="Agenda" title="Abrir na Agenda">
             <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
         )}
@@ -453,7 +455,8 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   const [fimDeSemana, setFimDeSemana] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [trocandoAutomatico, setTrocandoAutomatico] = useState(false);
-  const [recolhido, setRecolhido] = useRecolhido(`mesa:entrega:ajustes:${clientId}`, false);
+  // v4 E2 (dono, 15/11: "menos blocos acima da dobra"): o plano de publicação abre recolhido (o resumo fica na linha); a lista de artes sobe.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa:entrega:ajustes:${clientId}`, true);
 
   const melhores = useQuery({
     queryKey: ["mesa", "melhores-horarios", clientId],
@@ -551,7 +554,23 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
     }
   };
 
-  if (previsao.isLoading) return null;
+  // v4: enquanto a previsão carrega, um bloco do tamanho final guarda o lugar (a lista de artes não pula depois).
+  if (previsao.isLoading)
+    return (
+      <section className={`border-y border-border py-4 ${recolhido ? "h-[86px]" : "h-[379px] lg:h-[238px]"}`} aria-hidden="true" data-publicacao-carregando="">
+        <span className="block h-5 w-44 rounded-full bg-muted" />
+        {!recolhido && (
+          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-6 lg:max-w-[50%]">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="space-y-2">
+                <span className="block h-2.5 w-16 rounded-full bg-muted/70" />
+                <span className="block h-5 w-24 rounded-full bg-muted" />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
   if (previsao.isError) return <p className="rounded-md bg-destructive/10 p-3 text-[13px] text-destructive">{textoDoErro(previsao.error)}</p>;
 
   const tipos = melhores.data ? Object.keys(melhores.data.por_tipo).filter((k) => !!melhores.data!.por_tipo[k]) : [];
@@ -588,18 +607,33 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
           checked={horarioAutomatico}
           onCheckedChange={(v) => void trocarAutomatico(v)}
           disabled={!podeEditar || trocandoAutomatico || automatico.isLoading}
-          className="mr-2 shrink-0"
+          className="toque-compacto mr-2 shrink-0"
         />
         <span className="min-w-0">Horário automático pelos melhores horários</span>
       </label>
     </div>
   );
 
+  const horaFixa = p?.hora_publicacao || "09:00";
+  const diasDaRegra = regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta";
+  // A regra inteira, por extenso: mora no "?" do título (antes ficava em parágrafos na tela).
+  const regraPorExtenso = [
+    horarioAutomatico ? `Cada post sai no melhor horário do seu tipo, ${diasDaRegra}. Horário fixo de reserva: ${horaFixa}.` : `Horário fixo: ${horaFixa}, ${diasDaRegra}.`,
+    p?.agendar_ao_aprovar
+      ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Aprovada sem data: entra sozinha no próximo dia livre do plano (um post por dia, entre 9h e 20h)."
+      : "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Peças antigas: a equipe agenda pela Agenda.",
+    regraDoDia.data ? "O que passa do limite do dia vai para o próximo dia livre." : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <section className="space-y-3 border-y border-border py-4 text-[13px]" data-recolhido={recolhido && !editando ? "sim" : "nao"}>
       {/* Configuração da entrega: recolhível (lembrado por cliente); editando, fica aberta. */}
       <CabecalhoDeSecao
         titulo="Publicação e plano"
+        ajuda={recolhido && !editando ? undefined : regraPorExtenso}
+        rotuloDaAjuda="Como a publicação funciona"
         recolher={editando ? undefined : { recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: resumoDosAjustes }}
         acao={
           podeEditar && !editando && !recolhido ? (
@@ -611,39 +645,45 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
       />
       {recolhido && !editando ? null : !editando ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-1.5">
-            {/* 16/10/2026 (dono: "menos texto" no celular): abaixo de 640 px só a regra em uma linha; a explicação inteira volta a partir de 640 px. */}
-            <p className="leading-relaxed sm:hidden">
-              {horarioAutomatico ? `Melhor horário de cada tipo, reserva ${p?.hora_publicacao || "09:00"}` : `Horário fixo ${p?.hora_publicacao || "09:00"}`}, seg. a sex.
-            </p>
-            <p className="hidden leading-relaxed sm:block">
-              {horarioAutomatico
-                ? `Cada post sai no melhor horário do seu tipo, ${regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta"}. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
-                : `Horário fixo: ${p?.hora_publicacao || "09:00"}, ${regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta"}.`}{" "}
-              {p?.agendar_ao_aprovar
-                ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Aprovada sem data: entra sozinha no próximo dia livre do plano (um post por dia, entre 9h e 20h)."
-                : "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Peças antigas: a equipe agenda pela Agenda."}
-            </p>
-            {regraDoDia.data && (
-              <p className="leading-relaxed text-muted-foreground" data-regra-do-dia="">
-                <span className="font-medium text-foreground">Agenda:</span> até {regraDoDia.data.porDia} {regraDoDia.data.porDia === 1 ? "post" : "posts"} por dia
-                {regraDoDia.data.hypesPorDia ? ` + ${regraDoDia.data.hypesPorDia} de hype` : ", sem hype extra"}, {regraDoDia.data.horasEntre} h entre eles{regraDoDia.data.fimDeSemana ? ", sábado e domingo liberados" : ", de segunda a sexta"}; o que passa disso vai para o próximo dia livre.
-              </p>
-            )}
-            <p className="leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Plano:</span>{" "}
-              {p?.posts_por_mes ? `${p.posts_por_mes} posts por mês` : "posts por mês não definidos"}
-              {p?.laminas_por_post ? `, ${p.laminas_por_post} lâminas em média` : ""}
-              {p ? ` · cerca de ${usd(p.custo_por_post_usd)} por post (${p.fonte === "historico" ? `média de ${p.amostra} ${p.amostra === 1 ? "arte" : "artes"}` : "pela tabela de preços"})` : ""}
-              {p?.previsao_mes_usd != null ? ` · mês perto de ${usd(p.previsao_mes_usd)}` : ""}
-              {p?.posts_que_o_saldo_cobre != null ? ` · o saldo cobre ${p.posts_que_o_saldo_cobre} ${p.posts_que_o_saldo_cobre === 1 ? "post" : "posts"}` : ""}
-            </p>
+          {/* 14/11/2026 (dono: "menos texto, informação direta"): os ajustes viram números; a regra inteira mora no "?" do título. */}
+          <div className="min-w-0" data-regra-do-dia={regraDoDia.data ? "" : undefined}>
+            <NumerosAbertos
+              rotulo="Publicação e plano"
+              colunas={2}
+              tamanho="md"
+              itens={[
+                {
+                  rotulo: "Horário",
+                  valor: horarioAutomatico ? "Automático" : horaFixa,
+                  apoio: `${horarioAutomatico ? `reserva ${horaFixa} · ` : ""}${regraDoDia.data?.fimDeSemana ? "todos os dias" : "seg. a sex."}`,
+                },
+                {
+                  rotulo: "Por dia",
+                  valor: regraDoDia.data ? `${regraDoDia.data.porDia} ${regraDoDia.data.porDia === 1 ? "post" : "posts"}` : "·",
+                  apoio: regraDoDia.data ? `${regraDoDia.data.hypesPorDia ? `+ ${regraDoDia.data.hypesPorDia} de hype` : "sem hype extra"} · ${regraDoDia.data.horasEntre} h entre eles` : undefined,
+                },
+                {
+                  rotulo: "Plano do mês",
+                  valor: p?.posts_por_mes ? `${p.posts_por_mes} posts` : "não definido",
+                  apoio: p?.laminas_por_post ? `${p.laminas_por_post} lâminas em média` : undefined,
+                },
+                {
+                  rotulo: "Custo por post",
+                  valor: p ? usd(p.custo_por_post_usd) : "·",
+                  apoio: [
+                    p?.previsao_mes_usd != null ? `mês perto de ${usd(p.previsao_mes_usd)}` : "",
+                    p?.posts_que_o_saldo_cobre != null ? `saldo cobre ${p.posts_que_o_saldo_cobre} ${p.posts_que_o_saldo_cobre === 1 ? "post" : "posts"}` : "",
+                  ].filter(Boolean).join(" · ") || undefined,
+                  dica: p ? (p.fonte === "historico" ? `Média de ${p.amostra} ${p.amostra === 1 ? "arte" : "artes"}` : "Pela tabela de preços") : undefined,
+                },
+              ]}
+            />
           </div>
           {blocoDeHorarios}
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-3">
             <div className="min-w-0 space-y-1.5">
               <Label htmlFor="mesa-hora">{horarioAutomatico ? "Horário fixo (reserva)" : "Horário fixo de publicação"}</Label>
               <Input id="mesa-hora" type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
@@ -657,7 +697,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
               <Input id="mesa-laminas" inputMode="numeric" placeholder="Ex.: 4" value={laminas} onChange={(e) => setLaminas(e.target.value)} />
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3" data-regra-do-dia-editar="">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-3" data-regra-do-dia-editar="">
             <div className="min-w-0 space-y-1.5">
               <Label htmlFor="mesa-por-dia">Posts por dia (máximo)</Label>
               <Input id="mesa-por-dia" inputMode="numeric" value={porDia} onChange={(e) => setPorDia(e.target.value)} />
@@ -672,11 +712,11 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
             </div>
           </div>
           <label className="flex items-center" data-fim-de-semana-editar="">
-            <Switch checked={fimDeSemana} onCheckedChange={setFimDeSemana} className="mr-2 shrink-0" />
+            <Switch checked={fimDeSemana} onCheckedChange={setFimDeSemana} className="toque-compacto mr-2 shrink-0" />
             <span className="min-w-0">Postar no sábado e no domingo (desligado: só de segunda a sexta)</span>
           </label>
           <label className="flex items-center">
-            <Switch checked={agendar} onCheckedChange={setAgendar} className="mr-2 shrink-0" />
+            <Switch checked={agendar} onCheckedChange={setAgendar} className="toque-compacto mr-2 shrink-0" />
             <span className="min-w-0">Agendar sozinho na Agenda quando o cliente aprovar: sem data, vai para o próximo dia livre do plano, entre 9h e 20h ({fimDeSemana ? "todos os dias" : "segunda a sexta"})</span>
           </label>
           {blocoDeHorarios}

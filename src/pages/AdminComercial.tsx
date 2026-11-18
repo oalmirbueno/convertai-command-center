@@ -42,9 +42,13 @@ import Termometro from "@/components/comercial/Termometro";
 import { listarEventosDoFunil } from "@/components/comercial/eventosDoFunil";
 import { resumoDaOportunidade } from "@/components/comercial/resumoDaOportunidade";
 import { temperaturaDoLead, type EventoDoLead } from "@/components/comercial/temperatura";
-import { FaixaDeNumeros } from "@/components/sistema";
+import { Avatar, CardSurface, Chip, Collapsible, ProgressBar, StatCard, StatGrid, StatusPill } from "@/components/ds";
+import DinheiroDoMes from "@/components/comercial/DinheiroDoMes";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
+import CamposDoNegocio from "@/components/produto/CamposDoNegocio";
+import { rotulosDeValor } from "@/lib/produto/nichos";
+import { escopoDoCrm, naConta } from "@/lib/comercial/escopo";
 import OrigemDoLead from "@/components/ads/OrigemDoLead";
 import CaixaDoComercial, { novosNaCaixa, useCaixaDoComercial } from "@/components/comercial/CaixaDoComercial";
 import ConversaDoLead from "@/components/comercial/ConversaDoLead";
@@ -110,7 +114,11 @@ import {
   realizadoDoMes,
   diaEmSaoPaulo,
   linhasDeMetaDoMes,
+  recebidoDoMes,
   receitaDoMes,
+  type RecebidoDoMes,
+  caixaDaCasa,
+  type CaixaDaCasa,
   resumoDoFunil,
   rotuloDoEstagio,
   salvarCampanha,
@@ -197,6 +205,34 @@ const somarMeses = (periodo: string, passo: number) => {
   return primeiroDiaDoMes(data);
 };
 
+/** O que cada aba é no CRM da empresa cliente (sem a casa, o Mercúrio e o Financeiro). */
+const TITULO_DA_ABA_NA_CONTA: Partial<Record<Aba, string>> = {
+  visao: "O seu comercial num relance: funil, semana, metas e campanhas. Cada linha abre a sua área.",
+  leads: "A máquina de leads: busca empresas do nicho na cidade, levanta o contato com prova e põe no CRM o que você escolher.",
+  metas: "O alvo do mês e quanto já saiu. A receita é a soma dos negócios que você marcou como ganhos no mês.",
+  campanhas: "O que a empresa investe para aparecer, e quantos clientes aquilo virou. O lead aponta para a campanha, então o custo por cliente sai sozinho.",
+};
+
+/** No CRM da empresa: quem está logado, e se ele só pode pegar negócio para si (vendedor em empresa que separa por vendedor). */
+const donoPadraoNaConta = (): string => {
+  const e = escopoDoCrm();
+  return e.modo === "conta" && e.euId ? e.euId : "";
+};
+const soPegaParaSi = (): boolean => {
+  const e = escopoDoCrm();
+  return e.modo === "conta" && e.papel === "usuario" && e.distribuiLivre === false;
+};
+const rotulosDeValorNaConta = () => {
+  const e = escopoDoCrm();
+  return rotulosDeValor({ nicho: (e.modo === "conta" && e.nicho ? e.nicho : undefined) as never });
+};
+
+/** As áreas que existem no CRM da empresa: a Caixa e o Marketing são só da casa. */
+const AREAS_FORA_DA_CONTA: Aba[] = ["visao", "caixa", "marketing"];
+
+/** O nome de cada área no CRM da empresa (o menu lateral do produto leva a cada uma). */
+const NOME_DA_AREA_NA_CONTA: Partial<Record<Aba, string>> = { crm: "Funil", leads: "Máquina de leads", agenda: "Agenda", metas: "Metas", campanhas: "Campanhas" };
+
 const ehPeriodo = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-01$/.test(v);
 
 /** A janela tem pelo menos `px` de largura? Atualiza ao redimensionar e girar. */
@@ -264,28 +300,38 @@ export default function AdminComercial() {
    * mandado para alguém.
    */
   const { aba: abaDaUrl } = useParams<{ aba?: string }>();
+  const [busca] = useSearchParams();
+  // 13/11/2026: a mesma tela é o CRM que a empresa cliente assina. Lá não há
+  // Caixa nem Marketing da casa, e Campanhas depende do plano.
+  const escopo = escopoDoCrm();
+  const conta = escopo.modo === "conta" ? escopo : null;
+  const areas = conta
+    ? AREAS.filter((a) => AREAS_FORA_DA_CONTA.indexOf(a.valor) < 0 && (a.valor !== "campanhas" || conta.limites.campanhas))
+    : AREAS;
   // A porta de entrada é a visão geral: quem clica em "Comercial" quer o
   // estado do departamento, não uma das áreas escolhida por ele.
-  const aba: Aba = ABAS_VALIDAS.includes(abaDaUrl as Aba) ? (abaDaUrl as Aba) : "visao";
+  const aba: Aba = areas.some((a) => a.valor === abaDaUrl) ? (abaDaUrl as Aba) : conta ? "crm" : "visao";
   const setAba = (proxima: Aba) =>
-    navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`);
+    conta
+      ? navigate(proxima === "visao" ? "/app" : `${conta.base}/${proxima}`)
+      : navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`);
   // 25/10/2026: o link do sino abre a Caixa com ?item=<id> destacado.
-  const [busca] = useSearchParams();
   const itemDaCaixa = busca.get("item");
-  const caixa = useCaixaDoComercial();
+  const caixa = useCaixaDoComercial(!conta);
   const novosDaCaixa = novosNaCaixa(caixa.data);
   // O mês escolhido fica guardado enquanto o mês do calendário for o mesmo:
   // sair e voltar mantém; no mês seguinte a tela abre no mês novo.
   const mesDeHoje = primeiroDiaDoMes(new Date());
   const [periodo, setPeriodo] = useEstadoDoComercial(`periodo:${mesDeHoje}`, mesDeHoje, { validar: ehPeriodo, esperaMs: 0 });
   const [leadAberto, setLeadAberto] = useState<Lead | null>(null);
-  const [novoLead, setNovoLead] = useState(false);
+  // No produto, "/app/crm/crm?novo=1" (o botão Negócio do painel) já abre o cadastro.
+  const [novoLead, setNovoLead] = useState(() => !!conta && busca.get("novo") === "1");
   const [campanhaAberta, setCampanhaAberta] = useState<Campanha | "nova" | null>(null);
   const [pedidoDeEmpresa, setPedidoDeEmpresa] = useState(0);
   // Os filtros do CRM sobem para a linha do título quando cabem (16/10/2026:
   // as áreas viraram ícones nessa mesma linha, então o limite subiu de 1280
   // para 1440 px). Abaixo disso ficam numa fileira só, logo embaixo.
-  const filtrosNaLinha = useLarguraMinima(1440);
+  const filtrosNaLinha = useLarguraMinima(1680);
   // Do sm para cima as áreas moram na linha do título; no celular, logo abaixo.
   const abasNoTitulo = useLarguraMinima(640);
   const [linhaDosFiltros, setLinhaDosFiltros] = useState<HTMLDivElement | null>(null);
@@ -308,13 +354,13 @@ export default function AdminComercial() {
   const { data: clientesBrutos } = useClients();
   const clientes = useMemo(
     () =>
-      ((clientesBrutos || []) as Array<Record<string, unknown>>)
+      ((conta ? [] : clientesBrutos || []) as Array<Record<string, unknown>>)
         .map((c) => ({
           id: String(c.id),
           nome: String(c.company_name || c.full_name || "Cliente"),
         }))
         .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
-    [clientesBrutos],
+    [clientesBrutos, conta],
   );
 
   const { data: atividades = [], isError: erroNasAtividades } = useQuery({
@@ -328,14 +374,16 @@ export default function AdminComercial() {
   });
   // Quem pode ser dono de um lead: funil de time sem dono é funil de
   // ninguém; dois ligam para o mesmo lead, ou nenhum liga.
-  const { data: equipeBruta } = useTeamMembers();
+  const { data: equipeBruta } = useTeamMembers(!conta);
   const equipe = useMemo(
     () =>
-      ((equipeBruta || []) as Array<Record<string, unknown>>).map((m) => ({
-        id: String(m.id),
-        nome: String(m.full_name || m.email || "Sem nome"),
-      })),
-    [equipeBruta],
+      conta
+        ? conta.equipe
+        : ((equipeBruta || []) as Array<Record<string, unknown>>).map((m) => ({
+            id: String(m.id),
+            nome: String(m.full_name || m.email || "Sem nome"),
+          })),
+    [equipeBruta, conta],
   );
 
   const { data: empresas = [], isError: erroNasEmpresas } = useQuery({
@@ -366,15 +414,33 @@ export default function AdminComercial() {
     placeholderData: (anterior) => anterior,
   });
   // A receita realizada vem do Financeiro central, nunca daqui.
-  const { data: receita = 0, isError: erroNaReceita } = useQuery({
+  // Vem separada por origem (mensalidade, avulso, projeto) para a tela mostrar de onde entrou.
+  const { data: recebido, isError: erroNaReceita } = useQuery({
     queryKey: ["comercial-receita", periodo],
+    queryFn: () => recebidoDoMes(periodo),
+    placeholderData: (anterior) => anterior,
+    // O CRM da empresa cliente não tem o Financeiro da casa.
+    enabled: !conta,
+  });
+  // Na empresa cliente o realizado são os ganhos dela (receitaDoMes já sabe disso).
+  const { data: receitaDaConta = 0, isError: erroNaReceitaDaConta } = useQuery({
+    queryKey: ["comercial-receita-conta", periodo],
     queryFn: () => receitaDoMes(periodo),
     placeholderData: (anterior) => anterior,
+    enabled: Boolean(conta),
+  });
+  const receita = conta ? receitaDaConta : recebido?.total ?? 0;
+  // O que saiu no mês e o saldo de hoje, na conta do Fluxo de Caixa do Financeiro.
+  const { data: caixaDoFinanceiro, isError: erroNoCaixa } = useQuery({
+    queryKey: ["comercial-caixa", periodo],
+    queryFn: () => caixaDaCasa(periodo),
+    placeholderData: (anterior) => anterior,
+    enabled: !conta,
   });
 
   // Leitura que falhou não vira "lista vazia": a tela avisa e oferece tentar de novo.
   // A receita e os recorrentes do Financeiro também: falha ali mostrava "R$ 0" como dado real.
-  const leituraFalhou = erroNosLeads || erroNasAtividades || erroNosEventos || erroNasEmpresas || erroNosContatos || erroNasCampanhas || erroNasMetas || erroNaReceita || erroNosRecorrentes;
+  const leituraFalhou = erroNosLeads || erroNasAtividades || erroNosEventos || erroNasEmpresas || erroNosContatos || erroNasCampanhas || erroNasMetas || erroNaReceita || erroNaReceitaDaConta || erroNosRecorrentes || erroNoCaixa;
 
   const recarregar = () =>
     Promise.all([
@@ -386,6 +452,8 @@ export default function AdminComercial() {
       queryClient.invalidateQueries({ queryKey: ["comercial-empresas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-contatos"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-receita"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-caixa"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-receita-conta"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-clientes-recorrentes"] }),
     ]);
 
@@ -421,13 +489,14 @@ export default function AdminComercial() {
 
   let descricao: ReactNode = null;
   if (aba === "visao") {
-    descricao = carregandoLeads ? undefined : `${resumo.abertos} em conversa · ${resumo.ganhosNoMes} ${resumo.ganhosNoMes === 1 ? "ganho" : "ganhos"} no mês`;
+    // v4 (15/11/2026): carregando, a linha de estado já ocupa o lugar dela (um espaço), para a tela não descer 30 px quando os leads chegam.
+    descricao = carregandoLeads ? "\u00a0" : `${resumo.abertos} em conversa · ${resumo.ganhosNoMes} ${resumo.ganhosNoMes === 1 ? "ganho" : "ganhos"} no mês`;
   } else if (aba === "crm") {
     const alerta = aviso([
       resumo.atrasados > 0 && `${resumo.atrasados} ${resumo.atrasados === 1 ? "atrasado" : "atrasados"}`,
       resumo.semProximoPasso > 0 && `${resumo.semProximoPasso} sem próximo passo`,
     ]);
-    descricao = carregandoLeads ? undefined : (
+    descricao = carregandoLeads ? "\u00a0" : (
       <>
         {visaoDoCrm === "empresas" ? `${empresas.length} ${empresas.length === 1 ? "empresa" : "empresas"}` : `${resumo.abertos} em aberto`}
         {alerta && visaoDoCrm === "negocios" ? <> · {alerta}</> : null}
@@ -439,7 +508,7 @@ export default function AdminComercial() {
   } else if (aba === "metas") {
     descricao = `${metasDefinidas} de ${METRICAS.length} metas definidas`;
   } else if (aba === "campanhas") {
-    descricao = carregandoCampanhas ? undefined : `${campanhasAtivas} ${campanhasAtivas === 1 ? "ativa" : "ativas"} de ${campanhas.length}`;
+    descricao = carregandoCampanhas ? "\u00a0" : `${campanhasAtivas} ${campanhasAtivas === 1 ? "ativa" : "ativas"} de ${campanhas.length}`;
   } else if (aba === "marketing") {
     descricao = `${leadsNoMes} ${leadsNoMes === 1 ? "lead novo" : "leads novos"} no mês`;
   } else if (aba === "caixa") {
@@ -451,11 +520,11 @@ export default function AdminComercial() {
 
   /* ── As ações da área, na linha do título. ── */
   const seletorDeMes = (
-    <div className="flex h-9 items-center" role="group" aria-label="Mês">
+    <div className="flex h-9 items-center max-sm:[&>button]:w-7" role="group" aria-label="Mês">
       <button type="button" onClick={() => setPeriodo(somarMeses(periodo, -1))} className={botao.icone} aria-label="Mês anterior" title="Mês anterior">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       </button>
-      <span className="min-w-[72px] px-1 text-center text-[13px] font-medium tabular-nums text-foreground sm:min-w-[124px]" aria-live="polite">
+      <span className="min-w-[64px] text-center text-[13px] font-medium tabular-nums text-foreground sm:min-w-[124px] sm:px-1" aria-live="polite">
         <span className="sm:hidden">{mesCurto(periodo)}</span>
         <span className="hidden sm:inline">{mesLegivel(periodo)}</span>
       </span>
@@ -475,7 +544,7 @@ export default function AdminComercial() {
       {/* Os filtros do CRM (Negócios | Empresas, classe e busca) entram aqui
           quando cabem na linha do título. */}
       {aba === "crm" && filtrosNaLinha && <div ref={setLinhaDosFiltros} className="flex min-w-0 items-center" />}
-      {aba === "crm" && visaoDoCrm === "negocios" && (
+      {aba === "crm" && visaoDoCrm === "negocios" && !conta && (
         <BotaoDoCabecalho
           icone={<Download className="h-4 w-4" aria-hidden="true" />}
           texto="Trazer do diagnóstico"
@@ -514,7 +583,7 @@ export default function AdminComercial() {
     <Etapas
       soIcone
       rotulo="Áreas do Comercial"
-      itens={AREAS.map((a) => (a.valor === "caixa" ? { ...a, contador: novosDaCaixa } : a))}
+      itens={areas.map((a) => (a.valor === "caixa" ? { ...a, contador: novosDaCaixa } : a))}
       valor={aba}
       onEscolher={(v) => setAba(v as Aba)}
       className="min-w-0 flex-1"
@@ -522,27 +591,29 @@ export default function AdminComercial() {
   );
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-6">
       {/* ── Cabecalho: identidade, estado da área e as ações. Os numeros
              ficam com quem os usa, e nao empilhados aqui em cima: cinco
              cartoes iguais no topo de quatro telas diferentes obrigam a ler
              tudo para achar o que importa naquela. ── */}
       <header className="min-w-0">
         <CabecalhoDePagina
-          titulo="Comercial"
+          titulo={conta ? NOME_DA_AREA_NA_CONTA[aba] || "CRM" : "Comercial"}
           // 16/10/2026: no celular o cabeçalho fica só com título, "?" e ações.
           descricao={abasNoTitulo ? descricao : undefined}
           ajuda={TITULO_DA_ABA[aba]}
-          aoLado={abasNoTitulo ? abasDasAreas : undefined}
+          // No CRM da empresa a explicação da aba não fala da casa, do Mercúrio nem do Financeiro.
+          {...(conta && TITULO_DA_ABA_NA_CONTA[aba] ? { ajuda: TITULO_DA_ABA_NA_CONTA[aba] } : {})}
+          aoLado={abasNoTitulo && !conta ? abasDasAreas : undefined}
           acoes={acoes}
         />
         {/* Celular: as áreas logo abaixo do título, numa linha que rola. */}
-        {!abasNoTitulo && <div className="mt-2 min-w-0 border-b border-border pb-1">{abasDasAreas}</div>}
+        {!abasNoTitulo && !conta && <div className="mt-3 min-w-0 pb-1">{abasDasAreas}</div>}
       </header>
 
       {leituraFalhou && (
         <EstadoDeErro
-          titulo="Não foi possível carregar o Comercial."
+          titulo={conta ? "Não foi possível carregar o CRM." : "Não foi possível carregar o Comercial."}
           descricao="O que aparece abaixo pode estar incompleto."
           acao={
             <button type="button" onClick={() => void recarregar()} className={juntar(botao.secundario, "h-8")}>
@@ -553,22 +624,24 @@ export default function AdminComercial() {
       )}
 
       {/* 25/10/2026: o que o Mercúrio levou adiante é a primeira coisa do Comercial. */}
-      {aba === "visao" && novosDaCaixa > 0 && (
+      {aba === "visao" && !conta && novosDaCaixa > 0 && (
         <button
           type="button"
           onClick={() => setAba("caixa")}
-          className={juntar("flex w-full min-w-0 items-center rounded-md bg-primary/10 px-3 py-2 text-left text-[13px] font-medium text-primary hover:bg-primary/15", foco)}
+          className={juntar("flex min-h-[52px] w-full min-w-0 items-center rounded-full bg-foreground px-2 py-2 pr-5 text-left text-[13px] font-medium text-background transition-opacity hover:opacity-90", foco)}
           data-aviso-da-caixa=""
         >
-          <Inbox className="mr-2 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-solid text-on-accent">
+            <Inbox className="h-4 w-4" aria-hidden="true" />
+          </span>
           <span className="min-w-0 flex-1 truncate">
             {novosDaCaixa} {novosDaCaixa === 1 ? "lead avançou ou fechou" : "leads avançaram ou fecharam"} com o Mercúrio
           </span>
-          <span className="ml-2 shrink-0">Abrir a Caixa</span>
+          <span className="ml-2 inline-flex shrink-0 items-center">Abrir a Caixa<ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" /></span>
         </button>
       )}
 
-      {aba === "caixa" && <CaixaDoComercial leads={leads} onAbrirLead={setLeadAberto} itemDestacado={itemDaCaixa} />}
+      {aba === "caixa" && !conta && <CaixaDoComercial leads={leads} onAbrirLead={setLeadAberto} itemDestacado={itemDaCaixa} />}
 
       {aba === "leads" && (
         <Suspense fallback={<Carregando />}>
@@ -591,6 +664,8 @@ export default function AdminComercial() {
           resumo={resumo}
           previsao={previsao}
           receita={receita}
+          recebido={recebido}
+          caixa={caixaDoFinanceiro}
           clientesRecorrentes={clientesRecorrentes}
           metas={metas}
           leads={leads}
@@ -603,19 +678,19 @@ export default function AdminComercial() {
       )}
 
       {aba === "crm" && (
-        <FaixaDeNumeros
-          tamanho="compacto"
-          apoioAoLado
+        <NumerosEmCartoes
+          tamanho="md"
           // 16/10/2026: no celular o CRM é só o funil (os números estão na Visão geral).
           className="max-sm:hidden"
           rotulo="Números do CRM"
           itens={[
             {
+              variante: "accent",
               rotulo: "Em aberto",
               valor: carregandoLeads ? "…" : String(resumo.abertos),
               apoio: resumo.abertos === 1 ? "lead em conversa" : "leads em conversa",
             },
-            { rotulo: "Em jogo", valor: carregandoLeads ? "…" : dinheiro(resumo.valorEmJogo), apoio: "mensalidade x 12 + entrada" },
+            { variante: "ink", rotulo: "Em jogo", valor: carregandoLeads ? "…" : dinheiro(resumo.valorEmJogo), apoio: "em 12 meses", dica: "Mensalidade x 12 + entrada dos negócios abertos" },
             {
               rotulo: "Previsão do mês",
               valor: carregandoLeads ? "…" : dinheiro(previsao.ponderado),
@@ -623,11 +698,14 @@ export default function AdminComercial() {
                  metade do funil; dizer quantos ficaram de fora impede a conta
                  de virar promessa. */
               apoio: previsao.semData > 0 ? `${previsao.leads} com data, ${previsao.semData} sem` : `${previsao.leads} com data prevista`,
+              // Parte do funil que entrou na previsão (com data prevista sobre o total lido).
+              razao: previsao.leads + previsao.semData > 0 ? { feito: previsao.leads, total: previsao.leads + previsao.semData, rotulo: "Negócios com data prevista" } : undefined,
             },
             {
               rotulo: "Ganhos no mês",
               valor: carregandoLeads ? "…" : String(resumo.ganhosNoMes),
               apoio: resumo.taxaDeGanho == null ? "nada fechado ainda" : `${Math.round(resumo.taxaDeGanho * 100)}% de aproveitamento`,
+              razao: resumo.taxaDeGanho == null ? undefined : { feito: resumo.taxaDeGanho, total: 1, rotulo: "Aproveitamento dos negócios fechados" },
             },
           ]}
         />
@@ -682,13 +760,15 @@ export default function AdminComercial() {
           metas={metas}
           leads={leads}
           receita={receita}
+          recebido={recebido}
+          caixa={caixaDoFinanceiro}
           clientesRecorrentes={clientesRecorrentes}
           carregando={carregandoLeads || carregandoMetas}
           onSalvo={recarregar}
         />
       )}
 
-      {aba === "marketing" && (
+      {aba === "marketing" && !conta && (
         <MarketingDaCasa leads={leads} campanhas={campanhas} periodo={periodo} />
       )}
 
@@ -747,6 +827,8 @@ function VisaoGeral({
   resumo,
   previsao,
   receita,
+  recebido,
+  caixa,
   clientesRecorrentes,
   metas,
   leads,
@@ -759,6 +841,8 @@ function VisaoGeral({
   resumo: ReturnType<typeof resumoDoFunil>;
   previsao: ReturnType<typeof previsaoDoMes>;
   receita: number;
+  recebido?: RecebidoDoMes;
+  caixa?: CaixaDaCasa;
   clientesRecorrentes: number;
   metas: Array<{ id: string; metric: string; target: number }>;
   leads: Lead[];
@@ -797,33 +881,35 @@ function VisaoGeral({
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Visão geral do Comercial" memoriaDaRolagem="comercial:visao">
-      <div className="min-w-0 space-y-5">
+      <div className="min-w-0 space-y-6 sm:space-y-8">
         {/* Os quatro números que resumem o mês do departamento. */}
-        <FaixaDeNumeros
-          tamanho="compacto"
-          apoioAoLado
+        <NumerosEmCartoes
+          tamanho="lg"
           rotulo="Números do mês"
           itens={[
             {
+              variante: "accent",
+              icone: <KanbanSquare className="h-5 w-5" />,
               rotulo: "Em conversa",
               valor: carregando ? "…" : String(resumo.abertos),
-              apoio: resumo.abertos === 1 ? "lead aberto no funil" : "leads abertos no funil",
+              apoio: resumo.abertos === 1 ? "lead aberto" : "leads abertos",
             },
-            { rotulo: "Em jogo", valor: carregando ? "…" : dinheiro(resumo.valorEmJogo), apoio: "mensalidade x 12 + entrada" },
+            { rotulo: "Em jogo", valor: carregando ? "…" : dinheiro(resumo.valorEmJogo), apoio: "em 12 meses", dica: "Mensalidade x 12 + entrada dos negócios abertos" },
             {
               rotulo: "Previsão do mês",
               valor: carregando ? "…" : dinheiro(previsao.ponderado),
               apoio: previsao.semData > 0 ? `${previsao.leads} com data, ${previsao.semData} sem` : `${previsao.leads} com data prevista`,
+              razao: previsao.leads + previsao.semData > 0 ? { feito: previsao.leads, total: previsao.leads + previsao.semData, rotulo: "Negócios com data prevista" } : undefined,
             },
-            { rotulo: "Receita do mês", valor: dinheiro(receita), apoio: "lida do Financeiro" },
+            { variante: "ink", rotulo: "Receita do mês", valor: dinheiro(receita), apoio: naConta() ? "dos ganhos" : "do Financeiro" },
           ]}
         />
 
         {carregando ? (
           <Carregando rotulo="Carregando o resumo" linhas={5} />
         ) : (
-          <Painel semEspaco as="section" aria-label="Áreas do Comercial">
-            <ul className="divide-y divide-border">
+          <section aria-label="Áreas do Comercial" className="min-w-0">
+            <ul className="grid min-w-0 grid-flow-row-dense gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
               <Bloco titulo="CRM" icone={KanbanSquare} onClick={() => onIr("crm")}>
                 <Linha
                   forte={`${resumo.abertos} ${resumo.abertos === 1 ? "negócio aberto" : "negócios abertos"}`}
@@ -846,7 +932,7 @@ function VisaoGeral({
                 ) : (
                   // 16/10/2026: no celular só os dois primeiros.
                   proximos.map((a, i) => (
-                    <span key={a.id} className={juntar("flex min-w-0 items-baseline justify-between", i >= 2 && "max-sm:hidden")}>
+                    <span key={a.id} className={juntar("flex min-w-0 items-baseline justify-between rounded-md bg-muted/60 px-3 py-2", i >= 2 && "max-sm:hidden")}>
                       <span className={juntar(texto.corpo, "mr-2 min-w-0 truncate")}>
                         {a.title}
                         {nomeDoLead(a.lead_id) ? <span className="text-muted-foreground"> · {nomeDoLead(a.lead_id)}</span> : null}
@@ -857,8 +943,8 @@ function VisaoGeral({
                 )}
               </Bloco>
 
-              <Bloco titulo="Metas" icone={Target} onClick={() => onIr("metas")}>
-                <span className="grid min-w-0 gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+              <Bloco titulo="Metas" icone={Target} onClick={() => onIr("metas")} largo>
+                <span className="grid min-w-0 gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
                   {/* 16/10/2026: no celular só as metas definidas. */}
                   {linhasDeMeta.every((linha) => linha.alvo <= 0) && (
                     <span className={juntar(texto.auxiliar, "block truncate sm:hidden")}>Nenhuma meta definida no mês.</span>
@@ -867,7 +953,7 @@ function VisaoGeral({
                     <span key={linha.id} className={juntar("block min-w-0", linha.alvo <= 0 && "max-sm:hidden")}>
                       <span className="flex min-w-0 items-baseline justify-between text-[12px] leading-4">
                         <span className="mr-2 min-w-0 truncate text-muted-foreground">{linha.label}</span>
-                        <span className="shrink-0 tabular-nums text-foreground">
+                        <span className="shrink-0 font-semibold tabular-nums text-foreground">
                           {mostrar(linha, linha.feito)}
                           {linha.alvo > 0 ? (
                             <span className="text-muted-foreground"> de {mostrar(linha, linha.alvo)}</span>
@@ -897,10 +983,56 @@ function VisaoGeral({
                 <span className={juntar(texto.auxiliar, "block truncate max-sm:hidden")}>No ar, próximos e origem dos leads</span>
               </Bloco>
             </ul>
-          </Painel>
+          </section>
         )}
+
+        {/* v4 C2: entrou, saiu e saldo repetem o Financeiro; ficam recolhidos embaixo, abrem com um toque. */}
+        {!naConta() && <DinheiroDoMesRecolhido recebido={recebido} caixa={caixa} />}
       </div>
     </AreaDeTrabalho>
+  );
+}
+
+/**
+ * Os números da área em cartões (rodada ousada, 15/11/2026): número grande, rótulo apagado, um cartão
+ * sólido e um de tinta por fileira. `razao` desenha a barra de uma proporção que a tela já calculou
+ * (nunca um número novo).
+ */
+function NumerosEmCartoes({
+  rotulo,
+  itens,
+  tamanho = "lg",
+  className,
+}: {
+  rotulo: string;
+  itens: Array<{
+    rotulo: string;
+    valor: string;
+    apoio?: string;
+    dica?: string;
+    variante?: "default" | "accent" | "ink";
+    icone?: ReactNode;
+    razao?: { feito: number; total: number; rotulo: string };
+  }>;
+  tamanho?: "md" | "lg" | "xl";
+  className?: string;
+}) {
+  return (
+    <StatGrid cols={4} label={rotulo} className={className}>
+      {itens.map((item) => (
+        <StatCard
+          key={item.rotulo}
+          variant={item.variante}
+          size={tamanho}
+          icon={item.icone}
+          label={item.rotulo}
+          value={item.valor}
+          hint={item.apoio}
+          help={item.dica}
+          chart={item.razao ? <ProgressBar value={item.razao.feito} max={item.razao.total} tone={item.variante === "accent" ? "current" : 1} striped label={`${item.razao.rotulo}: ${Math.round((item.razao.feito / item.razao.total) * 100)}%`} /> : undefined}
+        />
+      ))}
+    </StatGrid>
   );
 }
 
@@ -909,36 +1041,38 @@ function Bloco({
   icone: Icone,
   onClick,
   children,
+  largo = false,
 }: {
   titulo: string;
   icone: React.ComponentType<{ className?: string }>;
   onClick: () => void;
   children: React.ReactNode;
+  /** Ocupa a fileira inteira (as metas, que são várias barras). */
+  largo?: boolean;
 }) {
   return (
-    <li className="min-w-0">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={`Abrir ${titulo}`}
-        className={juntar("group grid w-full min-w-0 grid-cols-[minmax(0,1fr)_16px] items-start gap-x-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 md:grid-cols-[160px_minmax(0,1fr)_16px]", foco)}
-      >
-        <span className="flex min-w-0 items-center text-[13px] font-semibold leading-5 text-foreground">
-          <Icone className="mr-2 h-4 w-4 shrink-0 text-primary" />
-          {titulo}
+    <CardSurface as="li" className={juntar("group relative flex min-w-0 flex-col transition-transform duration-200 hover:-translate-y-0.5", largo && "md:col-span-2 xl:col-span-3")} data-area-do-comercial={titulo}>
+      <button type="button" onClick={onClick} aria-label={`Abrir ${titulo}`} className={juntar("flex w-full min-w-0 flex-1 flex-col rounded-[inherit] p-5 text-left sm:p-6", foco)}>
+        <span className="flex min-w-0 items-center">
+          <span className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+            <Icone className="h-[18px] w-[18px]" />
+          </span>
+          <span className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>{titulo}</span>
+          <span className="ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-foreground group-hover:text-background">
+            <ArrowRight className="h-4 w-4 -rotate-45 transition-transform group-hover:rotate-0" aria-hidden="true" />
+          </span>
         </span>
-        <ArrowRight className="mt-0.5 h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 md:order-last" aria-hidden="true" />
-        <span className="col-span-2 mt-1.5 block min-w-0 space-y-1.5 md:col-span-1 md:mt-0">{children}</span>
+        <span className="mt-5 block min-w-0 space-y-2">{children}</span>
       </button>
-    </li>
+    </CardSurface>
   );
 }
 
 function Linha({ forte, fraca }: { forte: string; fraca: string }) {
   return (
-    <span className="flex min-w-0 items-baseline justify-between">
-      <span className="mr-2 min-w-0 truncate text-[13px] font-medium text-foreground">{forte}</span>
-      <span className={juntar(texto.auxiliar, "shrink-0")}>{fraca}</span>
+    <span className="block min-w-0">
+      <span className="block min-w-0 truncate text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground max-sm:text-[20px] max-sm:leading-7">{forte}</span>
+      <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>{fraca}</span>
     </span>
   );
 }
@@ -946,7 +1080,7 @@ function Linha({ forte, fraca }: { forte: string; fraca: string }) {
 function BarraDeProgresso({ feito, alvo, fina = false }: { feito: number; alvo: number; fina?: boolean }) {
   const pct = alvo > 0 ? Math.min(feito / alvo, 1) : 0;
   return (
-    <span className={juntar("mt-1 block overflow-hidden rounded-full bg-muted", fina ? "h-1" : "h-1.5")}>
+    <span className={juntar("mt-2 block overflow-hidden rounded-full bg-muted", fina ? "h-1.5" : "h-2.5")}>
       <span
         className={juntar("block h-full rounded-full transition-all", feito >= alvo ? "bg-success" : "bg-primary")}
         style={{ width: `${Math.round(pct * 100)}%` }}
@@ -962,6 +1096,8 @@ function Metas({
   metas,
   leads,
   receita,
+  recebido,
+  caixa,
   clientesRecorrentes,
   carregando,
   onSalvo,
@@ -970,6 +1106,8 @@ function Metas({
   metas: Array<{ id: string; metric: string; target: number }>;
   leads: Lead[];
   receita: number;
+  recebido?: RecebidoDoMes;
+  caixa?: CaixaDaCasa;
   clientesRecorrentes: number;
   carregando: boolean;
   onSalvo: () => Promise<unknown>;
@@ -992,11 +1130,12 @@ function Metas({
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Metas do mês" memoriaDaRolagem="comercial:metas">
+      {!naConta() && <DinheiroDoMes recebido={recebido} caixa={caixa} />}
       {carregando ? (
         <Carregando rotulo="Carregando as metas" linhas={5} />
       ) : (
-        <Painel semEspaco as="section" aria-label="Metas do mês">
-          <ul className="divide-y divide-border">
+        <section aria-label="Metas do mês" className="mt-6 min-w-0 sm:mt-8">
+          <ul className="grid min-w-0 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
             {METRICAS.map((metrica) => {
               const meta = metas.find((m) => m.metric === metrica.id);
               const feito = realizadoDoMes({
@@ -1011,18 +1150,12 @@ function Metas({
                 metrica.dinheiro ? dinheiro(v) : String(Math.round(v));
               const aberta = editando === metrica.id;
               return (
-                <li key={metrica.id} className="min-w-0 px-4 py-3">
-                  <div className="flex min-w-0 items-center">
+                <CardSurface as="li" padded key={metrica.id} variant={alvo > 0 && feito >= alvo ? "accent" : "default"} className="flex min-w-0 flex-col" data-meta={metrica.id}>
+                  <div className="flex min-w-0 items-start">
                     <div className="mr-3 min-w-0 flex-1">
-                      <p className={juntar(texto.corpo, "truncate font-medium")}>{metrica.label}</p>
-                      {/* De onde vem o número: sem isto, "por que está assim?"
-                          não tem resposta na própria tela. */}
-                      <p className={juntar(texto.auxiliar, "truncate max-sm:hidden")}>{metrica.fonte}</p>
+                      <p className="truncate text-[13px] font-medium leading-5 text-muted-foreground">{metrica.label}</p>
                     </div>
-                    <p className="shrink-0 text-right">
-                      <span className="text-[15px] font-semibold tabular-nums text-foreground">{mostrar(feito)}</span>
-                      <span className={juntar(texto.auxiliar, "tabular-nums")}>{alvo > 0 ? ` de ${mostrar(alvo)}` : " · sem meta"}</span>
-                    </p>
+                    {alvo > 0 && <Chip tone={feito >= alvo ? "neutral" : "accent"} className="mt-0.5">{Math.round((feito / alvo) * 100)}%</Chip>}
                     {!aberta && (
                       <button
                         type="button"
@@ -1038,12 +1171,18 @@ function Metas({
                       </button>
                     )}
                   </div>
-
-                  {alvo > 0 && <BarraDeProgresso feito={feito} alvo={alvo} />}
+                  <p className="mt-4 min-w-0 truncate">
+                    <span className="text-[32px] font-semibold leading-10 tracking-[-0.03em] tabular-nums text-foreground max-sm:text-[28px] max-sm:leading-9">{mostrar(feito)}</span>
+                    <span className={juntar(texto.auxiliar, "ml-1.5 tabular-nums")}>{alvo > 0 ? ` de ${mostrar(alvo)}` : " · sem meta"}</span>
+                  </p>
+                  {alvo > 0 && <ProgressBar className="mt-4" value={feito} max={alvo} height={10} tone={feito >= alvo ? "current" : 1} striped label={`${metrica.label}: ${mostrar(feito)} de ${mostrar(alvo)}`} />}
+                  {/* De onde vem o número: sem isto, "por que está assim?"
+                      não tem resposta na própria tela. */}
+                  <p className={juntar(texto.auxiliar, "mt-3 line-clamp-2 max-sm:hidden")}>{metrica.fonte}</p>
 
                   {aberta && (
                     <form
-                      className="mt-2.5 flex min-w-0 items-center"
+                      className="mt-4 flex min-w-0 items-center"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void salvar(metrica.id);
@@ -1068,11 +1207,11 @@ function Metas({
                       </button>
                     </form>
                   )}
-                </li>
+                </CardSurface>
               );
             })}
           </ul>
-        </Painel>
+        </section>
       )}
     </AreaDeTrabalho>
   );
@@ -1113,7 +1252,7 @@ function Marketing({
       ) : (
         <Painel semEspaco as="section" aria-label="Campanhas">
           {/* Cabeçalho da tabela (do md para cima); no celular cada linha empilha. */}
-          <div className="hidden grid-cols-[minmax(0,1fr)_repeat(4,110px)_96px] items-center gap-x-2 border-b border-border px-4 py-2 md:grid" aria-hidden="true">
+          <div className="mx-3 mt-3 hidden grid-cols-[minmax(0,1fr)_repeat(4,120px)_56px] items-center gap-x-3 rounded-md bg-muted/60 px-4 py-2.5 md:grid" aria-hidden="true">
             <span className={texto.rotulo}>Campanha</span>
             <span className={juntar(texto.rotulo, "text-right")}>Investido</span>
             <span className={juntar(texto.rotulo, "text-right")}>Leads</span>
@@ -1121,7 +1260,7 @@ function Marketing({
             <span className={juntar(texto.rotulo, "text-right")}>Custo por cliente</span>
             <span />
           </div>
-          <ul className="divide-y divide-border">
+          <ul className="px-3 pb-2">
             {campanhas.map((campanha) => {
               const kpi = kpisDaCampanha(campanha, leads);
               const numeros = [
@@ -1141,20 +1280,26 @@ function Marketing({
                     }`
                   : null;
               return (
-                <li key={campanha.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_repeat(4,110px)_96px]">
-                  <button type="button" onClick={() => onEditar(campanha)} className={juntar("min-w-0 rounded-sm text-left", foco)} aria-label={`Editar campanha ${campanha.name}`}>
-                    <span className={juntar(texto.corpo, "block truncate font-medium hover:underline")}>{campanha.name}</span>
-                    <span className={juntar(texto.auxiliar, "block truncate")}>
-                      {campanha.channel} · {campanha.status}
+                <li key={campanha.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-md px-4 py-4 transition-colors hover:bg-muted/50 md:grid-cols-[minmax(0,1fr)_repeat(4,120px)_56px]">
+                  <button type="button" onClick={() => onEditar(campanha)} className={juntar("flex min-w-0 items-center rounded-sm text-left", foco)} aria-label={`Editar campanha ${campanha.name}`}>
+                    <Avatar icon={<Megaphone className="h-4 w-4" />} tone={campanha.status === "ativa" ? "solid" : "neutral"} className="mr-3" />
+                    <span className="block min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center">
+                      <span className="min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{campanha.name}</span>
+                      <StatusPill tone={campanha.status === "ativa" ? "success" : "neutral"} className="ml-2">{campanha.status}</StatusPill>
+                    </span>
+                    <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+                      {campanha.channel}
                     </span>
                     {ganhos && (
                       <span className="block truncate text-[12px] leading-4 text-success" title={ganhos}>
                         {ganhos}
                       </span>
                     )}
+                    </span>
                   </button>
                   {numeros.map((n) => (
-                    <span key={n.rotulo} className="hidden text-right text-[13px] tabular-nums text-foreground md:block">
+                    <span key={n.rotulo} className="hidden text-right text-[13px] font-medium tabular-nums text-foreground md:block">
                       {n.valor}
                     </span>
                   ))}
@@ -1165,11 +1310,11 @@ function Marketing({
                   </span>
                   {/* Celular: os quatro números numa grade embaixo do nome.
                       16/10/2026: abaixo de 640 px só investido e leads. */}
-                  <dl className="col-span-2 mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 md:hidden">
+                  <dl className="col-span-2 mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-md bg-muted/60 p-3 md:hidden">
                     {numeros.map((n, i) => (
                       <div key={n.rotulo} className={juntar("min-w-0", i >= 2 && "max-sm:hidden")}>
                         <dt className={texto.rotulo}>{n.rotulo}</dt>
-                        <dd className="truncate text-[13px] tabular-nums text-foreground">{n.valor}</dd>
+                        <dd className="truncate text-[15px] font-semibold tabular-nums text-foreground">{n.valor}</dd>
                       </div>
                     ))}
                   </dl>
@@ -1210,6 +1355,7 @@ type FormDoLead = {
   one_off_value: string;
   expected_close_date: string;
   owner_id: string;
+  campos: Record<string, unknown>;
   notes: string;
   classe: string;
   qualificacao: Record<string, string>;
@@ -1249,7 +1395,8 @@ export function EditorDeLead({
     monthly_value: String(lead?.monthly_value || ""),
     one_off_value: String(lead?.one_off_value || ""),
     expected_close_date: lead?.expected_close_date || "",
-    owner_id: lead?.owner_id || "",
+    owner_id: lead?.owner_id || (naConta() && !lead ? donoPadraoNaConta() : ""),
+    campos: ((lead as { campos?: Record<string, unknown> | null } | null)?.campos || {}) as Record<string, unknown>,
     notes: lead?.notes || "",
     classe: lead?.classe || "",
     qualificacao: { ...(lead?.qualificacao || {}) } as Record<string, string>,
@@ -1334,6 +1481,7 @@ export function EditorDeLead({
       one_off_value: Number(form.one_off_value) || 0,
       expected_close_date: form.expected_close_date || null,
       owner_id: form.owner_id || null,
+      ...(naConta() ? { campos: form.campos } : {}),
       notes: form.notes,
       classe: form.classe || null,
       qualificacao: form.qualificacao,
@@ -1383,8 +1531,9 @@ export function EditorDeLead({
       const salvou = await salvar({ manterAberto: true });
       if (!salvou) return;
     }
-    // O ganho pede o cadastro: a mesma janela do quadro.
-    if (para === "ganho") return void setJanelaDoGanho(true);
+    // O ganho pede o cadastro: a mesma janela do quadro. No CRM da empresa
+    // não há cadastro da casa: o ganho é só a etapa, com os valores do negócio.
+    if (para === "ganho" && !naConta()) return void setJanelaDoGanho(true);
     if (await moverLead({ lead, paraEstagio: para, motivo })) {
       setMotivo("");
       await onSalvo();
@@ -1400,7 +1549,8 @@ export function EditorDeLead({
    * de aba não perde nada, e salvar continua mandando só o que mudou.
    */
   const [parte, setParte] = useState<ParteDoLead>("contato");
-  const partes = PARTES_DO_LEAD.filter((p) => lead || !p.soComLead);
+  // No CRM da empresa não existe o agente da casa.
+  const partes = PARTES_DO_LEAD.filter((p) => (lead || !p.soComLead) && !(naConta() && p.valor === "agente"));
 
   return (
     <Dialog open onOpenChange={(aberto) => { if (!aberto) void fechar(); }}>
@@ -1411,8 +1561,8 @@ export function EditorDeLead({
           {lead && <p className={texto.auxiliar}>{rotuloDoEstagio(lead.stage)}{lead.company ? ` · ${lead.company}` : ""}</p>}
           {lead && <ResumoNoTopoDoLead lead={lead} atividades={atividades} eventos={eventos} />}
           {/* De qual anúncio veio (origem do clique gravada pelo formulário do site). */}
-          {lead && <OrigemDoLead lead={lead} />}
-          {lead && lead.stage === "ganho" && !lead.won_client_id && (
+          {lead && !naConta() && <OrigemDoLead lead={lead} />}
+          {lead && !naConta() && lead.stage === "ganho" && !lead.won_client_id && (
             <div className="mt-2 flex min-w-0 flex-wrap items-center justify-between rounded-md border border-warning/40 bg-warning/10 px-3 py-2" data-ganho-sem-cadastro="">
               <p className={juntar(texto.corpo, "mr-3 min-w-0")}>Ganho sem cadastro: o cliente não está em Clientes nem no Financeiro.</p>
               <button type="button" onClick={() => setJanelaDoGanho(true)} className={botao.primario}>Cadastrar cliente</button>
@@ -1481,6 +1631,7 @@ export function EditorDeLead({
             {/* A classe é a primeira pergunta: com quem estamos falando. O
                 vazio é "não confirmado" de propósito, nunca preenchido por
                 padrão: classe chutada mente melhor que campo em branco. */}
+            {!naConta() && (
             <CampoDeFormulario rotulo="Classe da oportunidade">
               <select
                 value={form.classe || "nao_confirmado"}
@@ -1495,17 +1646,18 @@ export function EditorDeLead({
                 ))}
               </select>
             </CampoDeFormulario>
+            )}
             {/* Dono e data prevista: sem o primeiro, dois ligam para o mesmo
                 lead ou nenhum liga; sem o segundo, não existe previsão, só
                 a soma do funil inteiro, inclusive o que fecha ano que vem. */}
-            <CampoDeFormulario rotulo="Dono">
+            <CampoDeFormulario rotulo={naConta() ? "Responsável" : "Dono"} ajuda={naConta() && soPegaParaSi() ? "Quem repassa para outra pessoa é o gerente." : undefined}>
               <select
                 value={form.owner_id || "ninguem"}
                 onChange={(e) => setForm({ ...form, owner_id: e.target.value === "ninguem" ? "" : e.target.value })}
                 className={campo}
               >
-                <option value="ninguem">Sem dono</option>
-                {equipe.map((pessoa) => (
+                <option value="ninguem">{naConta() ? "Sem responsável" : "Sem dono"}</option>
+                {equipe.filter((pessoa) => !soPegaParaSi() || pessoa.id === donoPadraoNaConta() || pessoa.id === form.owner_id).map((pessoa) => (
                   <option key={pessoa.id} value={pessoa.id}>
                     {pessoa.nome}
                   </option>
@@ -1514,10 +1666,10 @@ export function EditorDeLead({
             </CampoDeFormulario>
             {/* Separados porque é assim que a casa vende: somar os dois faria
                 a meta de mensalidade nova mentir sempre que houvesse projeto. */}
-            <CampoDeFormulario rotulo="Mensalidade (R$)">
+            <CampoDeFormulario rotulo={naConta() ? `${rotulosDeValorNaConta().mensal} (R$)` : "Mensalidade (R$)"}>
               <input type="number" min="0" step="50" value={form.monthly_value} onChange={(e) => setForm({ ...form, monthly_value: e.target.value })} className={campo} />
             </CampoDeFormulario>
-            <CampoDeFormulario rotulo="Entrada / projeto (R$)">
+            <CampoDeFormulario rotulo={naConta() ? `${rotulosDeValorNaConta().avulso} (R$)` : "Entrada / projeto (R$)"}>
               <input type="number" min="0" step="50" value={form.one_off_value} onChange={(e) => setForm({ ...form, one_off_value: e.target.value })} className={campo} />
             </CampoDeFormulario>
             <CampoDeFormulario rotulo="Previsão de fechamento">
@@ -1573,6 +1725,7 @@ export function EditorDeLead({
             ))}
           </GrupoDeCampos>
           )}
+          {parte === "negocio" && naConta() && <CamposDoNegocio valores={form.campos} aoMudar={(campos) => setForm({ ...form, campos })} />}
 
           {parte === "notas" && (
           <GrupoDeCampos colunas={1}>
@@ -1591,6 +1744,7 @@ export function EditorDeLead({
           {lead && parte === "andamento" && (
             <>
               {/* Frente PRO: a proposta deste lead na Mesa Proposta (com o cliente quando o lead já tem ficha). */}
+              {!naConta() && (
               <section className="flex min-w-0 items-center justify-between" aria-label="Proposta">
                 <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>Proposta</h3>
                 <Link
@@ -1600,7 +1754,8 @@ export function EditorDeLead({
                   Gerar proposta
                 </Link>
               </section>
-              <section className="border-t border-border pt-4" aria-label="Mover de etapa">
+              )}
+              <section className={juntar(!naConta() && "border-t border-border pt-4")} aria-label="Mover de etapa">
                 <h3 className={juntar(texto.tituloSecao, "mb-2")}>Mover para</h3>
                 <div className="-m-1 flex flex-wrap [&>*]:m-1">
                   {ESTAGIOS.filter((e) => e.id !== lead.stage).map((estagio) => (
@@ -1610,7 +1765,7 @@ export function EditorDeLead({
                       onClick={() => void mover(estagio.id as EstagioId)}
                       title={estagio.ajuda}
                       className={juntar(
-                        "inline-flex h-8 items-center rounded-md border px-2.5 text-[13px] font-medium transition-colors",
+                        "toque-compacto inline-flex h-8 items-center rounded-full border px-3 text-[13px] font-medium transition-colors",
                         foco,
                         estagio.id === "ganho"
                           ? "border-success/40 text-success hover:bg-success/10"
@@ -1620,7 +1775,7 @@ export function EditorDeLead({
                       )}
                     >
                       <ArrowRight className="mr-1 h-3 w-3" aria-hidden="true" />
-                      {estagio.label}
+                      {rotuloDoEstagio(estagio.id)}
                     </button>
                   ))}
                 </div>
@@ -1684,7 +1839,7 @@ export function EditorDeLead({
                 {historico.length === 0 ? (
                   <p className={juntar(texto.auxiliar, "mt-2")}>Nada registrado ainda.</p>
                 ) : (
-                  <ul className="mt-2 divide-y divide-border">
+                  <ul className="mt-2">
                     {historico.map((evento) => (
                       <li key={evento.id} className={juntar(texto.corpo, "py-2 text-muted-foreground")}>
                         <span className="font-medium text-foreground">
@@ -1807,18 +1962,17 @@ function ResumoNoTopoDoLead({ lead, atividades, eventos }: { lead: Lead; ativida
   const resumo = resumoDaOportunidade(lead, atividades, eventos, agoraIso);
   const temperatura = temperaturaDoLead(lead, atividades, eventos, agoraIso);
   return (
-    <div className="-m-0.5 flex min-w-0 flex-wrap items-center text-[12px] tabular-nums text-muted-foreground [&>*]:m-0.5" aria-label="Resumo da oportunidade">
-      <Termometro temperatura={temperatura} className="mr-1" />
-      <span className="min-w-0 font-medium text-primary">{resumo.valor}</span>
-      <span aria-hidden="true">·</span>
-      <span className="min-w-0" title="Chance de fechar nesta etapa">{resumo.chance}% de chance</span>
-      <span aria-hidden="true">·</span>
-      <span className="min-w-0">{resumo.tempoNaEtapa}</span>
-      <span aria-hidden="true">·</span>
+    <div className="-m-1 flex min-w-0 flex-wrap items-center text-[12px] tabular-nums text-muted-foreground [&>*]:m-1" aria-label="Resumo da oportunidade">
+      <span className="min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">{resumo.valor}</span>
+      <Termometro temperatura={temperatura} />
+      <span className="inline-flex h-6 min-w-0 items-center rounded-full bg-muted px-2.5 font-medium text-foreground" title="Chance de fechar nesta etapa">{resumo.chance}% de chance</span>
+      <span className="inline-flex h-6 min-w-0 items-center rounded-full bg-muted px-2.5">{resumo.tempoNaEtapa}</span>
       {resumo.proximoPasso ? (
-        <span className={juntar("min-w-0 truncate", resumo.atrasado && "font-medium text-warning")} title={resumo.proximoPasso}>
-          Próximo: {resumo.proximoPasso}
-          {resumo.quando ? ` · ${resumo.quando}` : ""}
+        <span className={juntar("inline-flex h-6 min-w-0 max-w-full items-center rounded-full px-2.5", resumo.atrasado ? "bg-warning-soft font-medium text-warning" : "bg-accent-soft text-primary")} title={resumo.proximoPasso}>
+          <span className="min-w-0 truncate">
+            Próximo: {resumo.proximoPasso}
+            {resumo.quando ? ` · ${resumo.quando}` : ""}
+          </span>
         </span>
       ) : (
         <span className="min-w-0 italic text-muted-foreground/70">sem próximo passo</span>
@@ -1932,12 +2086,14 @@ function EditorDeCampanha({
             <input value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} placeholder="O que esta campanha precisa entregar" className={campo} />
           </CampoDeFormulario>
         </GrupoDeCampos>
+        {!naConta() && (
         <CampanhasDaMeta
           selecionadas={form.meta_campaign_ids || []}
           aoMudar={(ids) => setForm({ ...form, meta_campaign_ids: ids })}
           mercurioAtivo={!!form.mercurio_ativo}
           aoMudarMercurio={(v) => setForm({ ...form, mercurio_ativo: v })}
         />
+        )}
         <div className="flex items-center justify-end [&>*+*]:ml-2">
           <button type="button" onClick={onFechar} className={botao.secundario}>
             Cancelar
@@ -1948,5 +2104,14 @@ function EditorDeCampanha({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** v4 C2: entrou, saiu e saldo repetem o Financeiro; na visão geral ficam recolhidos embaixo e abrem com um toque. */
+function DinheiroDoMesRecolhido(props: Parameters<typeof DinheiroDoMes>[0]) {
+  return (
+    <Collapsible title="Dinheiro do mês" storageKey="comercial:visao:dinheiro" defaultOpen={false} summary="entrou, saiu e de onde veio">
+      <DinheiroDoMes {...props} />
+    </Collapsible>
   );
 }

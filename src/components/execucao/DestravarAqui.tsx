@@ -82,7 +82,7 @@ export default function DestravarAqui({ runId, motivo, revisao = false, aoResolv
 
   const giro = (acao: AcaoDeDestrave) => rodando === acao ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : null;
   return (
-    <section aria-label="Destravar aqui" className="rounded-xl border border-primary/40 bg-primary/5 p-3">
+    <section aria-label="Destravar aqui" className="rounded-lg border border-primary/40 bg-primary/5 p-3">
       <h4 className="flex items-center text-[13px] font-semibold text-foreground"><Unlock className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />Destravar aqui</h4>
       <p className="mt-0.5 text-[12px] text-muted-foreground">Responda ou decida aqui mesmo: o agente recebe na hora.</p>
 

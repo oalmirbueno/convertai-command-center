@@ -61,6 +61,11 @@ import { browserActTool, browserSessionTool } from '../mcp-server/modulos/mcp-na
 import { navegadorDoPcTool } from '../mcp-server/modulos/mcp-navegador-do-pc.ts';
 import { FERRAMENTAS_DO_PAINEL_INTEIRO, ligarCatalogo } from '../mcp-server/modulos/painel-inteiro.ts';
 import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro.ts';
+import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspace-e-perfis.ts';
+import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
+import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
+import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
+import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
 import {
   CLASSES_DO_LEAD,
   ETAPAS_DO_FUNIL,
@@ -367,6 +372,23 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_list_files: 'files:read',
   aceleriq_get_file: 'files:read',
   aceleriq_list_workspace_nodes: 'workspace:read',
+  aceleriq_workspace_mover_arquivo: 'files:write',
+  aceleriq_workspace_criar_arquivo: 'files:write',
+  aceleriq_workspace_link_arquivo: 'workspace:read',
+  aceleriq_workspace_retirar_aprovacao: 'files:write',
+  aceleriq_reagendar_publicacao: 'editorial:write',
+  // MCP 2.30 (18/11/2026): publicação planejada de post já aprovado, para depois o reagendar.
+  aceleriq_criar_publicacao_de_aprovado: 'editorial:write',
+  aceleriq_editar_legenda_publicacao: 'editorial:write',
+  aceleriq_ajustar_formato_publicacao: 'editorial:write',
+  // MCP 2.28 (14/11/2026): revisão interna, caixa Precisa de você e pedido ao dono.
+  aceleriq_revisar_trabalho_interno: 'mesas:write',
+  aceleriq_marcar_precisa_de_voce: 'mesas:write',
+  aceleriq_listar_precisa_de_voce: 'clients:read',
+  aceleriq_perfis_instagram_gravar: 'clients:write',
+  // MCP 2.29 (17/11/2026): listar e arquivar Referências e Concorrentes.
+  aceleriq_perfis_instagram_listar: 'clients:read',
+  aceleriq_perfis_instagram_arquivar: 'clients:write',
   aceleriq_list_opportunities: 'commercial:read',
   aceleriq_get_opportunity: 'commercial:read',
   aceleriq_list_commercial_activities: 'commercial:read',
@@ -3691,7 +3713,7 @@ const operatorRegisterTool: ToolDefinition = {
   name: 'aceleriq_operator_register',
   title: 'Cadastrar operador interno',
   description:
-    'Cria um operador interno novo (Hermes) no painel: slug, nome exibido, funcao, escopo e permissoes descritivas. O elenco NAO e fixo - alem de Vertice, Registro, Prisma e Augusto, cadastre quantos precisar. Chamar duas vezes com o mesmo slug devolve o existente em vez de duplicar. O nascimento entra na trilha de auditoria imutavel. Operador NAO tem e-mail, senha nem cliente atribuido, e nunca ocupa o assigned_to de uma tarefa: quem responde pelo trabalho continua sendo gente. IMPORTANTE: reportar execucao com slug desconhecido continua sendo ERRO e nunca cria operador - assim um slug digitado errado vira erro, e nao um operador fantasma.',
+    'Cria um operador interno novo (Hermes) no painel: slug, nome exibido, funcao, escopo e permissoes descritivas. O elenco NAO e fixo - alem de Vertice, Registro, Prisma e Augusto, cadastre quantos precisar. Chamar duas vezes com o mesmo slug devolve o existente em vez de duplicar. O nascimento entra na trilha de auditoria imutavel. Operador NAO tem e-mail, senha nem cliente atribuido, e nunca ocupa o assigned_to de uma tarefa: quem responde pelo trabalho continua sendo gente. IMPORTANTE: reportar execucao com slug desconhecido continua sendo ERRO e nunca cria operador - assim um slug digitado errado vira erro, e nao um operador fantasma. TETO: no maximo 40 operadores ATIVOS; pausados e aposentados nao contam. Para liberar vaga, pause ou aposente um operador ativo com aceleriq_operator_organize.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -3744,7 +3766,7 @@ const operatorOrganizeTool: ToolDefinition = {
   name: 'aceleriq_operator_organize',
   title: 'Organizar o agente no organograma',
   description:
-    'Edita como um operador interno aparece e onde ele fica na hierarquia: display_name, role, area (a funcao que agrupa a piramide), parent_slug (quem coordena), display_order, scope, status (active/paused/retired) e is_coordinator. O slug NAO muda: ele e a identidade que a auditoria referencia, e troca-lo renomearia o passado. Ciclo e barrado: um agente nao pode coordenar quem ja o coordena. Nada de humano e tocado por aqui - assigned_to continua intocavel.',
+    'Edita como um operador interno aparece e onde ele fica na hierarquia: display_name, role, area (a funcao que agrupa a piramide), parent_slug (quem coordena), display_order, scope, status (active/paused/retired) e is_coordinator. O slug NAO muda: ele e a identidade que a auditoria referencia, e troca-lo renomearia o passado. Ciclo e barrado: um agente nao pode coordenar quem ja o coordena. Nada de humano e tocado por aqui - assigned_to continua intocavel. TETO: reativar (status active para quem esta paused ou retired) e recusado se passar de 40 operadores ativos; pausar ou aposentar quem esta ativo libera vaga, aposentar quem ja esta aposentado nao libera.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -3854,7 +3876,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Guia e panoramas (2.17)', rota: '/', para: 'Mapa completo com as ferramentas de cada area (Mes, Stories, Hype, Templates, Estudio, Mesa Site, Laboratorio, base dos agentes, membros) e o retrato numa chamada.', pelo_mcp: 'aceleriq_guia, aceleriq_panorama_do_cliente, aceleriq_panorama_da_casa, aceleriq_mcp_saude' },
   { area: 'Esteira', rota: '/ciclo', para: 'Acoes da semana a partir do dossie geral, historico e fatos, separadas entre social e trafego.', pelo_mcp: 'aceleriq_get_client_dossier, aceleriq_get_client_context' },
   { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
-  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_checklist, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
+  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_checklist, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee; o que espera o dono: aceleriq_listar_precisa_de_voce e aceleriq_marcar_precisa_de_voce' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente, rituais de relacionamento e o Dia Prioritario de cada cliente (clientes do dia, semana, pendencias e registros).', pelo_mcp: 'aceleriq_get_client_context, aceleriq_dia_prioritario (leitura), aceleriq_dia_prioritario_registrar (acao)' },
   { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado; avisos de post no ar: aceleriq_aviso_publicacao_fila, aceleriq_aviso_publicacao_preparar, aceleriq_aviso_publicacao_decidir, aceleriq_aviso_publicacao_marcar_enviado; lembrete de aprovação e cobrança aprovados pelo dono: aceleriq_mensagens_automaticas_fila, aceleriq_mensagens_automaticas_marcar_enviado' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
@@ -5085,6 +5107,12 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DO_PAINEL_INTEIRO,
   // MCP 2.19: ações feitas nos anúncios e boletim do período (modulos/anuncios-registro.ts).
   ...FERRAMENTAS_DE_ANUNCIOS,
+  ...FERRAMENTAS_DE_WORKSPACE_E_PERFIS,
+  ...FERRAMENTA_DE_REAGENDAR,
+  ...FERRAMENTA_DE_CRIAR_PUBLICACAO,
+  ...FERRAMENTA_DE_EDITAR_LEGENDA,
+  ...FERRAMENTA_DE_AJUSTAR_FORMATO,
+  ...FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

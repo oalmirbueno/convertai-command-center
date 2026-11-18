@@ -66,7 +66,7 @@ export function corpoDaProducao(plano: PlanoAds, angulos: string[], formatos: Fo
 /** Seletor dos três tons (sóbrio, direto, agressivo), com a regra de cada um no título. */
 export function SeletorDeTom({ valor, onMudar, rotulo = "Tom" }: { valor: TomDoCriativo; onMudar: (t: TomDoCriativo) => void; rotulo?: string }) {
   return (
-    <div className="inline-flex h-9 min-w-0 max-w-full items-center rounded-md bg-muted p-0.5" role="radiogroup" aria-label={rotulo}>
+    <div className="inline-flex h-9 min-w-0 max-w-full items-center rounded-full bg-muted p-0.5" role="radiogroup" aria-label={rotulo}>
       {TONS_DO_CRIATIVO.map((t) => (
         <button
           key={t.valor}
@@ -76,8 +76,8 @@ export function SeletorDeTom({ valor, onMudar, rotulo = "Tom" }: { valor: TomDoC
           title={t.dica}
           onClick={() => onMudar(t.valor)}
           className={juntar(
-            "inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded px-3 text-[13px] font-medium transition-colors",
-            valor === t.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+            "inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded-full px-3 text-[13px] font-medium transition-colors",
+            valor === t.valor ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground",
             foco,
           )}
         >
@@ -272,7 +272,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
             <AjudaRecolhida className="ml-1 shrink-0" rotulo="O que vai ser produzido">
               {resumoDaProducao}. Para cada ângulo marcado: a copy escrita a mais (o Jev escolhe a melhor{comTesteAB ? "; a versão B é a próxima que traz outra ideia, para o teste A/B" : ""}), a direção de arte{comArte ? " e as artes no Estúdio Ads, com o andamento e o Parar" : ""}{comKit ? ", e o kit de recepção de quem ainda não tem" : ""}.{comTesteAB && comArte ? " A B de ângulo com uma variação no plano fica com a arte para gerar no Estúdio, com o custo lá." : ""} Trocar muda formatos, tom, modelo da copy, teste A/B, artes e kit.
             </AjudaRecolhida>
-            <button type="button" onClick={() => setTrocando((v) => !v)} aria-expanded={trocando} className={juntar("ml-1.5 shrink-0 rounded font-medium text-primary hover:underline", foco)}>
+            <button type="button" onClick={() => setTrocando((v) => !v)} aria-expanded={trocando} className={juntar("ml-1.5 shrink-0 rounded-sm font-medium text-primary hover:underline", foco)}>
               {trocando ? "Pronto" : "Trocar"}
             </button>
           </div>
@@ -296,7 +296,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
       </div>
 
       {trocando && !andamento && (
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 border-t border-border pt-3 md:grid-cols-2" aria-label="Trocar a produção">
+        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 border-t border-border pt-3 md:grid-cols-2" aria-label="Trocar a produção">
           <div className="min-w-0">
             <p className="mb-1 text-[12px] font-medium text-muted-foreground">Formatos</p>
             <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Formatos">
@@ -306,7 +306,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
                 onClick={() => setFormatosEscolhidos(null)}
                 className={juntar(
                   "mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors",
-                  !formatosEscolhidos ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground",
+                  !formatosEscolhidos ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground",
                   foco,
                 )}
               >
@@ -323,7 +323,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
                     onClick={() => alternarFormato(f.valor)}
                     className={juntar(
                       "mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors",
-                      ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground",
+                      ativo ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground",
                       foco,
                     )}
                   >

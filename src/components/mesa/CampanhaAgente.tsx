@@ -301,7 +301,7 @@ export default function CampanhaAgente({
           ))}
         </div></SugestoesDoAgente>
         <ZonaDeAnexos anexos={anexos}>
-          <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
+          <div className="rounded-lg border border-border bg-background p-2 focus-within:border-primary/60">
             <MiniaturasDosAnexos anexos={anexos} />
             <Textarea
               ref={campoRef}

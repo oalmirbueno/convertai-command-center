@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { FileSignature, Upload, Send, CheckCircle2, Clock, ChevronRight, ExternalLink, Mail, Trash2, Plus, BookOpen } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { Avatar, StatusPill, type Tone } from "@/components/ds";
 import {
   AreaDeTrabalho,
   CabecalhoDePagina,
@@ -28,7 +29,6 @@ import {
   botao,
   campo,
   campoTexto,
-  etiqueta,
   juntar,
   texto,
   toqueCompacto,
@@ -82,15 +82,15 @@ type Contract = {
   substituido_por?: string | null;
 };
 
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  draft: { label: "Rascunho", cls: "bg-muted text-muted-foreground" },
-  sent: { label: "Aguardando cliente", cls: "bg-warning/15 text-warning" },
-  signed: { label: "Em revisão", cls: "bg-primary/15 text-primary" },
-  completed: { label: "Assinado", cls: "bg-success/15 text-success" },
-  cancelled: { label: "Cancelado", cls: "bg-muted text-muted-foreground" },
-  substituido: { label: "Substituído", cls: "bg-muted text-muted-foreground" },
+const STATUS_META: Record<string, { label: string; cls: string; tom: Tone }> = {
+  draft: { label: "Rascunho", cls: "bg-muted text-muted-foreground", tom: "neutral" },
+  sent: { label: "Aguardando cliente", cls: "bg-warning-soft text-warning", tom: "warning" },
+  signed: { label: "Em revisão", cls: "bg-accent-soft text-primary", tom: "accent" },
+  completed: { label: "Assinado", cls: "bg-success-soft text-success", tom: "success" },
+  cancelled: { label: "Cancelado", cls: "bg-muted text-muted-foreground", tom: "neutral" },
+  substituido: { label: "Substituído", cls: "bg-muted text-muted-foreground", tom: "neutral" },
 };
-const META_ARQUIVADO = { label: "Arquivado", cls: "bg-muted text-muted-foreground" };
+const META_ARQUIVADO: { label: string; cls: string; tom: Tone } = { label: "Arquivado", cls: "bg-muted text-muted-foreground", tom: "neutral" };
 
 // UXS (30/09): a lista abre como fila de trabalho ("Em andamento"); o histórico fica a um clique.
 const FILTROS_DE_STATUS = [
@@ -356,9 +356,9 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
       }
     />
   ) : (
-    <div className="min-w-0 space-y-2">
+    <div className="min-w-0 space-y-3">
       <Painel semEspaco>
-        <ul className="divide-y divide-border">
+        <ul className="py-1.5">
           {filtrados.map((c) => {
             const client = clientById(c.client_id);
             const arquivado = c.status === "completed" && !!c.arquivado_em;
@@ -368,21 +368,23 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
             const podeExcluir = !modelo && canDeleteContracts && c.status === "draft" && !c.admin_signed_at && !c.sent_at && !c.client_signed_at;
             const IconeDeAbrir = modelo ? ChevronRight : ExternalLink;
             return (
-              <li key={c.id} className="flex min-w-0 items-center pr-3 sm:pr-4">
+              <li key={c.id} className="flex min-w-0 items-center pr-3 transition-colors hover:bg-muted/50 sm:pr-6">
                 {/* A linha inteira abre o contrato (UXS), com o mesmo recuo e altura de antes (o respiro da linha passou para o botão). Fora da ordem do Tab: o teclado usa o "Abrir" ao lado. */}
                 <button
                   type="button"
                   tabIndex={-1}
                   onClick={() => void abrirContrato(c)}
-                  className={juntar(toqueCompacto, "min-w-0 flex-1 px-3 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none sm:px-4")}
+                  className={juntar(toqueCompacto, "flex min-w-0 flex-1 items-start px-4 py-3.5 text-left focus-visible:outline-none sm:px-6 sm:py-4")}
                   data-linha-do-contrato=""
                 >
+                  {/* Rodada ousada (15/11/2026): ícone num círculo (sólido quando assinado), título maior e o estado em pílula. */}
+                  <Avatar icon={<FileSignature className="h-4 w-4" />} tone={c.status === "completed" && !arquivado ? "solid" : c.status === "signed" || c.status === "sent" ? "ink" : "neutral"} className="mr-4 max-sm:hidden" />
+                  <span className="block min-w-0 flex-1">
                   <span className="flex min-w-0 items-center">
-                    <FileSignature className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    <span className="block min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{c.title}</span>
-                    <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", meta.cls)}>{meta.label}</span>
+                    <span className="block min-w-0 truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{c.title}</span>
+                    <StatusPill tone={meta.tom} className="ml-2.5 hidden sm:inline-flex">{meta.label}</StatusPill>
                   </span>
-                  <span className={juntar(texto.auxiliar, "mt-1 block truncate sm:pl-6")}>
+                  <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>
                     <span className="sm:hidden">{meta.label} · </span>
                     {client?.full_name || "-"}
                     {client?.company_name ? ` · ${client.company_name}` : ""}
@@ -390,35 +392,36 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                     {` · ${new Date(c.created_at).toLocaleDateString("pt-BR")}`}
                   </span>
                   {!modelo && (
-                    <span className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] sm:pl-6 [&>*]:mr-3">
+                    <span className="-mb-1 mt-2 flex min-w-0 flex-wrap items-center text-[12px] [&>*]:mb-1 [&>*]:mr-2 [&>*]:h-6 [&>*]:rounded-full [&>*]:px-2.5">
                       {c.admin_signed_at ? (
-                        <span className="inline-flex items-center text-success">
+                        <span className="inline-flex items-center bg-success-soft text-success">
                           <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Admin assinou
                         </span>
                       ) : (
-                        <span className="inline-flex items-center text-muted-foreground">
+                        <span className="inline-flex items-center bg-muted text-muted-foreground">
                           <Clock className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Aguarda sua assinatura
                         </span>
                       )}
                       {c.client_signed_at ? (
-                        <span className="inline-flex items-center text-success">
+                        <span className="inline-flex items-center bg-success-soft text-success">
                           <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Cliente assinou
                         </span>
                       ) : c.sent_at ? (
-                        <span className="inline-flex items-center text-warning">
+                        <span className="inline-flex items-center bg-warning-soft text-warning">
                           <Mail className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Enviado, aguardando cliente
                         </span>
                       ) : null}
                     </span>
                   )}
+                  </span>
                 </button>
                 <div className="flex shrink-0 items-center [&>*+*]:ml-1.5 sm:[&>*+*]:ml-2">
-                  <button type="button" onClick={() => void abrirContrato(c)} className={botao.secundario} aria-label={`Abrir ${c.title}`}>
+                  <button type="button" onClick={() => void abrirContrato(c)} className={juntar(botao.secundario, "max-sm:w-9 max-sm:border-transparent max-sm:bg-transparent max-sm:px-0 max-sm:text-muted-foreground")} aria-label={`Abrir ${c.title}`}>
                     <IconeDeAbrir className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                     <span className="hidden sm:inline">Abrir</span>
                   </button>
                   {!modelo && canManageContracts && !c.admin_signed_at && (
-                    <button type="button" onClick={() => setSignOpen(c)} className={juntar(botao.secundario, "border-primary/50 text-primary hover:bg-primary/10")}>
+                    <button type="button" onClick={() => setSignOpen(c)} className={juntar(botao.secundario, "border-transparent bg-foreground text-background hover:bg-foreground/90")}>
                       <FileSignature className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                       <span className="hidden sm:inline">Assinar</span>
                       <span className="sr-only sm:hidden">Assinar {c.title}</span>
@@ -472,7 +475,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
       />
     </Suspense>
   ) : (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-6">
       {/* Esqueleto no lugar do painel enquanto a lista e o painel chegam: a lista não pula para baixo. */}
       {!lockedClientId && isLoading && contracts.length === 0 && <EsqueletoDoPainel />}
       {!lockedClientId && contracts.length > 0 && (
@@ -514,7 +517,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   const envioCliente = envioAberto ? clientById(envioAberto.client_id) : null;
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-6">
       <CabecalhoDePagina
         titulo="Contratos"
         nivel={lockedClientId ? 2 : 1}
@@ -548,6 +551,14 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
         }
       />
 
+      {/* v4 (15/11/2026): a barra de busca e filtros reserva o lugar enquanto a lista chega (antes ela aparecia depois e empurrava tudo: CLS 0,14 no celular). */}
+      {isLoading && contracts.length === 0 && !contratoAberto && !vistaModelos && (
+        <div aria-hidden="true" className="-m-1 flex flex-wrap items-center [&>*]:m-1" data-esqueleto-da-barra="">
+          <div className="h-9 flex-1 basis-full animate-pulse rounded-full bg-muted sm:basis-[240px]" />
+          <div className="h-9 w-36 animate-pulse rounded-full bg-muted" />
+          <div className="h-9 w-36 animate-pulse rounded-full bg-muted" />
+        </div>
+      )}
       {contracts.length > 0 && !contratoAberto && !vistaModelos && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
           <CampoDeBusca

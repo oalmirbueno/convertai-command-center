@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AvatarComPresenca } from "@/components/execucao/Visuais";
 import { CheckCircle2, Eye, Loader } from "lucide-react";
 import { Secao, botao, juntar, lista, texto } from "@/components/sistema";
 import { haQuanto, type UltimaAcaoReal } from "@/lib/funcionandoDeVerdade";
@@ -35,27 +36,31 @@ export default function FuncionandoDeVerdade({ comProva, semProva, aoAbrir }: {
       {comProva.length === 0 ? (
         <p className={texto.auxiliar}>Quando um agente entregar com prova, aparece aqui.</p>
       ) : (
-        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Última ação real de cada agente">
-          {visiveis.map((a) => (
+        /* v4 (15/11): lista limpa como nas referências: avatar do agente com o ponto do estado, sem traço entre as linhas. */
+        <ul className={juntar(lista.aberta, "space-y-0.5")} aria-label="Última ação real de cada agente">
+          {visiveis.map((a, i) => (
             <li key={a.agenteId} data-acao-real={a.estado}>
               <button
                 type="button"
                 onClick={() => aoAbrir(a.linkId, a.nome)}
-                className={juntar(lista.linha, "w-full items-start text-left")}
+                className={juntar(lista.linha, "w-full text-left")}
                 title={`Ver a prova: ${a.nome}`}
               >
-                {a.estado === "feito"
-                  ? <CheckCircle2 className={juntar("mr-2 mt-0.5 h-3.5 w-3.5 shrink-0", ESTADO[a.estado].tom)} aria-hidden="true" />
-                  : <Loader className={juntar("mr-2 mt-0.5 h-3.5 w-3.5 shrink-0", ESTADO[a.estado].tom)} aria-hidden="true" />}
+                <span className="relative mr-3 inline-flex shrink-0" aria-hidden="true">
+                  <AvatarComPresenca nome={a.agente} tom={i} tamanho={36} />
+                  <span className={juntar("absolute -bottom-0.5 -right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-card", ESTADO[a.estado].tom)}>
+                    {a.estado === "feito" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Loader className="h-3.5 w-3.5" />}
+                  </span>
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-baseline">
                     <span className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{a.agente}</span>
                     <span className={juntar(texto.etiqueta, "ml-auto shrink-0 pl-2 tabular-nums text-muted-foreground")}>{haQuanto(a.quando)}</span>
                   </span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>{a.nome}</span>
-                  <span className={juntar(texto.etiqueta, "block", ESTADO[a.estado].tom)}>{ESTADO[a.estado].rotulo}</span>
+                  <span className={juntar(texto.etiqueta, "block truncate", ESTADO[a.estado].tom)}>{ESTADO[a.estado].rotulo}</span>
                 </span>
-                <Eye className="ml-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <Eye className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               </button>
             </li>
           ))}

@@ -1,6 +1,5 @@
 import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ControlesDaPauta } from "./ControlesDaPauta";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -86,7 +85,7 @@ import EstudioEntrega from "./EstudioEntrega";
 import EstudioArteRapida, { type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
 // 22/10/2026: a peça de campanha aberta no Estúdio ganha "Voltar à campanha".
 import VoltarACampanha from "./VoltarACampanha";
-import { ModoDoEstudio, SeletorDeFormatoCompacto, SeletorDeQualidadeCompacto } from "./EstudioControles";
+import { LinhaDoAjuste, ModoDoEstudio, PainelDeAjustes, ROTULO_DA_QUALIDADE, SeletorDeFormatoCompacto, SeletorDeQualidadeCompacto } from "./EstudioControles";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA, tituloDoAviso } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import EstudioFotos from "./EstudioFotos";
@@ -108,17 +107,22 @@ import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "./ModeloDaCopyDoCont
 import { itemDaMarca } from "@/lib/mesa/marcas";
 import { arquivarDaFaixa, pautasParecidas, restaurarDaFaixa, tirarDaFila, type ArquivadaDaFaixa, type RecusadaDaFaixa } from "./arquivarDaFaixa";
 import ArquivadosDaFaixa, { chaveDosArquivados } from "./ArquivadosDaFaixa";
+import ErrosDoEstudio from "./ErrosDoEstudio";
 import AprovadasSemData, { chaveDasAprovadasSemData, JanelaDaAprovada, type AprovadaSemData } from "./AprovadasSemData";
 import AgendarDoEstudio from "./AgendarDoEstudio";
 import { entregarComModo, entregarVarias, prontaParaEntregar, resumoDoLote, type ModoDeEntrega, type ResultadoDaEntrega } from "@/lib/mesa/entregaComOpcoes";
 import PedidoDoCliente from "./PedidoDoCliente";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
+// 14/11/2026: ajuste, conferência e correção em segundo plano (a tela acompanha pelo banco) e progresso que só avança.
+import { chamarEmSegundoPlano, usePedidosEmSegundoPlano } from "@/lib/mesa/segundoPlano";
+import { desdeDaEtapa, useProgressoQueSoAvanca, type RetomadaDaLamina } from "./andamentoEstavel";
 // Frente T2: sem tipografia no kit da marca aberta, a geração fica bloqueada (não inventa).
 import EstudioSemTipografia, { TEXTO_SEM_TIPOGRAFIA } from "./EstudioSemTipografia";
 import { useSemTipografia } from "@/lib/mesa/tipografiaDoCliente";
 import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
 import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
+import EstudioArteFinalPronta, { arteFinalTravada } from "./EstudioArteFinalPronta";
 import EstudioRefinarTexto from "./EstudioRefinarTexto";
 import OpcoesDaCopy, { NotaDaCopy, opcoesDaResposta, type OpcaoDaCopy } from "@/components/sistema/OpcoesDaCopy";
 import EstudioTextoDaLamina from "./EstudioTextoDaLamina";
@@ -138,6 +142,7 @@ import {
   proporcaoDoFormato,
   versaoForaDoFormato,
   type FormatoDoPost,
+  FORMATOS_DO_POST,
   enviarUmParaAprovacao,
   AVISO_CONTINUO_SEM_MODELO,
   gravarTrabalhoNoCache,
@@ -334,7 +339,7 @@ function EtapasDaEsteira({ atual }: { atual: number }) {
         <li key={e.chave} className="flex items-start">
           <span
             className={`mr-2.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
-              i < atual ? "border-success bg-success/10 text-success" : i === atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
+              i < atual ? "border-success bg-success-soft text-success" : i === atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
             }`}
           >
             {i < atual ? <Check className="h-3.5 w-3.5" /> : i + 1}
@@ -367,7 +372,7 @@ function BarraDeFerramentas({
     <TooltipProvider delayDuration={250}>
       <nav
         aria-label="Ferramentas"
-        className={vertical ? "flex w-12 shrink-0 flex-col items-center border-l border-border py-2" : "flex min-w-0 overflow-x-auto border-t border-border px-2 py-1.5"}
+        className={vertical ? "flex w-16 shrink-0 flex-col items-center border-l border-border py-3" : "scrollbar-hidden flex min-w-0 overflow-x-auto overscroll-x-contain border-t border-border px-2 py-2"}
       >
         {ferramentas.map((f) => {
           const def = FERRAMENTAS[f];
@@ -381,13 +386,13 @@ function BarraDeFerramentas({
                   onClick={() => onAbrir(f)}
                   aria-label={def.rotulo}
                   aria-pressed={aberta}
-                  className={`relative flex shrink-0 items-center justify-center rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                    vertical ? "mb-1 h-10 w-10" : "mr-1 h-10 min-w-[64px] flex-col px-2"
-                  } ${aberta ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                  className={`relative flex shrink-0 items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    vertical ? "mb-2 h-10 w-10 rounded-full" : "mr-1.5 h-11 min-w-[68px] flex-col rounded-[16px] px-2.5"
+                  } ${aberta ? "bg-foreground text-background" : "bg-muted text-foreground hover:bg-foreground hover:text-background"}`}
                 >
                   <Icone className="h-[18px] w-[18px]" />
                   {!vertical && <span className="mt-0.5 text-[11px] leading-none">{def.rotulo}</span>}
-                  {marca(f) && <span className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${aberta ? "bg-primary-foreground" : "bg-primary"}`} aria-label="pede atenção" />}
+                  {marca(f) && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent-solid" aria-label="pede atenção" />}
                 </button>
               </TooltipTrigger>
               <TooltipContent side={vertical ? "left" : "top"} className="max-w-[240px]">
@@ -518,7 +523,14 @@ export function DetalheDoItem({
     aoMudar: atualizar,
     aoFalhar: (i) => avisarErro(erroDoItem(i), `Lâmina ${i.ordem} não foi gerada`),
   });
-  const andamento: Record<number, AndamentoDaLamina> = { ...fila.andamento, ...andamentoLocal };
+  /**
+   * 14/11/2026: ajuste, conferência e correção pedidos em segundo plano ficam registrados no trabalho; o
+   * andamento deles vem do banco (com o início do pedido) e sobrevive a fechar e reabrir a tela.
+   */
+  const pedidos = usePedidosEmSegundoPlano(trabalho?.id, atualizar);
+  const andamento: Record<number, AndamentoDaLamina> = { ...fila.andamento, ...pedidos.andamento, ...andamentoLocal };
+  // Início da tentativa que falhou, por lâmina: a nova tentativa continua o cronômetro (andamentoEstavel.ts).
+  const retomadas = useRef<Record<number, RetomadaDaLamina>>({});
 
   const diretor = padraoPara(catalogo, "diretor_arte");
   // 23/10 (dono): seletores por escopo, lembrados por cliente. A copy do conteúdo escreve a direção (texto exato e
@@ -557,20 +569,31 @@ export function DetalheDoItem({
     parteDaConferenciaDoJev(),
   ];
 
-  /** Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas. */
+  /**
+   * Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas, nem quando o
+   * servidor já conhece o início (fila ou pedido em segundo plano), nem na nova tentativa logo depois de um erro.
+   */
   const marcar = (ordem: number, etapa: EtapaDaLamina, detalhe?: string) =>
     setAndamento((a) => {
-      const antes = a[ordem];
-      const desde = antes && antes.etapa !== "fila" && etapa !== "fila" ? antes.desde : Date.now();
+      const daFila = fila.andamento[ordem];
+      const servidor = daFila && daFila.etapa !== "fila" ? daFila.desde : pedidos.andamento[ordem] ? pedidos.andamento[ordem].desde : null;
+      const desde = desdeDaEtapa({ antes: a[ordem], etapa, servidor, retomada: retomadas.current[ordem] || null, agora: Date.now() });
       return { ...a, [ordem]: { etapa, desde, detalhe } };
     });
-  const soltar = (ordem: number) => setAndamento((a) => semOrdem(a, ordem));
+  /** A lâmina fica livre. `comErro`: guarda o início para a nova tentativa não zerar o cronômetro. */
+  const soltar = (ordem: number, comErro = false) =>
+    setAndamento((a) => {
+      const antes = a[ordem];
+      if (comErro && antes && antes.etapa !== "fila") retomadas.current[ordem] = { desde: antes.desde, em: Date.now() };
+      else if (!comErro) delete retomadas.current[ordem];
+      return semOrdem(a, ordem);
+    });
 
   /** Conferência de uma lâmina; é a última etapa: no fim a lâmina fica livre. */
   const conferir = async (trabalhoId: string, ordem: number) => {
     marcar(ordem, "conferindo");
     try {
-      return await chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
+      return await chamarEmSegundoPlano<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
     } finally {
       soltar(ordem);
       atualizar();
@@ -587,9 +610,9 @@ export function DetalheDoItem({
    */
   const conferirDepois = async (trabalhoId: string, ordem: number, comecarCorrigindo: DecisaoDeAutocorrecao | null = null): Promise<number> => {
     const r = await conferirECorrigir({
-      conferir: () => chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem }),
+      conferir: () => chamarEmSegundoPlano<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem }),
       corrigir: (pedidoDaEquipe) =>
-        chamarFuncao<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalhoId, ordem, pedido_da_equipe: pedidoDaEquipe || undefined }),
+        chamarEmSegundoPlano<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalhoId, ordem, pedido_da_equipe: pedidoDaEquipe || undefined }),
       corrigirSozinho,
       comecarCorrigindo,
       aoMudarEtapa: (etapa, detalhe) => {
@@ -677,7 +700,7 @@ export function DetalheDoItem({
       if (g && typeof g.aviso_da_acao === "string" && g.aviso_da_acao) toast.warning(avisoDaPeca(`Lâmina ${ordem} gerada com aviso`), { description: g.aviso_da_acao, duration: 12000 });
       return (custoDaResposta(g) || 0) + custoFundo;
     } catch (e) {
-      soltar(ordem);
+      soltar(ordem, true);
       throw e;
     }
   };
@@ -691,7 +714,7 @@ export function DetalheDoItem({
     try {
       return await conferirDepois(trabalhoId, ordem);
     } catch (e) {
-      soltar(ordem);
+      soltar(ordem, true);
       avisarErro(e, `Lâmina ${ordem} pronta, mas a conferência falhou`);
       return 0;
     }
@@ -714,7 +737,14 @@ export function DetalheDoItem({
   const semImagem = cardsDaDirecao.filter((c) => !ultimas.has(c.ordem));
   // Lâminas da direção ATUAL com arte. ultimas.size contava também versões de
   // ordens que saíram (nova direção com menos lâminas): "7 de 5 com arte".
-  const laminasComArte = cardsDaDirecao.length - semImagem.length;
+  // 14/11/2026: a contagem mostrada não recua por releitura atrasada do trabalho (andamentoEstavel.ts); as
+  // decisões (o que falta gerar, se está tudo pronto) seguem na leitura real, logo abaixo.
+  const laminasComArte = useProgressoQueSoAvanca(
+    `${trabalho?.id || ""}:${cardsDaDirecao.map((c) => c.ordem).join(",")}`,
+    cardsDaDirecao.length - semImagem.length,
+    cardsDaDirecao.length,
+    trabalho?.atualizado_em,
+  );
   const filaDeGeracao = semImagem.length ? semImagem : cardsDaDirecao;
   const todosComImagem = cardsDaDirecao.length > 0 && semImagem.length === 0;
   const algoGerando = emLote || Object.keys(andamento).length > 0;
@@ -889,7 +919,9 @@ export function DetalheDoItem({
     marcar(ordem, "ajustando");
     let custo = 0;
     try {
-      const a = await chamarFuncao<any>("estudio-arte", {
+      // 14/11/2026: o ajuste roda em segundo plano na função (202 na hora) e a tela acompanha pelo banco. Antes a
+      // tela esperava o corpo da resposta e a função morta por limite de CPU virava "a função parou no meio".
+      const a = await chamarEmSegundoPlano<any>("estudio-arte", {
         acao: "ajustar_card",
         trabalho_id: trabalho.id,
         ordem,
@@ -906,7 +938,7 @@ export function DetalheDoItem({
       // Frente FS: ajuste feito, mas algo no caminho falhou e mudou a arte (fica também na lâmina).
       if (a && typeof a.aviso_da_acao === "string" && a.aviso_da_acao) toast.warning(`Lâmina ${ordem} ajustada com aviso`, { description: a.aviso_da_acao, duration: 12000 });
     } catch (e) {
-      soltar(ordem);
+      soltar(ordem, true);
       throw e;
     }
     const custoConferencia = await conferirSemDerrubar(trabalho.id, ordem);
@@ -1340,7 +1372,7 @@ export function DetalheDoItem({
   const seletorDeGerador = (
     <div className="w-[128px] min-w-0 shrink-0">
       <Select value={modeloImagem || ""} onValueChange={(id) => { setModeloImagem(id); void guardarEscolha({ modelo_imagem_id: id }); }} disabled={emLote || opcoesDeImagem.length === 0}>
-        <SelectTrigger className="h-8 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
+        <SelectTrigger className="toque-compacto h-8 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
           <SelectValue placeholder={opcoesDeImagem.length ? "Gerador" : "Sem gerador"} />
         </SelectTrigger>
         <SelectContent>
@@ -1358,7 +1390,7 @@ export function DetalheDoItem({
   const chaveCorrigirSozinho = (
     <div className="inline-flex h-8 shrink-0 items-center" data-corrigir-sozinho={corrigirSozinho ? "ligado" : "desligado"}>
       <ShieldCheck className={`mr-1.5 h-3.5 w-3.5 shrink-0 ${corrigirSozinho ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
-      <Switch
+      <Switch className="toque-compacto"
         id={`corrigir-sozinho-${item.id}`}
         checked={corrigirSozinho}
         onCheckedChange={(v) => setCorrigirSozinho(v === true)}
@@ -1374,20 +1406,20 @@ export function DetalheDoItem({
     </div>
   );
 
-  /** Pedido do dono (24/09): o diretor de arte à mão, para conversar sobre estilo, cenário e luz. */
+  /** Pedido do dono (24/09): o diretor de arte à mão, para conversar sobre estilo, cenário e luz (v4 E2: dentro dos Ajustes). */
   const botaoDoDiretor = (
     <Button
       type="button"
       size="sm"
       variant={ferramenta === "diretor" ? "secondary" : "ghost"}
-      className="h-8 w-8 shrink-0 p-0"
+      className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-[12px]"
       onClick={() => abrirFerramenta("diretor")}
       aria-pressed={ferramenta === "diretor"}
       aria-label="Conversar com o diretor"
       title="Diretor: converse com o diretor de arte para mudar o estilo, o cenário, a luz ou as cores. Ele lê o conteúdo e propõe mudanças que você aplica com um clique."
     >
-      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"). */}
       <MessageSquare className="h-4 w-4" aria-hidden="true" />
+      Conversar
     </Button>
   );
 
@@ -1408,7 +1440,8 @@ export function DetalheDoItem({
             // Gerar mostra a contagem ao lado do ícone e o preço continua.
             <>
               {semImagem.length ? <Wand2 className="h-4 w-4" aria-hidden="true" /> : <RotateCw className="h-4 w-4" aria-hidden="true" />}
-              {semImagem.length > 0 && <span className="tabular-nums" aria-hidden="true">{semImagem.length}</span>}
+              {/* v4 E2: a ação principal com nome (Gerar 5), verde vivo; Refazer segue só o ícone. */}
+              {semImagem.length > 0 && <span className="tabular-nums" aria-hidden="true">Gerar {semImagem.length}</span>}
               <span className="sr-only">
                 {semImagem.length
                   ? semImagem.length === cardsDaDirecao.length
@@ -1426,7 +1459,7 @@ export function DetalheDoItem({
               : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
           fecharAoConfirmar
           variant={semImagem.length ? "default" : "ghost"}
-          className={colunas ? "h-8 gap-1 px-2 text-[12px]" : "h-8 gap-1 px-2 text-[12px] max-sm:h-11 max-sm:min-w-[120px] max-sm:px-4 max-sm:text-[13px]"}
+          className={colunas ? (semImagem.length ? "h-9 gap-1.5 rounded-full px-4 text-[13px] font-semibold" : "h-8 gap-1 px-2 text-[12px]") : "h-9 gap-1.5 rounded-full px-4 text-[13px] font-semibold max-sm:h-11 max-sm:min-w-[120px] max-sm:px-4 max-sm:text-[13px]"}
           disabled={ocupado || entregue || semTipografia}
           partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
@@ -1452,9 +1485,10 @@ export function DetalheDoItem({
   // Frente AE-3 (dono, 28/09: "uma linha no computador, duas no máximo em telas menores, sem cartão em volta"):
   // o item, os ajustes da geração, a ação principal e a tela cheia (só o ícone) numa faixa só, que quebra
   // em duas quando não cabe. Nenhuma função saiu: a explicação de cada chave está no "?" ou na dica.
+  const rotuloDoFormato = (FORMATOS_DO_POST.find((f) => f.valor === formato) || { rotulo: "4:5" }).rotulo;
   const barraDoItem = (
-    <div className="shrink-0 border-b border-primary">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 py-1.5" data-barra-do-item="">
+    <div className="shrink-0 border-b border-border">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5 sm:px-5" data-barra-do-item="">
         <div className="flex min-w-[140px] flex-1 basis-[150px] items-center">
           {temRoteiro && (
             <span title={DICA_DO_ROTEIRO} className="mr-1.5 shrink-0">
@@ -1462,8 +1496,8 @@ export function DetalheDoItem({
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[14px] font-semibold leading-tight" title={item.title}>{item.title}</h2>
-            <p className="mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground">
+            <h2 className="truncate text-[20px] font-medium leading-7 tracking-[-0.025em] sm:text-[22px]" title={item.title}>{item.title}</h2>
+            <p className="mt-1 flex min-w-0 items-center text-[11px] text-muted-foreground">
               <span className="truncate">{rapida ? rapida.subtitulo : <>{dataCurta(item.due_date)} · {formatoDoItem(item)}</>}</span>
               <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
               {item.momento && (
@@ -1473,29 +1507,27 @@ export function DetalheDoItem({
                 </span>
               )}
               {trabalho && trabalho.custo_usd > 0 && (
-                <span className="ml-2 shrink-0 tabular-nums" title="Gasto de IA neste item">{usd(trabalho.custo_usd)}</span>
+                <span className="ml-2 inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 font-medium tabular-nums text-foreground" title="Gasto de IA neste item">{usd(trabalho.custo_usd)}</span>
               )}
             </p>
           </div>
         </div>
-        {/* Os ajustes da geração, do mesmo tamanho (h-8), lado a lado. */}
+        {/* v4 E2 (dono, 15/11: "muito poluído"): formato, qualidade, gerador, correção e estilo moram num botão só,
+            "Ajustes", que mostra o resumo (4:5 · Padrão). O Diretor saiu daqui porque já está no trilho de ferramentas. */}
         {estado === "producao" && (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1" data-ajustes-da-geracao="">
-            <div className="shrink-0" title="Formato do post (vale para todas as lâminas)">
+          <PainelDeAjustes
+            rotulo={`Ajustes da geração: ${rotuloDoFormato}, ${ROTULO_DA_QUALIDADE[qualidade].rotulo}`}
+            resumo={<><span className="tabular-nums">{rotuloDoFormato}</span><span aria-hidden="true" className="text-muted-foreground">·</span><span>{ROTULO_DA_QUALIDADE[qualidade].rotulo}</span></>}
+          >
+            <LinhaDoAjuste rotulo="Formato">
               <SeletorDeFormatoCompacto valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
-            </div>
-            {seletorDeQualidade}
-            {seletorDeGerador}
-            {botaoDoDiretor}
-            <Popover>
-              <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Ajustes da geração" title="Correção automática e estilo do cliente"><SlidersHorizontal className="h-4 w-4" /></Button></PopoverTrigger>
-              <PopoverContent align="end" className="w-80 space-y-3">
-                <p className="text-[13px] font-semibold">Ajustes da geração</p>
-                {chaveCorrigirSozinho}
-                {trabalho && <BotaoDoEstilo compacto trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="shrink-0" />}
-              </PopoverContent>
-            </Popover>
-          </div>
+            </LinhaDoAjuste>
+            <LinhaDoAjuste rotulo="Qualidade">{seletorDeQualidade}</LinhaDoAjuste>
+            <LinhaDoAjuste rotulo="Gerador">{seletorDeGerador}</LinhaDoAjuste>
+            <LinhaDoAjuste rotulo="Diretor de arte">{botaoDoDiretor}</LinhaDoAjuste>
+            <div className="border-t border-border pt-3">{chaveCorrigirSozinho}</div>
+            {trabalho && <BotaoDoEstilo compacto trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="shrink-0" />}
+          </PainelDeAjustes>
         )}
         {controlesDaPauta}
         {estado === "producao" && acaoPrincipal}
@@ -1577,7 +1609,7 @@ export function DetalheDoItem({
   const avisoDePostDeFotos = trabalho && ehPostDeFotos(trabalho.direcao) ? (
     <div className="mb-3 flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-[12px] leading-snug" role="status" data-aviso="post-de-fotos">
       <span className="mr-2 min-w-0 flex-1">Este item é um post de fotos da Mesa Foto: as fotos vão como estão, sem arte. Troque as fotos, a legenda e envie ao cliente por lá.</span>
-      <Link to={linkDoPostNaMesaFoto(clientId, { taskId: item.id, trabalhoId: trabalho.id })} className="inline-flex h-8 shrink-0 items-center rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground">
+      <Link to={linkDoPostNaMesaFoto(clientId, { taskId: item.id, trabalhoId: trabalho.id })} className="inline-flex h-8 shrink-0 items-center rounded-full bg-primary px-2.5 text-[12px] font-medium text-primary-foreground">
         Abrir na Mesa Foto
       </Link>
     </div>
@@ -1620,8 +1652,11 @@ export function DetalheDoItem({
       rotulo={<>{v ? <RotateCw className="h-3.5 w-3.5" aria-hidden="true" /> : <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />}<span className="sr-only">{v ? "Refazer" : "Gerar"} a lâmina {c.ordem}</span></>}
       titulo={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}`}
       descricao={comNotaDoFundo(`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`, [c.ordem])}
-      variant={v ? "ghost" : "default"}
-      className="h-8 w-full gap-1 px-2 text-[11px]"
+      // v4 (uma ação principal por vez): só a lâmina aberta ganha o botão cheio; as outras ficam discretas.
+      variant={v ? "ghost" : c.ordem === selecionado ? "default" : "outline"}
+      // v4 (referências): um círculo só com o ícone; o preço de cada lâmina fica na dica (o total já está no Gerar de cima).
+      semPreco
+      className="h-8 w-8 gap-1 rounded-full p-0 text-[11px]"
       disabled={laminaOcupada(c.ordem) || entregue || semTipografia}
       partes={() => partesGerarDas([c.ordem]).concat(partesDoFundo([c.ordem]))}
       executar={() => gerarEConferir(c.ordem)}
@@ -1844,7 +1879,7 @@ export function DetalheDoItem({
       <div className="flex min-h-0 shrink-0 flex-col border-r border-border" style={{ width: LARGURA_NA_PRANCHETA + 32 }}>
         <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium text-muted-foreground" title={`${trabalho?.direcao?.origem === "roteiro" ? "Direção do roteiro" : "Direção do diretor"}${infinito ? ", carrossel contínuo" : ""}. ${ordemTravada ? `Lâminas: clique escolhe, duplo clique amplia. ${AVISO_DA_ORDEM_NO_CONTINUO}` : "Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem"}`}>
           <span className="min-w-0 flex-1 truncate">Prancheta</span>
-          <span className="ml-1 shrink-0 normal-case tracking-normal tabular-nums" data-resumo-da-prancheta="">{laminasComArte}/{cardsDaDirecao.length}</span>
+          <span className={`ml-1 inline-flex h-6 shrink-0 items-center rounded-full px-2 font-semibold normal-case tracking-normal tabular-nums ${cardsDaDirecao.length > 0 && laminasComArte >= cardsDaDirecao.length ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`} data-resumo-da-prancheta="">{laminasComArte}/{cardsDaDirecao.length}</span>
         </p>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8">
           {prancheta(true)}
@@ -1939,6 +1974,20 @@ export function DetalheDoItem({
       partesCorrigir={() => partesAjustar().concat(partesConferir())}
       onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}
       onConcluido={atualizar}
+      arteFinal={
+        <EstudioArteFinalPronta
+          key={`arte-final-${trabalho.id}-${cardSelecionado.ordem}`}
+          trabalhoId={trabalho.id}
+          ordem={cardSelecionado.ordem}
+          versaoAtual={Math.max(0, ...(trabalho.cards || []).filter((v) => v.ordem === cardSelecionado.ordem).map((v) => v.versao))}
+          bloqueado={arteFinalTravada(trabalho) || laminaOcupada(cardSelecionado.ordem)}
+          motivoDoBloqueio={arteFinalTravada(trabalho) ? "Trabalho entregue ou em aprovação: reabra para corrigir antes de trocar a arte." : "Espere a lâmina terminar."}
+          onGravado={(r) => {
+            gravarTrabalhoNoCache(queryClient, clientId, r.trabalho);
+            atualizar();
+          }}
+        />
+      }
       gif={<GifDaLamina trabalhoId={trabalho.id} ordem={cardSelecionado.ordem} gifs={(trabalho.direcao as any)?.gifs || []} ocupado={laminaOcupada(cardSelecionado.ordem)} onPronto={atualizar} />}
       semTrocaDeFundo={comFundoContinuo && usaFundoContinuo(cardSelecionado)}
       instrucaoInicial={instrucaoDoCliente && instrucaoDoCliente.ordem === cardSelecionado.ordem ? instrucaoDoCliente.texto : null}
@@ -1986,7 +2035,7 @@ export function DetalheDoItem({
   const executarPassoDoPlano: ExecutorDoPasso = async (p) => {
     if (!trabalho) throw new Error("Abra o trabalho antes.");
     if (p.operacao === "ajustar_texto" && p.ordem) {
-      const r = await chamarFuncao<any>("estudio-arte", { acao: "ajustar_texto", trabalho_id: trabalho.id, ordem: p.ordem });
+      const r = await chamarEmSegundoPlano<any>("estudio-arte", { acao: "ajustar_texto", trabalho_id: trabalho.id, ordem: p.ordem });
       atualizar();
       const c = await conferirSemDerrubar(trabalho.id, p.ordem);
       atualizar();
@@ -2158,7 +2207,7 @@ export function DetalheDoItem({
 
       {cardsDaDirecao.length > 1 && (
         <label className="flex cursor-pointer items-start rounded-lg border border-border bg-background px-3 py-2.5">
-          <Switch checked={infinito} onCheckedChange={(v) => void alternarContinuo(v)} disabled={salvandoContinuo || algoGerando || entregue || formato !== "feed_4x5"} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
+          <Switch checked={infinito} onCheckedChange={(v) => void alternarContinuo(v)} disabled={salvandoContinuo || algoGerando || entregue || formato !== "feed_4x5"} className="toque-compacto mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
           <span className="min-w-0">
             <span className="block text-[13px] font-medium">Carrossel contínuo</span>
             <span className="block text-[12px] leading-snug text-muted-foreground">
@@ -2407,13 +2456,15 @@ export function DetalheDoItem({
   };
 
   const cabecalhoDoPainel = ferramenta ? (
-    <div className="flex h-11 shrink-0 items-center border-b border-border px-4">
-      <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{FERRAMENTAS[ferramenta].rotulo}</p>
+    <div className="flex h-14 shrink-0 items-center px-4">
+      {/* v4 (cabeçalho de cartão das referências): ícone em círculo, título e fechar em círculo. */}
+      <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary">{(() => { const I = FERRAMENTAS[ferramenta].icone; return <I className="h-4 w-4" />; })()}</span>
+      <p className="min-w-0 flex-1 truncate text-[15px] font-medium tracking-[-0.01em]">{FERRAMENTAS[ferramenta].rotulo}</p>
       <button
         type="button"
         onClick={() => setFerramenta("")}
         aria-label="Fechar a ferramenta"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-foreground hover:text-background"
       >
         <X className="h-4 w-4" />
       </button>
@@ -2434,7 +2485,7 @@ export function DetalheDoItem({
           <div className="flex min-h-0 min-w-0 flex-1">{centro}</div>
           {/* Painel deslizante da ferramenta: abre ao lado da barra, com rolagem própria. */}
           <div
-            className="min-h-0 shrink-0 overflow-hidden border-border transition-[width] duration-200 ease-out"
+            className="min-h-0 shrink-0 overflow-hidden border-border"
             style={{ width: ferramenta ? LARGURA_DO_PAINEL : 0, borderLeftWidth: ferramenta ? 1 : 0 }}
           >
             {ferramenta && (
@@ -2500,13 +2551,13 @@ function mesesDoSeletor(mesAtual: string): string[] {
 /** O estúdio antes de haver pauta para abrir (lista vazia ou ainda lendo). */
 function SemPauta({ carregando, vazia }: { carregando: boolean; vazia: boolean }) {
   return (
-    <div className={juntar(superficie.painel, "flex min-h-[320px] flex-1 flex-col items-center justify-center p-8 text-center")}>
+    <div className={juntar(superficie.painel, "ds-hatch flex min-h-[320px] flex-1 flex-col items-center justify-center p-8 text-center")} data-empty-state="">
       {carregando ? (
         <p className="inline-flex items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a pauta…</p>
       ) : (
         <>
-          <ListChecks className="h-6 w-6 text-primary" />
-          <p className="mt-3 text-[15px] font-semibold">{vazia ? "Nenhuma pauta de arte neste período" : "Escolha uma pauta na faixa acima"}</p>
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-solid text-on-accent" aria-hidden="true"><ListChecks className="h-6 w-6" /></span>
+          <p className="mt-4 text-[20px] font-medium leading-7 tracking-[-0.02em]">{vazia ? "Nenhuma pauta de arte neste período" : "Escolha uma pauta na faixa acima"}</p>
           <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">
             {vazia ? "Troque o período na faixa ou complete a agenda pela aba Mês." : "O estúdio abre com a pauta escolhida."}
           </p>
@@ -2787,7 +2838,7 @@ export default function AbaEstudio({
   };
 
   // Frente AE-2 (dono: "sem linha nova"): Pautas | Arte rápida entra na barra da faixa e na do histórico.
-  const modoDoEstudio = <ModoDoEstudio modo={alvoRapido ? "rapida" : "pautas"} onModo={(m) => irParaRapida(m === "rapida" ? NOVA_ARTE_RAPIDA : null, ["fotos"])} className="mb-1 mr-2 mt-1" />;
+  const modoDoEstudio = <ModoDoEstudio modo={alvoRapido ? "rapida" : "pautas"} onModo={(m) => irParaRapida(m === "rapida" ? NOVA_ARTE_RAPIDA : null, ["fotos"])} className="mb-1 mr-2 mt-1" curto={!!alvoRapido} />;
 
   const faixaDasPautas = (
     <EstudioLista
@@ -2809,7 +2860,7 @@ export default function AbaEstudio({
       arquivar={{ onArquivar: (ids) => void arquivarPautas(ids), parecidas }}
       entregar={{ podeLiberar: podeRecarregar, prontas: prontasDaFaixa, onEntregar: (ids, modo, mostrar) => void entregarPautas(ids, modo, mostrar), ocupado: entregandoLote }}
       inicio={modoDoEstudio}
-      extra={<><AprovadasSemData /><ArquivadosDaFaixa onMudou={relerDepoisDeArquivar} /></>}
+      extra={<><ErrosDoEstudio /><AprovadasSemData /><ArquivadosDaFaixa onMudou={relerDepoisDeArquivar} /></>}
     />
   );
 
@@ -2834,7 +2885,7 @@ export default function AbaEstudio({
 
   const carregando = dados.isLoading || (!!tarefaId && !selecionado && (avulso.isLoading || avulso.isFetching));
   const vazio = itemDeOutraMarca ? (
-    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-xl border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-item-de-outra-marca="">
+    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-lg border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-item-de-outra-marca="">
       <p className="text-[14px] font-semibold">Este item é de outra marca</p>
       <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. O Estúdio mostra e gera só a marca {marcaAberta ? marcaAberta.nome : "aberta"}, com o kit dela.</p>
     </div>

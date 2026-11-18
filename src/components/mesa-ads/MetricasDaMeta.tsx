@@ -9,6 +9,7 @@ import { botao, foco, juntar, superficie, texto } from "@/components/sistema/est
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { textoDoErro } from "@/lib/mesa/api";
+import { CartaoDeIndicador } from "@/components/mesa/ousado";
 import { brl, inteiro, tempoDesde } from "./adsApi";
 import { CabecalhoDaParte } from "./Comuns";
 import type { PeriodoDaConsulta } from "./periodoDaConta";
@@ -53,17 +54,21 @@ function Aviso({ children }: { children: string }) {
   );
 }
 
-function NumeroDaMeta({ metrica, valor, rotulo }: { metrica: MetricaDoCatalogo; valor: number | null; rotulo?: string }) {
+function NumeroDaMeta({ metrica, valor, rotulo, variante }: { metrica: MetricaDoCatalogo; valor: number | null; rotulo?: string; variante?: "solido" | "tinta" }) {
+  // Rodada ousada (15/11/2026): número grande em cartão; o primeiro é o sólido na cor da marca e o segundo o de tinta.
   return (
-    <div className={juntar(superficie.painel, "min-w-0 px-3 py-2.5")} data-metrica={metrica.id}>
-      <dt className="flex min-w-0 items-center">
-        <span className="truncate text-[12px] text-muted-foreground" title={rotulo || metrica.rotulo}>{rotulo || metrica.rotulo}</span>
+    <CartaoDeIndicador
+      lista
+      data-metrica={metrica.id}
+      variante={variante}
+      rotulo={rotulo || metrica.rotulo}
+      valor={formatar(valor, metrica.formato)}
+      ajuda={
         <AjudaRecolhida className="ml-1 shrink-0" rotulo={`O que é ${rotulo || metrica.rotulo}?`} titulo={rotulo || metrica.rotulo}>
           {metrica.ajuda}
         </AjudaRecolhida>
-      </dt>
-      <dd className="mt-0.5 truncate text-[24px] font-semibold tabular-nums">{formatar(valor, metrica.formato)}</dd>
-    </div>
+      }
+    />
   );
 }
 
@@ -177,19 +182,19 @@ export function GraficoNoTempo({
       ) : (
         <p className="text-[13px] text-muted-foreground">Sem {rotuloDaMedida.toLowerCase()} no período.</p>
       )}
-      <div className="mt-3 flex h-[132px] min-w-0 items-end border-b border-border" role="img" aria-label={`${rotuloDaMedida} por ${modo === "hora" ? "hora do dia" : "dia da semana"}`}>
+      <div className="mt-5 flex h-[168px] min-w-0 items-end" role="img" aria-label={`${rotuloDaMedida} por ${modo === "hora" ? "hora do dia" : "dia da semana"}`}>
         {faixas.map((f) => {
           const v = valorDaFaixa(f, chave);
-          const altura = maior > 0 ? Math.max(v > 0 ? 4 : 0, Math.round((v / maior) * 120)) : 0;
+          const altura = maior > 0 ? Math.max(v > 0 ? 4 : 0, Math.round((v / maior) * 156)) : 0;
           const dica = `${f.rotulo}: ${inteiro(v)} ${rotuloDaMedida.toLowerCase()} · ${brl(f.gasto)} investidos${v > 0 ? ` · ${brl(f.gasto / v)} cada` : ""}`;
           return (
-            <div key={f.indice} className="flex h-full min-w-0 flex-1 items-end px-px" title={dica} aria-label={dica} data-faixa={f.indice} data-valor={v}>
-              <div className={juntar("w-full rounded-t", emDestaque(f.indice) ? "bg-primary" : "bg-primary/35")} style={{ height: `${altura}px` }} />
+            <div key={f.indice} className="flex h-full min-w-0 flex-1 items-end px-0.5 sm:px-1" title={dica} aria-label={dica} data-faixa={f.indice} data-valor={v}>
+              <div className={juntar("w-full rounded-full", emDestaque(f.indice) ? "bg-primary" : "bg-primary/35")} style={{ height: `${altura}px` }} />
             </div>
           );
         })}
       </div>
-      <div className="mt-1 flex min-w-0" aria-hidden="true">
+      <div className="mt-2 flex min-w-0" aria-hidden="true">
         {faixas.map((f) => (
           <span key={f.indice} className={juntar("min-w-0 flex-1 whitespace-nowrap text-[11px] text-muted-foreground", modo === "hora" ? "text-left" : "text-center")}>
             {modo === "hora" ? (
@@ -204,7 +209,7 @@ export function GraficoNoTempo({
         ))}
       </div>
       <details className="mt-2">
-        <summary className={juntar("cursor-pointer rounded text-[12px] text-muted-foreground hover:text-foreground", foco)}>Ver em tabela</summary>
+        <summary className={juntar("cursor-pointer rounded-sm text-[12px] text-muted-foreground hover:text-foreground", foco)}>Ver em tabela</summary>
         <div className="mt-2">
           <table className="w-full text-[12px] tabular-nums">
             <thead>
@@ -248,7 +253,7 @@ function PorHorario({ clientId, periodo, objetivo }: { clientId: string; periodo
   const atual = d ? (modo === "hora" && d.hora ? d.hora : d.diaDaSemana) : null;
   const modoReal = d && modo === "hora" && !d.hora ? "dia_da_semana" : modo;
   return (
-    <section className="min-w-0 border-t border-border pt-4" aria-label="Por horário">
+    <section className={juntar(superficie.painel, "min-w-0 p-5 sm:p-6")} aria-label="Por horário">
       <CabecalhoDaParte
         nivel={3}
         titulo="Por horário"
@@ -342,7 +347,7 @@ export default function MetricasDaMeta({ clientId, periodo, rotuloDoPeriodo }: {
         }
       />
       {!recolhido && (
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-5">
           {q.isLoading && <Carregando forma="aba" rotulo="Lendo os números na Meta" />}
           {q.isError && <EstadoDeErro titulo="Os números não vieram." descricao={textoDoErro(q.error)} />}
           {d && (
@@ -358,9 +363,9 @@ export default function MetricasDaMeta({ clientId, periodo, rotuloDoPeriodo }: {
               {!objetivo && presentes.length > 0 && (
                 <div className="min-w-0" aria-label="Resultados por objetivo">
                   <p className={texto.rotulo}>Resultados por objetivo</p>
-                  <div className="mt-1.5 flex min-w-0 flex-wrap">
+                  <div className="mt-2.5 flex min-w-0 flex-wrap">
                     {presentes.map((p) => (
-                      <button key={p.objetivo} type="button" onClick={() => setObjetivo(p.objetivo)} className={juntar("mb-1.5 mr-2 rounded-md border border-border px-2.5 py-1.5 text-left text-[13px] hover:bg-muted/40", foco)} data-objetivo-total={p.objetivo}>
+                      <button key={p.objetivo} type="button" onClick={() => setObjetivo(p.objetivo)} className={juntar("mb-2 mr-2 rounded-full border border-border bg-card px-4 py-2 text-left text-[13px] transition-colors hover:bg-muted", foco)} data-objetivo-total={p.objetivo}>
                         <span className="font-medium">{p.rotulo}</span>{" "}
                         <span className="tabular-nums text-muted-foreground">
                           {p.por_resultado.length > 1
@@ -376,9 +381,9 @@ export default function MetricasDaMeta({ clientId, periodo, rotuloDoPeriodo }: {
               )}
 
               {metricas.length > 0 ? (
-                <dl className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5" aria-label="Números do período">
-                  {metricas.map((m) => (
-                    <NumeroDaMeta key={m.id} metrica={m} valor={valorDaColuna(d.total.numeros, m.id)} rotulo={m.id === "resultados" ? (d.total.misto ? "Resultados (objetivos misturados)" : d.total.resultado_rotulo) : undefined} />
+                <dl className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 desk:grid-cols-4" aria-label="Números do período">
+                  {metricas.map((m, i) => (
+                    <NumeroDaMeta key={m.id} variante={i === 0 ? "solido" : i === 1 ? "tinta" : undefined} metrica={m} valor={valorDaColuna(d.total.numeros, m.id)} rotulo={m.id === "resultados" ? (d.total.misto ? "Resultados (objetivos misturados)" : d.total.resultado_rotulo) : undefined} />
                   ))}
                 </dl>
               ) : (
@@ -389,14 +394,14 @@ export default function MetricasDaMeta({ clientId, periodo, rotuloDoPeriodo }: {
                 (d.itens.length === 0 ? (
                   <EstadoVazio compacto titulo="Nada neste recorte." descricao={objetivo ? "Nenhuma campanha deste objetivo teve entrega no período." : "Nenhuma entrega no período."} />
                 ) : (
-                  <div className="min-w-0 overflow-x-auto" role="region" aria-label="Tabela de números" tabIndex={0}>
-                    <table className="w-full min-w-[640px] text-[12px] tabular-nums">
+                  <div className={juntar(superficie.painel, "min-w-0 overflow-x-auto px-5 py-2 sm:px-6")} role="region" aria-label="Tabela de números" tabIndex={0}>
+                    <table className="w-full min-w-[640px] text-[13px] tabular-nums">
                       <thead>
-                        <tr className="border-b border-border text-left text-muted-foreground">
-                          <th className="py-2 pr-3 font-medium">{NIVEIS_DA_METRICA.filter((n) => n.valor === nivel)[0].rotulo.replace(/s$/, "")}</th>
-                          <th className="py-2 pr-3 font-medium">Resultado</th>
+                        <tr className="border-b border-border text-left text-[12px] text-muted-foreground">
+                          <th className="py-3 pr-4 font-medium">{NIVEIS_DA_METRICA.filter((n) => n.valor === nivel)[0].rotulo.replace(/s$/, "")}</th>
+                          <th className="py-3 pr-4 font-medium">Resultado</th>
                           {metricas.map((m) => (
-                            <th key={m.id} className="whitespace-nowrap py-2 pr-3 text-right font-medium" title={m.ajuda}>
+                            <th key={m.id} className="whitespace-nowrap py-3 pr-4 text-right font-medium" title={m.ajuda}>
                               {m.id === "resultados" ? "Resultados" : m.rotulo}
                             </th>
                           ))}
@@ -404,14 +409,14 @@ export default function MetricasDaMeta({ clientId, periodo, rotuloDoPeriodo }: {
                       </thead>
                       <tbody>
                         {d.itens.map((i) => (
-                          <tr key={i.id} className="border-b border-border/50 hover:bg-muted/30" data-item={i.id}>
-                            <td className="max-w-[280px] py-2 pr-3">
+                          <tr key={i.id} className="border-b border-border/60 transition-colors hover:bg-muted/50" data-item={i.id}>
+                            <td className="max-w-[280px] py-3.5 pr-4">
                               <span className="block truncate text-[13px] font-medium" title={i.nome}>{i.nome}</span>
                               {(i.campanha && nivel !== "campanha") && <span className="block truncate text-[11px] text-muted-foreground">{i.campanha}</span>}
                             </td>
-                            <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{i.resultado_rotulo}</td>
+                            <td className="whitespace-nowrap py-3.5 pr-4 text-muted-foreground">{i.resultado_rotulo}</td>
                             {metricas.map((m) => (
-                              <td key={m.id} className="whitespace-nowrap py-2 pr-3 text-right">
+                              <td key={m.id} className="whitespace-nowrap py-3.5 pr-4 text-right font-medium">
                                 {formatar(valorDaColuna(i.numeros, m.id), m.formato)}
                               </td>
                             ))}

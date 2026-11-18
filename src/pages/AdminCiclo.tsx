@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowDown, BarChart3, Brain, CalendarDays, Check, ChevronLeft, ChevronRight,
+  ArrowDown, ArrowUpRight, BarChart3, Brain, CalendarDays, Check, ChevronLeft, ChevronRight,
   ChevronRight as Caret, Columns3, DollarSign, ExternalLink, FileArchive,
   HeartPulse, LayoutDashboard, ListChecks, Megaphone, Menu, RefreshCw, Share2,
   Smartphone, Sparkles, TrendingUp,
@@ -45,6 +45,8 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import ClientCycleSheet from "@/components/ciclo/ClientCycleSheet";
+import { AnelDeProgresso, Passos, TrioDeNumeros } from "@/components/execucao/Visuais";
+import PrimeiraLeitura, { EsqueletoDeCartoes } from "@/components/execucao/PrimeiraLeitura";
 import { AjudaRecolhida, Carregando, EstadoVazio, JanelaCentral, Secao, SeletorCompacto, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 import {
   CYCLES, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS, type CycleArea,
@@ -97,6 +99,9 @@ const shortDate = (date: Date) =>
 const hourOf = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
 
+/** v4 (15/11): leituras que a lista espera responder UMA vez antes de aparecer (ver PrimeiraLeitura). */
+const LEITURAS_DO_CICLO = [["ciclo-situacao"], ["ciclo-planos"], ["ciclo-planos-anteriores"], ["weekly-cycle"], ["cycle-coach"], ["entrega-etapas-lista"], ["ciclo-avulsos-situacao"]] as const;
+
 export default function AdminCiclo() {
   const { user, profile } = useAuth();
   const canWrite = ["admin", "manager"].includes(profile?.role || "");
@@ -140,7 +145,7 @@ export default function AdminCiclo() {
   // verdade, a área de conteúdo começa exatamente onde ele termina, sem número
   // chutado que descole em algum aparelho.
   const headerRef = useRef<HTMLElement | null>(null);
-  const [headerH, setHeaderH] = useState(168);
+  const [headerH, setHeaderH] = useState(137);
   useEffect(() => {
     const node = headerRef.current;
     if (!node) return;
@@ -1256,7 +1261,7 @@ export default function AdminCiclo() {
           onClick={() =>
             void (avulso ? marcarEtapaAvulsa(client, step) : toggle(client, step))
           }
-          className={`flex h-8 items-center justify-center rounded-lg border text-[12px] font-bold tabular-nums transition-colors active:scale-95 ${
+          className={`flex h-8 items-center justify-center rounded-md border text-[12px] font-semibold tabular-nums transition-colors active:scale-95 ${
             done
               ? onboardingTrack
                 ? "border-info bg-info text-white"
@@ -1265,7 +1270,7 @@ export default function AdminCiclo() {
                 ? "border-primary bg-primary/10 text-primary"
                 : onboardingTrack
                   ? "border-info/25 bg-info/5 text-info/70"
-                  : "border-border bg-secondary/30 text-muted-foreground"
+                  : "border-border bg-muted/40 text-muted-foreground"
           } ${pendingKey === key ? "opacity-50" : ""}`}
         >
           {done ? <Check className="h-4 w-4" strokeWidth={3} /> : step}
@@ -1277,18 +1282,20 @@ export default function AdminCiclo() {
       <div
         key={client.id}
         ref={(node) => { cardRefs.current[client.id] = node; }}
-        // Sem caixa (sistema): linha com divisória; semana fechada ganha só a marca verde à esquerda.
-        className={`min-w-0 border-t border-border py-3 transition-colors ${
-          complete ? "border-l-2 border-l-success pl-3" : ""
-        } ${highlighted === client.id ? "rounded-md ring-2 ring-primary" : ""}`}
+        // Cartão do cliente (redesenho de 14/11/2026); semana fechada ganha a borda verde.
+        className={juntar(superficie.painel, "min-w-0 p-5 transition-colors sm:p-5", complete && "border-success/40", highlighted === client.id && "ring-2 ring-primary")}
       >
         {/* Linha de identidade: altura fixa, contador com largura reservada */}
         <button
           type="button"
           onClick={() => setDetailId(client.id)}
-          className="flex h-8 w-full items-center gap-2 text-left"
+          className="flex h-11 w-full items-center gap-2 text-left"
         >
-          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">
+          {/* v4 (15/11): o anel é o progresso do cliente (feitas de total), com o número no miolo. */}
+          <AnelDeProgresso valor={doneCount} total={clientTotal} tamanho={44} espessura={4} rotulo={`${doneCount} de ${clientTotal} etapas feitas`} className="mr-1 text-foreground">
+            {complete ? <Check className="h-4 w-4 text-primary" strokeWidth={3} /> : `${doneCount}/${clientTotal}`}
+          </AnelDeProgresso>
+          <span className="min-w-0 flex-1 truncate text-[16px] font-semibold leading-6 tracking-[-0.01em] text-foreground">
             {client.company_name || client.full_name}
           </span>
           {avulso ? (
@@ -1313,10 +1320,9 @@ export default function AdminCiclo() {
               {PHASE_LABELS[phaseOf(client)]}
             </span>
           )}
-          <span className="w-11 shrink-0 text-right text-[12px] font-bold tabular-nums text-muted-foreground">
-            {doneCount}/{clientTotal}
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground" aria-hidden="true">
+            <Caret className="h-4 w-4" />
           </span>
-          <Caret className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
 
         {/* O que o painel está pedindo para este cliente AGORA.
@@ -1324,7 +1330,7 @@ export default function AdminCiclo() {
             a etapa faz sentido hoje. Só as duas mais graves — lista
             longa vira ruído e ninguém lê. */}
         {!avulso && (pendenciasPorCliente.get(String(client.id))?.length ?? 0) > 0 && (
-          <div className="mb-2 space-y-0.5">
+          <div className="mb-3 mt-2 space-y-1">
             {(pendenciasPorCliente.get(String(client.id)) || []).slice(0, 2).map((p) => (
               <p
                 key={p.chave}
@@ -1351,7 +1357,7 @@ export default function AdminCiclo() {
           });
           if (pend.length === 0) return null;
           return (
-            <div className="mb-2 space-y-0.5">
+            <div className="mb-3 mt-2 space-y-1">
               {pend.slice(0, 2).map((p) => (
                 <p
                   key={p.chave}
@@ -1402,19 +1408,29 @@ export default function AdminCiclo() {
           </div>
         )}
 
-        {/* Barra segmentada: um bloco por etapa, na mesma ordem dos botões */}
-        <div className="mb-2 flex h-1 gap-[3px]">
-          {Array.from({ length: clientTotal }, (_, index) => (
-            <span
-              key={index}
-              className={`flex-1 rounded-full ${
-                etapaFeita(client, index + 1)
-                  ? !avulso && index + 1 > totalSteps ? "bg-info" : "bg-primary"
-                  : "bg-secondary"
-              }`}
-            />
-          ))}
-        </div>
+        {/* v4 (15/11): as etapas viram passos ligados por linha (feito com ✓, o da vez com anel);
+            no avulso fica a barra, porque os botões numerados logo abaixo já são os passos. */}
+        {avulso ? (
+          <div className="mb-2 mt-3 flex h-1.5 gap-[3px]">
+            {Array.from({ length: clientTotal }, (_, index) => (
+              <span
+                key={index}
+                className={`flex-1 rounded-full ${etapaFeita(client, index + 1) ? "bg-primary" : "bg-muted"}`}
+              />
+            ))}
+          </div>
+        ) : (
+          <Passos
+            compacto
+            rotulo={`Etapas de ${client.company_name || client.full_name}`}
+            className="mb-3 mt-4"
+            itens={Array.from({ length: clientTotal }, (_, index) => ({
+              rotulo: stepLabelOf(client, index + 1),
+              feito: etapaFeita(client, index + 1),
+              atual: index + 1 === nextStep,
+            }))}
+          />
+        )}
 
         {/* Avulso: uma entrega, uma fila — o holofote sequencial. */}
         {avulso && nextStep && (
@@ -1433,7 +1449,7 @@ export default function AdminCiclo() {
               onClick={() =>
                 void (avulso ? marcarEtapaAvulsa(client, nextStep) : toggle(client, nextStep))
               }
-              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50"
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50"
             >
               <Check className="h-4 w-4" strokeWidth={3} />
               Feito
@@ -1452,7 +1468,7 @@ export default function AdminCiclo() {
             de jogo, REAL: cada Feito marca a etapa de verdade no
             histórico. Corrigir uma marcação é na folha (toque no nome). */}
         {!avulso ? (
-          <div className="divide-y divide-border border-t border-border">
+          <div className="-mx-1 space-y-1">
             {FRENTES_DA_SEMANA.map((frente) => {
               const aberta = frente.steps.find((s) => !etapaFeita(client, s)) ?? null;
               const feitasNaFila = frente.steps.filter((s) => etapaFeita(client, s)).length;
@@ -1460,7 +1476,7 @@ export default function AdminCiclo() {
                 return (
                   <div
                     key={frente.nome}
-                    className="flex h-9 items-center"
+                    className="flex h-9 items-center px-3"
                   >
                     <Check className="mr-2 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
                     <span className="text-[11px] font-semibold text-success">
@@ -1470,16 +1486,19 @@ export default function AdminCiclo() {
                 );
               }
               const chaveBotao = `${client.id}:${area}:${aberta}`;
+              // v4 (15/11): uma ação principal por cartão. Só a etapa da vez leva o botão cheio;
+              // as outras frentes continuam marcáveis, com o botão discreto.
+              const daVez = aberta === nextStep;
               return (
                 <div
                   key={frente.nome}
-                  className="flex items-center py-2"
+                  className={juntar("flex min-h-[52px] items-center rounded-xl px-3 py-2", daVez ? "bg-muted/70" : "")}
                 >
                   <div className="mr-2 min-w-0 flex-1">
-                    <p className="text-[11px] font-medium text-muted-foreground">
+                    <p className="truncate text-[11px] font-medium text-muted-foreground">
                       {frente.nome} · {feitasNaFila + 1} de {frente.steps.length}
                     </p>
-                    <p className="truncate text-[12px] font-semibold leading-snug text-foreground">
+                    <p className="truncate text-[13px] font-semibold leading-snug text-foreground" title={stepLabelOf(client, aberta)}>
                       {stepLabelOf(client, aberta)}
                     </p>
                   </div>
@@ -1487,7 +1506,8 @@ export default function AdminCiclo() {
                     type="button"
                     disabled={!canWrite || pendingKey === chaveBotao}
                     onClick={() => void toggle(client, aberta)}
-                    className={`flex h-8 shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 text-[12px] font-bold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50 ${
+                    aria-label={`Feito: ${stepLabelOf(client, aberta)}`}
+                    className={`flex h-9 shrink-0 items-center gap-1 rounded-full px-3.5 text-[12px] font-semibold transition-transform active:scale-95 disabled:opacity-50 ${daVez ? "bg-primary text-primary-foreground" : "border border-border bg-card text-foreground hover:bg-muted"} ${
                       pendingKey === chaveBotao ? "opacity-50" : ""
                     }`}
                   >
@@ -1548,21 +1568,6 @@ export default function AdminCiclo() {
           </div>
         )}
 
-        {/* Linha de estado: altura reservada, nunca muda o tamanho do card */}
-        <p className="mt-2 flex h-4 items-center truncate text-[12px]">
-          {complete ? (
-            <span className="font-semibold text-success">
-              {avulso ? "Entrega completa" : "Semana fechada"}
-            </span>
-          ) : nextStep ? (
-            <>
-              <span className="font-semibold text-foreground">Agora:</span>
-              <span className="ml-1 truncate text-muted-foreground">
-                {nextStep}. {stepLabelOf(client, nextStep)}
-              </span>
-            </>
-          ) : null}
-        </p>
       </div>
     );
   };
@@ -1600,10 +1605,12 @@ export default function AdminCiclo() {
       type="button"
       onClick={() => setAvulsosAbertos(true)}
       className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
-        avulsosAbertos ? "text-primary" : "text-muted-foreground"
+        avulsosAbertos ? "text-foreground" : "text-muted-foreground"
       }`}
     >
-      <Sparkles className="h-5 w-5" />
+      <span className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors ${avulsosAbertos ? "bg-primary text-primary-foreground" : ""}`}>
+        <Sparkles className="h-[18px] w-[18px]" />
+      </span>
       <span className="flex items-center gap-1">
         Avulsos
         <span className="tabular-nums opacity-70">{totalAvulsos > 0 ? totalAvulsos : ""}</span>
@@ -1623,10 +1630,12 @@ export default function AdminCiclo() {
         type="button"
         onClick={() => { setArea(target); setAvulsosAbertos(false); setServicoAvulso(null); }}
         className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
-          selected ? "text-primary" : "text-muted-foreground"
+          selected ? "text-foreground" : "text-muted-foreground"
         }`}
       >
-        <Icon className="h-5 w-5" />
+        <span className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors ${selected ? "bg-primary text-primary-foreground" : ""}`}>
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
         <span className="flex items-center gap-1">
           {config.short}
           <span className="tabular-nums opacity-70">
@@ -1653,7 +1662,7 @@ export default function AdminCiclo() {
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Abrir menu"
           >
             <Menu className="h-5 w-5" />
@@ -1662,26 +1671,37 @@ export default function AdminCiclo() {
             <h1 className="flex items-center justify-center text-[15px] font-semibold leading-tight text-foreground">
               <ListChecks className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" /> Ciclo da Semana
               <AjudaRecolhida className="ml-1 min-h-0" titulo="Ciclo da Semana">
-                Seis etapas por cliente em cada frente, em três filas. Marque Feito na etapa da vez; toque no nome do cliente para ver a evolução e num dia da semana para ver o que foi feito nele.
+                Seis etapas por cliente em cada frente, em três filas. Marque Feito na etapa da vez; toque no nome do cliente para ver a evolução e num dia da semana para ver o que foi feito nele. Esta é a versão anterior do Ciclo: a tela atual é a Esteira, e o que se marca aqui não aparece lá.
               </AjudaRecolhida>
             </h1>
             <p className="truncate text-[11px] leading-tight text-muted-foreground">{avulsosAbertos ? "Clientes avulsos" : cycle.label}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setHistoryOpen(true)}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Ver histórico"
-          >
-            <TrendingUp className="h-[18px] w-[18px]" />
-          </button>
+          <div className="flex shrink-0 items-center">
+            {/* v4 (15/11): o Ciclo atual é a Esteira; o atalho fica sempre à mão. */}
+            <Link
+              to="/ciclo"
+              title="Abrir a Esteira (o Ciclo atual)"
+              className="mr-0.5 inline-flex h-8 items-center rounded-full bg-muted px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-muted/70"
+            >
+              Esteira
+              <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Ver histórico"
+            >
+              <TrendingUp className="h-[18px] w-[18px]" />
+            </button>
+          </div>
         </div>
 
         <div className="flex h-10 items-center justify-between gap-1 px-2">
           <button
             type="button"
             onClick={() => setWeekOffset((current) => current - 1)}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary/60"
+            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Semana anterior"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -1699,7 +1719,7 @@ export default function AdminCiclo() {
           <button
             type="button"
             onClick={() => setWeekOffset((current) => current + 1)}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary/60"
+            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Próxima semana"
           >
             <ChevronRight className="h-4 w-4" />
@@ -1717,8 +1737,8 @@ export default function AdminCiclo() {
                 key={key}
                 type="button"
                 onClick={() => setDayKey(key)}
-                className={`flex h-12 flex-col items-center justify-center rounded-md transition-colors ${
-                  isToday ? "bg-primary/15" : count > 0 ? "bg-secondary/50" : ""
+                className={`flex h-12 flex-col items-center justify-center rounded-xl transition-colors ${
+                  isToday ? "bg-accent-soft" : count > 0 ? "bg-muted/70" : "hover:bg-muted/50"
                 }`}
                 aria-label={`Dia ${day.getDate()}: ${count} ${count === 1 ? "marcação" : "marcações"}`}
               >
@@ -1738,8 +1758,9 @@ export default function AdminCiclo() {
           })}
         </div>
 
-        <div className="flex h-8 items-center gap-2 px-3">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+        {/* v4 (15/11, passada estrutural): nas frentes, a barra e a frase repetiam o trio de números logo abaixo; ficam só nos avulsos (que não têm o trio). */}
+        {avulsosAbertos && <div className="flex h-8 items-center gap-2 px-3">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-all duration-300"
               style={{ width: `${Math.round(weekTotals.pct * 100)}%` }}
@@ -1748,28 +1769,14 @@ export default function AdminCiclo() {
           <span className="w-16 shrink-0 text-right text-[11px] font-semibold tabular-nums text-muted-foreground">
             {weekTotals.done}/{weekTotals.total}
           </span>
-        </div>
+        </div>}
 
         {/* A leitura da carteira: responde "está tudo certo?" antes de
             alguém abrir cliente por cliente. A barra acima conta etapa
             marcada, que é esforço; isto conta o que o painel está
             pedindo, que é a realidade. */}
-        {!avulsosAbertos && situacoes && activeClients.length > 0 && (
-          <div className="flex h-7 items-center gap-1.5 px-3 pb-1">
-            <span
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                leitura.urgentes > 0
-                  ? "bg-destructive"
-                  : leitura.emAtencao > 0
-                    ? "bg-warning"
-                    : "bg-success"
-              }`}
-            />
-            <span className="truncate text-[11px] text-muted-foreground">
-              {leitura.frase}
-            </span>
-          </div>
-        )}
+        {/* v4 (15/11): a linha fica com a altura reservada desde o começo; quando a leitura chegava,
+            o topo crescia e empurrava a lista inteira. */}
       </header>
 
       {/* min-h-0 é o que faz a lista caber de verdade: sem isso o filho de um
@@ -1782,31 +1789,46 @@ export default function AdminCiclo() {
         ref={scrollRef}
         className="mx-auto w-full min-w-0 max-w-5xl px-3 pb-[calc(env(safe-area-inset-bottom)+72px)] pt-3 sm:px-4"
       >
-        <div className="w-full min-w-0 space-y-3">
+        <PrimeiraLeitura chaves={LEITURAS_DO_CICLO} aguardar={carregandoClientes} limiteMs={2500} esqueleto={<EsqueletoDeCartoes rotulo="Carregando o ciclo" alturas={[92, 180, 300, 300]} />}>
+        <div className="w-full min-w-0 space-y-4">
+          {/* v4 (15/11): a semana em três números, sem cartão (o que a barra do topo não diz). */}
+          {!avulsosAbertos && activeClients.length > 0 && (
+            <TrioDeNumeros
+              className="px-1 pt-1"
+              itens={[
+                { rotulo: "Etapas", valor: <>{weekTotals.done}<span className="text-muted-foreground">/{weekTotals.total}</span></> },
+                { rotulo: "Ação hoje", valor: situacoes ? leitura.urgentes : "–", tom: situacoes && leitura.urgentes > 0 ? "text-destructive" : "text-foreground", dica: situacoes ? leitura.frase : undefined },
+                { rotulo: "Acompanhar", valor: situacoes ? leitura.emAtencao : "–", tom: situacoes && leitura.emAtencao > 0 ? "text-warning" : "text-foreground" },
+                { rotulo: "Fechados", valor: <>{closedClients.length}<span className="text-muted-foreground">/{activeClients.length}</span></> },
+              ]}
+            />
+          )}
           {nextUp && canWrite && (
             <button
               type="button"
               onClick={jumpToNext}
-              className="flex w-full items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/[0.06] p-3 text-left"
+              className={juntar(superficie.painel, superficie.destaque, "flex w-full items-center gap-3 p-4 text-left transition-transform duration-200 hover:-translate-y-0.5 sm:p-5")}
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[13px] font-bold tabular-nums text-primary">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-on-accent text-[18px] font-semibold tabular-nums text-accent-solid">
                 {nextUp.step}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[11px] font-medium text-primary">
+                <span className="block text-[12px] font-medium leading-4 text-muted-foreground">
                   Continuar de onde parou
                 </span>
-                <span className="block truncate text-[13px] font-semibold text-foreground">
+                <span className="block truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">
                   {nextUp.client.company_name || nextUp.client.full_name}
                 </span>
-                <span className="block truncate text-[11px] text-muted-foreground">{nextUp.label}</span>
+                <span className="block truncate text-[12px] leading-4 text-muted-foreground">{nextUp.label}</span>
               </span>
-              <ArrowDown className="h-4 w-4 shrink-0 text-primary" />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-foreground" aria-hidden="true">
+                <ArrowDown className="h-4 w-4" />
+              </span>
             </button>
           )}
 
           {coach?.coach && (
-            <div className={juntar(superficie.poco, "p-3")}>
+            <div className={juntar(superficie.painel, superficie.tinta, "p-4 sm:p-5")}>
               <div className="flex items-center justify-between gap-2">
                 <p className="flex items-center gap-1.5 text-[12px] font-medium text-primary">
                   <Sparkles className="h-3 w-3" /> Coach da semana
@@ -1860,6 +1882,8 @@ export default function AdminCiclo() {
                 nivel={3}
                 titulo="O que pede ação hoje"
                 recolher="ciclo-antigo:acoes-do-dia"
+                // v4 (15/11, passada estrutural): começa recolhida (o resumo diz quantas); os cartões logo abaixo já trazem o aviso de cada cliente.
+                recolhidaDeInicio
                 resumo={`${acoes.length} ${acoes.length === 1 ? "ação" : "ações"}`}
                 className="border-b border-border pb-3"
               >
@@ -1867,7 +1891,7 @@ export default function AdminCiclo() {
                   {acoes.map((acao, indice) => (
                     <div
                       key={`${acao.clientId}:${acao.acao}:${indice}`}
-                      className="rounded-lg px-1 py-0.5 transition-colors hover:bg-secondary/50"
+                      className="rounded-lg px-1 py-0.5 transition-colors hover:bg-muted/60"
                     >
                       <button
                         type="button"
@@ -1924,7 +1948,7 @@ export default function AdminCiclo() {
           {carregandoClientes ? (
             <Carregando rotulo="Carregando os clientes" linhas={4} />
           ) : (
-            <div className="grid min-w-0 grid-cols-1 border-b border-border lg:grid-cols-2 lg:gap-x-6 empty:border-b-0">{openClients.map(renderClientCard)}</div>
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2 lg:gap-5">{openClients.map(renderClientCard)}</div>
           )}
 
           {!carregandoClientes && activeClients.length === 0 && (
@@ -1959,7 +1983,7 @@ export default function AdminCiclo() {
               <button
                 type="button"
                 onClick={() => setShowClosed((current) => !current)}
-                className="flex h-10 w-full items-center justify-between rounded-lg border border-success/25 bg-success/5 px-3 text-left"
+                className="flex h-10 w-full items-center justify-between rounded-full bg-success-soft px-4 text-left transition-colors hover:bg-success/15"
               >
                 <span className="text-[12px] font-semibold text-success">
                   {closedClients.length} {closedClients.length === 1 ? "cliente fechado" : "clientes fechados"}
@@ -1968,7 +1992,7 @@ export default function AdminCiclo() {
                   {showClosed ? "esconder" : "ver"}
                 </span>
               </button>
-              {showClosed && <div className="grid min-w-0 grid-cols-1 border-b border-border lg:grid-cols-2 lg:gap-x-6">{closedClients.map(renderClientCard)}</div>}
+              {showClosed && <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2 lg:gap-5">{closedClients.map(renderClientCard)}</div>}
             </div>
           )}
 
@@ -2053,6 +2077,7 @@ export default function AdminCiclo() {
             </p>
           )}
         </div>
+        </PrimeiraLeitura>
       </div>
 
       {/* Barra idêntica à do painel: colada na borda de baixo, com o recuo do
@@ -2063,7 +2088,7 @@ export default function AdminCiclo() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Frentes do ciclo"
       >
-        <div className="flex items-stretch h-14 max-w-[560px] mx-auto">
+        <div className="flex items-stretch h-16 max-w-[560px] mx-auto">
           <AreaTab target="social" />
           <AreaTab target="trafego" />
           <AvulsosTab />
@@ -2212,7 +2237,7 @@ export default function AdminCiclo() {
             <button
               type="button"
               onClick={() => { setLegendOpen(true); setMenuOpen(false); }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-secondary/60"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-muted"
             >
               <ListChecks className="h-4 w-4 text-primary" /> Como funciona o ciclo
             </button>
@@ -2234,7 +2259,7 @@ export default function AdminCiclo() {
                 type="button"
                 onClick={() => void logWeekToBrain()}
                 disabled={brainSaving}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-secondary/60 disabled:opacity-50"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-muted disabled:opacity-50"
               >
                 <Brain className={`h-4 w-4 text-primary ${brainSaving ? "animate-pulse" : ""}`} />
                 Guardar a semana no segundo cérebro
@@ -2249,7 +2274,7 @@ export default function AdminCiclo() {
                 key={link.url}
                 to={link.url}
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <link.icon className="h-4 w-4" /> {link.title}
               </Link>
@@ -2281,7 +2306,7 @@ export default function AdminCiclo() {
                     <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
                       {Math.round(week.pct * 100)}%
                     </span>
-                    <span className="flex h-24 w-full items-end overflow-hidden rounded-md bg-secondary/40">
+                    <span className="flex h-24 w-full items-end overflow-hidden rounded-md bg-muted/60">
                       <span
                         className={`block w-full rounded-md ${
                           selected ? "bg-primary" : week.pct >= 1 ? "bg-success/70" : "bg-primary/40"
@@ -2347,7 +2372,7 @@ export default function AdminCiclo() {
               <li key={slot.step} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-foreground">
                 <span
                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${
-                    slot.fixed ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"
+                    slot.fixed ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {slot.step}

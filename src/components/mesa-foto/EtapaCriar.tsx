@@ -61,18 +61,6 @@ export default function EtapaCriar() {
 
   return (
     <div className="min-w-0 space-y-5" data-etapa-criar="">
-      {esperando > 0 && (
-        <div className="flex min-w-0 flex-wrap items-center text-[13px]" data-esperando-aprovacao={esperando}>
-          <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="mr-2 min-w-0">
-            {esperando} {esperando === 1 ? "foto gerada espera" : "fotos geradas esperam"} a sua aprovação.
-          </span>
-          <button type="button" className={juntar("rounded font-medium text-primary hover:underline", foco)} onClick={() => irPara("aprovar")}>
-            Aprovar agora
-          </button>
-        </div>
-      )}
-
       <Cartao
         titulo="O que você quer produzir?"
         recolher={false}
@@ -80,7 +68,7 @@ export default function EtapaCriar() {
         dica="Escolha e a mesa segue para frente: com a foto ou o produto já em mãos, abre direto a ferramenta; senão, as Fotos pedem o que falta. A escolha fica guardada para este cliente."
       >
         {/* 02/10 (dono: "só ícone e nome; a explicação no ?"): cada opção é ícone + nome; o que faz e o que precisa ficam no "?". */}
-        <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-3" data-objetivos="">
+        <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-3" data-objetivos="">
           {OBJETIVOS.map((o) => {
             const Icone = ICONES_DOS_OBJETIVOS[o.valor];
             const escolhido = !!objetivo && objetivo.valor === o.valor;
@@ -92,15 +80,16 @@ export default function EtapaCriar() {
                   aria-pressed={escolhido}
                   title={`${o.texto} Precisa: ${o.precisa}.`}
                   className={juntar(
-                    "flex h-full w-full min-w-0 flex-col items-center justify-center rounded-lg border px-2 pb-3 pt-4 text-center transition-colors hover:border-primary/50 hover:bg-muted/40",
-                    escolhido ? "border-primary bg-primary/[0.06]" : "border-border",
+                    // v4 (azulejos das referências): ícone num círculo grande no centro; o escolhido fica com o círculo de tinta.
+                    "group flex h-full w-full min-w-0 flex-col items-center justify-center rounded-lg border bg-card px-2 pb-4 pt-5 text-center transition-colors hover:border-foreground/30",
+                    escolhido ? "border-foreground/40" : "border-border",
                     foco,
                   )}
                   data-objetivo={o.valor}
                   data-forma-de-criar={o.etapa}
                 >
-                  <Icone className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
-                  <span className="mt-2 block text-[13px] font-semibold leading-tight">{o.titulo}</span>
+                  <span aria-hidden="true" className={juntar("flex h-14 w-14 shrink-0 items-center justify-center rounded-full transition-colors sm:h-16 sm:w-16", escolhido ? "bg-foreground text-background" : "bg-muted text-foreground group-hover:bg-foreground group-hover:text-background")}><Icone className="h-6 w-6" /></span>
+                  <span className="mt-3 block text-[13px] font-medium leading-tight">{o.titulo}</span>
                   {escolhido && (
                     <span className="mt-1 inline-flex items-center text-[11px] font-medium text-primary">
                       <Check className="mr-0.5 h-3 w-3" aria-hidden="true" /> escolhido
@@ -125,10 +114,22 @@ export default function EtapaCriar() {
           </div>
         )}
       </Cartao>
+      {/* v4: o aviso do que espera aprovação vem DEPOIS dos azulejos (ele chega com a leitura das fotos e empurrava a grade no celular). */}
+      {esperando > 0 && (
+        <div className="flex min-w-0 flex-wrap items-center text-[13px]" data-esperando-aprovacao={esperando}>
+          <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <span className="mr-2 min-w-0">
+            {esperando} {esperando === 1 ? "foto gerada espera" : "fotos geradas esperam"} a sua aprovação.
+          </span>
+          <button type="button" className={juntar("rounded-sm font-medium text-primary hover:underline", foco)} onClick={() => irPara("aprovar")}>
+            Aprovar agora
+          </button>
+        </div>
+      )}
 
       {kit && (
         <div className="flex min-w-0 items-center" data-produto-aberto="">
-          <span className="mr-2.5 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-md bg-muted" />}</span>
+          <span className="mr-2.5 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-full bg-muted" />}</span>
           <div className="mr-2 min-w-0 flex-1">
             <div className="flex min-w-0 items-center">
               <p className="min-w-0 truncate text-[13px] font-semibold">
@@ -168,7 +169,7 @@ export default function EtapaCriar() {
         resumo="Book, pessoa real, pessoas da IA, quadro livre e ideias"
         dica="Ferramentas para quem já conhece a mesa. Também ficam no botão Mais, no alto."
       >
-        <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3" data-apoios-do-criar="">
+        <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2 xl:grid-cols-3" data-apoios-do-criar="">
           {AVANCADAS.map((a) => {
             const Icone = a.icone;
             return (

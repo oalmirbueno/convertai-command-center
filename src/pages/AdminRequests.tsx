@@ -33,7 +33,6 @@ import {
 import {
   AreaDeTrabalho,
   BarraDeControles,
-  CabecalhoDePagina,
   CampoDeBusca,
   CampoDeFormulario,
   Carregando,
@@ -50,12 +49,13 @@ import {
   useEstadoDaTela,
   useLargo,
 } from "@/components/sistema";
+import { Avatar, PageHeader } from "@/components/ds";
 
 const statusOptions = [
-  { value: "new", label: "Novo", cls: "bg-info/10 text-info" },
-  { value: "analyzing", label: "Em Análise", cls: "bg-warning/10 text-warning" },
-  { value: "in_progress", label: "Em Andamento", cls: "bg-primary/10 text-primary" },
-  { value: "completed", label: "Concluído", cls: "bg-success/10 text-success" },
+  { value: "new", label: "Novo", cls: "bg-info-soft text-info" },
+  { value: "analyzing", label: "Em Análise", cls: "bg-warning-soft text-warning" },
+  { value: "in_progress", label: "Em Andamento", cls: "bg-accent-soft text-primary" },
+  { value: "completed", label: "Concluído", cls: "bg-success-soft text-success" },
 ];
 
 const taskPriorityOptions: Array<{ value: RequestTaskPriority; label: string }> = [
@@ -69,8 +69,8 @@ const priorityBadge: Record<string, { cls: string; label: string }> = {
   low: { cls: "bg-muted text-muted-foreground", label: "Baixa" },
   normal: { cls: "bg-secondary text-foreground", label: "Normal" },
   medium: { cls: "bg-secondary text-foreground", label: "Média" },
-  high: { cls: "bg-warning/10 text-warning", label: "Alta" },
-  urgent: { cls: "bg-destructive/10 text-destructive", label: "Urgente" },
+  high: { cls: "bg-warning-soft text-warning", label: "Alta" },
+  urgent: { cls: "bg-danger-soft text-destructive", label: "Urgente" },
 };
 
 /** Filtro de prioridade: normal e média contam juntas (o cliente escolhe "normal"). */
@@ -598,7 +598,7 @@ export default function AdminRequests() {
     </div>
   ) : (
     <RegiaoRolavel modo="lg" rotulo="Pedidos" sobre="cartao" memoria="pedidos:lista">
-      <ul className="divide-y divide-border" aria-label="Pedidos dos clientes">
+      <ul className="divide-y divide-border/70 p-2" aria-label="Pedidos dos clientes">
         {filteredRequests.map((request: any) => {
           const client = getClient(request.client_id);
           const project = getProject(request.project_id);
@@ -613,12 +613,13 @@ export default function AdminRequests() {
                 onClick={() => abrirPedido(request)}
                 aria-current={aberto ? "true" : undefined}
                 className={juntar(
-                  "flex w-full min-w-0 items-start px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5",
-                  aberto && "bg-muted/70",
+                  "flex w-full min-w-0 items-start rounded-lg px-3 py-4 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                  aberto && "bg-accent-soft hover:bg-accent-soft",
                 )}
               >
-                <span className="mr-3 min-w-0 flex-1">
-                  <span className="block text-[14px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">
+                <Avatar name={client?.company_name || client?.full_name || "?"} tone={aberto ? "solid" : "neutral"} className="mr-3 mt-0.5" />
+                <span className="min-w-0 flex-1 sm:mr-3">
+                  <span className="block text-[15px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">
                     {request.title}
                   </span>
                   {request.description && (
@@ -629,14 +630,21 @@ export default function AdminRequests() {
                   <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>
                     {client?.company_name || client?.full_name || "-"}
                     <span className="mx-1.5" aria-hidden="true">·</span>
-                    {project?.name || "Sem projeto"}
-                    <span className="mx-1.5" aria-hidden="true">·</span>
+                    <span className="max-sm:hidden">
+                      {project?.name || "Sem projeto"}
+                      <span className="mx-1.5" aria-hidden="true">·</span>
+                    </span>
                     <span className="tabular-nums">{formatDate(request.created_at)}</span>
                   </span>
+                  {/* Celular: estado e prioridade embaixo do texto (ao lado, espremiam o título). */}
+                  <span className="mt-2 flex min-w-0 flex-wrap items-center sm:hidden [&>*+*]:ml-1.5">
+                    <span className={juntar(etiqueta, "h-6 px-2.5 text-[12px]", status.cls)}><span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />{status.label}</span>
+                    <span className={juntar(etiqueta, "h-6 px-2.5", priority.cls)}>{priority.label}</span>
+                  </span>
                 </span>
-                <span className="flex shrink-0 flex-col items-end [&>*+*]:mt-1 sm:flex-row sm:items-center sm:[&>*+*]:ml-1.5 sm:[&>*+*]:mt-0">
-                  <span className={juntar(etiqueta, priority.cls)}>{priority.label}</span>
-                  <span className={juntar(etiqueta, status.cls)}>{status.label}</span>
+                <span className="hidden shrink-0 items-center sm:flex [&>*+*]:ml-1.5">
+                  <span className={juntar(etiqueta, "h-6 px-2.5", priority.cls)}>{priority.label}</span>
+                  <span className={juntar(etiqueta, "h-6 px-2.5 text-[12px]", status.cls)}><span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />{status.label}</span>
                 </span>
               </button>
             </li>
@@ -651,16 +659,16 @@ export default function AdminRequests() {
       {/* Sistema de design (docs/design/SISTEMA.md): no computador a tela tem a
           altura da janela, a lista e o detalhe rolam cada um por conta própria.
           No celular a página rola normal e o detalhe abre numa janela. */}
-      <CabecalhoDePagina
-        titulo="Pedidos"
-        descricao={
+      <PageHeader
+        title="Pedidos"
+        subtitle={
           !roleCanMutate
             ? "Modo leitura"
             : todos.length
               ? `${emAberto} em aberto de ${todos.length}`
               : undefined
         }
-        ajuda={
+        help={
           <>
             Pedidos que os clientes fazem pelo portal. Abra um pedido para mudar o status ou transformar em tarefa no Kanban. Pedido que já virou tarefa muda de status pelo Kanban.
             {!roleCanMutate && " Admin ou manager gerencia os pedidos."}
@@ -668,7 +676,7 @@ export default function AdminRequests() {
         }
       />
 
-      <AreaDeTrabalho principalRolavel={false} className="mt-4">
+      <AreaDeTrabalho principalRolavel={false} className="mt-5">
         {/* Busca primeiro; status, cliente e prioridade na linha 2 (no máximo
             duas linhas: se não couberem, viram "Filtros (n)"). Limpar vai no "...". */}
         {todos.length > 0 && (

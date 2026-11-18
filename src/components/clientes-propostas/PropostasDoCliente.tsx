@@ -75,7 +75,7 @@ export default function PropostasDoCliente({ cliente, onAbrir }: { cliente: Clie
         <EstadoVazio compacto icone={<BriefcaseBusiness className="h-5 w-5" />} titulo="Sem proposta." descricao="Venda nova ou upsell, em Nova proposta." />
       ) : (
         <Painel semEspaco>
-          <ul className={juntar("divide-y divide-border")}>
+          <ul className={juntar("min-w-0")}>
             {lista.map((l) => (
               <LinhaDaProposta key={l.id} l={l} onAbrir={(x) => void onAbrir(enderecoDaProposta(x))} />
             ))}

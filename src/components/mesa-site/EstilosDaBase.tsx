@@ -99,7 +99,7 @@ export default function EstilosDaBase({
       {rotuloDoProduto && topo.length > 0 && (
         <div className="min-w-0">
           <span className={juntar(texto.rotulo, "mb-1.5 block")}>Combinam com {rotuloDoProduto}</span>
-          <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label={`Estilos que combinam com ${rotuloDoProduto}`}>
+          <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label={`Estilos que combinam com ${rotuloDoProduto}`}>
             {topo.map((e) => cartao(e, dados.recomendados.principais.indexOf(e.id) >= 0 ? "recomendado" : "combina"))}
           </div>
         </div>
@@ -107,7 +107,7 @@ export default function EstilosDaBase({
       {!rotuloDoProduto && <p className={texto.auxiliar}>Escolha o tipo de produto para ver os estilos que combinam.</p>}
       <div className="min-w-0">
         <span className={juntar(texto.rotulo, "mb-1.5 block")}>{rotuloDoProduto ? "Outros estilos" : "Todos os estilos"} · {resto.length}</span>
-        <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label="Estilos da base">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label="Estilos da base">
           {resto.map((e) => cartao(e, null))}
         </div>
         {!topo.length && !resto.length && <p className={texto.auxiliar}>Nenhum estilo com essa busca.</p>}

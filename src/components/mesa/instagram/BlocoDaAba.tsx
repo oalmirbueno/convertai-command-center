@@ -48,7 +48,7 @@ export default function BlocoDaAba({
   }, [pedidoDeAbrir]);
 
   return (
-    <section ref={ref} id={`ig-${id}`} data-bloco-do-instagram={id} className={juntar(superficie.painel, "min-w-0 scroll-mt-4 px-3 py-2.5 sm:px-4")}>
+    <section ref={ref} id={`ig-${id}`} data-bloco-do-instagram={id} className={juntar(superficie.painel, "min-w-0 scroll-mt-4 px-4 py-3.5 sm:px-4")}>
       <div className="flex min-w-0 items-center justify-between">
         <TituloRecolhivel titulo={titulo} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} className="mr-2" />
         {!recolhido && acao ? <div className="flex shrink-0 items-center">{acao}</div> : null}

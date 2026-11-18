@@ -4,7 +4,7 @@ import { useAvisosPorArea, marcarAreaComoLida, marcarTiposComoLidos, type AreaDo
 
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCircle, ChevronDown, CreditCard, FileArchive,
+  AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCheck, CheckCircle, ChevronDown, CreditCard, FileArchive,
   FolderOpen, Instagram, ListChecks, Megaphone, Package, Sunrise,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,22 +19,22 @@ import { AjudaRecolhida, JanelaCentral, SeletorCompacto, botao, juntar, texto } 
 
 function getNotifIcon(type: string) {
   switch (categoriaDoAviso(type)) {
-    case "decisao": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
-    case "pedido": return { icon: <Package className="w-4 h-4" />, bg: "bg-info/10 text-info" };
-    case "projeto": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-success/10 text-success" };
-    case "cobranca": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
-    case "tarefa": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info/10 text-info" };
-    case "relatorio": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-accent/50 text-accent-foreground" };
+    case "decisao": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
+    case "pedido": return { icon: <Package className="w-4 h-4" />, bg: "bg-info-soft text-info" };
+    case "projeto": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-success-soft text-success" };
+    case "cobranca": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning-soft text-warning" };
+    case "tarefa": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info-soft text-info" };
+    case "relatorio": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-muted text-foreground" };
     // Post no ar: o aviso que leva para fora do painel merece cara própria.
-    case "publicacao": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-success/10 text-success" };
-    case "entrega": return { icon: <FileArchive className="w-4 h-4" />, bg: "bg-success/10 text-success" };
-    case "alerta": return { icon: <AlertTriangle className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
-    case "agente": return { icon: <Bot className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
-    case "comercial": return { icon: <Briefcase className="w-4 h-4" />, bg: "bg-info/10 text-info" };
-    case "anuncios": return { icon: <Megaphone className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
+    case "publicacao": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-success-soft text-success" };
+    case "entrega": return { icon: <FileArchive className="w-4 h-4" />, bg: "bg-success-soft text-success" };
+    case "alerta": return { icon: <AlertTriangle className="w-4 h-4" />, bg: "bg-warning-soft text-warning" };
+    case "agente": return { icon: <Bot className="w-4 h-4" />, bg: "bg-muted text-muted-foreground" };
+    case "comercial": return { icon: <Briefcase className="w-4 h-4" />, bg: "bg-info-soft text-info" };
+    case "anuncios": return { icon: <Megaphone className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
     // 26/10: o resumo do dia (um por dia) leva à tela Hoje.
-    case "resumo": return { icon: <Sunrise className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
-    default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
+    case "resumo": return { icon: <Sunrise className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
+    default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-muted text-muted-foreground" };
   }
 }
 
@@ -191,21 +191,25 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
         {/* Lista: a única rolagem da janela */}
         <div className="pb-2">
           {isError ? <button type="button" className="m-5 text-[13px] text-warning" onClick={() => void refetch()}>Não foi possível ler os avisos. Tentar novamente</button> : groups.length === 0 ? (
-            <p className="py-8 text-center text-[13px] text-muted-foreground">Nenhuma notificação.</p>
+            <div className="flex flex-col items-center px-5 py-14 text-center">
+              <span aria-hidden="true" className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><Bell className="h-5 w-5" /></span>
+              <p className="text-[13px] text-muted-foreground">Nenhuma notificação.</p>
+            </div>
           ) : (
             groups.map((group) => {
               const aberto = grupoAberto(group);
               return (
-              <section key={group.categoria} aria-label={group.nome} data-grupo-do-sino={group.categoria} className="border-b border-border/50 last:border-b-0">
-                <div className="flex min-w-0 items-center px-5 py-2">
+              <section key={group.categoria} aria-label={group.nome} data-grupo-do-sino={group.categoria} className="border-b border-border/60 pb-2 last:border-b-0">
+                <div className="flex min-w-0 items-center px-5 pb-2 pt-4">
                   <button type="button" aria-expanded={aberto} onClick={() => setAbertos((x) => ({ ...x, [group.categoria]: !aberto }))} className="flex min-w-0 flex-1 items-center text-left">
-                    <ChevronDown className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", !aberto && "-rotate-90")} aria-hidden="true" />
-                    <span className={juntar(texto.etiqueta, "min-w-0 truncate", group.pedeDecisao ? "text-primary" : "text-muted-foreground")}>{group.nome}</span>
-                    <span className={juntar(texto.etiqueta, "ml-1.5 shrink-0 tabular-nums text-muted-foreground")}>{group.naoLidos > 0 ? `${group.naoLidos} não ${group.naoLidos === 1 ? "lido" : "lidos"}` : group.itens.length}</span>
+                    <ChevronDown className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200", !aberto && "-rotate-90")} aria-hidden="true" />
+                    <span className={juntar("min-w-0 truncate text-[13px] font-semibold leading-5", group.pedeDecisao ? "text-primary" : "text-foreground")}>{group.nome}</span>
+                    <span className={juntar(texto.etiqueta, "ml-2 inline-flex h-5 shrink-0 items-center rounded-full px-2 tabular-nums", group.naoLidos > 0 ? (group.pedeDecisao ? "bg-accent-solid text-on-accent" : "bg-foreground text-background") : "bg-muted text-muted-foreground")}>{group.naoLidos > 0 ? `${group.naoLidos} não ${group.naoLidos === 1 ? "lido" : "lidos"}` : group.itens.length}</span>
                   </button>
                   {group.naoLidos > 0 && (
-                    <button type="button" onClick={() => void marcarGrupo(group)} className={juntar(botao.discreto, "ml-2 h-7 shrink-0 px-2 text-[12px]")} title={`Marcar todos de ${group.nome} como lidos`} aria-label={`Marcar todos de ${group.nome} como lidos`}>
-                      Marcar todos como lidos
+                    <button type="button" onClick={() => void marcarGrupo(group)} className={juntar(botao.icone, "ml-2 h-7 w-7")} title={`Marcar todos de ${group.nome} como lidos`} aria-label={`Marcar todos de ${group.nome} como lidos`}>
+                      {/* v4: só o ícone (o texto repetia em cada grupo); o nome completo fica na dica e no leitor de tela. */}
+                      <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -217,25 +221,26 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                       key={n.id}
                       onClick={() => handleClick(n)}
                       data-pede-decisao={destaque ? "" : undefined}
-                      className={`px-5 py-3 cursor-pointer transition-colors ${
-                        destaque ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-secondary/30"
+                      className={`mx-2 mb-1 min-w-0 cursor-pointer rounded-md px-3 py-3 transition-colors ${
+                        destaque ? "bg-accent-soft hover:bg-accent-soft/80" : "hover:bg-muted/60"
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${bg}`} title={rotuloDoTipoDoAviso(n.notification_type) || undefined}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${n.read ? "bg-muted text-muted-foreground" : bg}`} title={rotuloDoTipoDoAviso(n.notification_type) || undefined}>
                           {icon}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-[13px] leading-snug ${n.read ? "text-muted-foreground" : destaque ? "text-foreground font-medium" : "text-foreground"}`}>
+                          <p className={`text-[13px] leading-5 [overflow-wrap:anywhere] ${n.read ? "text-muted-foreground" : destaque ? "text-foreground font-medium" : "text-foreground"}`}>
                             {n.message}
                           </p>
                           {area === "agentes" && n.link && <ContextoDoAviso link={n.link} />}
-                          <p className="text-[11px] text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>
-                          {n.link && (
-                            <p className="text-[11px] text-primary mt-1">{getLinkLabel(n)}</p>
-                          )}
+                          {/* v4: hora e destino na mesma linha (uma linha a menos por aviso). */}
+                          <p className="mt-1 flex min-w-0 items-center text-[12px] leading-4 text-muted-foreground">
+                            <span className="shrink-0">{timeAgo(n.created_at)}</span>
+                            {n.link && <span className="ml-2 min-w-0 truncate font-medium text-primary">{getLinkLabel(n)}</span>}
+                          </p>
                         </div>
-                        {!n.read && <div className={`w-2 h-2 rounded-full shrink-0 mt-2 ${destaque ? "bg-primary" : "bg-muted-foreground/40"}`} />}
+                        {!n.read && <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-2 ${destaque ? "bg-accent-solid ring-4 ring-primary/15" : "bg-foreground"}`} />}
                       </div>
                     </div>
                   );

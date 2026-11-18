@@ -1,16 +1,13 @@
 import { ArrowLeft } from "lucide-react";
 import {
-  CabecalhoDePagina,
-  Etapas,
-  Secao,
-  foco,
+  botao,
+  espaco,
   juntar,
   texto,
   useEstadoDaTela,
   type ItemDeEtapa,
 } from "@/components/sistema";
-import CircularProgress from "./CircularProgress";
-import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import { Card, PageHeader, PillTabs, ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 import { FadeUp, StaggerContainer } from "./motion";
 import TabOverview from "./tabs/TabOverview";
 import TabDeliveries from "./tabs/TabDeliveries";
@@ -105,114 +102,89 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
       }`
     : "";
 
+  const passos = (FLUXOS[project.project_type] || FLUXO_PADRAO);
+
   return (
-    <StaggerContainer className="min-w-0 space-y-6">
+    <StaggerContainer className={espaco.pagina}>
       <FadeUp>
         <button
           type="button"
           onClick={onBack}
-          className={juntar("mb-1 inline-flex items-center rounded text-[12px] text-muted-foreground transition-colors hover:text-foreground", foco)}
+          className={juntar(botao.secundario, "mb-4 h-8 px-3 text-[12px]")}
         >
-          <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          <ArrowLeft className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
           Voltar aos projetos
         </button>
-        <CabecalhoDePagina
-          titulo={project.name}
-          descricao={`${typeLabels[project.project_type] || "Projeto"} · ${statusLabels[project.status] || project.status}${previsao ? ` · ${previsao}` : ""}`}
-          ajuda={project.description ? summarizeProjectText(project.description) : undefined}
-          acoes={
-            <>
-              <span className="hidden items-center sm:flex" title="Progresso">
-                <CircularProgress progress={project.progress || 0} size={44} strokeWidth={4} />
-              </span>
-              {!isImpersonating && <RequestButton projectId={project.id} projectName={project.name} />}
-            </>
-          }
+        <PageHeader
+          title={project.name}
+          subtitle={`${typeLabels[project.project_type] || "Projeto"}${previsao ? ` · ${previsao}` : ""}`}
+          help={project.description ? summarizeProjectText(project.description) : undefined}
+          beside={<StatusPill tone={tomDoStatus[project.status] || "neutral"}>{statusLabels[project.status] || project.status}</StatusPill>}
+          actions={!isImpersonating ? <RequestButton projectId={project.id} projectName={project.name} /> : undefined}
         />
       </FadeUp>
 
       <FadeUp>
-        <FaixaDeNumeros
-          rotulo="Números do projeto"
-          itens={[
-            { rotulo: "Etapas concluídas", valor: `${completedMilestones}/${allMilestones.length}` },
-            { rotulo: "Entregas liberadas", valor: visibleFiles.length },
-            { rotulo: "Aprovadas", valor: approvedDeliveries, corDoValor: "text-emerald-500" },
-            { rotulo: "Aguardando decisão", valor: pendingApprovals, corDoValor: pendingApprovals ? "text-amber-500" : "text-foreground" },
-          ]}
-        />
+        <StatGrid cols={4} label="Números do projeto">
+          <StatCard
+            variant="accent"
+            size="xl"
+            label="Progresso"
+            value={`${project.progress || 0}%`}
+            hint={previsao || undefined}
+            chart={<ProgressBar value={project.progress || 0} max={100} label={`${project.progress || 0}% concluído`} />}
+          />
+          <StatCard
+            variant="ink"
+            size="xl"
+            label="Etapas concluídas"
+            value={`${completedMilestones}/${allMilestones.length}`}
+            chart={allMilestones.length > 0 ? <ProgressBar value={completedMilestones} max={allMilestones.length} tone={1} striped /> : undefined}
+          />
+          <StatCard
+            size="xl"
+            label="Entregas liberadas"
+            value={visibleFiles.length}
+            hint={`${approvedDeliveries} aprovada(s)`}
+            chart={visibleFiles.length > 0 ? <ProgressBar value={approvedDeliveries} max={visibleFiles.length} tone={1} label={`${approvedDeliveries} de ${visibleFiles.length} entregas aprovadas`} /> : undefined}
+          />
+          <StatCard
+            size="xl"
+            label="Aguardando decisão"
+            value={pendingApprovals}
+            hint={pendingApprovals ? <span className="font-medium text-warning">Sua aprovação</span> : "Nenhuma pendência"}
+            onClick={pendingApprovals ? () => setAba("deliveries") : undefined}
+          />
+        </StatGrid>
       </FadeUp>
 
       <FadeUp>
-        <Etapas rotulo="Seções do projeto" itens={abas} valor={aba} onEscolher={setAba} className="border-b border-border" />
-        <div className="mt-5 min-w-0">
+        <PillTabs
+          label="Seções do projeto"
+          tabs={abas.map((a) => ({ value: a.valor, label: a.rotulo, count: typeof a.contador === "number" ? a.contador : undefined }))}
+          value={aba}
+          onChange={setAba}
+        />
+        <div className="mt-6 min-w-0 sm:mt-8">
           {aba === "overview" && (
             <>
               {/* Como funciona este servico: o processo desenhado, curto e claro */}
-              {(() => {
-                const FLOWS: Record<string, { title: string; steps: { label: string; hint: string }[] }> = {
-                  social_media: {
-                    title: "Como funciona o seu Social Media",
-                    steps: [
-                      { label: "Estratégia", hint: "Definimos os temas do ciclo" },
-                      { label: "Criação", hint: "Artes e legendas produzidas" },
-                      { label: "Sua aprovação", hint: "Você dá o OK no painel" },
-                      { label: "Publicação", hint: "Sai na conta certa, na hora certa" },
-                      { label: "Medição", hint: "Resultados viram relatório" },
-                    ],
-                  },
-                  trafego: {
-                    title: "Como funciona o seu Tráfego",
-                    steps: [
-                      { label: "Público", hint: "Quem deve ver o anúncio" },
-                      { label: "Criativos", hint: "Anúncios produzidos" },
-                      { label: "Veiculação", hint: "Campanha no ar com verba" },
-                      { label: "Otimização", hint: "Ajustes para custo menor" },
-                      { label: "Relatório", hint: "Investido × retorno explicado" },
-                    ],
-                  },
-                  site: {
-                    title: "Como funciona o seu Site",
-                    steps: [
-                      { label: "Estrutura", hint: "Mapa das páginas" },
-                      { label: "Design", hint: "Visual e identidade" },
-                      { label: "Sua aprovação", hint: "Você valida o caminho" },
-                      { label: "Construção", hint: "Página no ar" },
-                      { label: "Entrega", hint: "Publicado e revisado" },
-                    ],
-                  },
-                };
-                const flow = FLOWS[project.project_type] || {
-                  title: "Como funciona este projeto",
-                  steps: [
-                    { label: "Planejamento", hint: "Escopo e objetivos" },
-                    { label: "Produção", hint: "Mão na massa" },
-                    { label: "Sua aprovação", hint: "Você valida no painel" },
-                    { label: "Entrega", hint: "Material liberado" },
-                    { label: "Acompanhamento", hint: "Resultado medido" },
-                  ],
-                };
-                return (
-                  <Secao titulo={flow.title} className="mb-6">
-                    <ol className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
-                      {flow.steps.map((step, index) => (
-                        <li key={step.label} className="flex min-w-0 items-start">
-                          <span className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
-                            {index + 1}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block text-[13px] font-medium leading-5 text-foreground">{step.label}</span>
-                            <span className={juntar(texto.auxiliar, "block")}>{step.hint}</span>
-                          </span>
-                        </li>
-                      ))}
-                    </ol>
-                  </Secao>
-                );
-              })()}
-              <div className="border-t border-border pt-5">
-                <TabOverview project={project} />
-              </div>
+              <Card title={passos.title} className="mb-6 sm:mb-8">
+                <ol className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-5 sm:gap-4">
+                  {passos.steps.map((step, index) => (
+                    <li key={step.label} className="flex min-w-0 items-center rounded-md bg-muted/60 p-3 sm:block sm:p-4">
+                      <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums sm:mb-3 sm:mr-0", index === 0 ? "bg-accent-solid text-on-accent" : "bg-foreground text-background")}>
+                        {index + 1}
+                      </span>
+                      <span className="block min-w-0">
+                        <span className="block text-[13px] font-semibold leading-5 text-foreground">{step.label}</span>
+                        <span className={juntar(texto.auxiliar, "mt-0.5 block")}>{step.hint}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </Card>
+              <TabOverview project={project} />
             </>
           )}
           {aba === "deliveries" && <TabDeliveries projectId={project.id} />}
@@ -225,3 +197,57 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
     </StaggerContainer>
   );
 }
+
+const tomDoStatus: Record<string, Tone> = {
+  active: "success",
+  review: "warning",
+  planning: "info",
+  done: "neutral",
+  paused: "neutral",
+};
+
+type Fluxo = { title: string; steps: { label: string; hint: string }[] };
+
+const FLUXOS: Record<string, Fluxo> = {
+  social_media: {
+    title: "Como funciona o seu Social Media",
+    steps: [
+      { label: "Estratégia", hint: "Definimos os temas do ciclo" },
+      { label: "Criação", hint: "Artes e legendas produzidas" },
+      { label: "Sua aprovação", hint: "Você dá o OK no painel" },
+      { label: "Publicação", hint: "Sai na conta certa, na hora certa" },
+      { label: "Medição", hint: "Resultados viram relatório" },
+    ],
+  },
+  trafego: {
+    title: "Como funciona o seu Tráfego",
+    steps: [
+      { label: "Público", hint: "Quem deve ver o anúncio" },
+      { label: "Criativos", hint: "Anúncios produzidos" },
+      { label: "Veiculação", hint: "Campanha no ar com verba" },
+      { label: "Otimização", hint: "Ajustes para custo menor" },
+      { label: "Relatório", hint: "Investido × retorno explicado" },
+    ],
+  },
+  site: {
+    title: "Como funciona o seu Site",
+    steps: [
+      { label: "Estrutura", hint: "Mapa das páginas" },
+      { label: "Design", hint: "Visual e identidade" },
+      { label: "Sua aprovação", hint: "Você valida o caminho" },
+      { label: "Construção", hint: "Página no ar" },
+      { label: "Entrega", hint: "Publicado e revisado" },
+    ],
+  },
+};
+
+const FLUXO_PADRAO: Fluxo = {
+  title: "Como funciona este projeto",
+  steps: [
+    { label: "Planejamento", hint: "Escopo e objetivos" },
+    { label: "Produção", hint: "Mão na massa" },
+    { label: "Sua aprovação", hint: "Você valida no painel" },
+    { label: "Entrega", hint: "Material liberado" },
+    { label: "Acompanhamento", hint: "Resultado medido" },
+  ],
+};

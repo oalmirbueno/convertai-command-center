@@ -2,13 +2,14 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Timer, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
-import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import { Avatar, CardSurface, ProgressBar } from "@/components/ds";
+import { Numeros, tabela } from "@/components/finance/pecasDoFinanceiro";
 import Secao from "@/components/sistema/Secao";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import GradeDeSecoes from "@/components/sistema/GradeDeSecoes";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campo, espaco, juntar, lista } from "@/components/sistema/estilos";
+import { botao, campo, espaco, juntar, lista, superficie } from "@/components/sistema/estilos";
 import { BarraFina, BarrasPorMes, MapaDeHoras } from "@/components/horas/Graficos";
 import {
   CARGA_PADRAO_HORAS,
@@ -47,6 +48,7 @@ import {
   rotuloDoMes,
 } from "@/lib/horas/formato";
 import { cn } from "@/lib/utils";
+import { useLarguraMinima } from "@/hooks/useLarguraMinima";
 
 /**
  * Horas e custos (frente CR, 28/09). Admin e gestor. Junta o tempo que o
@@ -86,7 +88,7 @@ function Tendencia({ v, inverter = false }: { v: number | null; inverter?: boole
   );
 }
 
-const celula = "whitespace-nowrap px-3 py-2 text-right tabular-nums";
+const celula = "whitespace-nowrap px-3 py-2 text-right tabular-nums text-foreground";
 const celulaTitulo = "whitespace-nowrap px-3 py-2 text-right text-[12px] font-medium text-muted-foreground";
 
 function TabelaDeComparacao({
@@ -97,9 +99,9 @@ function TabelaDeComparacao({
   rotuloDoAtual: string;
 }) {
   return (
-    <div className="min-w-0 overflow-x-auto">
-      <table className="w-full min-w-[560px] text-[13px]">
-        <thead className="border-b border-border">
+    <div className={juntar(superficie.painel, "min-w-0 overflow-x-auto p-3 sm:p-4")}>
+      <table className={juntar(tabela.tabela, "min-w-[620px]")}>
+        <thead className={tabela.cabeca}>
           <tr>
             <th className="px-3 py-2 text-left text-[12px] font-medium text-muted-foreground">Medida</th>
             <th className={celulaTitulo}>{rotuloDoAtual}</th>
@@ -109,10 +111,10 @@ function TabelaDeComparacao({
             <th className={celulaTitulo}>Contra a média</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={tabela.corpo}>
           {linhas.map((l) => (
-            <tr key={l.rotulo} className="border-b border-border last:border-b-0">
-              <td className="whitespace-nowrap px-3 py-2 font-medium">{l.rotulo}</td>
+            <tr key={l.rotulo}>
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-foreground">{l.rotulo}</td>
               <td className={juntar(celula, "font-semibold")}>{l.formatar(l.c.atual)}</td>
               <td className={celula}>{l.formatar(l.c.anterior)}</td>
               <td className={celula}>{l.formatar(l.c.media3)}</td>
@@ -230,7 +232,7 @@ function LinhaDoCliente({
     return t || null;
   };
   return (
-    <li className={juntar(lista.linha, "block")} data-cliente-das-horas={l.client_id}>
+    <li className={juntar(lista.linha, "block px-3 py-4 sm:px-4")} data-cliente-das-horas={l.client_id}>
       <button
         type="button"
         onClick={() => setAberta(!aberta)}
@@ -238,25 +240,26 @@ function LinhaDoCliente({
         className="grid w-full min-w-0 grid-cols-1 items-center gap-y-2 text-left lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)] lg:gap-x-6"
       >
         <span className="flex min-w-0 items-center">
-          {aberta ? <ChevronDown className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+          {aberta ? <ChevronDown className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />}
+          <Avatar name={l.nome} className="mr-3" />
           <span className="min-w-0">
-            <span className="block truncate text-[13px] font-medium text-foreground">{l.nome}</span>
+            <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{l.nome}</span>
             <span className="block truncate text-[12px] text-muted-foreground">{detalhes.length ? detalhes.join(" · ") : `${l.dias} dia${l.dias === 1 ? "" : "s"} no mês`}</span>
           </span>
         </span>
         <span className="block min-w-0">
-          <span className="mb-1 flex items-baseline justify-between text-[12px]">
+          <span className="mb-1.5 flex items-baseline justify-between text-[12px]">
             <span className="text-muted-foreground">{recorteNoMes ? "Tempo" : "Tempo no recorte"}</span>
-            <span className="tabular-nums text-foreground">{formatarDuracao(segundos)}</span>
+            <span className="text-[13px] font-semibold tabular-nums text-foreground">{formatarDuracao(segundos)}</span>
           </span>
           <BarraFina fracao={maiorTempo > 0 ? segundos / maiorTempo : 0} rotulo={`Tempo: ${formatarDuracao(segundos)}`} />
         </span>
         <span className="block min-w-0">
-          <span className="mb-1 flex items-baseline justify-between text-[12px]">
+          <span className="mb-1.5 flex items-baseline justify-between text-[12px]">
             <span className="text-muted-foreground">IA no mês</span>
-            <span className="tabular-nums text-foreground">{formatarUsd(l.custoUsd)}</span>
+            <span className="text-[13px] font-semibold tabular-nums text-foreground">{formatarUsd(l.custoUsd)}</span>
           </span>
-          <BarraFina fracao={maiorCusto > 0 ? l.custoUsd / maiorCusto : 0} cor="bg-info" rotulo={`Custo de IA: ${formatarUsd(l.custoUsd)}`} />
+          <BarraFina fracao={maiorCusto > 0 ? l.custoUsd / maiorCusto : 0} cor="bg-chart-2" rotulo={`Custo de IA: ${formatarUsd(l.custoUsd)}`} />
         </span>
         <span className="block min-w-0 text-[12px]">
           <span className="block truncate text-foreground">
@@ -274,8 +277,8 @@ function LinhaDoCliente({
         </span>
       </button>
       {aberta && (
-        <div className="mt-3 min-w-0 space-y-3 pl-5" data-detalhe-do-cliente="">
-          <ul className="grid grid-cols-2 gap-x-6 gap-y-1 text-[12px] sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-4 min-w-0 space-y-4 sm:pl-6" data-detalhe-do-cliente="">
+          <ul className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-md bg-muted/60 p-4 text-[12px] sm:grid-cols-3 lg:grid-cols-6">
             {TIPOS_DE_ENTREGA.map((t) => (
               <li key={t.chave} className="flex min-w-0 items-baseline justify-between">
                 <span className="mr-2 truncate text-muted-foreground">{t.rotulo}</span>
@@ -319,6 +322,8 @@ export default function AdminHoras() {
   // Quem: o gestor vê sempre o próprio tempo (o banco garante); o admin escolhe.
   const pessoa = !ehAdmin ? null : pessoaGuardada === "eu" ? (user && user.id) || null : pessoaGuardada === "todos" ? null : pessoaGuardada;
   const resumo = useResumoDeHoras(mes, pessoa);
+  // Celular: o período do dia vira lista (a faixa de quatro opções não cabe ao lado do título).
+  const telaLarga = useLarguraMinima(640);
   const custos = useCustosDoHistorico(mes, {});
 
   const dados = resumo.data;
@@ -390,7 +395,7 @@ export default function AdminHoras() {
   })();
 
   const seletorDoMes = (
-    <select aria-label="Mês" value={mes} onChange={(e) => setMes(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-8 w-auto max-w-[200px] px-2")}>
+    <select aria-label="Mês" value={mes} onChange={(e) => setMes(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto max-w-[200px] rounded-full px-3")}>
       {opcoesDeMes.map((m) => (
         <option key={m} value={m}>
           {maiuscula(rotuloDoMes(m))}
@@ -399,7 +404,7 @@ export default function AdminHoras() {
     </select>
   );
   const seletorDePessoa = ehAdmin ? (
-    <select aria-label="Pessoa" value={pessoaGuardada} onChange={(e) => setPessoa(e.target.value)} className={juntar(campo, "mb-1 h-8 w-auto max-w-[200px] px-2")}>
+    <select aria-label="Pessoa" value={pessoaGuardada} onChange={(e) => setPessoa(e.target.value)} className={juntar(campo, "mb-1 h-9 w-auto max-w-[200px] rounded-full px-3")}>
       <option value="eu">Você</option>
       <option value="todos">Equipe toda</option>
       {((dados && dados.pessoas) || [])
@@ -428,13 +433,50 @@ export default function AdminHoras() {
       />
     );
   } else {
-    corpo = (
-      <>
-        <Secao
-          titulo="Escalar, segurar ou contratar"
-          descricao={decisao.titulo}
-          ajuda={<AjudaDaDecisao carga={carga} />}
-          acao={
+    // v4 (15/11/2026): no celular os controles descem para dentro da seção; ao lado do título eles
+    // cortavam o nome dela pela metade.
+    const recortes = (
+            <div className="flex min-w-0 flex-wrap items-center sm:justify-end">
+              <SeletorCompacto
+                rotulo="Recorte"
+                valor={chaveDoRecorte}
+                onEscolher={(v) => setRecorte(v)}
+                opcoes={[
+                  { valor: "mes", rotulo: "Mês" },
+                  { valor: "semana", rotulo: "Semana" },
+                  { valor: "dia", rotulo: "Dia" },
+                ]}
+                className="mb-1 mr-2"
+              />
+              {chaveDoRecorte === "semana" && (
+                <select aria-label="Semana" value={semanaUsada} onChange={(e) => setSemana(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto rounded-full px-3")}>
+                  {semanas.map((s) => (
+                    <option key={s} value={s}>
+                      Semana de {s.slice(8, 10)}/{s.slice(5, 7)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {chaveDoRecorte === "dia" && diasComTempo.length > 0 && (
+                <select aria-label="Dia" value={dia} onChange={(e) => setDia(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-9 w-auto rounded-full px-3")}>
+                  {diasComTempo.map((d) => (
+                    <option key={d} value={d}>
+                      {d.slice(8, 10)}/{d.slice(5, 7)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <SeletorCompacto
+                rotulo="Período do dia"
+                valor={periodo}
+                onEscolher={(v) => setPeriodo(v)}
+                opcoes={[{ valor: "todos", rotulo: "Dia todo" }].concat(PERIODOS.map((p) => ({ valor: p.chave, rotulo: p.rotulo })))}
+                modo={telaLarga ? undefined : "lista"}
+                className="mb-1"
+              />
+            </div>
+    );
+    const campoDaCarga = (
             <label className="inline-flex items-center text-[12px] text-muted-foreground">
               <span className="mr-2">Carga mensal (h){pessoasNoFiltro > 1 ? ` × ${pessoasNoFiltro}` : ""}</span>
               <input
@@ -451,19 +493,39 @@ export default function AdminHoras() {
                 className={juntar(campo, "h-8 w-20 px-2 text-right tabular-nums")}
               />
             </label>
-          }
+    );
+    corpo = (
+      <>
+        <Secao
+          titulo="Escalar, segurar ou contratar"
+          descricao={decisao.titulo}
+          ajuda={<AjudaDaDecisao carga={carga} />}
+          acao={telaLarga ? campoDaCarga : undefined}
           data-decisao={cap.decisao}
         >
-          <ul className="mb-4 space-y-1 text-[13px]" data-motivos-da-decisao="">
-            {cap.motivos.map((m) => (
-              <li key={m} className="text-foreground">
-                {m}
-              </li>
-            ))}
-          </ul>
-          <FaixaDeNumeros
+          {!telaLarga && <div className="mb-3 flex min-w-0 justify-end">{campoDaCarga}</div>}
+          <div className="grid min-w-0 gap-3 sm:gap-5 lg:grid-cols-3">
+          <CardSurface padded variant={cap.decisao === "escalar" ? "accent" : "ink"} className="flex min-w-0 flex-col">
+            <p className="text-[13px] font-medium leading-5 text-muted-foreground">Decisão do mês</p>
+            <p className="mt-3 text-[32px] font-semibold leading-10 tracking-[-0.035em] text-foreground sm:text-[40px] sm:leading-[44px]" aria-hidden="true">{decisao.titulo}</p>
+            <ul className="mt-4 space-y-1.5 text-[13px] leading-5" data-motivos-da-decisao="">
+              {cap.motivos.map((m) => (
+                <li key={m} className="text-foreground">
+                  {m}
+                </li>
+              ))}
+            </ul>
+            {cap.ocupacao !== null && (
+              <div className="mt-auto pt-6">
+                <ProgressBar value={Math.round(cap.ocupacao * 100)} max={100} striped height={10} label={`Ocupação de ${Math.round(cap.ocupacao * 100)}% da carga`} />
+              </div>
+            )}
+          </CardSurface>
+          <Numeros
             rotulo="Capacidade"
-            colunas={5}
+            className="lg:col-span-2"
+            grade="grid-cols-2 md:grid-cols-3"
+            emFaixa
             itens={[
               {
                 rotulo: "Ocupação",
@@ -493,12 +555,13 @@ export default function AdminHoras() {
               },
             ]}
           />
+          </div>
         </Secao>
 
         <Secao titulo="O mês em números" descricao={rotuloDoMes(mes)} ajuda={<AjudaDaPagina />}>
-          <FaixaDeNumeros
+          <Numeros
             rotulo="Números do mês"
-            colunas={6}
+            grade="grid-cols-2 lg:grid-cols-3"
             itens={[
               {
                 rotulo: "Horas",
@@ -511,6 +574,15 @@ export default function AdminHoras() {
                 valor: String(tMes ? tMes.entregas : 0),
                 apoio: avancoDoMes === null ? `${tMes ? tMes.porTipo.publicados || 0 : 0} posts publicados` : `${Math.round(avancoDoMes * 100)}% do plano`,
               },
+            ]}
+          />
+          {/* v4 C2: a eficiência num painel só, sem um cartão por número. */}
+          <Numeros
+            rotulo="Eficiência do mês"
+            className="mt-3 sm:mt-5"
+            grade="grid-cols-2 sm:grid-cols-3"
+            emFaixa
+            itens={[
               { rotulo: "Horas por entrega", valor: formatarHoras(efMes.horasPorEntrega, 2), apoio: "tempo ÷ entregas" },
               { rotulo: "IA por entrega", valor: formatarUsd(efMes.custoPorEntrega), apoio: "custo ÷ entregas" },
               { rotulo: "Entregas por hora", valor: formatarNumero(efMes.entregasPorHora, 2), apoio: `${tMes ? tMes.atrasadas : 0} atrasadas` },
@@ -522,47 +594,9 @@ export default function AdminHoras() {
           titulo="Por cliente"
           descricao={`${ordenadas.length} cliente${ordenadas.length === 1 ? "" : "s"}${rotuloDoRecorte ? ` · ${rotuloDoRecorte}` : ""}`}
           ajuda="Toque num cliente para ver as entregas por tipo e a comparação com o mês anterior e a média de 3 meses. Custo e entregas são do mês inteiro; o recorte muda só o tempo."
-          acao={
-            <div className="flex min-w-0 flex-wrap items-center justify-end">
-              <SeletorCompacto
-                rotulo="Recorte"
-                valor={chaveDoRecorte}
-                onEscolher={(v) => setRecorte(v)}
-                opcoes={[
-                  { valor: "mes", rotulo: "Mês" },
-                  { valor: "semana", rotulo: "Semana" },
-                  { valor: "dia", rotulo: "Dia" },
-                ]}
-                className="mb-1 mr-2"
-              />
-              {chaveDoRecorte === "semana" && (
-                <select aria-label="Semana" value={semanaUsada} onChange={(e) => setSemana(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-8 w-auto px-2")}>
-                  {semanas.map((s) => (
-                    <option key={s} value={s}>
-                      Semana de {s.slice(8, 10)}/{s.slice(5, 7)}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {chaveDoRecorte === "dia" && diasComTempo.length > 0 && (
-                <select aria-label="Dia" value={dia} onChange={(e) => setDia(e.target.value)} className={juntar(campo, "mb-1 mr-2 h-8 w-auto px-2")}>
-                  {diasComTempo.map((d) => (
-                    <option key={d} value={d}>
-                      {d.slice(8, 10)}/{d.slice(5, 7)}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <SeletorCompacto
-                rotulo="Período do dia"
-                valor={periodo}
-                onEscolher={(v) => setPeriodo(v)}
-                opcoes={[{ valor: "todos", rotulo: "Dia todo" }].concat(PERIODOS.map((p) => ({ valor: p.chave, rotulo: p.rotulo })))}
-                className="mb-1"
-              />
-            </div>
-          }
+          acao={telaLarga ? recortes : undefined}
         >
+          {!telaLarga && <div className="mb-2 min-w-0">{recortes}</div>}
           {ordenadas.length === 0 ? (
             <EstadoVazio
               compacto
@@ -571,7 +605,7 @@ export default function AdminHoras() {
               descricao={semHoras ? "As horas aparecem aqui conforme o trabalho nos clientes." : "Escolha outro mês."}
             />
           ) : (
-            <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Clientes do mês">
+            <ul className={juntar(superficie.painel, lista.divisoria, "px-2 py-2 sm:px-3")} aria-label="Clientes do mês">
               {ordenadas.map((l) => (
                 <LinhaDoCliente
                   key={l.client_id}
@@ -597,7 +631,7 @@ export default function AdminHoras() {
 
         <GradeDeSecoes colunas={2}>
           <Secao titulo="Mês a mês" descricao={`${MESES_DE_HISTORICO} meses`} ajuda="Uma medida por gráfico. A barra tracejada é a projeção do mês em andamento. Os números exatos estão no Histórico.">
-            <div className="grid min-w-0 grid-cols-1 gap-y-6">
+            <CardSurface padded className="grid min-w-0 grid-cols-1 gap-y-8">
               <BarrasPorMes
                 rotulo="Horas"
                 mesEscolhido={mes}
@@ -617,11 +651,11 @@ export default function AdminHoras() {
               <BarrasPorMes
                 rotulo="Custo de IA"
                 mesEscolhido={mes}
-                cor="bg-info"
+                cor="bg-chart-2"
                 formatar={(v) => formatarUsd(v)}
                 serie={mesesDoHistorico.map((m) => ({ mes: m, valor: totais[m].custoUsd, projetado: m === mesAtual ? projetar(totais[m].custoUsd, m, agora) : null }))}
               />
-            </div>
+            </CardSurface>
           </Secao>
           <Secao
             titulo="Quando rende mais"
@@ -632,14 +666,16 @@ export default function AdminHoras() {
             }
             ajuda="Mais escuro, mais tempo trabalhado naquele dia da semana e hora. Na lista de clientes, rende mais é o período com mais peças do Estúdio por hora trabalhada (sem peças, o período com mais horas). Manhã 6h às 12h, tarde 12h às 18h, noite 18h às 6h."
           >
-            <MapaDeHoras mapa={mapaDeCalor(detalhe, periodo)} formatar={formatarDuracao} />
+            <CardSurface padded>
+              <MapaDeHoras mapa={mapaDeCalor(detalhe, periodo)} formatar={formatarDuracao} />
+            </CardSurface>
           </Secao>
         </GradeDeSecoes>
 
         <Secao titulo="Histórico" descricao="o mês fecha sozinho na virada" ajuda="Cada linha é um mês de São Paulo. O tempo zera no começo do mês e o mês anterior fica guardado aqui.">
-          <div className="min-w-0 overflow-x-auto">
-            <table className="w-full min-w-[720px] text-[13px]">
-              <thead className="border-b border-border">
+          <div className={juntar(superficie.painel, "min-w-0 overflow-x-auto p-3 sm:p-4")}>
+            <table className={juntar(tabela.tabela, "min-w-[820px]")}>
+              <thead className={tabela.cabeca}>
                 <tr>
                   <th className="px-3 py-2 text-left text-[12px] font-medium text-muted-foreground">Mês</th>
                   <th className={celulaTitulo}>Horas</th>
@@ -652,7 +688,7 @@ export default function AdminHoras() {
                   <th className={celulaTitulo}>IA por entrega</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className={tabela.corpo}>
                 {mesesDoHistorico
                   .slice()
                   .reverse()
@@ -661,7 +697,7 @@ export default function AdminHoras() {
                     const ef = eficiencia(t.segundos, t.custoUsd, t.entregas);
                     const av = avanco(t);
                     return (
-                      <tr key={m} className={cn("border-b border-border last:border-b-0", m === mes && "bg-primary/[0.07]")}>
+                      <tr key={m} className={cn(m === mes && "[&>td]:bg-primary/10 [&>td:first-child]:rounded-l-full [&>td:last-child]:rounded-r-full [&>td]:border-b-transparent")}>
                         <td className="whitespace-nowrap px-3 py-2 font-medium">{maiuscula(rotuloDoMes(m))}</td>
                         <td className={celula}>{formatarDuracao(t.segundos)}</td>
                         <td className={celula}>{t.clientesAtivos}</td>
@@ -689,12 +725,21 @@ export default function AdminHoras() {
         descricao={dados && dados.escopo === "todos" ? "Equipe toda" : ehAdmin && pessoa && user && pessoa !== user.id ? "Uma pessoa" : "Seu tempo"}
         ajuda={<AjudaDaPagina />}
         acoes={
-          <div className="flex min-w-0 flex-wrap items-center justify-end">
-            {seletorDoMes}
-            {seletorDePessoa}
-          </div>
+          telaLarga ? (
+            <div className="flex min-w-0 flex-wrap items-center justify-end">
+              {seletorDoMes}
+              {seletorDePessoa}
+            </div>
+          ) : undefined
         }
       />
+      {/* v4 (15/11/2026): no celular os dois seletores ganham a linha deles (na linha do título ficavam cortados na borda). */}
+      {!telaLarga && (
+        <div className="flex min-w-0 items-center [&>select]:mb-0 [&>select]:min-w-0 [&>select]:max-w-none [&>select]:flex-1">
+          {seletorDoMes}
+          {seletorDePessoa}
+        </div>
+      )}
       {corpo}
     </div>
   );

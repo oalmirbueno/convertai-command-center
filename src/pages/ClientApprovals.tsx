@@ -4,13 +4,14 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useEditorialApprovalPreview } from "@/hooks/useEditorialCalendar";
 import { useToast } from "@/hooks/use-toast";
-import { CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, botao, campo, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { Carregando, EstadoVazio, SeletorCompacto, botao, campo, espaco, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { PageHeader, StatusPill, type Tone } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { AlertTriangle, CheckCircle2, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
@@ -18,10 +19,10 @@ import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFil
 import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
 import { useTelaPequena } from "@/components/client/useTelaPequena";
 
-const approvalBadge: Record<string, { cls: string; label: string }> = {
-  pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Pendente" },
-  approved: { cls: "bg-success/10 text-success border-success/20", label: "Aprovado" },
-  rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Ajuste pedido" },
+const approvalBadge: Record<string, { tone: Tone; label: string }> = {
+  pending: { tone: "warning", label: "Pendente" },
+  approved: { tone: "success", label: "Aprovado" },
+  rejected: { tone: "danger", label: "Ajuste pedido" },
 };
 
 const fileIcon = (name: string) => {
@@ -109,7 +110,7 @@ function CarouselPreview({ images, small, grande }: { images: any[]; small?: boo
   const swipe = useSwipe(prev, next);
   if (images.length === 0) return null;
   const current = images[idx] || images[0];
-  const maxH = small ? "h-32" : "min-h-[200px] max-h-[400px]";
+  const maxH = small ? "h-52" : "min-h-[200px] max-h-[400px]";
 
   return (
     <div className="relative group" {...(images.length > 1 ? swipe : {})}>
@@ -313,6 +314,25 @@ export default function ClientApprovals() {
   };
   const deslizarNaFila = useSwipe(() => irPara(posicao - 1), () => irPara(posicao + 1));
   const decisaoTravadaNoCelular = isReadOnly || previaDoAtual.isFetching || previaDoAtual.isError;
+  // Link direto do lembrete no WhatsApp (10/11/2026): /aprovacoes?peca=<id> abre
+  // aquela peça primeiro. Vale uma vez, quando a lista chega; depois a tela segue normal.
+  const pecaDoLink = useRef<string | null>(new URLSearchParams(window.location.search).get("peca"));
+  useEffect(() => {
+    const id = pecaDoLink.current;
+    if (!id || !approvalFiles.length) return;
+    pecaDoLink.current = null;
+    const alvo = approvalFiles.find((f: any) => f.id === id);
+    if (!alvo) return;
+    if (filtro !== "todos") setFiltro("todos");
+    if (pequena) {
+      const fila = approvalFiles.filter((f: any) => f.approval_status === "pending")
+        .concat(approvalFiles.filter((f: any) => f.approval_status !== "pending"));
+      setPosicaoNaFila(Math.max(0, fila.findIndex((f: any) => f.id === id)));
+    } else {
+      setPreviewFile(alvo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approvalFiles.length, pequena]);
   const abrirComTeclado = (e: { key: string; preventDefault: () => void }, f: any) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -321,22 +341,22 @@ export default function ClientApprovals() {
   };
 
   return (
-    <div className="min-w-0 space-y-5">
-      <CabecalhoDePagina
-        titulo="Aprovações"
-        descricao={
+    <div className={espaco.pagina}>
+      <PageHeader
+        title="Aprovações"
+        subtitle={
           [
             approvalFiles.length ? (contagem.pending ? `${contagem.pending} esperando você` : "Nada esperando você") : "",
             isReadOnly ? "somente leitura" : "",
           ].filter(Boolean).join(" · ") || undefined
         }
-        ajuda={
+        help={
           <>
             Os materiais que a equipe preparou para você conferir antes de publicar. Toque num item para ver em tamanho grande e aprovar ou pedir ajuste. Aprovar não tem volta.
             {isReadOnly && " Somente leitura: dá para conferir a experiência do cliente, mas não aprovar nem pedir ajuste por ele."}
           </>
         }
-        acoes={
+        actions={
           approvalFiles.length > 0 ? (
             <SeletorCompacto
               rotulo="Filtrar aprovações"
@@ -373,14 +393,24 @@ export default function ClientApprovals() {
           return (
             <section aria-label="Aprovação" className="min-w-0" {...deslizarNaFila}>
               {filaDoCelular.length > 1 && (
-                <div className="mb-2 flex min-w-0 items-center justify-between">
-                  <button type="button" onClick={() => irPara(posicao - 1)} aria-label="Item anterior" className={juntar(botao.icone, "h-11 w-11")}>
+                <div className="mb-3 flex min-w-0 items-center justify-between">
+                  <button type="button" onClick={() => irPara(posicao - 1)} aria-label="Item anterior" className={juntar(botao.icone, "h-11 w-11 bg-card shadow-card")}>
                     <ChevronLeft className="h-5 w-5" aria-hidden="true" />
                   </button>
-                  <span className={juntar(texto.auxiliar, "tabular-nums")} aria-live="polite">
-                    {posicao + 1} de {filaDoCelular.length}
+                  <span className="mx-3 flex min-w-0 flex-1 flex-col items-center">
+                    <span className="rounded-full bg-foreground px-3 py-1 text-[12px] font-medium leading-4 tabular-nums text-background" aria-live="polite">
+                      {posicao + 1} de {filaDoCelular.length}
+                    </span>
+                    {/* Onde você está na fila: um traço por item (até 12; acima disso o contador basta). */}
+                    {filaDoCelular.length <= 12 && (
+                      <span aria-hidden="true" className="mt-2 flex w-full max-w-[180px] items-center justify-center">
+                        {filaDoCelular.map((item: any, i: number) => (
+                          <span key={item.id} className={juntar("mx-0.5 h-1 min-w-0 flex-1 rounded-full transition-colors", i === posicao ? "bg-foreground" : item.approval_status === "pending" ? "bg-warning/50" : "bg-border")} />
+                        ))}
+                      </span>
+                    )}
                   </span>
-                  <button type="button" onClick={() => irPara(posicao + 1)} aria-label="Próximo item" className={juntar(botao.icone, "h-11 w-11")}>
+                  <button type="button" onClick={() => irPara(posicao + 1)} aria-label="Próximo item" className={juntar(botao.icone, "h-11 w-11 bg-card shadow-card")}>
                     <ChevronRight className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
@@ -389,19 +419,17 @@ export default function ClientApprovals() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Ver detalhes de ${f.file_name}`}
-                className={juntar(superficie.painel, "min-w-0 overflow-hidden", foco)}
+                className={juntar(superficie.painel, "relative min-w-0 overflow-hidden", foco)}
                 onClick={() => setPreviewFile(f)}
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >
                 <CarouselPreview key={f.id} images={images} grande />
+                <span className="absolute left-3 top-3 z-[1] flex rounded-full bg-card shadow-card [&>[data-status-pill]]:!bg-transparent"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
               </div>
-              <div className="mt-3 min-w-0">
-                <div className="flex min-w-0 items-start">
-                  <p className="mr-2 min-w-0 flex-1 text-[15px] font-semibold leading-5 text-foreground break-words">{f.file_name}</p>
-                  <span className={juntar(etiqueta, "border", badge.cls)}>{badge.label}</span>
-                </div>
-                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
-                  {images.length > 1 ? `Carrossel com ${images.length} cards · ` : ""}{f.project?.name || "-"}
+              <div className="mt-4 min-w-0">
+                <p className="min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]">{f.file_name}</p>
+                <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
+                  {images.length > 1 ? `Carrossel com ${images.length} cards · ` : ""}{f.project?.name || "-"} · {formatDate(f.created_at)}
                 </p>
                 <button type="button" onClick={() => setPreviewFile(f)} className={juntar(botao.discreto, "-ml-3.5 mt-1 h-11 text-primary")}>
                   Ver legenda e detalhes
@@ -413,7 +441,7 @@ export default function ClientApprovals() {
                   </div>
                 )}
                 {atualPendente && previaDoAtual.isError && (
-                  <div role="alert" className="mt-2 flex min-w-0 items-center rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2">
+                  <div role="alert" className="mt-2 flex min-w-0 items-center rounded-md bg-danger-soft px-3 py-2">
                     <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
                     <p className="min-w-0 flex-1 text-[12px] leading-4 text-destructive">Não foi possível conferir o conteúdo. A decisão fica bloqueada até a prévia ser validada.</p>
                     <button type="button" onClick={() => previaDoAtual.refetch()} className={juntar(botao.discreto, "ml-1 h-11 px-2 text-primary")}>
@@ -437,7 +465,7 @@ export default function ClientApprovals() {
                     type="button"
                     disabled={decisaoTravadaNoCelular}
                     onClick={() => { if (!isReadOnly) setConfirmApprove(f.id); }}
-                    className={juntar(botao.primario, "h-12 w-full flex-1 bg-success text-[14px] text-white hover:bg-success/90")}
+                    className={juntar(botao.primario, "h-12 w-full flex-1 bg-accent-solid text-[14px] font-semibold text-on-accent hover:bg-accent-solid/90")}
                   >
                     {previaDoAtual.isFetching && !previaDoAtual.data ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" aria-hidden="true" />}
                     Aprovar
@@ -455,7 +483,7 @@ export default function ClientApprovals() {
           );
         })()
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={juntar(espaco.grade, "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3")}>
           {visiveis.map((f: any) => {
             const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
             const images = getCarouselImages(f);
@@ -466,17 +494,19 @@ export default function ClientApprovals() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Ver ${f.file_name}`}
-                className={juntar(superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col overflow-hidden transition-colors hover:border-muted-foreground/30", foco)}
+                className={juntar(superficie.painel, "group/cartao relative flex h-full min-w-0 cursor-pointer flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1", foco)}
                 onClick={() => setPreviewFile(f)}
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >
-                <CarouselPreview images={images} small />
-                <div className="min-w-0 px-4 py-3">
-                  <div className="flex min-w-0 items-center">
-                    <p className="mr-2 min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">{f.file_name}</p>
-                    <span className={juntar(etiqueta, "border", badge.cls)}>{badge.label}</span>
+                <div className="p-2 pb-0">
+                  <div className="overflow-hidden rounded-md">
+                    <CarouselPreview images={images} small />
                   </div>
-                  <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+                </div>
+                <span className="absolute left-4 top-4 z-[1] flex rounded-full bg-card shadow-card [&>[data-status-pill]]:!bg-transparent"><StatusPill tone={badge.tone}>{badge.label}</StatusPill></span>
+                <div className="min-w-0 p-5">
+                  <p className="min-w-0 truncate text-[15px] font-semibold leading-5 text-foreground">{f.file_name}</p>
+                  <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
                     {isCarousel ? `Carrossel com ${images.length} cards · ` : ""}{f.project?.name || "-"} · {formatDate(f.created_at)}
                   </p>
                   {f.approval_status === "rejected" && f.feedback && (
@@ -484,6 +514,13 @@ export default function ClientApprovals() {
                       <p className={texto.auxiliar}>Seu pedido de ajuste</p>
                       <p className="line-clamp-3 text-[12px] leading-4 text-foreground">{f.feedback}</p>
                     </div>
+                  )}
+                  {/* A ação da tela: quem espera você ganha o botão verde (o cartão inteiro abre a conferência). */}
+                  {f.approval_status === "pending" && (
+                    <span aria-hidden="true" className="mt-4 flex h-11 w-full items-center justify-center rounded-full bg-accent-solid text-[14px] font-semibold text-on-accent transition-opacity group-hover/cartao:opacity-90">
+                      {isReadOnly ? "Conferir" : "Conferir e aprovar"}
+                      <ArrowUpRight className="ml-1.5 h-4 w-4" />
+                    </span>
                   )}
                 </div>
               </div>
@@ -499,7 +536,7 @@ export default function ClientApprovals() {
             <DialogTitle className="flex items-center gap-2 truncate pr-6 text-[15px]">
               {previewFile?.file_name}
               {previewFile && getCarouselImages(previewFile).length > 1 && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
+                <span className="shrink-0 rounded-full bg-accent-soft px-2 py-1 text-[11px] font-medium leading-none text-primary">
                   Carrossel • {getCarouselImages(previewFile).length} itens
                 </span>
               )}
@@ -590,7 +627,7 @@ export default function ClientApprovals() {
               {previewFile.carousel_text && <div className="space-y-0.5"><p className={texto.rotulo}>Texto do carrossel</p><p className="text-[13px] leading-5 text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
               {previewFile.description && <div className="space-y-0.5"><p className={texto.rotulo}>Descrição</p><p className="text-[13px] leading-5 text-foreground">{previewFile.description}</p></div>}
               {editorialPreview.isLoading && (
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-[12px] leading-4 text-muted-foreground">
+                <div className="flex items-center gap-2 rounded-md bg-muted/60 p-4 text-[12px] leading-4 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Conferindo o conteúdo editorial vinculado…
                 </div>
@@ -598,7 +635,7 @@ export default function ClientApprovals() {
               {editorialPreview.isError && (
                 <div
                   role="alert"
-                  className="rounded-lg border border-destructive/20 bg-destructive/5 p-3"
+                  className="rounded-md bg-danger-soft p-4"
                 >
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -663,7 +700,7 @@ export default function ClientApprovals() {
                     {snapshot.plans.map((plan, planIndex) => (
                       <div
                         key={`${plan.platform}-${plan.account_handle || plan.account_name || planIndex}`}
-                        className="space-y-2 rounded-md bg-muted/50 p-3"
+                        className="space-y-2 rounded-md bg-muted/60 p-4"
                       >
                         <div>
                           <p className="text-[12px] leading-4 font-medium text-foreground">
@@ -722,12 +759,12 @@ export default function ClientApprovals() {
           })()}
           {previewFile?.approval_status === "pending" && (
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
-              <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
+              <Button variant="outline" className="rounded-full border-destructive/40 text-destructive hover:bg-destructive/10"
                 disabled={isReadOnly || editorialPreview.isFetching || editorialPreview.isError}
                 onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setFeedbackLamina(0); setPreviewFile(null); } }}>
                 Pedir ajuste
               </Button>
-              <Button className="bg-success hover:bg-success/90 text-white"
+              <Button className="rounded-full bg-accent-solid px-6 font-semibold text-on-accent hover:bg-accent-solid/90"
                 disabled={isReadOnly || editorialPreview.isFetching || editorialPreview.isError}
                 onClick={() => { if (!isReadOnly) { setConfirmApprove(previewFile.id); setPreviewFile(null); } }}>
                 Aprovar
@@ -752,7 +789,7 @@ export default function ClientApprovals() {
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmApprove(null)}>Cancelar</Button>
-            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting || isReadOnly}>
+            <Button className="rounded-full bg-accent-solid px-6 font-semibold text-on-accent hover:bg-accent-solid/90" onClick={handleApprove} disabled={submitting || isReadOnly}>
               {submitting ? "Aprovando..." : "Confirmar"}
             </Button>
           </DialogFooter>

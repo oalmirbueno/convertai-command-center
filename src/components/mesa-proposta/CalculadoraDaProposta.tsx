@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
-import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import { NumerosAbertos } from "@/components/mesa/ousado";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando, EstadoDeErro } from "@/components/sistema/Estados";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
@@ -116,9 +116,8 @@ export default function CalculadoraDaProposta({ proposta, aberta, onAberta, onPa
         />
       ) : !hora.data ? null : (
         <div className="min-w-0 space-y-4">
-          <FaixaDeNumeros
+          <NumerosAbertos
             colunas={3}
-            semMoldura
             itens={[
               { rotulo: "Custo da hora", valor: reais(hora.data.custo_hora) },
               { rotulo: "Preço da hora", valor: reais(hora.data.preco_hora), apoio: `margem ${hora.data.parametros.margem_pct}%` },

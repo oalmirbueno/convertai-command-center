@@ -205,7 +205,7 @@ export default function CartaoDeAcao({
             return (
               <li key={`${i.operacao}-${i.ref}`} className={`flex min-w-0 items-start py-1 text-[12px] leading-snug ${(andando || parada) && !r ? "opacity-60" : ""}`} data-item-feito={r ? (r.ok ? "sim" : "nao") : undefined}>
                 {r && r.ok && <Check className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-success" aria-label="feito" />}
-                <span className="mr-1.5 mt-px shrink-0 rounded bg-muted px-1.5 py-px text-[11px] font-medium">{i.rotulo}</span>
+                <span className="mr-1.5 mt-px shrink-0 rounded-full bg-muted px-1.5 py-px text-[11px] font-medium">{i.rotulo}</span>
                 <span className="min-w-0 [overflow-wrap:anywhere]">
                   <span className="font-medium">{i.titulo}</span>
                   {i.detalhe && <span className="text-muted-foreground"> · {i.detalhe}</span>}

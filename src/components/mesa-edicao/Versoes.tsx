@@ -35,8 +35,8 @@ export function segundosDoTexto(t: string): number | null {
 
 const COR_DO_ESTADO: Record<string, string> = {
   aprovada: "bg-success/15 text-foreground",
-  rejeitada: "bg-destructive/10 text-destructive",
-  em_revisao: "bg-primary/10 text-primary",
+  rejeitada: "bg-danger-soft text-destructive",
+  em_revisao: "bg-accent-soft text-primary",
   rascunho: "bg-muted text-muted-foreground",
 };
 
@@ -191,7 +191,7 @@ function NovaVersao({ videos, onFechar }: { videos: ResumoDoVideo[]; onFechar: (
 
   return (
     <div className={juntar("mb-3 rounded-md bg-muted/50 p-3")} data-nova-versao="">
-      <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-2 sm:gap-3 sm:grid-cols-2">
         <label className="min-w-0 text-[11px] text-muted-foreground">
           Vídeo
           <select className={campo} value={videoId} onChange={(e) => setVideoId(e.target.value)}>

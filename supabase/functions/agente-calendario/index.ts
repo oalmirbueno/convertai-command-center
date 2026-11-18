@@ -1,4 +1,5 @@
 import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
+import { AVISO_DA_LINHA_DO_TEMPO, campanhaArquivada, camposDoArquivo, faltaColunaDoArquivo, temLinhaDoTempo, validarPeriodoDaCampanha } from "../_shared/arquivo-da-campanha.ts";
 // 22/10: projeto ativo do cliente quando a proposta não tem projeto (o "Criar e gravar" falhava com project_id vazio).
 import { projetoAtivoDoCliente } from "./modulos/projeto-ativo.ts";
 import { conferirDatasDoPeriodo, ErroDoPeriodoDoPedido, janelaDoPedidoComLimite } from "./modulos/periodo-do-pedido.ts";
@@ -6185,6 +6186,58 @@ async function campanhaSalvar(servico: SupabaseClient, chamador: Chamador, corpo
   return json({ campanha: data, recusadas, custo_usd: 0 });
 }
 
+/**
+ * campanha_arquivar { campanha_id, arquivar: boolean } (16/11/2026, sem IA e sem custo): arquiva ou
+ * desarquiva. Grava arquivada_em/arquivada_por e não mexe no status, então desarquivar volta ao que
+ * era. Arquivada sai da lista padrão e nunca é a campanha do mês. Repetir não muda a data original.
+ * Resposta: { campanha, arquivada, custo_usd: 0 }.
+ */
+async function campanhaArquivar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  if (typeof corpo.arquivar !== "boolean") throw new ErroHttp(400, "arquivar_invalido", "Mande arquivar: true para arquivar ou false para desarquivar.");
+  const arquivar = corpo.arquivar;
+  if (campanhaArquivada(c as { arquivada_em?: string | null }) === arquivar) return json({ campanha: c, arquivada: arquivar, sem_mudanca: true, custo_usd: 0 });
+  const { data, error } = await servico
+    .from("mesa_campanhas")
+    .update(camposDoArquivo(arquivar, chamador.userId))
+    .eq("id", c.id)
+    .eq("client_id", c.client_id)
+    .select("*")
+    .single();
+  if (error && faltaColunaDoArquivo(error)) {
+    throw new ErroHttp(503, "campanha_sem_arquivo", "O banco ainda não tem o arquivo das campanhas. Falta aplicar a migration 20261116120000_mesa_campanhas_arquivar.");
+  }
+  if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", arquivar ? "Não foi possível arquivar a campanha. Tente de novo." : "Não foi possível desarquivar a campanha. Tente de novo.");
+  return json({ campanha: data, arquivada: arquivar, custo_usd: 0 });
+}
+
+/**
+ * campanha_periodo { campanha_id, periodo_inicio, periodo_fim } (16/11/2026, sem IA e sem custo): troca
+ * o período (AAAA-MM-DD, fim no mesmo dia ou depois, até 62 dias). Se a campanha já tem linha do tempo,
+ * as fases NÃO são recalculadas aqui: volta o aviso para usar Reorganizar (campanha_reorganizar).
+ * Resposta: { campanha, avisos, linha_do_tempo_desatualizada, custo_usd: 0 }.
+ */
+async function campanhaPeriodo(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const periodo = validarPeriodoDaCampanha(corpo.periodo_inicio, corpo.periodo_fim);
+  if (!periodo.ok) throw new ErroHttp(400, periodo.codigo, periodo.mensagem);
+  const linhaDoTempo = temLinhaDoTempo(c.briefing);
+  const mudou = periodo.inicio !== c.periodo_inicio || periodo.fim !== c.periodo_fim;
+  const avisos = linhaDoTempo && mudou ? [AVISO_DA_LINHA_DO_TEMPO] : [];
+  if (!mudou) return json({ campanha: c, avisos, linha_do_tempo_desatualizada: false, sem_mudanca: true, custo_usd: 0 });
+  const { data, error } = await servico
+    .from("mesa_campanhas")
+    .update({ periodo_inicio: periodo.inicio, periodo_fim: periodo.fim })
+    .eq("id", c.id)
+    .eq("client_id", c.client_id)
+    .select("*")
+    .single();
+  if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "Não foi possível salvar o período. Tente de novo.");
+  return json({ campanha: data, avisos, linha_do_tempo_desatualizada: linhaDoTempo, custo_usd: 0 });
+}
+
 // ------------------------------------------------ tom comercial, esquema e mercado da campanha (22/10/2026)
 
 /**
@@ -10336,6 +10389,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   ...selo.acoes,
   campanha_conversar: campanhaConversar,
   campanha_salvar: campanhaSalvar,
+  // 16/11/2026: arquivar/desarquivar e editar o período, sem IA.
+  campanha_arquivar: campanhaArquivar,
+  campanha_periodo: campanhaPeriodo,
   campanha_plano_imagens: campanhaPlanoImagens,
   campanha_conferir: campanhaConferir,
   campanha_mudanca_planejar: campanhaMudancaPlanejar,

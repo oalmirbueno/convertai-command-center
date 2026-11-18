@@ -227,13 +227,13 @@ export default function AgenteDaOferta({
               <span className="min-w-0 flex-1 truncate">
                 Lapidando: <span className="font-medium">{foco.nome}</span>
               </span>
-              <button type="button" onClick={() => setFoco(null)} className={juntar("ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted", focoVisivel)} aria-label="Tirar a oferta em foco">
+              <button type="button" onClick={() => setFoco(null)} className={juntar("ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted", focoVisivel)} aria-label="Tirar a oferta em foco">
                 <X className="h-3 w-3" />
               </button>
             </div>
           )}
           <ZonaDeAnexos anexos={anexos}>
-            <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
+            <div className="rounded-md border border-input bg-card p-2 focus-within:border-primary/60">
               <MiniaturasDosAnexos anexos={anexos} />
               <Textarea
                 ref={entradaRef}

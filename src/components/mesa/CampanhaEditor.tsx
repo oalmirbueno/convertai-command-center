@@ -47,7 +47,7 @@ export function SeletorDoTom({ valor, onValor, desabilitado }: { valor: string |
             disabled={desabilitado}
             title={DICA_DO_TOM[t]}
             onClick={() => onValor(t)}
-            className={`mb-1.5 mr-1.5 inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition-colors ${atual === t ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/50"}`}
+            className={`mb-1.5 mr-1.5 inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors ${atual === t ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background hover:border-primary/50"}`}
           >
             {ROTULO_DO_TOM[t]}
           </button>

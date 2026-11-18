@@ -91,6 +91,8 @@ import {
   linhasDeMetaDoMes,
   moverLead,
   realizadoDoMes,
+  recebidoDoMes,
+  caixaDaCasa,
   receitaDoMes,
   resumoDoFunil,
   salvarDadosDaEmpresaDoLead,
@@ -193,18 +195,90 @@ describe("2. o mês do ganho e do lead é o de São Paulo", () => {
 
 describe("3. falha no Financeiro não vira R$ 0", () => {
   it("receitaDoMes e clientesRecorrentesDoMes sobem ErroDeLeitura", async () => {
-    banco.falhas["financial_entries:select"] = { message: "permission denied" };
+    banco.falhas["billing:select"] = { message: "permission denied" };
     await expect(receitaDoMes("2026-10-01")).rejects.toBeInstanceOf(ErroDeLeitura);
     await expect(clientesRecorrentesDoMes("2026-10-01")).rejects.toBeInstanceOf(ErroDeLeitura);
   });
 
   it("sem falha, continuam somando", async () => {
-    banco.tabelas.financial_entries = [
-      { amount: 1000, direction: "in", cancelled_at: null, competence: "2026-10-01", client_id: "c1", recurring_rule_id: "r1" },
-      { amount: 500, direction: "in", cancelled_at: null, competence: "2026-10-01", client_id: "c2", recurring_rule_id: null },
+    banco.tabelas.billing = [
+      { amount: 1000, status: "paid", type: "renewal", client_id: "c1", paid_date: "2026-10-05", due_date: "2026-10-05" },
+      { amount: 500, status: "paid", type: "one_off", client_id: "c2", paid_date: "2026-10-20", due_date: "2026-10-20" },
     ];
     await expect(receitaDoMes("2026-10-01")).resolves.toBe(1500);
     await expect(clientesRecorrentesDoMes("2026-10-01")).resolves.toBe(1);
+  });
+
+  it("o recebido do mês sai separado por origem, na régua do Financeiro", async () => {
+    banco.tabelas.billing = [
+      // Mensalidades: duas do mesmo cliente contam um recorrente só.
+      { amount: 1000, status: "paid", type: "renewal", client_id: "c1", paid_date: "2026-10-05", due_date: "2026-10-05" },
+      { amount: 800, status: "paid", type: "renewal", client_id: "c1", paid_date: "2026-10-28", due_date: "2026-10-28" },
+      // Parcial: entra só o que foi pago.
+      { amount: 900, paid_amount: 400, status: "partial", type: "renewal", client_id: "c2", paid_date: "2026-10-10", due_date: "2026-10-10" },
+      // Pago sem data de pagamento: vale o mês do vencimento.
+      { amount: 300, status: "paid", type: "one_off", client_id: "c3", paid_date: null, due_date: "2026-10-15" },
+      // Vencia em outubro, pago em novembro: é dinheiro de novembro.
+      { amount: 700, status: "paid", type: "renewal", client_id: "c4", paid_date: "2026-11-02", due_date: "2026-10-30" },
+      // Fora da conta: em aberto, recarga de anúncio e dólar do Freela.
+      { amount: 600, status: "pending", type: "renewal", client_id: "c5", paid_date: null, due_date: "2026-10-12" },
+      { amount: 2000, status: "paid", type: "ads_recharge", client_id: "c1", paid_date: "2026-10-06", due_date: "2026-10-06" },
+      { amount: 150, status: "paid", type: "freela", client_id: null, currency: "USD", paid_date: "2026-10-07", due_date: "2026-10-07" },
+    ];
+    banco.tabelas.payment_installments = [
+      { amount: 1347, paid_amount: 900, status: "partial", paid_date: "2026-10-13", due_date: "2026-10-13" },
+      { amount: 697, status: "paid", paid_date: "2026-09-28", due_date: "2026-09-28" },
+    ];
+    banco.tabelas.produto_cobrancas = [
+      // Assinatura do CRM e E-mail paga em outubro: entra pelo valor cheio.
+      { valor: 49.9, valor_liquido: 47.41, estado: "paga", pago_em: "2026-10-12T14:00:00+00:00" },
+      // Em aberto e paga em setembro ficam fora.
+      { valor: 79.9, valor_liquido: null, estado: "aberta", pago_em: null },
+      { valor: 49.9, valor_liquido: 47.41, estado: "paga", pago_em: "2026-09-12T14:00:00+00:00" },
+    ];
+    await expect(recebidoDoMes("2026-10-01")).resolves.toEqual({
+      mensalidades: 2200,
+      avulsos: 300,
+      projetos: 900,
+      crmEmail: 49.9,
+      total: 3449.9,
+      clientesRecorrentes: 2,
+    });
+  });
+
+  it("saídas do mês e saldo em caixa seguem o Fluxo de Caixa do Financeiro", async () => {
+    banco.tabelas.financial_settings = [{ settings_key: "default", opening_balance: -1000 }];
+    banco.tabelas.billing = [
+      { amount: 3000, status: "paid", type: "renewal" },
+      { amount: 900, paid_amount: 400, status: "partial", type: "one_off" },
+      // Fora: recarga de anúncio, dólar do Freela e cobrança em aberto.
+      { amount: 5000, status: "paid", type: "ads_recharge" },
+      { amount: 100, status: "paid", type: "freela", currency: "USD" },
+      { amount: 800, status: "pending", type: "renewal" },
+    ];
+    banco.tabelas.payment_installments = [{ amount: 600, status: "paid" }];
+    banco.tabelas.expenses = [
+      { amount: 250, status: "paid", category: "ferramentas", paid_date: "2026-10-03", due_date: "2026-10-03" },
+      // Sem data de pagamento: vale o vencimento.
+      { amount: 150, status: "paid", category: "pro_labore", paid_date: null, due_date: "2026-10-20" },
+      // Mês anterior: conta no saldo, não no mês.
+      { amount: 300, status: "paid", category: "ferramentas", paid_date: "2026-09-28", due_date: "2026-09-28" },
+      // Aporte de investidor é capital, não saída.
+      { amount: 2000, status: "paid", category: "inv_trafego", paid_date: "2026-10-05", due_date: "2026-10-05" },
+      { amount: 999, status: "pending", category: "ferramentas", paid_date: null, due_date: "2026-10-10" },
+    ];
+    // Do CRM e E-mail entra o líquido (o Asaas repassa sem a taxa); em aberto não entra.
+    banco.tabelas.produto_cobrancas = [
+      { valor: 49.9, valor_liquido: 47.41, estado: "paga", pago_em: "2026-09-12T14:00:00+00:00" },
+      { valor: 79.9, valor_liquido: null, estado: "aberta", pago_em: null },
+    ];
+    // Saldo: -1000 + (3000 + 400 + 600 + 47,41) − (250 + 150 + 300) = 2347,41.
+    await expect(caixaDaCasa("2026-10-01")).resolves.toEqual({ saiuNoMes: 400, saldo: 2347.41 });
+  });
+
+  it("falha no caixa sobe ErroDeLeitura, não vira saldo zero", async () => {
+    banco.falhas["expenses:select"] = { message: "permission denied" };
+    await expect(caixaDaCasa("2026-10-01")).rejects.toBeInstanceOf(ErroDeLeitura);
   });
 
   it("a tela conta essas leituras no aviso de erro", () => {

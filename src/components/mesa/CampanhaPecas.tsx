@@ -87,7 +87,7 @@ export function PecasPorFase({ pecas, acoes, vazio }: { pecas: SituacaoDaPeca[];
             <p className={juntar(texto.rotulo, "mb-2")}>
               {f.rotulo} <span className="font-normal">· {daFase.length}</span>
             </p>
-            <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+            <ul className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
               {daFase.map((p) => (
                 <PecaNaGrade key={p.item.tema_id || p.item.tema} peca={p} acoes={acoes ? acoes(p) : undefined} />
               ))}
@@ -262,7 +262,7 @@ export default function CampanhaPecas({
   onAbrirStories?: (sequenciaId: string) => void;
 }) {
   const acoes = useAcoesDasPecas({ campanha, pecas, onAbrirArteRapida, onAbrirStories });
-  if (carregando) return <div className="h-40 animate-pulse rounded-xl bg-muted" />;
+  if (carregando) return <div className="h-40 animate-pulse rounded-lg bg-muted" />;
   return (
     <div className="min-w-0 space-y-3" data-pecas-da-campanha="">
       <p className={texto.auxiliar}>Abra no Estúdio: tudo pronto, só gerar lá.</p>

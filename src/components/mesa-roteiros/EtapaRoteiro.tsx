@@ -115,7 +115,7 @@ export default function EtapaRoteiro({
   if (roteirosQ.isLoading) return <Carregando forma="aba" rotulo="Carregando o roteiro" />;
   if (roteiroId && !linha) {
     return (
-      <EstadoVazio
+      <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
         icone={<FileText className="h-5 w-5" />}
         titulo="Este roteiro não está na lista do cliente."
         acao={
@@ -130,7 +130,7 @@ export default function EtapaRoteiro({
   if (solto) return <RoteiroSolto roteiro={solto} onDescartar={() => setSolto(null)} />;
   if (!tarefaId && !avulso) {
     return (
-      <EstadoVazio
+      <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
         icone={<FileText className="h-5 w-5" />}
         titulo="Escolha uma peça na Agenda ou comece um roteiro avulso."
         acao={
@@ -389,7 +389,7 @@ function FormularioDeGeracao({
               {modoDoTipo(tipo).cuidados}
             </AjudaRecolhida>
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="radiogroup" aria-label="Tipo de roteiro">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" role="radiogroup" aria-label="Tipo de roteiro">
             {MODOS_DE_ROTEIRO.map((m) => (
               <button
                 key={m.valor}
@@ -700,7 +700,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
         resumo={rascunho.ganchos.length ? `${rascunho.ganchos.length} ganchos · usando o ${rascunho.gancho_escolhido + 1}` : undefined}
         data-ganchos=""
       >
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-3" role="radiogroup" aria-label="Ganchos">
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-3" role="radiogroup" aria-label="Ganchos">
           {rascunho.ganchos.map((g, i) => (
             <div key={i} className={juntar("min-w-0 rounded-md border p-2.5", rascunho.gancho_escolhido === i ? "border-primary bg-primary/5" : "border-border")}>
               <label className="flex items-start text-[13px]">
@@ -769,7 +769,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
               <div className="flex min-w-0 items-center">
                 <span className="mr-2 shrink-0 text-[13px] font-bold tabular-nums text-primary">{String(i + 1).padStart(2, "0")}</span>
                 <div className="mr-2 min-w-0 flex-1 sm:max-w-[200px]">
-                  <input value={b.funcao} onChange={(e) => mudarBloco(i, { funcao: e.target.value })} disabled={desabilitado} aria-label={`Função do bloco ${i + 1}`} className={juntar(campo, "font-semibold uppercase")} />
+                  <input value={b.funcao} onChange={(e) => mudarBloco(i, { funcao: e.target.value })} disabled={desabilitado} aria-label={`Função do bloco ${i + 1}`} className={juntar(campo, "font-semibold")} />
                 </div>
                 <div className="mr-auto flex shrink-0 items-center text-[12px] text-muted-foreground">
                   <div className="mr-1 w-16">

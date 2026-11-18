@@ -107,7 +107,7 @@ export async function comercialCobrar(input: { lead_id: string; plano: string; n
   let criada;
   try {
     criada = await criarCobrancaPix(token, fetch, { nome, documento, email, telefone: digitos((lead as Record<string, unknown>).whatsapp).replace(/^55/, '') || null, valor,
-      descricao: plano.mensal > 0 ? `Aceleriq: ${nomeDoPacote}, entrada e primeira mensalidade` : `Aceleriq: ${plano.nome}`, referencia: `lead:${input.lead_id}`, vencimento: venc });
+      descricao: plano.mensal > 0 ? `Aceleriq: ${nomeDoPacote}, primeira mensalidade (paga adiantada)` : `Aceleriq: ${plano.nome}`, referencia: `lead:${input.lead_id}`, vencimento: venc });
   } catch (e) {
     if (e instanceof ErroDoAsaas) return { cobranca: null, nova: false, erro_asaas: true, aviso: e.message };
     throw e;

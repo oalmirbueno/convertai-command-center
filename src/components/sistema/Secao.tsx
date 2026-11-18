@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import AjudaRecolhida, { avisarSeForExplicacao } from "./AjudaRecolhida";
 import { useChaveDeRecolher, useRecolhido } from "./TituloRecolhivel";
@@ -90,10 +90,10 @@ export function CabecalhoDeSecao({
                   aria-expanded={!recolhido}
                   aria-label={recolhido ? "Mostrar" : "Recolher"}
                   title={recolhido ? "Mostrar" : "Recolher"}
-                  className={juntar("toque-compacto relative -left-1 inline-flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
+                  className={juntar("toque-compacto relative -left-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
                   data-recolher-secao=""
                 >
-                  <ChevronDown className={juntar("h-4 w-4 transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
+                  <ChevronDown className={juntar("h-4 w-4 transition-transform duration-200", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
                 </button>
                 <Titulo
                   className={juntar(nivel === 3 ? "text-[13px] font-semibold leading-5 text-foreground" : texto.tituloSecao, "min-w-0 cursor-pointer select-none truncate", classeDoTitulo)}
@@ -109,10 +109,10 @@ export function CabecalhoDeSecao({
                   onClick={recolher.onAlternar}
                   aria-expanded={!recolhido}
                   title={recolhido ? "Mostrar" : "Recolher"}
-                  className={juntar("relative -left-1 flex min-w-0 max-w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-muted", foco)}
+                  className={juntar("relative -left-1 flex min-w-0 max-w-full items-center rounded-full py-0.5 pl-1 pr-2.5 text-left transition-colors hover:bg-muted", foco)}
                   data-titulo-recolhivel=""
                 >
-                  <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
+                  <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
                   {/* 28/09 (dono: "título grande não pode quebrar"): uma linha só, com
                       reticências só quando falta espaço de verdade. O botão se desloca
                       com relative -left-1 e NÃO com margem negativa: a margem tirava
@@ -134,8 +134,8 @@ export function CabecalhoDeSecao({
           </div>
         )}
         {/* Recolhido, o resumo fica EMBAIXO do título (não aperta o título ao lado). */}
-        {recolhido && recolher && recolher.resumo ? <p className="mt-0.5 min-w-0 truncate pl-5 text-[12px] text-muted-foreground" data-resumo-recolhido="">{recolher.resumo}</p> : null}
-        {descricao && !recolhido && <p className={juntar(texto.auxiliar, "mt-0.5", recolher && "pl-5", truncar && "truncate")}>{descricao}</p>}
+        {recolhido && recolher && recolher.resumo ? <p className="mt-0.5 min-w-0 truncate pl-6 text-[12px] text-muted-foreground" data-resumo-recolhido="">{recolher.resumo}</p> : null}
+        {descricao && !recolhido && <p className={juntar(texto.auxiliar, "mt-0.5", recolher && "pl-6", truncar && "truncate")}>{descricao}</p>}
       </div>
       {/* Sem min-w-0 de propósito: o grupo nunca fica mais estreito que a maior ação. */}
       {acao && <div className="-m-1 flex flex-initial shrink-[5] flex-wrap items-center justify-end [&>*]:m-1">{acao}</div>}
@@ -147,7 +147,7 @@ export function CabecalhoDeSecao({
  * Cartão da seção. NÃO use para seção (28/09, dono: "ficou tudo encaixotado,
  * antigo"): seção é aberta. Fica só para exceção pedida pelo dono.
  */
-const CARTAO = "rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm sm:px-5 sm:py-4";
+const CARTAO = "rounded-lg border border-border bg-card px-4 py-3.5 shadow-card sm:px-5 sm:py-4";
 
 /**
  * Seção: título, uma linha de apoio, ação à direita e o conteúdo, SEM caixa.
@@ -280,6 +280,8 @@ function SecaoRecolhivel({
   children?: ReactNode;
 }) {
   const [recolhido, setRecolhido] = useRecolhido(chave, inicial);
+  // Só anima depois de um clique: ao carregar a página nada se mexe.
+  const [mexeu, setMexeu] = useState(false);
   return (
     <section id={id} className={juntar("min-w-0", cartao ? CARTAO : divisoria && "border-t border-border pt-4 sm:pt-5", className)} data-recolhido={recolhido ? "sim" : "nao"} {...resto}>
       <CabecalhoDeSecao
@@ -289,9 +291,9 @@ function SecaoRecolhivel({
         acao={recolhido ? undefined : acao}
         ajuda={ajuda}
         nivel={nivel}
-        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo, modo }}
+        recolher={{ recolhido, onAlternar: () => { setMexeu(true); setRecolhido(!recolhido); }, resumo, modo }}
       />
-      {!recolhido && <div className={juntar("min-w-0", corpoClassName)}>{children}</div>}
+      {!recolhido && <div className={juntar("min-w-0", mexeu && "ds-abrir", corpoClassName)}>{children}</div>}
     </section>
   );
 }

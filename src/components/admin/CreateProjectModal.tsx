@@ -13,6 +13,8 @@ import { CalendarIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AjudaRecolhida, CampoDeEscolha, CampoDeFormulario, SeletorCompacto, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import { projectTemplates } from "@/lib/projectTemplates";
+import { buildPlanoComEntrada, lerValorBR, percentualDaEntrada } from "@/lib/paymentInstallments";
+import { somarMeses } from "@/lib/extrasDoCliente";
 
 export const PROJECT_TYPES = [
   { value: "social_media", label: "Social Media" },
@@ -48,7 +50,7 @@ export default function CreateProjectModal({ open, onClose, editProject, default
   const [billingMode, setBillingMode] = useState<"included" | "one_off">("included");
   const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
   const [totalValue, setTotalValue] = useState("");
-  const [entryPct, setEntryPct] = useState("50");
+  const [entryPct, setEntryPct] = useState(""); // entrada em R$ (16/11: valor livre, não mais %)
   const [installmentsCount, setInstallmentsCount] = useState("1");
   // "create" = gerar plano agora | "already" = já cobrado/lançado fora | "none" = sem cobrança neste projeto
   const [financialMode, setFinancialMode] = useState<"create" | "already" | "none">("create");
@@ -94,12 +96,12 @@ export default function CreateProjectModal({ open, onClose, editProject, default
       (async () => {
         const { data: existing } = await supabase
           .from("project_payments")
-          .select("id, entry_percentage, installments_count")
+          .select("id, entry_amount, installments_count")
           .eq("project_id", editProject.id)
           .maybeSingle();
         if (existing) {
           setFinancialMode("create");
-          setEntryPct(String(existing.entry_percentage ?? "50"));
+          setEntryPct(Number(existing.entry_amount) > 0 ? String(existing.entry_amount) : "");
           setInstallmentsCount(String(existing.installments_count ?? "1"));
         } else {
           setFinancialMode(editProject.total_value ? "already" : "none");
@@ -113,7 +115,7 @@ export default function CreateProjectModal({ open, onClose, editProject, default
       setBillingMode("included");
       setBrand("");
       setTotalValue("");
-      setEntryPct("50");
+      setEntryPct("");
       setInstallmentsCount("1");
       setFinancialMode("create");
       setStartDate(new Date());
@@ -186,13 +188,11 @@ export default function CreateProjectModal({ open, onClose, editProject, default
             await wipePlans();
           } else {
             // "Gerar plano" no edit: recria plano só se valores mudaram ou não existe
-            const total = parseFloat(totalValue);
-            const ePct = parseFloat(entryPct) || 0;
-            const iCount = parseInt(installmentsCount) || 1;
+            const total = lerValorBR(totalValue);
+            const iCount = Math.max(parseInt(installmentsCount) || 1, 1);
             await wipePlans();
-            const entryAmount = (total * ePct) / 100;
-            const remaining = total - entryAmount;
-            const perInstallment = iCount > 0 ? remaining / iCount : 0;
+            const entryAmount = Math.min(lerValorBR(entryPct), total);
+            const ePct = percentualDaEntrada(total, entryAmount);
             const { data: paymentData, error: payErr } = await supabase
               .from("project_payments")
               .insert({
@@ -207,18 +207,7 @@ export default function CreateProjectModal({ open, onClose, editProject, default
               .select().single();
             if (payErr) throw payErr;
             const today = format(new Date(), "yyyy-MM-dd");
-            const instRows: any[] = [{
-              payment_id: paymentData.id, installment_number: 0, amount: entryAmount,
-              due_date: today, status: "pending", description: `Entrada (${ePct}%)`,
-            }];
-            for (let i = 1; i <= iCount; i++) {
-              const d = new Date(); d.setMonth(d.getMonth() + i);
-              instRows.push({
-                payment_id: paymentData.id, installment_number: i, amount: perInstallment,
-                due_date: format(d, "yyyy-MM-dd"), status: "pending",
-                description: iCount === 1 ? "Pagamento na entrega" : `Parcela ${i}/${iCount}`,
-              });
-            }
+            const instRows = buildPlanoComEntrada({ paymentId: paymentData.id, total, entrada: entryAmount, entradaEm: today, entradaPaga: false, parcelas: iCount, primeiraEm: entryAmount > 0 ? somarMeses(today, 1) : today });
             await supabase.from("payment_installments").insert(instRows);
           }
         } catch (e: any) {
@@ -241,12 +230,10 @@ export default function CreateProjectModal({ open, onClose, editProject, default
         // ── Auto-create payment plan for one_off projects ──
         if (billingMode === "one_off" && financialMode === "create" && newProject) {
           try {
-            const total = parseFloat(totalValue);
-            const ePct = parseFloat(entryPct) || 0;
-            const iCount = parseInt(installmentsCount) || 1;
-            const entryAmount = (total * ePct) / 100;
-            const remaining = total - entryAmount;
-            const perInstallment = iCount > 0 ? remaining / iCount : 0;
+            const total = lerValorBR(totalValue);
+            const iCount = Math.max(parseInt(installmentsCount) || 1, 1);
+            const entryAmount = Math.min(lerValorBR(entryPct), total);
+            const ePct = percentualDaEntrada(total, entryAmount);
 
             const { data: paymentData, error: payErr } = await supabase
               .from("project_payments")
@@ -263,27 +250,9 @@ export default function CreateProjectModal({ open, onClose, editProject, default
             if (payErr) throw payErr;
 
             const today = format(new Date(), "yyyy-MM-dd");
-            const instRows: any[] = [{
-              payment_id: paymentData.id,
-              installment_number: 0,
-              amount: entryAmount,
-              due_date: today,
-              status: "pending",
-              description: `Entrada (${ePct}%)`,
-            }];
-            for (let i = 1; i <= iCount; i++) {
-              const d = new Date(); d.setMonth(d.getMonth() + i);
-              instRows.push({
-                payment_id: paymentData.id,
-                installment_number: i,
-                amount: perInstallment,
-                due_date: format(d, "yyyy-MM-dd"),
-                status: "pending",
-                description: iCount === 1 ? "Pagamento na entrega" : `Parcela ${i}/${iCount}`,
-              });
-            }
+            const instRows = buildPlanoComEntrada({ paymentId: paymentData.id, total, entrada: entryAmount, entradaEm: today, entradaPaga: false, parcelas: iCount, primeiraEm: entryAmount > 0 ? somarMeses(today, 1) : today });
             await supabase.from("payment_installments").insert(instRows);
-            toast.success(`Plano de pagamento criado (entrada + ${iCount}x)`);
+            toast.success(entryAmount > 0 ? `Plano de pagamento criado (entrada + ${iCount}x)` : `Plano de pagamento criado (${iCount}x)`);
           } catch (e: any) {
             console.error("payment auto-create failed", e);
             toast.warning("Projeto criado, mas o plano de pagamento falhou. Configure manualmente.");
@@ -385,8 +354,8 @@ export default function CreateProjectModal({ open, onClose, editProject, default
     }
   };
 
-  const valorTotal = parseFloat(totalValue);
-  const entrada = parseFloat(entryPct || "0");
+  const valorTotal = lerValorBR(totalValue);
+  const entrada = Math.min(lerValorBR(entryPct), valorTotal || 0);
   const parcelas = Math.max(parseInt(installmentsCount) || 1, 1);
   const reais = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
   const botaoDeData = (vazio: boolean) => juntar(campo, "flex items-center text-left hover:border-primary/50", vazio && "text-muted-foreground");
@@ -482,10 +451,10 @@ export default function CreateProjectModal({ open, onClose, editProject, default
                   </CampoDeFormulario>
                   {financialMode === "create" && (
                     <>
-                      <CampoDeFormulario rotulo="Entrada %">
-                        <input value={entryPct} onChange={(e) => setEntryPct(e.target.value)} type="number" step="1" min="0" max="100" className={campo} />
+                      <CampoDeFormulario rotulo="Entrada (R$)">
+                        <input value={entryPct} onChange={(e) => setEntryPct(e.target.value)} inputMode="decimal" placeholder="0,00" className={campo} />
                       </CampoDeFormulario>
-                      <CampoDeFormulario rotulo="Parcelas">
+                      <CampoDeFormulario rotulo={entrada > 0 ? "Restante em" : "Parcelas"}>
                         <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="1" className={campo} />
                       </CampoDeFormulario>
                     </>
@@ -495,9 +464,8 @@ export default function CreateProjectModal({ open, onClose, editProject, default
 
               {financialMode === "create" && totalValue && valorTotal > 0 && (
                 <p className={juntar(texto.auxiliar, "truncate tabular-nums")}>
-                  Entrada: <span className="text-foreground">R$ {reais((valorTotal * entrada) / 100)}</span>
-                  {" · "}
-                  {installmentsCount}× de <span className="text-foreground">R$ {reais((valorTotal * (100 - entrada)) / 100 / parcelas)}</span>
+                  {entrada > 0 && <>Entrada: <span className="text-foreground">R$ {reais(entrada)}</span>{" · restante "}</>}
+                  {parcelas}× de <span className="text-foreground">R$ {reais((valorTotal - entrada) / parcelas)}</span>
                 </p>
               )}
             </div>

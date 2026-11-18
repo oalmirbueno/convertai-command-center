@@ -52,7 +52,7 @@ function EsperandoAprovacao() {
       <span className="mr-2">
         {n} {n === 1 ? "foto gerada ainda espera" : "fotos geradas ainda esperam"} a aprovação da equipe.
       </span>
-      <button type="button" className="rounded font-medium text-primary hover:underline" onClick={() => irPara("aprovar")}>
+      <button type="button" className="rounded-sm font-medium text-primary hover:underline" onClick={() => irPara("aprovar")}>
         Aprovar
       </button>
     </div>
@@ -150,7 +150,7 @@ export default function EtapaUsar() {
               </button>
             </div>
             <div className="min-w-0">
-              <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+              <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
                 {lista.map((f, i) => {
                   const marcada = escolhidasIds.indexOf(f.id) >= 0;
                   return (
@@ -165,7 +165,7 @@ export default function EtapaUsar() {
                         <SeloCurto foto={f} />
                         <MenuDeUso foto={f} variante="outline" />
                       </div>
-                      <label className="absolute right-2.5 top-2.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
+                      <label className="absolute right-2.5 top-2.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-card">
                         <input type="checkbox" checked={marcada} onChange={() => alternar(f.id)} className="h-3.5 w-3.5" aria-label={`Marcar ${f.nome}`} />
                       </label>
                     </li>

@@ -329,7 +329,7 @@ export default function BibliotecaDeFontes({
             </DialogDescription>
           </DialogHeader>
 
-          <div role="tablist" aria-label="Qual fonte escolher" className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+          <div role="tablist" aria-label="Qual fonte escolher" className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
             {(["titulo", "texto"] as PapelDaEscolha[]).map((p) => (
               <button
                 key={p}
@@ -337,7 +337,7 @@ export default function BibliotecaDeFontes({
                 role="tab"
                 aria-selected={papel === p}
                 onClick={() => setPapel(p)}
-                className={`min-w-0 rounded-lg px-2.5 py-1 text-left ${papel === p ? "bg-card shadow-sm" : "hover:bg-card/60"}`}
+                className={`toque-compacto min-w-0 rounded-md px-3 py-1.5 text-left transition-colors ${papel === p ? "bg-card shadow-sm" : "hover:bg-background"}`}
               >
                 <span className="block text-[11px] text-muted-foreground">{ROTULO_DO_PAPEL[p]}</span>
                 <span className={`block truncate text-[13px] font-medium ${escolha[p] ? "text-foreground" : "text-muted-foreground"}`}>
@@ -378,7 +378,7 @@ export default function BibliotecaDeFontes({
                   }}
                   aria-pressed={categoria === c}
                   className={`mr-1.5 shrink-0 rounded-full border px-2.5 py-1 text-[12px] capitalize ${
-                    categoria === c ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    categoria === c ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-card text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {c === "todas" ? "Todas" : c}
@@ -393,12 +393,12 @@ export default function BibliotecaDeFontes({
           {biblioteca.isLoading && (
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-[158px] animate-pulse rounded-xl bg-muted" />
+                <div key={i} className="h-[158px] animate-pulse rounded-lg bg-muted" />
               ))}
             </div>
           )}
           {biblioteca.data && filtradas.length === 0 && (
-            <p className="rounded-lg border border-dashed border-border p-6 text-center text-[12px] text-muted-foreground">
+            <p className="rounded-lg bg-muted/50 p-6 text-center text-[12px] text-muted-foreground">
               {familias.length ? "Nenhuma família com essa busca." : "A biblioteca de fontes ainda está vazia."}
             </p>
           )}

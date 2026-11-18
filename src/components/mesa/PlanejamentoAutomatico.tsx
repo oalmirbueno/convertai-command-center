@@ -408,7 +408,7 @@ function Passo({ rotulo, feito, agora }: { rotulo: string; feito: boolean; agora
 function ErroDoMes({ erro }: { erro: unknown }) {
   if (erro instanceof ErroDaMesa && erro.codigo === "provedor_timeout") {
     return (
-      <p className={juntar(superficie.painel, "flex items-start border-destructive/40 p-2.5 text-[12px] leading-relaxed")}>
+      <p className={juntar(superficie.painel, "flex items-start border-destructive/40 p-4 text-[12px] leading-relaxed")}>
         <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-destructive" />
         <span className="min-w-0 [overflow-wrap:anywhere]">
           O provedor de IA demorou demais e o tempo esgotou (504). O que este mês já tinha pronto fica guardado: tente este mês de novo.
@@ -454,7 +454,7 @@ function LinhaDoMes({
       <div className="flex min-w-0 flex-wrap items-center">
         <p className="mr-2 text-[13px] font-medium capitalize">{rotuloDoMes(estado.mes)}</p>
         <span
-          className={`mr-2 rounded-full px-2 py-0.5 text-[11px] ${
+          className={`mr-2 rounded-full px-2.5 py-1 text-[11px] ${
             f === "gravado"
               ? "bg-success text-white"
               : f === "erro"
@@ -727,7 +727,7 @@ export default function PlanejamentoAutomatico() {
           rotuloDaAjuda="Como funciona o planejar e preencher"
           ajuda="Para cada mês do período, o estrategista propõe os temas, a Mesa escolhe os melhores pela nota do Jev, detalha e grava na agenda. Até três meses correm ao mesmo tempo e cada um entra na agenda assim que fica pronto; você pode parar a qualquer hora (o que já começou termina)."
         />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
           <Campo rotulo="De">
             <Select value={de} onValueChange={setDe} disabled={rodando}>
               <SelectTrigger className="h-9 text-[13px] capitalize"><SelectValue /></SelectTrigger>
@@ -749,7 +749,7 @@ export default function PlanejamentoAutomatico() {
           </Campo>
         </div>
         <EscolhaDeFormatos valor={formatos} onMudar={setFormatos} desabilitado={rodando} vazio="Pelo nicho do cliente (nenhum escolhido)" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
           <Campo rotulo="Objetivo principal">
             <Input value={objetivo} onChange={(e) => setObjetivo(e.target.value)} placeholder="Ex.: pedidos pelo WhatsApp" className="h-9" disabled={rodando} />
           </Campo>
@@ -757,7 +757,7 @@ export default function PlanejamentoAutomatico() {
             <Input value={oferta} onChange={(e) => setOferta(e.target.value)} placeholder="Ex.: kit de mudas de outono" className="h-9" disabled={rodando} />
           </Campo>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
           <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={modeloId} onChange={trocarModelo} rotulo="Modelo do estrategista" disabled={rodando} />
           <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
           <Campo rotulo="Projeto de social">

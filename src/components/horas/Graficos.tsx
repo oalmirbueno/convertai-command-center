@@ -22,36 +22,36 @@ export function BarrasPorMes({
   cor?: string;
 }) {
   const maior = serie.reduce((m, p) => Math.max(m, p.valor || 0, p.projetado || 0), 0);
-  const ALTURA = 88;
+  const ALTURA = 104;
   return (
     <figure className="min-w-0" aria-label={rotulo}>
-      <figcaption className="mb-2 text-[12px] font-medium text-muted-foreground">{rotulo}</figcaption>
+      <figcaption className="mb-3 text-[13px] font-medium leading-5 text-muted-foreground">{rotulo}</figcaption>
       <div
-        className="grid items-end gap-x-1 border-b border-border"
-        style={{ gridTemplateColumns: `repeat(${Math.max(serie.length, 1)}, minmax(0, 1fr))`, height: ALTURA + 18 }}
+        className="grid items-end gap-x-1.5"
+        style={{ gridTemplateColumns: `repeat(${Math.max(serie.length, 1)}, minmax(0, 1fr))`, height: ALTURA + 22 }}
       >
         {serie.map((p) => {
           const v = p.valor || 0;
-          const h = maior > 0 ? Math.max(v > 0 ? 3 : 0, Math.round((v / maior) * ALTURA)) : 0;
+          const h = maior > 0 ? Math.max(v > 0 ? 8 : 0, Math.round((v / maior) * ALTURA)) : 0;
           const hp = maior > 0 && p.projetado ? Math.round((p.projetado / maior) * ALTURA) : 0;
           const escolhido = p.mes === mesEscolhido;
           const titulo = `${rotuloDoMes(p.mes)}: ${p.valor === null ? "sem dado" : formatar(v)}${p.projetado ? ` (projetado ${formatar(p.projetado)})` : ""}`;
           return (
             <div key={p.mes} className="relative flex h-full min-w-0 flex-col items-center justify-end" title={titulo} aria-label={titulo} role="img">
               {escolhido && p.valor !== null && (
-                <span className="mb-1 whitespace-nowrap text-[11px] font-medium tabular-nums text-foreground">{formatar(v)}</span>
+                <span className="mb-1.5 whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-[11px] font-medium tabular-nums text-background">{formatar(v)}</span>
               )}
-              <div className="relative w-full max-w-[28px]" style={{ height: Math.max(h, hp) }}>
+              <div className="relative w-full max-w-[36px]" style={{ height: Math.max(h, hp, 4) }}>
                 {hp > h && (
-                  <div aria-hidden="true" className="absolute inset-x-0 bottom-0 rounded-t-[4px] border border-dashed border-muted-foreground/50" style={{ height: hp }} />
+                  <div aria-hidden="true" className="absolute inset-x-0 bottom-0 rounded-md border border-dashed border-muted-foreground/50" style={{ height: hp }} />
                 )}
-                <div aria-hidden="true" className={cn("absolute inset-x-0 bottom-0 rounded-t-[4px]", cor, !escolhido && "opacity-60")} style={{ height: h }} />
+                <div aria-hidden="true" className={cn("absolute inset-x-0 bottom-0 rounded-md", h > 0 ? cor : "bg-muted", h > 0 && !escolhido && "opacity-30")} style={{ height: Math.max(h, 4) }} />
               </div>
             </div>
           );
         })}
       </div>
-      <div className="mt-1 grid gap-x-1" style={{ gridTemplateColumns: `repeat(${Math.max(serie.length, 1)}, minmax(0, 1fr))` }} aria-hidden="true">
+      <div className="mt-2 grid gap-x-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(serie.length, 1)}, minmax(0, 1fr))` }} aria-hidden="true">
         {serie.map((p) => (
           <span key={p.mes} className={cn("truncate text-center text-[11px]", p.mes === mesEscolhido ? "font-medium text-foreground" : "text-muted-foreground")}>
             {rotuloCurtoDoMes(p.mes)}
@@ -69,7 +69,7 @@ const DIAS_LONGOS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado"
 export function MapaDeHoras({ mapa, formatar }: { mapa: number[][]; formatar: (segundos: number) => string }) {
   let maior = 0;
   for (const linha of mapa) for (const v of linha) if (v > maior) maior = v;
-  const colunas = "grid min-w-[520px] grid-cols-[32px_repeat(24,minmax(0,1fr))] gap-[2px]";
+  const colunas = "grid min-w-[560px] grid-cols-[36px_repeat(24,minmax(0,1fr))] gap-[3px]";
   return (
     <div className="min-w-0 overflow-x-auto" role="group" aria-label="Mapa de horas trabalhadas por dia da semana e hora">
       <div className={colunas} aria-hidden="true">
@@ -81,8 +81,8 @@ export function MapaDeHoras({ mapa, formatar }: { mapa: number[][]; formatar: (s
         ))}
       </div>
       {mapa.map((linha, d) => (
-        <div key={d} className={cn(colunas, "mt-[2px]")}>
-          <span className="text-[11px] leading-4 text-muted-foreground">{DIAS[d]}</span>
+        <div key={d} className={cn(colunas, "mt-[3px]")}>
+          <span className="text-[11px] leading-5 text-muted-foreground">{DIAS[d]}</span>
           {linha.map((v, h) => {
             const alfa = maior > 0 && v > 0 ? 0.15 + 0.85 * (v / maior) : 0;
             const titulo = `${DIAS_LONGOS[d]}, ${h}h: ${v > 0 ? formatar(v) : "nada"}`;
@@ -92,8 +92,8 @@ export function MapaDeHoras({ mapa, formatar }: { mapa: number[][]; formatar: (s
                 title={titulo}
                 aria-label={titulo}
                 role="img"
-                className={cn("h-4 rounded-[3px]", v > 0 ? "" : "bg-muted/60")}
-                style={v > 0 ? { backgroundColor: `hsl(var(--primary) / ${alfa.toFixed(2)})` } : undefined}
+                className={cn("h-5 rounded-[6px]", v > 0 ? "" : "bg-muted")}
+                style={v > 0 ? { backgroundColor: `hsl(var(--chart-1) / ${alfa.toFixed(2)})` } : undefined}
               />
             );
           })}
@@ -107,7 +107,7 @@ export function MapaDeHoras({ mapa, formatar }: { mapa: number[][]; formatar: (s
 export function BarraFina({ fracao, cor = "bg-primary", rotulo }: { fracao: number; cor?: string; rotulo: string }) {
   const pct = Math.max(0, Math.min(1, fracao || 0)) * 100;
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" role="img" aria-label={rotulo} title={rotulo}>
+    <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="img" aria-label={rotulo} title={rotulo}>
       <div className={cn("h-full rounded-full", cor)} style={{ width: `${pct}%` }} />
     </div>
   );

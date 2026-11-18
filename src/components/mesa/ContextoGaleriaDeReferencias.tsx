@@ -150,7 +150,7 @@ export default function GaleriaDeReferencias({
       {refs.isError && <AvisoDeErro erro={refs.error} />}
 
       {refs.isLoading ? (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Quadrado key={i}>
               <span className="block h-full w-full animate-pulse bg-muted" />
@@ -167,7 +167,7 @@ export default function GaleriaDeReferencias({
         </div>
       ) : (
         <>
-          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">
             {visiveis.map((r) => {
               const lida = !!(r.leitura && r.leitura.trim());
               const indice = comImagem.indexOf(r);
@@ -182,7 +182,7 @@ export default function GaleriaDeReferencias({
                     aria-label={`Ver maior: ${r.nome}, ${PAPEIS[r.papel].curto}${lida ? "" : ", sem leitura"}`}
                     className="block w-full rounded-lg text-left outline-none ring-offset-background transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   >
-                    <Quadrado className={`border ${r.destaque ? "border-amber-400" : "border-border"}`}>
+                    <Quadrado className={`border ${r.destaque ? "border-warning" : "border-border"}`}>
                       <ImagemDeReferencia fonte={fonteDaReferencia(r)} alt={r.nome} largura={240} className="h-full w-full" />
                       {!lida && (
                         <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-background bg-warning" aria-hidden="true" />

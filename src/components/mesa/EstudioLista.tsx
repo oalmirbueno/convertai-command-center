@@ -10,7 +10,8 @@ import {
   CircleDot,
   Copy,
   Film,
-  ImageOff,
+  GalleryHorizontalEnd,
+  Image as ImageIcon,
   Loader2,
   PanelTopClose,
   PanelTopOpen,
@@ -53,10 +54,10 @@ import { dataLocal, fonteDoArquivo, PROXIMOS_DIAS, ultimasVersoes, type ArteNaAg
 
 const COR_DO_SELO: Record<TomDoSelo, string> = {
   neutro: "bg-secondary text-muted-foreground",
-  primario: "bg-primary/10 text-primary",
-  ok: "bg-success/10 text-success",
+  primario: "bg-accent-soft text-primary",
+  ok: "bg-success-soft text-success",
   alerta: "bg-warning/15 text-warning",
-  erro: "bg-destructive/10 text-destructive",
+  erro: "bg-danger-soft text-destructive",
 };
 
 const ICONE_DO_SELO: Record<TomDoSelo, typeof Circle> = {
@@ -107,8 +108,9 @@ export interface FontesDaLista {
 
 /** Largura do cartão na faixa (px). A capa é 4:5, com altura pela largura. */
 // Frente AE-3 (dono, 28/09: "faixa de pautas mais baixa, sem cartão alto"): cartão de uma linha de título e capa pequena.
-export const LARGURA_DO_CARTAO = 200;
-const LARGURA_DA_CAPA = 28;
+// Rodada ousada v3 (15/11/2026): cartão maior, com a capa à vista.
+export const LARGURA_DO_CARTAO = 236;
+const LARGURA_DA_CAPA = 40;
 
 const dois = (n: number) => (n < 10 ? `0${n}` : String(n));
 
@@ -182,7 +184,7 @@ function MenuDeEntregaDaFaixa({ entregar, marcados, aoEntregar }: { entregar: En
         <button
           type="button"
           disabled={!prontas || entregar.ocupado}
-          className="toque-compacto mr-1 flex h-8 min-w-8 items-center justify-center rounded-md bg-primary px-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+          className="toque-compacto mr-1 flex h-10 min-w-10 items-center justify-center rounded-full bg-accent-solid px-3 text-[13px] font-semibold text-on-accent disabled:opacity-50"
           title={marcados.length && !prontas ? "Nenhuma das marcadas tem todas as lâminas com arte" : "Entregar as marcadas"}
           aria-label={`Entregar ${prontas ? `(${prontas})` : ""}`.trim()}
           data-entregar-da-faixa={prontas}
@@ -266,12 +268,13 @@ function CartaoDoItem({
       data-formato={modoDaPauta(item, t)}
       data-item-id={item.id}
       style={{ width: LARGURA_DO_CARTAO }}
-      className={`flex min-w-0 items-center rounded-lg border px-1.5 py-1 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+      // A pauta aberta é o cartão de tinta (os tokens trocam para quem está dentro).
+      className={`flex min-w-0 items-center rounded-[18px] border p-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
         selecionando && marcado
           ? "border-destructive bg-destructive/5 ring-1 ring-destructive"
           : ativo
-            ? "border-primary bg-primary/5 ring-1 ring-primary"
-            : "border-border bg-background hover:border-primary/50"
+            ? "ds-ink"
+            : "border-border bg-card hover:border-foreground/30"
       }`}
     >
       {selecionando && (
@@ -279,22 +282,23 @@ function CartaoDoItem({
           {marcado && <Check className="h-3 w-3" />}
         </span>
       )}
-      {modoDaPauta(item, t) === "video" ? <span className="flex shrink-0 items-center justify-center rounded bg-primary/10 text-primary" style={capa}><Film className="h-4 w-4" aria-label="Vídeo rápido" /></span> : capaDoEstudio ? (
-        <span className="block shrink-0 overflow-hidden rounded" style={capa}>
+      {modoDaPauta(item, t) === "video" ? <span className="flex shrink-0 items-center justify-center rounded-[10px] bg-accent-soft text-primary" style={capa}><Film className="h-4 w-4" aria-label="Vídeo rápido" /></span> : capaDoEstudio ? (
+        <span className="block shrink-0 overflow-hidden rounded-[10px]" style={capa}>
           <ImagemDaMesa caminho={capaDoEstudio.storage_path} alt="" className="h-full w-full" />
         </span>
       ) : capaDaAgenda && capaDaAgenda.caminho ? (
-        <span className="block shrink-0 overflow-hidden rounded" style={capa}>
+        <span className="block shrink-0 overflow-hidden rounded-[10px]" style={capa}>
           <ImagemDaMesa caminho={capaDaAgenda.caminho} bucket={capaDaAgenda.bucket} alt="" className="h-full w-full" />
         </span>
       ) : (
-        <span className="flex shrink-0 items-center justify-center rounded border border-dashed border-border bg-secondary text-muted-foreground" style={capa}>
-          {modoDaPauta(item, t) === "fotos" ? <Camera className="h-4 w-4 text-primary" aria-label="Fotos" /> : <ImageOff className="h-3 w-3" />}
+        // v4 (referências): sem arte ainda, a capa é um azulejo hachurado com o ícone do formato (não o "sem imagem").
+        <span className={`ds-hatch flex shrink-0 items-center justify-center rounded-[10px] ${ativo ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"}`} style={capa} data-capa-sem-arte="">
+          {modoDaPauta(item, t) === "fotos" ? <Camera className="h-4 w-4 text-primary" aria-label="Fotos" /> : /carrossel/i.test(formatoDoItem(item)) ? <GalleryHorizontalEnd className="h-4 w-4" aria-hidden="true" /> : <ImageIcon className="h-4 w-4" aria-hidden="true" />}
         </span>
       )}
-      <span className="ml-2 min-w-0 flex-1">
-        <span className="block truncate text-[12px] font-medium leading-4 text-foreground">{item.title}</span>
-        <span className="mt-0.5 flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground">
+      <span className="ml-2.5 min-w-0 flex-1 pr-1">
+        <span className="block truncate text-[13px] font-semibold leading-5 tracking-[-0.01em] text-foreground">{item.title}</span>
+        <span className="mt-1 flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground">
           <span className="min-w-0 truncate">{dataCurta(item.due_date)} · {modoDaPauta(item, t) === "fotos" ? "Fotos" : formatoDoItem(item)}</span>
           {roteiro && (
             <span title={DICA_DO_ROTEIRO} className="ml-1 shrink-0">
@@ -335,7 +339,7 @@ function CartaoDoItem({
         onClick={() => onArquivar(item.id)}
         aria-label={`Arquivar ${item.title}`}
         title="Arquivar: sai da faixa, do mês e da fila (dá para desfazer)"
-        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-background/90 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
         data-arquivar-pauta={item.id}
       >
         <Archive className="h-3.5 w-3.5" />
@@ -445,11 +449,11 @@ export default function EstudioLista({
   }, [tarefaId, filtrados.length, recolhida, filtro, janela, semanaDeHoje]);
 
   const topo = (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 py-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 pb-2 pt-1">
       {inicio}
-      <div className="w-[160px] shrink-0">
+      <div className="min-w-[124px] flex-1 sm:w-[176px] sm:flex-none sm:shrink-0">
         <Select value={janela} onValueChange={onJanela}>
-          <SelectTrigger className="h-8 min-w-0 text-[13px] font-medium first-letter:uppercase" aria-label="Período da lista">
+          <SelectTrigger className="toque-compacto h-10 min-w-0 rounded-full px-4 text-[13px] font-medium first-letter:uppercase" aria-label="Período da lista">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -460,7 +464,8 @@ export default function EstudioLista({
           </SelectContent>
         </Select>
       </div>
-      <div className="grid h-8 shrink-0 grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5" role="tablist" aria-label="Filtro das pautas">
+      {/* Os números do Estúdio moram aqui: cada filtro é uma pílula com a contagem grande; o aberto é a pílula de tinta com a contagem em verde. */}
+      <div className="scrollbar-hidden flex h-10 min-w-0 max-w-full shrink items-center overflow-x-auto rounded-full border border-border bg-card p-[3px] sm:grid sm:shrink-0 sm:grid-cols-3 sm:gap-0.5 sm:overflow-visible" role="tablist" aria-label="Filtro das pautas">
         {FILTROS_DO_ESTUDIO.map((f) => (
           <button
             key={f.valor}
@@ -469,12 +474,12 @@ export default function EstudioLista({
             onClick={() => onFiltro(f.valor)}
             aria-selected={filtro === f.valor}
             title={f.dica}
-            className={`flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded px-2.5 text-[12px] transition-colors ${
-              filtro === f.valor ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            className={`toque-compacto flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full pl-2.5 pr-1 text-[12px] sm:min-w-0 sm:pl-3.5 font-medium transition-colors duration-200 ${
+              filtro === f.valor ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <span>{f.rotulo}</span>
-            <span className="ml-1 tabular-nums text-muted-foreground">{contagem[f.valor]}</span>
+            <span className={`ml-1.5 inline-flex h-6 min-w-[26px] sm:ml-2 sm:min-w-[28px] items-center justify-center rounded-full px-1.5 text-[15px] font-semibold leading-none tracking-[-0.02em] tabular-nums ${filtro === f.valor ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground"}`}>{contagem[f.valor]}</span>
           </button>
         ))}
       </div>
@@ -482,7 +487,7 @@ export default function EstudioLista({
       {recolhida && filtrados.length > 0 && (
         <div className="w-[300px] min-w-0 max-w-full shrink" data-pauta-no-seletor="">
           <Select value={tarefaId && filtrados.some((i) => i.id === tarefaId) ? tarefaId : ""} onValueChange={onEscolher}>
-            <SelectTrigger className="h-8 min-w-0 text-[13px]" aria-label="Pauta aberta">
+            <SelectTrigger className="toque-compacto h-10 min-w-0 rounded-full px-4 text-[13px]" aria-label="Pauta aberta">
               <SelectValue placeholder="Escolha a pauta" />
             </SelectTrigger>
             <SelectContent>
@@ -503,7 +508,7 @@ export default function EstudioLista({
         <button
           type="button"
           onClick={() => setSelecionando(true)}
-          className={juntar(botao.icone, "h-8 w-8")}
+          className={juntar(botao.icone, "h-10 w-10 border border-border bg-card text-foreground")}
           aria-label="Selecionar"
           title={entregar ? "Selecionar: marcar várias pautas para entregar ou arquivar de uma vez" : "Selecionar: marcar várias pautas para arquivar de uma vez"}
           data-selecionar-pautas=""
@@ -524,12 +529,12 @@ export default function EstudioLista({
             disabled={!marcados.length}
             aria-label={`Arquivar ${marcados.length ? `(${marcados.length})` : ""}`.trim()}
             title="Arquivar as marcadas"
-            className="toque-compacto flex h-8 min-w-8 items-center justify-center rounded-md bg-destructive px-2 text-[12px] font-medium text-destructive-foreground disabled:opacity-50"
+            className="toque-compacto flex h-10 min-w-10 items-center justify-center rounded-full bg-destructive px-3 text-[13px] font-semibold text-destructive-foreground disabled:opacity-50"
           >
             <Archive className="h-4 w-4" aria-hidden="true" />
             {marcados.length > 0 && <span className="ml-1 tabular-nums" aria-hidden="true">{marcados.length}</span>}
           </button>
-          <button type="button" onClick={sairDaSelecao} className={juntar(botao.icone, "ml-1")} aria-label="Cancelar a seleção" title="Cancelar a seleção">
+          <button type="button" onClick={sairDaSelecao} className={juntar(botao.icone, "ml-1 h-10 w-10 border border-border bg-card text-foreground")} aria-label="Cancelar a seleção" title="Cancelar a seleção">
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </span>
@@ -539,7 +544,7 @@ export default function EstudioLista({
         <button
           type="button"
           onClick={() => onRecolher(!recolhida)}
-          className={botao.icone}
+          className={juntar(botao.icone, "ml-1 h-10 w-10 border border-border bg-card text-foreground")}
           aria-expanded={!recolhida}
           aria-label={recolhida ? "Mostrar pautas" : "Recolher pautas"}
           title={recolhida ? "Mostrar as pautas" : "Recolher as pautas e dar mais altura ao estúdio"}
@@ -563,12 +568,12 @@ export default function EstudioLista({
       )}
       {!carregando && !erro && itens.length === 0 && !itemFora && (
         // 16/10/2026 (dono: "menos texto"): uma frase curta; o caminho (aba Mês) fica no title.
-        <p className="pb-2 text-[12px] text-muted-foreground" title="Complete a agenda pela aba Mês">
+        <p className="ds-hatch mb-2 flex h-14 items-center justify-center rounded-md px-4 text-center text-[13px] font-medium text-muted-foreground" title="Complete a agenda pela aba Mês">
           {proximos ? "Nada na agenda dos próximos 60 dias." : "Nada na agenda deste mês."}
         </p>
       )}
       {!carregando && itens.length > 0 && filtrados.length === 0 && !itemFora && (
-        <p className="pb-2 text-[12px] text-muted-foreground">Nada neste filtro.</p>
+        <p className="ds-hatch mb-2 flex h-14 items-center justify-center rounded-md px-4 text-center text-[13px] font-medium text-muted-foreground">Nada neste filtro.</p>
       )}
     </>
   );
@@ -581,10 +586,10 @@ export default function EstudioLista({
           {avisos}
           {(semanas.length > 0 || itemFora) && (
             <div ref={faixa} className="relative min-w-0 overflow-x-auto" aria-label="Pautas por semana">
-              <div className="inline-flex items-start pb-1 pt-0.5">
+              <div className="inline-flex items-start pb-1.5 pt-0.5">
                 {itemFora && (
                   <div className="mr-3 flex shrink-0 flex-col">
-                    <p className="mb-1 text-[11px] font-semibold text-muted-foreground">Aberto, fora do período</p>
+                    <p className="mb-1.5 inline-flex h-6 items-center self-start whitespace-nowrap rounded-full bg-muted px-2.5 text-[11px] font-semibold text-muted-foreground">Aberto, fora do período</p>
                     <CartaoDoItem item={itemFora} ativo={itemFora.id === tarefaId} fontes={fontes} onEscolher={onEscolher} {...propsDoCartao(itemFora)} />
                   </div>
                 )}
@@ -592,13 +597,13 @@ export default function EstudioLista({
                   const atual = s.semana === semanaDeHoje;
                   const passada = !!s.semana && s.semana < semanaDeHoje;
                   return (
-                    <div key={s.semana || "sem-data"} data-semana={s.semana} className={`flex shrink-0 flex-col ${i < semanas.length - 1 ? "mr-3 border-r border-border pr-3" : ""}`}>
-                      <p className={`mb-1 whitespace-nowrap text-[11px] font-semibold ${atual ? "text-primary" : "text-muted-foreground"}`}>
+                    <div key={s.semana || "sem-data"} data-semana={s.semana} className={`flex shrink-0 flex-col ${i < semanas.length - 1 ? "mr-5" : ""}`}>
+                      <p className={`mb-1.5 inline-flex h-6 items-center self-start whitespace-nowrap rounded-full px-2.5 text-[11px] font-semibold ${atual ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground"}`}>
                         {s.semana ? `${atual ? "Esta semana · " : passada ? "Já passou · " : ""}${rotuloDaSemana(s.semana)}` : "Sem data"}
                       </p>
                       <ul className="flex">
                         {s.itens.map((item, j) => (
-                          <li key={item.id} className={j < s.itens.length - 1 ? "mr-1.5" : ""}>
+                          <li key={item.id} className={j < s.itens.length - 1 ? "mr-2" : ""}>
                             <CartaoDoItem item={item} ativo={item.id === tarefaId} fontes={fontes} onEscolher={onEscolher} {...propsDoCartao(item)} />
                           </li>
                         ))}

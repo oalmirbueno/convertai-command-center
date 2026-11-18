@@ -2907,8 +2907,240 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261105200000",
-      "path": "supabase/migrations/20261105200000_alcada_automatica.sql",
+      "version": "20261110120000",
+      "path": "supabase/migrations/20261110120000_dossie_preserva_conversas_whatsapp.sql",
+      "local_sha256": "2000536dfbaf9af51b0dc6cea04f85701a878b7c2c24e7d79288dde9e3a94bfa",
+      "remote_name": "dossie_preserva_conversas_whatsapp",
+      "remote_statements_sha256": "7fccbf2d4768206ccaedb0808921362a11406db686c3d57a925e8daa76a8af6d",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110210000",
+      "path": "supabase/migrations/20261110210000_lembrete_com_link_da_peca.sql",
+      "local_sha256": "d06aa0250d6b952d852eb15ae3ff6578d011ef543b60785471183947f1454d2d",
+      "remote_name": "lembrete_com_link_da_peca",
+      "remote_statements_sha256": "d7456d4d1968c17aa8d539c6ef425aab0e6937177a5190756918df492ef48aff",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110230000",
+      "path": "supabase/migrations/20261110230000_lembrete_sem_duplicar_email_e_whatsapp.sql",
+      "local_sha256": "7606bd2439d6ce10935a0c387c8a1916526a57b03529b9557561b0f48cf8ac8a",
+      "remote_name": "lembrete_sem_duplicar_email_e_whatsapp",
+      "remote_statements_sha256": "1297f5af871aa21bc8b066aa24b76b820f6428eba26700e8853412ab7ef2682e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110233000",
+      "path": "supabase/migrations/20261110233000_agentes_origem_execucao_e_organizacao.sql",
+      "local_sha256": "f9583c1c7b0e21cd8b4d0a7d412510a3969e6d994f3a7165cc2e3126862ba430",
+      "remote_name": "agentes_origem_execucao_e_organizacao",
+      "remote_statements_sha256": "82ed484a967231e4392a70f1e2d6dc075838ef4d6c17682989bd292ac3fa51ce",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110233100",
+      "path": "supabase/migrations/20261110233100_ritual_vencido_e_vigia_do_envio.sql",
+      "local_sha256": "af5eaef01e894e9b6b8147532ca59091412f67af33e07be70915824a23bce686",
+      "remote_name": "ritual_vencido_e_vigia_do_envio",
+      "remote_statements_sha256": "a499d753b6db5578c7abeb81123044869f8a186babaeebd93faa84fad957d934",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110234000",
+      "path": "supabase/migrations/20261110234000_agentes_origens_novas_e_elenco.sql",
+      "local_sha256": "6cdd63951e64f33e639c85fa174a754b036bb03ded32fb534e5b41d819217476",
+      "remote_name": "agentes_origens_novas_e_elenco",
+      "remote_statements_sha256": "765cbc87a88f4bc7f372bcf432f2e6640e685a3db31b55b8413ed0dee3e91ab6",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111143000",
+      "path": "supabase/migrations/20261111143000_reabrir_publicacao_cancelada.sql",
+      "local_sha256": "3b9b83b76b1dea190eda8c70656c886233902fb5de55ff9a4d9728770cbf89cd",
+      "remote_name": "reabrir_publicacao_cancelada",
+      "remote_statements_sha256": "5a1fa3b466aee3fa1bb5519ee86c25a7c489cd9b29a22180a4a0572571029fa1",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111143100",
+      "path": "supabase/migrations/20261111143100_retirar_arquivo_da_aprovacao.sql",
+      "local_sha256": "1caf73a155670807c540b8d2c2a419ccacef52e65d2d94cb38874cfc0a333879",
+      "remote_name": "retirar_arquivo_da_aprovacao",
+      "remote_statements_sha256": "0bf9a81e98721de6f83158a935eaed9e7860185a565671fac5361921c9b704a8",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111150000",
+      "path": "supabase/migrations/20261111150000_cancelada_so_por_pessoa_na_cadeia.sql",
+      "local_sha256": "549a5337460fe1399d5d481526c8b0425f98dad2882c154d5baf37ec2a680951",
+      "remote_name": "cancelada_so_por_pessoa_na_cadeia",
+      "remote_statements_sha256": "075678f6b8f0fc0fd36edaeff17c98bfc893444f9eedabae097da4feaceadfb2",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111150100",
+      "path": "supabase/migrations/20261111150100_cancelada_troca_de_conta_e_cadeia_longa.sql",
+      "local_sha256": "3e2c3bb9b1a69cddc97d77a3b9f62580b64677ad971f927fa02b3818c6521bbe",
+      "remote_name": "cancelada_troca_de_conta_e_cadeia_longa",
+      "remote_statements_sha256": "72313b1683d030cfdc6f9c20599a3dbd6a640d7566afca03fce529913604580e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111160000",
+      "path": "supabase/migrations/20261111160000_perfis_carrossel_laminas_e_molde.sql",
+      "local_sha256": "3244139ae3e754071cb7e4596789f83767567f91bea3a71629c60155670c35f7",
+      "remote_name": "perfis_carrossel_laminas_e_molde",
+      "remote_statements_sha256": "b4624cc0b1a36bc91f53d3528c58c8fc25805710d8e2a49e7f7bac86acfd504a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111170000",
+      "path": "supabase/migrations/20261111170000_perfis_moldes_resumo_e_vigia.sql",
+      "local_sha256": "52fe6a207ac7548ddf53cc321070ec7b0ced2c3fe1eeb7abf9534bbd71d2120d",
+      "remote_name": "perfis_moldes_resumo_e_vigia",
+      "remote_statements_sha256": "facfcdff0375279745d1414dc9c54ace731b406b0929c1be15c845b63dd253f6",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261112130000",
+      "path": "supabase/migrations/20261112130000_aviso_de_peca_nova_no_grupo.sql",
+      "local_sha256": "49b0040f6db96a10fb5fd0bfc1bbf664049238be3e9410fdb7ec6e72ac6b24c8",
+      "remote_name": "aviso_de_peca_nova_no_grupo",
+      "remote_statements_sha256": "968012ed0e33492a4497940a016df89b78ec0abc6e870f351475816ec2a71835",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261112150000",
+      "path": "supabase/migrations/20261112150000_aviso_inclui_pecas_antigas.sql",
+      "local_sha256": "40b2284cc950c5d35dc0c8a9aa42b6e1ce027340012a03b81db9a96a4462e7ea",
+      "remote_name": "aviso_inclui_pecas_antigas",
+      "remote_statements_sha256": "53ca0fc7e98a02b80208449d39de1158878367d218ef2c3611decfa88a0cb78a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113120000",
+      "path": "supabase/migrations/20261113120000_produto_crm_e_email.sql",
+      "local_sha256": "653c4ae38f084157d196ea23be31ac961dcc6d2aec82465f7dc0c13bd3e66809",
+      "remote_name": "produto_crm_e_email",
+      "remote_statements_sha256": "6bf121bec76f470b0c428b7a791abe736af4e2247e0a7c546da3102bc462220f",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113150000",
+      "path": "supabase/migrations/20261113150000_aprovacao_so_peca_que_vale.sql",
+      "local_sha256": "a7ac0091a750ac0c4dde7b749cdc2bab396d2741481efae9f90a62065dd7641f",
+      "remote_name": "aprovacao_so_peca_que_vale",
+      "remote_statements_sha256": "35e8eaf9e94227e2afe6b0b66ab82ab94c52b2d3398a7a477ec390f2875e1890",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113180000",
+      "path": "supabase/migrations/20261113180000_produto_precos_na_pagina_publica.sql",
+      "local_sha256": "4659cebd389e51d79a9fe9007857642e5a92dff188f27f8a8164c28ab5539f8e",
+      "remote_name": "produto_precos_na_pagina_publica",
+      "remote_statements_sha256": "485d3f4f34a0f1ae4dffc4b58a77e1a98fd0100ed9ae80f8bf06e2227aadd63a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113200000",
+      "path": "supabase/migrations/20261113200000_crm_cargos_campos_e_automacoes.sql",
+      "local_sha256": "89104a021d2e1a3c92479fb608f6177dd5ecf7b4bbad92930e786833c15d4f0c",
+      "remote_name": "crm_cargos_campos_e_automacoes",
+      "remote_statements_sha256": "c461b6f0a468677bd3ceb0b2ee7682bad5274ec006594af07c131d8249ae353f",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113210000",
+      "path": "supabase/migrations/20261113210000_crm_captacao_e_rastreamento.sql",
+      "local_sha256": "a4aad4d0917fd2bbcdff86d980aea5460901d85e273f9da8a472f8cbf153fe0b",
+      "remote_name": "crm_captacao_e_rastreamento",
+      "remote_statements_sha256": "652099d6949e62e5a9c8dda696a1d5b0249a0b135f3a07726c40616b87081d33",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113220000",
+      "path": "supabase/migrations/20261113220000_crm_espaco.sql",
+      "local_sha256": "807f6ef625e50fe72adee8091febd5941cd43f27483aac68696dfbe29f42c138",
+      "remote_name": "crm_espaco",
+      "remote_statements_sha256": "5bd43227e22e475423bd7ca0a3799bef68ed80b326950c2e934dfa50bad5a5d3",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114100000",
+      "path": "supabase/migrations/20261114100000_crm_meta_leads_e_whatsapp.sql",
+      "local_sha256": "24d632abac2bb330b363a711380d8dcede763594982b0f1ed2ee18cae25bc3f3",
+      "remote_name": "crm_meta_leads_e_whatsapp",
+      "remote_statements_sha256": "1d16033ce3e773da03c86f4c606f4348b3121be9d2896e260e1920903c420173",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114110000",
+      "path": "supabase/migrations/20261114110000_crm_whats_rotina.sql",
+      "local_sha256": "fb4765372564cf5e8535fe551aa6e15ca24bbdf498c5a42e505efa7344264b37",
+      "remote_name": "crm_whats_rotina",
+      "remote_statements_sha256": "ddcf1cb797f90c0d276376e835d6e58070aa2f262ced44822c4e5e500b06a767",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114180000",
+      "path": "supabase/migrations/20261114180000_editar_legenda_e_formato_aprovados.sql",
+      "local_sha256": "c2524df9ba66250b0c24bfd00b3adea5ae02da8f41ebe8e2e0f8ba3bdf2d0ba3",
+      "remote_name": "editar_legenda_e_formato_aprovados",
+      "remote_statements_sha256": "da6a57d601890fc29b867e426f1633643c34eb371976a77f4e872922f4f75064",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114190000",
+      "path": "supabase/migrations/20261114190000_extras_do_cliente.sql",
+      "local_sha256": "31a00ad5d6e342a12fb8382d7ea543416b919c5d317f535f4df8622fa3114b96",
+      "remote_name": "extras_do_cliente",
+      "remote_statements_sha256": "54b681dcacaeff91606847afa85312acfd8bf08b1a1cf404e52949a874a93c4b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114210000",
+      "path": "supabase/migrations/20261114210000_esteira_revisao_interna_e_modo_aprovacao.sql",
+      "local_sha256": "3d7a7a30f9270f9faabf540c97dc7c15a0819e39f510309862b48377769d922c",
+      "remote_name": "esteira_revisao_interna_e_modo_aprovacao",
+      "remote_statements_sha256": "7233412125ee4bbd744ce73dd0ece81109bbde77c81627839bc3677d02b5fad9",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114220000",
+      "path": "supabase/migrations/20261114220000_extras_variavel_sem_percentual.sql",
+      "local_sha256": "9e0e2f627c94a30331bda37266ec95c1832e5c9049bb569614af916928bfa1c1",
+      "remote_name": "extras_variavel_sem_percentual",
+      "remote_statements_sha256": "0c127696597950e3be0451b2da392bc7d5d194b2f96db1bf35694fb727e5da73",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261114230000",
+      "path": "supabase/migrations/20261114230000_marcar_precisa_do_dono.sql",
+      "local_sha256": "8875fd95dd68709ada17efe1bd129ec1de8647fad755d2a3a0a8716bb8b8d6de",
+      "remote_name": "marcar_precisa_do_dono",
+      "remote_statements_sha256": "067d1095724f56e122093c3c5baa1da36690d886782b132afec3134fccb3ecc4",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261116120000",
+      "path": "supabase/migrations/20261116120000_mesa_campanhas_arquivar.sql",
+      "local_sha256": "6127db13559161da458d10b663adc9b20618a9e1220bac3b377b98870df768e2",
+      "remote_name": "mesa_campanhas_arquivar",
+      "remote_statements_sha256": "7c40ff05843fda09855eff12bfe46c77fcf49359791bbbe5affeb7102aa594e3",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261116130000",
+      "path": "supabase/migrations/20261116130000_afiliado_dos_extras.sql",
+      "local_sha256": "258f649818902a6a4088bb75a562fafb495f712d391101eaaff3bc88981221de",
+      "remote_name": "afiliado_dos_extras",
+      "remote_statements_sha256": "1ea27fcab305a537213001bdb097a0a8ead324b83f3ff7783daa86264c756ac5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261116140000",
+      "path": "supabase/migrations/20261116140000_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",

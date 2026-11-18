@@ -95,7 +95,7 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
         recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: `${kits.length} ${kits.length === 1 ? "produto" : "produtos"}` }}
       />
       {!recolhido && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {kits.map((k) => {
             const capa = (fotos.data || []).find((f) => f.id === (k.frente_imagem_id || (k.refs[0] && k.refs[0].imagem_id))) || null;
             const ativo = k.id === kitId;
@@ -399,7 +399,7 @@ export default function EtapaCampanha() {
           <EscolherProduto kits={listaDeKits} onCriado={() => setNova(false)} />
         ) : (
           <div data-sem-produto="">
-            <EstadoVazio
+            <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
               icone={<Package className="h-5 w-5" />}
               titulo="Este cliente ainda não tem produto na Mesa Foto."
               descricao="Suba e identifique o produto lá: ele aparece aqui na hora."

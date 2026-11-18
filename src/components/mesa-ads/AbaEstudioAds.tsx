@@ -49,6 +49,7 @@ import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   arteDoPlanoPedida,
+  gerandoDeVerdade,
   laminasSemArte,
   pegarArteDoPlano,
   produzirLamina,
@@ -262,7 +263,8 @@ export default function AbaEstudioAds({
     refetchInterval: (q) => {
       const dados = (q.state.data || []) as any[];
       const montando = dados.some((t) => !(t.direcao && Array.isArray(t.direcao.cards) && t.direcao.cards.length));
-      const gerando = dados.some((t) => t.status === "gerando");
+      // 14/11/2026: "gerando" antigo (sem gravação recente) não mantém a releitura para sempre.
+      const gerando = dados.some((t) => gerandoDeVerdade(t));
       return temTrabalhos && (montando || gerando) ? 8000 : false;
     },
   });
@@ -470,7 +472,7 @@ export default function AbaEstudioAds({
     return (
       <div className="min-w-0 space-y-4">
         {painelDaCampanha}
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Clapperboard className="h-5 w-5" />}
           titulo="Nenhum criativo produzido ainda"
           descricao={'No Plano de teste, escolha os ângulos e os formatos e use "Produzir criativos", ou puxe as peças prontas de uma campanha.'}
@@ -623,8 +625,8 @@ export default function AbaEstudioAds({
             valor={vista}
             onEscolher={(v) => setVista(v === "acervo" ? "acervo" : "criativos")}
           />
-          {vista === "criativos" && <div className="mb-1 mr-2 inline-flex rounded-lg bg-secondary/40 p-0.5" role="group" aria-label="Formato do estúdio">
-            {([['arte', 'Arte', ImageIcon], ['video', 'Vídeo', Clapperboard]] as const).map(([id, nome, Icone]) => <button key={id} type="button" aria-pressed={midia === id} title={nome} aria-label={nome} onClick={() => setMidia(id)} className={`toque-compacto inline-flex h-7 w-8 items-center justify-center rounded-md ${midia === id ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground'}`}><Icone className="h-4 w-4" aria-hidden="true" /></button>)}
+          {vista === "criativos" && <div className="mb-1 mr-2 inline-flex rounded-full bg-muted/40 p-0.5" role="group" aria-label="Formato do estúdio">
+            {([['arte', 'Arte', ImageIcon], ['video', 'Vídeo', Clapperboard]] as const).map(([id, nome, Icone]) => <button key={id} type="button" aria-pressed={midia === id} title={nome} aria-label={nome} onClick={() => setMidia(id)} className={`toque-compacto inline-flex h-7 w-9 items-center justify-center rounded-full ${midia === id ? 'bg-card text-primary shadow-card' : 'text-muted-foreground'}`}><Icone className="h-4 w-4" aria-hidden="true" /></button>)}
           </div>}
           {vista === "criativos" && midia === "arte" && !unica && (
             <SeletorCompacto
@@ -730,7 +732,7 @@ export default function AbaEstudioAds({
         data-estudio-ads-grade=""
       >
         <aside className="ads-creative-list min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain" aria-label={midia === "video" ? "Criativos de vídeo" : "Criativos"}>
-          {midia === "video" && <div className="sticky top-0 z-10 space-y-2 bg-background pb-3"><p className="text-[12px] leading-4 font-semibold">Vídeos por campanha</p><input className="w-full rounded-md border bg-background px-2 py-1.5 text-[12px] leading-4" aria-label="Buscar base do vídeo" placeholder="Buscar anúncio…" value={buscaVideo} onChange={(e) => setBuscaVideo(e.target.value)} /><p className="text-[11px] text-muted-foreground">Escolha a base. Cada vídeo tem seu próprio andamento.</p>{(pedidosDeVideo.isError || arquivosDeVideo.isError) && <p role="alert" className="text-[12px] leading-4">Histórico indisponível. <button onClick={() => { void pedidosDeVideo.refetch(); void arquivosDeVideo.refetch(); }}>Conferir</button></p>}</div>}
+          {midia === "video" && <div className="sticky top-0 z-10 space-y-2 bg-background pb-3"><p className="text-[12px] leading-4 font-semibold">Vídeos por campanha</p><input className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-[12px] leading-4" aria-label="Buscar base do vídeo" placeholder="Buscar anúncio…" value={buscaVideo} onChange={(e) => setBuscaVideo(e.target.value)} /><p className="text-[11px] text-muted-foreground">Escolha a base. Cada vídeo tem seu próprio andamento.</p>{(pedidosDeVideo.isError || arquivosDeVideo.isError) && <p role="alert" className="text-[12px] leading-4">Histórico indisponível. <button onClick={() => { void pedidosDeVideo.refetch(); void arquivosDeVideo.refetch(); }}>Conferir</button></p>}</div>}
           {grupos.length === 0 && <p className="px-1 text-[12px] text-muted-foreground">Nenhum criativo nessa situação.</p>}
           {grupos.map((g) => {
             // Frente CR: a melhor variação do ângulo à vista (marcada); as outras recolhidas.
@@ -749,7 +751,7 @@ export default function AbaEstudioAds({
                     aria-current={ativo ? "true" : undefined}
                     className={`flex w-full min-w-0 items-center rounded-lg border p-1.5 text-left transition-colors ${ativo ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
                   >
-                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded-md bg-secondary">{midia === "video" ? <Clapperboard className={`mx-auto mt-3 h-6 w-6 ${videoResumo.quantidade ? "text-primary" : "text-muted-foreground"}`} /> : capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
+                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded-full bg-muted">{midia === "video" ? <Clapperboard className={`mx-auto mt-3 h-6 w-6 ${videoResumo.quantidade ? "text-primary" : "text-muted-foreground"}`} /> : capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center text-[12px] font-medium">
                         <span className="min-w-0 truncate">{midia === "video" ? nomeBaseVideo(c) : formatoDe(c.formato).rotulo}</span>
@@ -791,7 +793,7 @@ export default function AbaEstudioAds({
                       type="button"
                       aria-expanded={outrosAbertos}
                       onClick={() => setAbertosOutros((l) => (l.indexOf(g.chave) >= 0 ? l.filter((x) => x !== g.chave) : l.concat([g.chave])))}
-                      className="mt-1 flex w-full min-w-0 items-center rounded px-1 py-0.5 text-left text-[12px] text-muted-foreground hover:text-foreground"
+                      className="mt-1 flex w-full min-w-0 items-center rounded-sm px-1 py-0.5 text-left text-[12px] text-muted-foreground hover:text-foreground"
                     >
                       <ChevronDown className={`mr-1 h-3.5 w-3.5 shrink-0 transition-transform ${outrosAbertos ? "rotate-180" : ""}`} />
                       <span className="min-w-0 truncate">Outras variações ({outros.length})</span>
@@ -892,7 +894,7 @@ export default function AbaEstudioAds({
                       aria-label="Status do criativo"
                       value={aberto.status}
                       onChange={(e) => void mudar(aberto, { status: e.target.value as StatusDoCriativo }, "Status salvo")}
-                      className="h-8 rounded-md border border-input bg-background px-2 text-[12px] text-foreground"
+                      className="h-8 rounded-md border border-input bg-card px-2 text-[12px] text-foreground"
                     >
                       {STATUS_DO_CRIATIVO.map((s) => (
                         <option key={s.valor} value={s.valor}>
@@ -908,7 +910,7 @@ export default function AbaEstudioAds({
                       value={aberto.ad_id || ""}
                       disabled={anuncios.isLoading}
                       onChange={(e) => void mudar(aberto, { ad_id: e.target.value || null }, e.target.value ? "Criativo ligado ao anúncio" : "Vínculo desfeito")}
-                      className="h-8 min-w-0 max-w-[220px] rounded-md border border-input bg-background px-2 text-[12px] text-foreground"
+                      className="h-8 min-w-0 max-w-[220px] rounded-md border border-input bg-card px-2 text-[12px] text-foreground"
                     >
                       <option value="">{anuncios.isLoading ? "Carregando…" : listaDeAnuncios.length ? "Ligar a um anúncio" : "Sem anúncios importados"}</option>
                       {listaDeAnuncios.map((a) => (

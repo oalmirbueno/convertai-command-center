@@ -495,7 +495,7 @@ export default function PreviaEditavel({
           </span>
         </div>
         {estado.avisos.length > 0 && (
-          <p className={juntar(texto.auxiliar, "mb-2 whitespace-normal text-amber-700 dark:text-amber-400")} data-avisos-do-motor="">
+          <p className={juntar(texto.auxiliar, "mb-2 whitespace-normal text-warning")} data-avisos-do-motor="">
             {estado.avisos.join(" ")}
           </p>
         )}
@@ -530,7 +530,7 @@ export default function PreviaEditavel({
               </div>
             )}
             {fonteEfetiva === "motor" && semPonte && editando && (
-              <p className={juntar(texto.auxiliar, "mt-2 whitespace-normal text-amber-700 dark:text-amber-400")} data-motor-sem-ponte="">
+              <p className={juntar(texto.auxiliar, "mt-2 whitespace-normal text-warning")} data-motor-sem-ponte="">
                 O site do motor ainda não responde à edição. Edite na prévia rápida: vale igual.
               </p>
             )}

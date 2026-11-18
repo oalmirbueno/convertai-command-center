@@ -43,7 +43,8 @@ export function CabecalhoDaParte({
   // dentro no celular). Promovido em 26/09 (frente C); o nome local fica.
   return (
     <CabecalhoDeSecao
-      className={juntar(recolhido ? "items-center py-0.5" : "mb-3 items-center py-0.5", className)}
+      // v4: no celular, ação larga desce para a linha de baixo em vez de espremer o título em "Result…".
+      className={juntar(recolhido ? "items-center py-0.5" : "mb-3 items-center py-0.5", "max-sm:flex-wrap max-sm:[&>*:first-child]:basis-44 max-sm:[&>*:last-child]:max-w-full", className)}
       titulo={titulo}
       ajuda={ajuda}
       descricao={descricao}
@@ -106,7 +107,7 @@ export function SeloDaVersao({ criativo, className = "" }: { criativo: Pick<Cria
   if (!v) return null;
   return (
     <span
-      className={`inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded border border-border px-1 text-[11px] font-semibold leading-none text-muted-foreground ${className}`}
+      className={`inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-sm border border-border px-1 text-[11px] font-semibold leading-none text-muted-foreground ${className}`}
       title={`Versão ${v} do teste A/B do ângulo`}
       aria-label={`Versão ${v} do teste A/B`}
       data-versao-do-teste={v}
@@ -178,7 +179,7 @@ export function BarraDeNota({ rotulo, nota, inverso = false, dica }: { rotulo: s
         <span className="truncate">{rotulo}</span>
         <span className="ml-1 shrink-0 tabular-nums text-foreground">{nota === null ? "-" : nota.toLocaleString("pt-BR")}</span>
       </div>
-      <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary" role="meter" aria-label={rotulo} aria-valuemin={0} aria-valuemax={10} aria-valuenow={nota === null ? undefined : nota}>
+      <div className="mt-0.5 h-2 w-full overflow-hidden rounded-full bg-muted" role="meter" aria-label={rotulo} aria-valuemin={0} aria-valuemax={10} aria-valuenow={nota === null ? undefined : nota}>
         <div className={`h-full rounded-full ${cor}`} style={{ width: `${nota === null ? 0 : nota * 10}%` }} />
       </div>
     </div>
@@ -193,7 +194,7 @@ export function BarraDeNota({ rotulo, nota, inverso = false, dica }: { rotulo: s
 export function Foto({ src, alt, className = "", contain = false }: { src: string | null | undefined; alt: string; className?: string; contain?: boolean }) {
   const [falhou, setFalhou] = useState(false);
   if (!src || falhou) {
-    return <div className={`flex items-center justify-center bg-secondary/60 text-[11px] text-muted-foreground ${className}`}>{src ? "Imagem indisponível" : "Sem imagem"}</div>;
+    return <div className={`flex items-center justify-center bg-muted/60 text-[11px] text-muted-foreground ${className}`}>{src ? "Imagem indisponível" : "Sem imagem"}</div>;
   }
   if (/^https?:\/\//i.test(src) && src.indexOf("/storage/v1/") < 0) {
     return <img src={src} alt={alt} loading="lazy" onError={() => setFalhou(true)} className={`${contain ? "object-contain" : "object-cover"} ${className}`} />;
@@ -217,7 +218,7 @@ export function BotaoCopiar({ texto, rotulo = "Copiar", className = "" }: { text
           window.setTimeout(() => setFeito(false), 1500);
         } else toast.error("Não foi possível copiar", { description: "Selecione o texto e copie à mão." });
       }}
-      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground ${className}`}
+      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${className}`}
     >
       {feito ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
@@ -236,14 +237,14 @@ export function SeloDoSinal({ sinal, className = "" }: { sinal: string; classNam
 
 /** Classe das pílulas de filtro e escolha (mesma em todas as etapas). */
 export const pilula = (ativa: boolean) =>
-  `mb-1.5 mr-1.5 inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition-colors ${
-    ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
+  `mb-1.5 mr-1.5 inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors ${
+    ativa ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-muted-foreground hover:text-foreground"
   }`;
 
 /** Abas simples (botões com role=tab): funcionam em qualquer navegador e nos testes. */
 export function Abas<T extends string>({ valor, opcoes, onMudar, rotulo, className = "" }: { valor: T; opcoes: { valor: T; rotulo: ReactNode; oculta?: boolean }[]; onMudar: (v: T) => void; rotulo: string; className?: string }) {
   return (
-    <div role="tablist" aria-label={rotulo} className={`flex min-w-0 flex-wrap items-center border-b border-border ${className}`}>
+    <div role="tablist" aria-label={rotulo} className={`-mb-1 flex min-w-0 flex-wrap items-center ${className}`}>
       {opcoes.filter((o) => !o.oculta).map((o) => {
         const ativa = o.valor === valor;
         return (
@@ -253,7 +254,7 @@ export function Abas<T extends string>({ valor, opcoes, onMudar, rotulo, classNa
             role="tab"
             aria-selected={ativa}
             onClick={() => onMudar(o.valor)}
-            className={`-mb-px mr-1 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors ${ativa ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            className={`toque-compacto mb-1 mr-1 inline-flex h-8 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium transition-colors ${ativa ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
           >
             {o.rotulo}
           </button>
@@ -270,7 +271,7 @@ export function Diagnostico({ valor }: { valor: DiagnosticoDoCriativo | string |
   const texto = (v: unknown) => (typeof v === "string" ? v : "");
   return (
     <div className="min-w-0 space-y-0.5" data-diagnostico="">
-      {texto(valor.sinal) && <span className="inline-block rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning">{texto(valor.sinal)}</span>}
+      {texto(valor.sinal) && <span className="inline-block rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning">{texto(valor.sinal)}</span>}
       {texto(valor.leitura) && <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">{texto(valor.leitura)}</p>}
       {texto(valor.acao) && <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Próximo passo: {texto(valor.acao)}</p>}
     </div>

@@ -80,7 +80,7 @@ export function AjustesDaCena({ canvas, no, onMudar, onAnimar }: { canvas: Canva
   const mudar = (m: Partial<CenaDoResultado>) => cena && onMudar({ cena: { ...cena, ...m } });
   if (!cena) {
     return (
-      <div className="min-w-0 rounded-xl border border-white/10 bg-zinc-900/60 p-2.5" data-cena-do-resultado="nao">
+      <div className="min-w-0 rounded-lg border border-white/10 bg-zinc-900/60 p-2.5" data-cena-do-resultado="nao">
         <p className="mb-1.5 flex items-center text-[12px] font-semibold">
           <Clapperboard className="mr-1.5 h-3.5 w-3.5 text-emerald-300" /> Cena da história
         </p>
@@ -95,7 +95,7 @@ export function AjustesDaCena({ canvas, no, onMudar, onAnimar }: { canvas: Canva
   }
   const pessoas = entradasDoGerar(canvas, no.id).filter((e) => e.entrada === "pessoa").length;
   return (
-    <div className="min-w-0 space-y-2 rounded-xl border border-emerald-400/30 bg-zinc-900/60 p-2.5" data-cena-do-resultado="sim">
+    <div className="min-w-0 space-y-2 rounded-lg border border-emerald-400/30 bg-zinc-900/60 p-2.5" data-cena-do-resultado="sim">
       <div className="flex min-w-0 items-center">
         <p className="flex min-w-0 flex-1 items-center text-[12px] font-semibold">
           <Clapperboard className="mr-1.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
@@ -164,7 +164,7 @@ export function EditorDaLigacaoDeResultado({
   const foto = fotoDaLigacao(origem, ligacao.imagem_id, aprovadasDe(fontes));
   return (
     <div className="min-w-0 space-y-2" data-ligacao-de-resultado={ligacao.id}>
-      <div className="flex min-w-0 items-center rounded-xl border border-white/10 bg-zinc-900/60 p-2">
+      <div className="flex min-w-0 items-center rounded-lg border border-white/10 bg-zinc-900/60 p-2">
         <span className="relative block shrink-0 overflow-hidden rounded-lg bg-zinc-900" style={{ width: 44, height: 52 }}>
           {foto ? <MiniaturaDoStorage bucket={foto.storage_bucket} caminho={foto.storage_path || foto.url} alt="" largura={120} className="h-full w-full" /> : null}
         </span>

@@ -200,6 +200,18 @@ describe("entregar cria ou atualiza o mesmo item da Agenda", () => {
     expect(r.payload?.idempotency_key).not.toBe(r1.payload?.idempotency_key);
   });
 
+  it("revisão com a conta só cancelada não cria publicação nova (Para Si)", async () => {
+    const existente = postExistente({
+      primary_file_id: "velho",
+      publications: [pubPlanejada({ status: "cancelled", scheduled_at: "2026-10-01T14:30:00.000Z" })],
+    });
+    const r = await planoDaSincronizacao(peca({ rodada: 2, fileIds: ["n1"] }), existente, { conta, arquivoAtualEditavel: false });
+    expect(r.acao).toBe("revisao");
+    expect(r.payload?.revision_of_post_id).toBe(existente.id);
+    expect(r.payload?.publications).toEqual([]);
+    expect(r.aviso).toMatch(/cancelada/);
+  });
+
   it("post já agendado ou publicado com outra arte: não troca sozinho (trava contra publicar a peça errada)", async () => {
     for (const status of ["scheduled", "published"]) {
       const existente = postExistente({ primary_file_id: "outra", publications: [pubPlanejada({ status })] });
@@ -414,6 +426,7 @@ describe("ações de publicação da peça", () => {
       transition_editorial_publication: (args) => {
         // O banco de mentira acompanha a transição para a releitura.
         tabelas.editorial_publications[0].status = args.p_action === "cancel" ? "cancelled" : "planned";
+        if (args.p_action === "reopen") tabelas.editorial_publications[0].scheduled_at = null;
         tabelas.editorial_publications[0].version = Number(tabelas.editorial_publications[0].version) + 1;
         return { data: { version: tabelas.editorial_publications[0].version } };
       },
@@ -422,9 +435,7 @@ describe("ações de publicação da peça", () => {
     expect(db.chamadas.map((c) => `${c.nome}:${c.args.p_action || ""}`)).toEqual([
       "transition_editorial_publication:cancel",
       "transition_editorial_publication:reopen",
-      "save_editorial_post:",
     ]);
-    expect(((db.chamadas[2].args.p_payload as Linha).publications as Linha[])[0].scheduled_at).toBeNull();
     expect(r.quando).toBeNull();
   });
 
@@ -454,6 +465,40 @@ describe("ações de publicação da peça", () => {
     expect(((saves[1].args.p_payload as Linha).publications as Linha[])[0].scheduled_at).toBe("2026-10-01T14:30:00.000Z");
   });
 
+  it("sincronizar: revisão de revisão não recria a conta cancelada de propósito lá atrás (A → B → C)", async () => {
+    const A = "a0000000-0000-4000-8000-000000000000";
+    const tabelas = {
+      tasks: [{ id: "t1", project_id: "pr1", title: "Dia", deleted_at: null }],
+      files: [
+        { id: N1, file_name: "Dia", caption: "leg nova", description: "o", visibility: "internal", approval_status: "none", agency_approval_status: "not_requested", locked_at: null, parent_file_id: null, archived_at: null, status: "ready" },
+        { id: VELHO, visibility: "approval", approval_status: "rejected", agency_approval_status: "approved", locked_at: "x" },
+      ],
+      editorial_post_internal: [
+        { post_id: A, task_id: "t1", revision_of_post_id: null, idempotency_key: "77777777-7777-4777-8777-777777777770", responsible_id: null, internal_notes: null },
+        { post_id: P1, task_id: "t1", revision_of_post_id: A, idempotency_key: "77777777-7777-4777-8777-777777777777", responsible_id: null, internal_notes: null },
+      ],
+      editorial_posts: [
+        { id: A, version: 9, client_id: "c1", project_id: "pr1", primary_file_id: "outro", title: "Dia", content_type: "carousel", objective: "o", default_caption: "leg", production_status: "ready", archived_at: "2026-09-21", created_at: "2026-09-19" },
+        { id: P1, version: 4, client_id: "c1", project_id: "pr1", primary_file_id: VELHO, title: "Dia", content_type: "carousel", objective: "o", default_caption: "leg", production_status: "ready", archived_at: null, created_at: "2026-09-20" },
+      ],
+      // A tinha o Instagram cancelado de propósito; B nasceu sem publicação.
+      editorial_publications: [{ id: "pubA", version: 3, post_id: A, status: "cancelled", platform: "instagram", external_account_id: "acc", file_id: null, caption: "leg", first_comment: null, alt_text: null, scheduled_at: null, scheduled_timezone: "America/Sao_Paulo" }],
+      editorial_publication_internal: [{ publication_id: "pubA", idempotency_key: "99999999-9999-4999-8999-999999999990" }],
+      editorial_events: [{ publication_id: "pubA", event_type: "publication_cancelled", metadata: { failure_reason: "cancelada de proposito" }, created_at: "2026-09-20T10:00:00Z" }],
+      project_external_accounts: [{ project_id: "pr1", client_id: "c1", external_account_id: "acc" }],
+      external_accounts: [{ id: "acc", platform: "instagram", status: "active", client_id: "c1" }],
+      external_account_connections: [],
+    };
+    const db = bancoFalso(tabelas);
+    const r = await sincronizarPecaNaAgenda({ db: db.cliente, doChamador: db.cliente, userId: "u" }, { id: "w1", client_id: "c1", task_id: "t1", status: "entregue", file_ids: [N1, N2], legenda: "leg nova", entrega_rodada: 3, post_id: P1 });
+    expect(r.acao).toBe("revisao");
+    expect(r.aviso).toMatch(/cancelada/);
+    const saves = db.chamadas.filter((c) => c.nome === "save_editorial_post");
+    expect(saves).toHaveLength(1);
+    expect((saves[0].args.p_payload as Linha).revision_of_post_id).toBe(P1);
+    expect((saves[0].args.p_payload as Linha).publications).toEqual([]);
+  });
+
   it("publicacaoDaPeca escolhe a do Instagram viva", () => {
     const p = publicacaoDaPeca([
       pubPlanejada({ id: "fb", platform: "facebook" }),
@@ -461,6 +506,17 @@ describe("ações de publicação da peça", () => {
       pubPlanejada({ id: "ig" }),
     ]);
     expect(p?.id).toBe("ig");
+  });
+
+  it("publicacaoDaPeca devolve a cancelada da mesma conta quando não há viva", () => {
+    const p = publicacaoDaPeca([
+      pubPlanejada({ id: "fb-cancelada", platform: "facebook", status: "cancelled" }),
+      pubPlanejada({ id: "ig-cancelada", status: "cancelled" }),
+    ]);
+    expect(p?.id).toBe("ig-cancelada");
+    const estado = estadoDaPublicacao({ trabalho: { status: "entregue", post_id: "p1" }, publicacao: p, agora: new Date() });
+    expect(estado.codigo).toBe("publicacao_cancelada");
+    expect(estado.detalhe).toMatch(/Publicação cancelada/);
   });
 });
 
@@ -540,7 +596,7 @@ describe("contratos", () => {
   it("nada publica direto na Meta: só as RPCs da Agenda (o ciclo do banco publica)", () => {
     expect(agenda).not.toMatch(/graph\.facebook\.com|media_publish|autopublish_jobs/);
     const rpcs = agenda.match(/rpc\("([a-z_]+)"/g) || [];
-    for (const r of rpcs) expect(['rpc("save_editorial_post"', 'rpc("transition_editorial_publication"', 'rpc("archive_editorial_post"']).toContain(r);
+    for (const r of rpcs) expect(['rpc("save_editorial_post"', 'rpc("transition_editorial_publication"', 'rpc("archive_editorial_post"', 'rpc("reagendar_publicacao_cancelada"']).toContain(r);
   });
 
   it("a Agenda abre o item certo: o card do post da peça mostra a publicação da Mesa", () => {

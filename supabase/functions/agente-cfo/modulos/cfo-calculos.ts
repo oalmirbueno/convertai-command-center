@@ -1045,7 +1045,7 @@ export function avaliarGasto(r: Retrato, g: GastoProposto): AvaliacaoDoGasto {
 
 // ------------------------------------------------------------------ texto do CFO (sem IA)
 
-export type IntencaoDoCFO = "saude" | "projecao" | "posso_gastar" | "onde_cortar" | "este_mes" | "plano" | "lancar" | "meta" | "nova_meta" | "simular" | "erros" | "outra";
+export type IntencaoDoCFO = "saude" | "historico" | "projecao" | "posso_gastar" | "onde_cortar" | "este_mes" | "plano" | "lancar" | "meta" | "nova_meta" | "simular" | "erros" | "outra";
 
 /**
  * A resposta do CFO escrita só com o retrato (reserva quando a IA não está
@@ -1168,6 +1168,8 @@ export function parecerRecorrente(texto: string): boolean {
 export function intencaoPorPalavras(texto: string): IntencaoDoCFO {
   const t = semAcento(String(texto || "")).toLowerCase();
   if (/(posso gastar|da para gastar|cabe no|consigo pagar|posso pagar|posso comprar|posso contratar|vale gastar)/.test(t)) return "posso_gastar";
+  // 16/11: o que já aconteceu (lucro, quanto sobrou, comparar meses) vai para o histórico.
+  if (/(lucro|lucrei|sobrou|resultado do mes|mes passado|mes anterior|historico|compar|melhor mes|pior mes|quanto entrou|quanto saiu|margem)/.test(t)) return "historico";
   // Lote B (09/10): "crie uma meta de teste" virou troca da meta mensal. Criar, editar e simular são intenções separadas.
   if (/(simul|e se eu|e se a gente|cenario|hipotetic)/.test(t)) return "simular";
   if (/(mud|alter|defin|ajust|troc|sub).{0,30}meta (mensal|do mes)|meta (mensal|do mes).{0,20}(para|vai pra|em) /.test(t)) return "meta";

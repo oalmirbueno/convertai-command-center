@@ -1,3 +1,4 @@
+import { assinarCaminho } from "@/lib/assinaturasEmLote";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { useSearchParams } from "react-router-dom";
@@ -7,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { useToast } from "@/hooks/use-toast";
+import { mensagemDaRetirada, podeRetirarDaAprovacao, retirarDaAprovacao } from "@/lib/fileApprovalActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,6 +37,7 @@ import {
   handoffWorkspaceFileToFiles,
   suggestedFileType,
 } from "@/lib/workspaceFileHandoff";
+import { ErroDeMovimento, moverPeloPainel } from "@/lib/workspaceMoverCliente";
 import { useWorkspaceUploads } from "@/hooks/useWorkspaceUploads";
 import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel";
 import { TemplatePicker } from "@/components/workspace/TemplatePicker";
@@ -919,11 +922,11 @@ export default function Workspace() {
 
   async function signedUrl(path: string) {
     if (signedUrls[path]) return signedUrls[path];
-    const { data, error } = await supabase.storage.from("workspace").createSignedUrl(path, 3600);
-    if (error) throw error;
-    if (data?.signedUrl) {
-      setSignedUrls(p => ({ ...p, [path]: data.signedUrl }));
-      return data.signedUrl;
+    const linha = await assinarCaminho("workspace", path, 3600);
+    if (linha.signedUrl && !linha.error) {
+      const url = linha.signedUrl;
+      setSignedUrls(p => ({ ...p, [path]: url }));
+      return url;
     }
     throw new Error("URL do arquivo indisponível.");
   }
@@ -1568,33 +1571,36 @@ export default function Workspace() {
   }
 
   async function moveNode(n: Node, targetParentId: string | null) {
-    if (n.__virtual) {
-      // Virtual file: change files.folder to match target virtual folder or clear
-      if (n.kind === "file" && n.__file_id) {
-        let newFolder: string | null = null;
-        if (targetParentId && targetParentId.startsWith(VIRT_PREFIX + "folder:")) {
-          newFolder = targetParentId.substring((VIRT_PREFIX + "folder:").length);
-        }
-        await (supabase as any).from("files").update({ folder: newFolder }).eq("id", n.__file_id);
-        toast({ title: "Movido" }); invalidate(); return;
-      }
-      toast({ title: "Ação não suportada", description: "Pastas virtuais não podem ser movidas.", variant: "destructive" });
-      return;
+    try {
+      const resultado = await moverPeloPainel({
+        virtual: !!n.__virtual,
+        kind: n.kind,
+        id: n.id,
+        fileId: n.__file_id || null,
+        clientId,
+        userId: user?.id || null,
+        scope,
+        nome: n.name,
+        mime: n.mime,
+        sizeBytes: n.size_bytes,
+        storagePath: n.storage_path,
+        targetParentId,
+        parentIdAtual: n.parent_id,
+        ehDescendente: (origemId, destinoId) => isDescendant(origemId, destinoId),
+      });
+      if (!resultado.mudou) return;
+      toast({ title: "Movido" });
+      invalidate();
+    } catch (erro) {
+      const destinoGravado = erro instanceof ErroDeMovimento && erro.destinoGravado;
+      const mensagem = erro instanceof Error ? erro.message : "Tente novamente.";
+      toast({
+        title: destinoGravado ? "Entrou na pasta, mas continua na origem" : "Erro ao mover",
+        description: mensagem,
+        variant: "destructive",
+      });
+      if (destinoGravado) invalidate();
     }
-    if (targetParentId && isVirt(targetParentId)) {
-      toast({ title: "Destino inválido", description: "Não é possível mover para pastas de Arquivos.", variant: "destructive" });
-      return;
-    }
-    if (n.kind === "folder" && isDescendant(n.id, targetParentId)) {
-      toast({ title: "Movimento inválido", description: "Não pode mover para dentro de si mesma.", variant: "destructive" });
-      return;
-    }
-    if (n.parent_id === targetParentId) return;
-    const { error } = await supabase.from("workspace_nodes")
-      .update({ parent_id: targetParentId }).eq("id", n.id);
-    if (error) { toast({ title: "Erro ao mover", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "Movido" });
-    invalidate();
   }
 
   async function createFolderAndMove() {
@@ -1626,6 +1632,41 @@ export default function Workspace() {
     () => ((projects || []) as any[]).filter((project) => project.client_id === clientId),
     [projects, clientId],
   );
+
+  function arquivoPendenteDoNo(n: Node | null) {
+    if (!n || n.kind !== "file") return null;
+    const id = n.__virtual ? n.__file_id : n.sent_for_approval_file_id;
+    if (!id) return null;
+    const linha = ((clientFiles || []) as Array<{ id: string; parent_file_id?: string | null; archived_at?: string | null; locked_at?: string | null; visibility?: string | null; approval_status?: string | null }>).find((f) => f.id === id);
+    if (linha) return linha;
+    if (n.__virtual && n.__visibility === "approval" && n.__approval_status === "pending") {
+      return { id, parent_file_id: null, archived_at: null, locked_at: null, visibility: "approval", approval_status: "pending" };
+    }
+    return null;
+  }
+
+  async function retirarNoDaAprovacao(n: Node | null) {
+    const arquivo = arquivoPendenteDoNo(n);
+    if (!arquivo || !podeRetirarDaAprovacao(arquivo)) return;
+    const segue = await confirmDialog({
+      title: "Retirar da aprovação?",
+      description: "O pedido pendente do cliente é cancelado. O arquivo fica interno e invisível para ele. Nada é apagado.",
+      confirmLabel: "Retirar da aprovação",
+    });
+    if (!segue) return;
+    try {
+      await retirarDaAprovacao(arquivo.id);
+      toast({ title: "Arquivo retirado da aprovação", description: "Voltou ao rascunho interno. O cliente não vê mais." });
+      setSelected(null);
+      invalidate();
+    } catch (erro) {
+      toast({
+        title: "Não foi possível retirar da aprovação",
+        description: mensagemDaRetirada(erro),
+        variant: "destructive",
+      });
+    }
+  }
 
   function canSendToFiles(n: Node | null) {
     return !!n
@@ -2260,17 +2301,17 @@ export default function Workspace() {
           type="button"
           aria-label={`Contexto: ${contextLabel}`}
           className={juntar(
-            "inline-flex h-9 min-w-0 max-w-[120px] items-center rounded-md border border-border bg-transparent px-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-muted sm:max-w-[260px]",
+            // v4 G2: no celular vira círculo só com o ícone (o caminho já mostra o nome do contexto) e o "…" volta a caber na linha.
+            "inline-flex h-9 w-9 min-w-0 items-center justify-center rounded-full border border-border bg-card text-[13px] font-medium text-foreground transition-colors hover:bg-muted sm:w-auto sm:max-w-[260px] sm:justify-start sm:px-3",
             pickerOpen && "bg-muted",
             foco,
           )}
         >
           {scope === "global"
-            ? <Globe2 className="mr-1.5 hidden h-4 w-4 shrink-0 text-primary sm:inline-block" aria-hidden="true" />
-            : <Folder className="mr-1.5 hidden h-4 w-4 shrink-0 text-primary sm:inline-block" aria-hidden="true" />}
-          <span className="min-w-0 truncate sm:hidden">{scope === "global" ? "Global" : contextLabel}</span>
+            ? <Globe2 className="h-4 w-4 shrink-0 text-primary sm:mr-1.5" aria-hidden="true" />
+            : <Folder className="h-4 w-4 shrink-0 text-primary sm:mr-1.5" aria-hidden="true" />}
           <span className="hidden min-w-0 truncate sm:inline">{contextLabel}</span>
-          <ChevronDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronDown className="ml-1.5 hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:inline-block" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -2354,9 +2395,7 @@ export default function Workspace() {
   const acoesDoCabecalho = (
     <>
       {seletorDeContexto}
-      <button type="button" onClick={() => setNewFolderOpen(true)} className={juntar(botao.secundario, "hidden sm:inline-flex")}>
-        <FolderPlus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Pasta
-      </button>
+      {/* v4 (15/11, passada estrutural): uma ação principal (Enviar); "Nova pasta" mora no "…" em toda largura. */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" aria-label="Mais ações" className={juntar(botao.icone, "h-9 w-9")}>
@@ -2364,7 +2403,7 @@ export default function Workspace() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
-          <DropdownMenuItem className="sm:hidden" onSelect={() => setNewFolderOpen(true)}>
+          <DropdownMenuItem onSelect={() => setNewFolderOpen(true)}>
             <FolderPlus className="mr-2 h-3.5 w-3.5" /> Nova pasta
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setTemplateOpen(true)}>
@@ -2409,7 +2448,7 @@ export default function Workspace() {
         type="button"
         onClick={() => fileInputRef.current?.click()}
         aria-label="Enviar arquivos"
-        className={juntar(botao.primario, "px-2.5 sm:px-3.5")}
+        className={juntar(botao.primario, "px-2.5 max-sm:order-first sm:px-3.5")}
       >
         <Upload className="h-4 w-4" aria-hidden="true" />
         <span className="ml-1.5 hidden sm:inline">Enviar</span>
@@ -2475,8 +2514,8 @@ export default function Workspace() {
                   onDrop={(e) => onDropFolder(e, null)}
                   aria-current={!parent ? "page" : undefined}
                   className={juntar(
-                    "shrink-0 rounded px-1.5 py-1 text-[13px] transition-colors",
-                    !parent ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                    "toque-compacto inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[13px] font-medium transition-colors",
+                    !parent ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     dragOverId === "root" && "bg-primary/10 text-primary ring-1 ring-primary/40",
                     foco,
                   )}
@@ -2492,8 +2531,8 @@ export default function Workspace() {
                         type="button"
                         aria-current={ultima ? "page" : undefined}
                         className={juntar(
-                          "max-w-[180px] truncate rounded px-1.5 py-1 text-[13px] transition-colors",
-                          ultima ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                          "toque-compacto h-8 max-w-[180px] truncate rounded-full px-3 text-[13px] font-medium transition-colors",
+                          ultima ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                           foco,
                         )}
                         onClick={() => nav.jumpTo(i)}
@@ -2608,7 +2647,7 @@ export default function Workspace() {
           />
           <div
             role="menu"
-            className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+            className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-pop"
             style={{
               left: Math.min(menuDaArea.x, window.innerWidth - 240),
               top: Math.min(menuDaArea.y, window.innerHeight - 190),
@@ -2673,7 +2712,7 @@ export default function Workspace() {
                 descricao="Arraste arquivos, cole uma imagem (Ctrl+V), envie ou crie uma subpasta."
               />
             ) : view === "grid" ? (
-              <ul className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6">
+              <ul className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 sm:gap-x-5 lg:grid-cols-4 desk:grid-cols-5">
                 {filtered.map(n => {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";
@@ -2696,11 +2735,13 @@ export default function Workspace() {
                       {/* Cartão de mídia: a imagem manda, proporção por padding-bottom, nada escurecido. */}
                       <div
                         className={juntar(
-                          "relative overflow-hidden rounded-lg transition-shadow",
-                          temImagem ? "bg-muted" : superficie.poco,
+                          "relative overflow-hidden transition-shadow",
+                          // Pasta e arquivo sem miniatura: cartão branco (14/11/2026); mídia continua com a imagem mandando.
+                          // v4 (15/11): pasta vazia vira zona listrada (o vazio das referências), sem cartão.
+                          temImagem ? "rounded-lg bg-muted" : isFolder && !n.__virtual && total === 0 ? "rounded-lg border border-dashed border-border" : superficie.painel,
                           dragActive ? "ring-2 ring-primary" : "group-hover:ring-1 group-hover:ring-border",
                         )}
-                        style={{ paddingBottom: "100%" }}
+                        style={{ paddingBottom: "100%", ...(!temImagem && isFolder && !n.__virtual && total === 0 ? { backgroundImage: "repeating-linear-gradient(135deg, hsl(var(--muted-foreground) / 0.12) 0, hsl(var(--muted-foreground) / 0.12) 2px, transparent 2px, transparent 8px)" } : {}) }}
                       >
                         {temImagem ? (
                           <WorkspaceThumb
@@ -2711,9 +2752,16 @@ export default function Workspace() {
                           />
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <Icon className={juntar("h-10 w-10", isFolder ? "text-primary" : KIND_META[k].color)} aria-hidden="true" />
+                            {/* Rodada ousada (15/11/2026): o ícone num círculo grande; a pasta no círculo de tinta. */}
+                            <span className={juntar("relative flex h-16 w-16 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-105 max-sm:h-14 max-sm:w-14", isFolder ? (n.__virtual || total > 0 ? "bg-foreground text-background" : "bg-card text-muted-foreground ring-1 ring-border") : "bg-muted")}>
+                              <Icon className={juntar("h-7 w-7", isFolder ? "" : KIND_META[k].color)} aria-hidden="true" />
+                              {/* v4 (15/11): quantos itens a pasta tem, num selo no círculo. */}
+                              {isFolder && !n.__virtual && total > 0 && (
+                                <span className="absolute -right-1.5 -top-1.5 inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-accent-solid px-1.5 text-[11px] font-semibold tabular-nums text-on-accent ring-2 ring-card" aria-hidden="true">{total > 99 ? "99+" : total}</span>
+                              )}
+                            </span>
                             {!isFolder && extOf(n.name) && (
-                              <span className={juntar(etiqueta, "mt-2 bg-background font-mono", KIND_META[k].accent)}>{extOf(n.name)}</span>
+                              <span className={juntar(etiqueta, "mt-3 rounded-full bg-muted px-2", KIND_META[k].accent)}>{extOf(n.name)}</span>
                             )}
                           </div>
                         )}
@@ -2738,8 +2786,8 @@ export default function Workspace() {
                           </span>
                         )}
                       </div>
-                      <div className="mt-1.5 min-w-0 pr-1">
-                        <p className="truncate text-[13px] font-medium leading-5 text-foreground">{n.name}</p>
+                      <div className="mt-2.5 min-w-0 px-1">
+                        <p className="truncate text-[13px] font-semibold leading-5 text-foreground">{n.name}</p>
                         <p className={juntar(texto.auxiliar, "truncate tabular-nums")}>
                           {isFolder
                             ? (n.__virtual ? "Seção" : total === 0 ? "Vazia" : `${total} ${total === 1 ? "item" : "itens"}`)
@@ -2763,7 +2811,7 @@ export default function Workspace() {
               </ul>
 
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden p-2 sm:p-3")}>
                 {filtered.map(n => {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";
@@ -2779,7 +2827,7 @@ export default function Workspace() {
                       onDragLeave={() => isFolder && setDragOverId(null)}
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
                       className={juntar(
-                        "relative flex min-w-0 cursor-pointer items-center px-2 py-2 transition-colors hover:bg-muted/40",
+                        "relative flex min-w-0 cursor-pointer items-center rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/60",
                         dragActive && "bg-primary/10 ring-1 ring-primary/40",
                       )}
                     >
@@ -2789,8 +2837,10 @@ export default function Workspace() {
                         onClick={() => isFolder ? nav.push(n) : setSelected(n)}
                         className={juntar("absolute inset-0 z-[1]", foco)}
                       />
-                      <Icon className={juntar("mr-3 h-4 w-4 shrink-0", isFolder ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate text-[13px]">{n.name}</span>
+                      <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full", isFolder ? "bg-foreground text-background" : "bg-muted text-muted-foreground")} aria-hidden="true">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{n.name}</span>
                       {isInboxQuarantined(n) && <span className={juntar(etiqueta, "ml-2 bg-amber-500/15 text-amber-500")}>Quarentena</span>}
                       {isWorkspaceFileLinked(n) && <span className={juntar(etiqueta, "ml-2 bg-success/15 text-success")}>Em Arquivos</span>}
                       {!isFolder && n.size_bytes ? (
@@ -2870,6 +2920,11 @@ export default function Workspace() {
                   {canSendToFiles(selected) && (
                     <Button size="sm" onClick={() => openHandoff(selected)} className="h-9">
                       <Send className="mr-1.5 h-3.5 w-3.5" /> Enviar para Arquivos
+                    </Button>
+                  )}
+                  {(profile?.role === "admin" || profile?.role === "manager") && podeRetirarDaAprovacao(arquivoPendenteDoNo(selected)) && (
+                    <Button size="sm" variant="outline" onClick={() => void retirarNoDaAprovacao(selected)} className="h-9">
+                      Retirar da aprovação
                     </Button>
                   )}
                   <div className="flex-1" />

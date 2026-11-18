@@ -40,6 +40,8 @@ export const ACOES_DA_PONTE = {
     // confere acesso, custo e protege peça aprovada/publicada).
     'campanha_mudanca_planejar', 'campanha_mudanca_confirmar', 'campanha_mudanca_desfazer', 'campanha_versao_voltar',
     'campanha_reorganizar', 'campanha_mercado', 'campanha_roteiro_video', 'campanha_trilha',
+    // 16/11/2026: arquivar/desarquivar e editar o período (sem IA, sem custo).
+    'campanha_arquivar', 'campanha_periodo',
   ],
   'mesa-ads': ['briefing_salvar', 'oferta_salvar', 'oferta_do_contexto', 'plano_gerar', 'criativos_produzir', 'pacote_enviar', 'criativos_da_campanha_mesa'],
   'estudio-arte': ['entregar', 'enfileirar'],
@@ -64,7 +66,18 @@ export const ACOES_LONGAS_DA_PONTE: ReadonlySet<string> = new Set([
 ]);
 
 /** RPCs do banco que a ponte pode chamar como a pessoa. */
-export const RPCS_DA_PONTE = ['mesa_enviar_para_aprovacao'] as const;
+export const RPCS_DA_PONTE = [
+  'mesa_enviar_para_aprovacao',
+  'transition_editorial_publication',
+  'withdraw_file_client_approval',
+  'editar_legenda_publicacao_aprovada',
+  'ajustar_formato_publicacao_aprovada',
+  // MCP 2.28: revisão interna da peça e pedido ao dono. Nenhuma das duas aprova pelo cliente, agenda ou publica.
+  'revisar_trabalho_interno',
+  'marcar_precisa_do_dono',
+  // MCP 2.30: cria a publicação planejada (sem data) de post já aprovado. O banco confere aprovação, conta e projeto; não agenda nem publica.
+  'save_editorial_post',
+] as const;
 export type RpcDaPonte = (typeof RPCS_DA_PONTE)[number];
 
 export function acaoPermitida(funcao: string, acao: string): funcao is FuncaoDaMesa {

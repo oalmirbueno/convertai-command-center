@@ -5,6 +5,7 @@ import {
   MARCADOR_AVANCOS,
   MARCADOR_CONFIRMADO,
   MARCADOR_LEITURA,
+  MARCADOR_WHATSAPP,
   MAX_CONFIRMACOES,
   clienteEntraNoAgente,
   comporDossie,
@@ -60,6 +61,44 @@ describe("dossiê do agente: o texto da equipe nunca se perde", () => {
     expect(linhas.length).toBe(MAX_CONFIRMACOES);
     // Sem leitura nova, a antiga fica.
     expect(d).toContain("Semana nova.");
+  });
+
+  it("a conversa de WhatsApp escrita depois dos avanços sobrevive, uma vez só, e os avanços ficam por último", () => {
+    const comCauda = [
+      HUMANO,
+      AVANCOS,
+      `${MARCADOR_WHATSAPP}\n- Cliente pediu orçamento da poda.`,
+      "## Notas do grupo\numa nota",
+    ].join("\n\n");
+    const leituraNova = secaoDaLeitura(leitura, new Date("2026-09-25T15:00:00Z"));
+    const uma = comporDossie(comCauda, { leitura: leituraNova });
+    const duas = comporDossie(uma, {});
+    expect(uma.startsWith(HUMANO)).toBe(true);
+    expect(uma.match(/## Conversas do grupo de WhatsApp/g)).toHaveLength(1);
+    expect(uma).toContain("- Cliente pediu orçamento da poda.");
+    expect(uma).toContain("## Notas do grupo\numa nota");
+    expect(uma.indexOf("## 1. Plano")).toBeLessThan(uma.indexOf("## Notas do grupo"));
+    expect(uma.indexOf("## Notas do grupo")).toBeLessThan(uma.indexOf(MARCADOR_LEITURA));
+    expect(uma.indexOf(MARCADOR_LEITURA)).toBeLessThan(uma.indexOf(MARCADOR_WHATSAPP));
+    expect(uma.indexOf(MARCADOR_WHATSAPP)).toBeLessThan(uma.indexOf(MARCADOR_AVANCOS));
+    expect(uma.trim().endsWith("Cliente aprovou: arte")).toBe(true);
+    expect(duas).toBe(uma);
+  });
+
+  it("a conversa mais nova substitui a antiga, com ou sem data no título", () => {
+    const dossie = [
+      HUMANO,
+      `${MARCADOR_WHATSAPP}\n- conversa de ontem`,
+      AVANCOS,
+      `${MARCADOR_WHATSAPP} (10/11/2026)\n- conversa nova`,
+    ].join("\n\n");
+    const uma = comporDossie(dossie, {});
+    expect(uma.match(/## Conversas do grupo de WhatsApp/g)).toHaveLength(1);
+    expect(uma).toContain(`${MARCADOR_WHATSAPP} (10/11/2026)\n- conversa nova`);
+    expect(uma).not.toContain("conversa de ontem");
+    expect(uma.indexOf("## 2. Estado atual")).toBeLessThan(uma.indexOf(MARCADOR_WHATSAPP));
+    expect(uma.indexOf(MARCADOR_WHATSAPP)).toBeLessThan(uma.indexOf(MARCADOR_AVANCOS));
+    expect(comporDossie(uma, {})).toBe(uma);
   });
 
   it("dossiê sem seção de avanços também funciona", () => {

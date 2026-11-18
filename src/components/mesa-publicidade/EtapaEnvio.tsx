@@ -70,7 +70,7 @@ export default function EtapaEnvio() {
       />
       {!banco && <AvisoDoRascunho />}
       {!aprovadas.length ? (
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<Send className="h-5 w-5" />}
           titulo="Nenhuma foto aprovada ainda."
           acao={
@@ -81,7 +81,7 @@ export default function EtapaEnvio() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-aprovadas="">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-6" data-aprovadas="">
             {aprovadas.map((r) => {
               const tomada = campanha.tomadas.find((t) => t.foto_tomada_id === r.foto_tomada_id) || null;
               const destinos = campanha.encaminhamentos.filter((e) => e.imagem_id === r.imagem_id).map((e) => (e.destino === "ads" ? "Mesa Ads" : "Mesa"));

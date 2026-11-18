@@ -114,7 +114,7 @@ function PropostaEmLinha({ x, confirmar, cancelar, desfazer }: { x: PropostaNaTe
       </p>
       <p className="text-muted-foreground [overflow-wrap:anywhere]">{x.p.resumo}</p>
       {x.p.avisos.map((a) => (
-        <p key={a} className="text-amber-600 dark:text-amber-400 [overflow-wrap:anywhere]">
+        <p key={a} className="text-warning [overflow-wrap:anywhere]">
           {a}
         </p>
       ))}

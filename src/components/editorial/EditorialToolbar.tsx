@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   CalendarPlus2,
@@ -7,6 +7,7 @@ import {
   Columns3,
   FilePlus2,
   List,
+  Plus,
   Rows3,
   Search,
   SlidersHorizontal,
@@ -29,6 +30,84 @@ import { useCelular } from "@/hooks/useCelular";
 
 export type EditorialView = "board" | "month" | "week" | "list";
 
+/**
+ * Campo da busca com o texto local (12/11/2026, "Softy" virou "Sy —
+ * criativosy"). A busca mora no endereço (?q=) e o React Router 7 aplica
+ * toda mudança de endereço dentro de startTransition: o input controlado
+ * direto pelo endereço ficava um passo atrás da digitação, o React devolvia
+ * o valor antigo ao campo e letras sumiam ou o cursor pulava para o fim.
+ * Aqui o que se digita aparece na hora e segue para o endereço a cada tecla.
+ *
+ * Eco x mudança de fora, sem comparar só o texto: cada tecla abre uma
+ * revisão local pendente (o último texto enviado). Enquanto ela está
+ * pendente e o campo em foco, valores do endereço diferentes dela são ecos
+ * atrasados (ou ambíguos) e não voltam ao campo; quando o endereço chega no
+ * último texto enviado, a revisão fecha. Com nada pendente, toda mudança do
+ * endereço vale, mesmo em foco e mesmo que repita um texto já enviado (enviar
+ * B, depois C, navegação de fora volta B: o campo mostra B). Ao sair do
+ * campo, ele assume o endereço. "Limpar filtros" manda um sinal explícito
+ * (versaoDoReset): fecha a pendência e assume o endereço, mesmo que ele já
+ * estivesse vazio durante a digitação pendente.
+ */
+export function CampoDeBusca({
+  valor,
+  onMudar,
+  versaoDoReset = 0,
+  className,
+}: {
+  valor: string;
+  onMudar: (valor: string) => void;
+  /** Incrementada pelo pai em "Limpar filtros". */
+  versaoDoReset?: number;
+  className?: string;
+}) {
+  const [texto, setTexto] = useState(valor);
+  const ref = useRef<HTMLInputElement>(null);
+  // Último texto enviado que o endereço ainda não confirmou (null = nada pendente).
+  const pendente = useRef<string | null>(null);
+  const valorAtual = useRef(valor);
+  valorAtual.current = valor;
+  useEffect(() => {
+    if (pendente.current !== null) {
+      if (valor === pendente.current) {
+        pendente.current = null;
+        return;
+      }
+      const emFoco = typeof document !== "undefined" && ref.current !== null && document.activeElement === ref.current;
+      if (emFoco) return;
+      pendente.current = null;
+    }
+    setTexto(valor);
+  }, [valor]);
+  const resetVisto = useRef(versaoDoReset);
+  useEffect(() => {
+    if (resetVisto.current === versaoDoReset) return;
+    resetVisto.current = versaoDoReset;
+    pendente.current = null;
+    setTexto(valorAtual.current);
+  }, [versaoDoReset]);
+  return (
+    <input
+      ref={ref}
+      type="search"
+      value={texto}
+      onChange={(event) => {
+        const novo = event.target.value;
+        setTexto(novo);
+        pendente.current = novo;
+        onMudar(novo);
+      }}
+      onBlur={() => {
+        pendente.current = null;
+        setTexto(valorAtual.current);
+      }}
+      placeholder="Buscar conteúdo"
+      aria-label="Buscar conteúdo, legenda ou conta"
+      className={className}
+    />
+  );
+}
+
 interface SelectOption {
   value: string;
   label: string;
@@ -37,6 +116,8 @@ interface SelectOption {
 interface EditorialToolbarProps {
   /** Título da página (h1 + "?" + resumo): a primeira linha começa por ele. */
   cabecalho?: ReactNode;
+  /** Números do período sem cartão, na linha do título (computador). */
+  numeros?: ReactNode;
   /** No quadro de conteúdos (sem período), o que vai no começo da segunda linha. */
   inicioDaLinha?: ReactNode;
   title: string;
@@ -98,6 +179,21 @@ const visoes: Array<{
   { value: "board", label: "Conteúdos", icon: Columns3 },
 ];
 
+/** 1280 px para cima: as visões cabem com o nome escrito (sem matchMedia, fica o ícone). */
+function useTelaLarga() {
+  const consulta = "(min-width: 1280px)";
+  const [largo, setLargo] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(consulta).matches);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(consulta);
+    const ouvir = () => setLargo(mq.matches);
+    ouvir();
+    mq.addEventListener?.("change", ouvir);
+    return () => mq.removeEventListener?.("change", ouvir);
+  }, []);
+  return largo;
+}
+
 function FilterSelect({
   value,
   label,
@@ -115,7 +211,8 @@ function FilterSelect({
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
         className={juntar(
-          "h-9 w-full min-w-0 bg-background text-[13px]",
+          // Polimento v4: o filtro é pílula, como a busca e os botões ao lado (antes, caixa de canto reto).
+          "h-9 w-full min-w-0 rounded-full bg-card px-3.5 text-[13px]",
           className,
         )}
         aria-label={label}
@@ -153,6 +250,7 @@ function CampoDoFiltro({ rotulo, children }: { rotulo: string; children: ReactNo
  */
 export default function EditorialToolbar({
   cabecalho,
+  numeros,
   inicioDaLinha,
   title,
   tituloCurto,
@@ -217,6 +315,13 @@ export default function EditorialToolbar({
       responsibleId,
     ].some(isActiveFilter);
   const celular = useCelular();
+  const largo = useTelaLarga();
+  // Sinal explícito para a busca local: "Limpar filtros" ressincroniza o campo.
+  const [versaoDoReset, setVersaoDoReset] = useState(0);
+  const limparFiltros = () => {
+    setVersaoDoReset((v) => v + 1);
+    onClearFilters();
+  };
 
   // O corpo do "Filtros" é o mesmo no computador e no celular (16/10/2026).
   const cabecalhoDosFiltros = (
@@ -225,7 +330,7 @@ export default function EditorialToolbar({
       <button
         type="button"
         className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-        onClick={onClearFilters}
+        onClick={limparFiltros}
         disabled={!hasAnyActiveFilter}
       >
         <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -243,7 +348,7 @@ export default function EditorialToolbar({
           </CampoDoFiltro>
         </div>
       )}
-      <div className="xl:hidden">
+      <div>
         <CampoDoFiltro rotulo="Projeto">
           <FilterSelect value={projectId} label="Todos os projetos" options={projects} onChange={onProjectChange} />
         </CampoDoFiltro>
@@ -302,7 +407,7 @@ export default function EditorialToolbar({
                 <Search className="h-[18px] w-[18px]" aria-hidden="true" />
                 {filtrosAtivos > 0 && (
                   <span
-                    className="absolute right-1 top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground"
+                    className="absolute right-1 top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-accent-solid px-1 text-[11px] font-semibold tabular-nums text-on-accent"
                     aria-hidden="true"
                   >
                     {filtrosAtivos}
@@ -319,12 +424,10 @@ export default function EditorialToolbar({
               {cabecalhoDosFiltros}
               <div className="relative mb-3 min-w-0">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => onSearchChange(event.target.value)}
-                  placeholder="Buscar conteúdo"
-                  aria-label="Buscar conteúdo, legenda ou conta"
+                <CampoDeBusca
+                  valor={search}
+                  onMudar={onSearchChange}
+                  versaoDoReset={versaoDoReset}
                   className={juntar(campo, "h-11 pl-9")}
                 />
               </div>
@@ -334,7 +437,7 @@ export default function EditorialToolbar({
           {view === "board" && canCreate && (
             <button
               type="button"
-              className={juntar(botao.icone, "h-11 w-11 text-primary hover:text-primary")}
+              className={juntar(botao.icone, "ml-1 h-11 w-11 bg-accent-solid text-on-accent hover:bg-accent-solid/90 hover:text-on-accent")}
               onClick={onCreate}
               aria-label="Criar conteúdo"
               title="Criar conteúdo"
@@ -345,7 +448,7 @@ export default function EditorialToolbar({
           {view !== "board" && canSchedule && (
             <button
               type="button"
-              className={juntar(botao.icone, "h-11 w-11 text-primary hover:text-primary")}
+              className={juntar(botao.icone, "ml-1 h-11 w-11 bg-accent-solid text-on-accent hover:bg-accent-solid/90 hover:text-on-accent")}
               onClick={onSchedule}
               aria-label="Agendar publicação"
               title="Agendar publicação"
@@ -411,17 +514,36 @@ export default function EditorialToolbar({
     );
   }
 
+  // Passada estrutural (15/11/2026, dono: "menos poluído, mais intuitivo,
+  // idêntico às referências"). No computador o topo tem duas linhas, como nas
+  // referências de calendário: em cima o título, os números do período sem
+  // cartão e UMA ação principal com nome; embaixo as visões com nome, o
+  // período e a busca. Projeto e os filtros finos moram no "Filtros".
+  const filtrosNaJanela = advancedFilterCount + (isActiveFilter(projectId) ? 1 : 0);
+  const acaoPrincipal = juntar(botao.primario, "ml-3 h-11 shrink-0 px-5 text-[14px] font-semibold");
   return (
-    <div className="flex min-w-0 flex-wrap items-center">
-      {/* 16/10/2026 (dono): "está ocupando duas linhas; a parte de baixo
-          encaixa na de cima". Uma linha só: título, visões em ícone (o nome
-          fica no title e no leitor de tela), período, busca, filtros e a
-          ação principal em ícone, sem bordas. Só quebra quando não cabe. */}
-      <div className="mb-2 mr-3 min-w-0 max-w-full">{cabecalho}</div>
+    <div className="min-w-0" data-barra-da-agenda="">
+      <div className="mb-5 flex min-w-0 flex-wrap items-center">
+        <div className="mr-6 min-w-0 max-w-full flex-1">{cabecalho}</div>
+        {numeros && <div className="mr-3 hidden min-w-0 lg:block">{numeros}</div>}
+        {/* A ação principal: verde vivo, texto escuro e o nome escrito. */}
+        {view === "board" && canCreate && (
+          <button type="button" className={acaoPrincipal} onClick={onCreate} aria-label="Criar conteúdo" title="Criar conteúdo">
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+            Criar conteúdo
+          </button>
+        )}
+        {view !== "board" && canSchedule && (
+          <button type="button" className={acaoPrincipal} onClick={onSchedule} aria-label="Agendar publicação" title="Agendar publicação">
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+            Agendar
+          </button>
+        )}
+      </div>
 
-      <div className="mb-2 mr-3 flex min-w-0 max-w-full items-center">
+      <div className="mb-4 flex min-w-0 flex-wrap items-center">
         <Etapas
-          soIcone
+          soIcone={!largo}
           rotulo="Área editorial e visualização da agenda"
           itens={visoes.map((option) => ({
             valor: option.value,
@@ -430,13 +552,13 @@ export default function EditorialToolbar({
           }))}
           valor={view}
           onEscolher={(v) => onViewChange(v as EditorialView)}
-          className="shrink-0"
+          className="mb-2 mr-4 shrink-0 rounded-full bg-card p-1 shadow-card"
         />
         {view !== "board" ? (
-          <div className="ml-2 flex min-w-0 items-center">
+          <div className="mb-2 mr-3 flex min-w-0 items-center">
             <button
               type="button"
-              className={botao.icone}
+              className={juntar(botao.icone, "h-9 w-9 bg-card shadow-card")}
               onClick={onPrevious}
               aria-label="Período anterior"
               title="Período anterior"
@@ -445,126 +567,94 @@ export default function EditorialToolbar({
             </button>
             <button
               type="button"
-              className={juntar(botao.discreto, "h-8 px-2 text-foreground")}
-              onClick={onToday}
-              title="Voltar para hoje"
-            >
-              Hoje
-            </button>
-            <button
-              type="button"
-              className={botao.icone}
+              className={juntar(botao.icone, "ml-1.5 h-9 w-9 bg-card shadow-card")}
               onClick={onNext}
               aria-label="Próximo período"
               title="Próximo período"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
-            <h2 className={juntar(texto.tituloSecao, "ml-1 min-w-0 truncate first-letter:uppercase")}>
+            <h2 className="ml-4 min-w-0 truncate text-[20px] font-medium leading-7 tracking-[-0.02em] text-foreground first-letter:uppercase" title={title}>
               {title}
             </h2>
+            {mostrarHoje && (
+              <button
+                type="button"
+                className="ml-3 shrink-0 rounded-full text-[13px] font-medium text-foreground underline decoration-foreground/30 underline-offset-4 transition-colors hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                onClick={onToday}
+                title="Voltar para hoje"
+              >
+                Hoje
+              </button>
+            )}
           </div>
         ) : (
-          inicioDaLinha ? <div className="ml-2 flex min-w-0 items-center">{inicioDaLinha}</div> : null
+          inicioDaLinha ? <div className="mb-2 mr-3 flex min-w-0 items-center">{inicioDaLinha}</div> : null
         )}
-      </div>
 
-      <div className="mb-2 ml-auto flex w-full min-w-0 items-center sm:w-auto sm:flex-1 sm:justify-end">
-        <div className="relative mr-2 min-w-0 flex-1 lg:w-[200px] lg:flex-none">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Buscar conteúdo"
-            aria-label="Buscar conteúdo, legenda ou conta"
-            className={juntar(campo, "pl-9")}
-          />
-        </div>
-        {clients.length > 0 && (
-          <div className="mr-2 hidden w-[160px] shrink-0 md:block">
-            <FilterSelect
-              value={clientId}
-              label="Todos os clientes"
-              options={clients}
-              onChange={onClientChange}
+        <div className="mb-2 ml-auto flex w-full min-w-0 items-center sm:w-auto sm:flex-1 sm:justify-end">
+          <div className="relative mr-2 min-w-0 flex-1 lg:w-[220px] lg:flex-none">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <CampoDeBusca
+              valor={search}
+              onMudar={onSearchChange}
+              versaoDoReset={versaoDoReset}
+              className={juntar(campo, "h-10 rounded-full border-transparent bg-card pl-10 shadow-card")}
             />
           </div>
-        )}
-        <div className="mr-2 hidden w-[160px] shrink-0 xl:block">
-          <FilterSelect
-            value={projectId}
-            label="Todos os projetos"
-            options={projects}
-            onChange={onProjectChange}
-          />
-        </div>
-        <Popover>
-          <PopoverTrigger asChild>
+          {clients.length > 0 && (
+            <div className="mr-2 hidden w-[180px] shrink-0 md:block">
+              <FilterSelect
+                value={clientId}
+                label="Todos os clientes"
+                options={clients}
+                onChange={onClientChange}
+                className="h-10 border-transparent shadow-card"
+              />
+            </div>
+          )}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={juntar(botao.secundario, "relative h-10 shrink-0 border-transparent px-4 shadow-card", filtrosNaJanela > 0 && "text-foreground")}
+                aria-label={`Mais filtros, ${filtrosNaJanela} ${
+                  filtrosNaJanela === 1 ? "ativo" : "ativos"
+                }`}
+                title="Filtros"
+              >
+                <SlidersHorizontal className="mr-2 h-4 w-4" aria-hidden="true" />
+                Filtros
+                {filtrosNaJanela > 0 && (
+                  <span
+                    className="ml-2 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent-solid px-1 text-[11px] font-semibold tabular-nums text-on-accent"
+                    aria-hidden="true"
+                  >
+                    {filtrosNaJanela}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              className="w-[calc(100vw-24px)] max-w-[380px] rounded-lg p-5"
+            >
+              {cabecalhoDosFiltros}
+              {gradeDosFiltros}
+            </PopoverContent>
+          </Popover>
+          {hasAnyActiveFilter && (
             <button
               type="button"
-              className={juntar(botao.icone, "relative", advancedFilterCount > 0 && "text-foreground")}
-              aria-label={`Mais filtros, ${advancedFilterCount} ${
-                advancedFilterCount === 1 ? "ativo" : "ativos"
-              }`}
-              title="Filtros"
+              onClick={limparFiltros}
+              className={juntar(botao.icone, "ml-1")}
+              aria-label="Limpar filtros"
+              title="Limpar filtros"
             >
-              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-              {advancedFilterCount > 0 && (
-                <span
-                  className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground"
-                  aria-hidden="true"
-                >
-                  {advancedFilterCount}
-                </span>
-              )}
+              <X className="h-4 w-4" />
             </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            className="w-[calc(100vw-24px)] max-w-[380px] p-3"
-          >
-            {cabecalhoDosFiltros}
-            {gradeDosFiltros}
-          </PopoverContent>
-        </Popover>
-        {hasAnyActiveFilter && (
-          <button
-            type="button"
-            onClick={onClearFilters}
-            className={botao.icone}
-            aria-label="Limpar filtros"
-            title="Limpar filtros"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-
-        {/* A ação principal em ícone (o nome no title). Ícone próprio: o
-            Criar conteúdo não repete o ícone da visão Conteúdos. */}
-        {view === "board" && canCreate && (
-          <button
-            type="button"
-            className={juntar(botao.icone, "ml-1 text-primary hover:text-primary")}
-            onClick={onCreate}
-            aria-label="Criar conteúdo"
-            title="Criar conteúdo"
-          >
-            <FilePlus2 className="h-4 w-4" aria-hidden="true" />
-          </button>
-        )}
-
-        {view !== "board" && canSchedule && (
-          <button
-            type="button"
-            className={juntar(botao.icone, "ml-1 text-primary hover:text-primary")}
-            onClick={onSchedule}
-            aria-label="Agendar publicação"
-            title="Agendar publicação"
-          >
-            <CalendarPlus2 className="h-4 w-4" aria-hidden="true" />
-          </button>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

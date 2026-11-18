@@ -1,3 +1,4 @@
+import { campanhaArquivada } from "../../../../supabase/functions/_shared/arquivo-da-campanha";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Clapperboard, Flame, Megaphone, MessageCircleQuestion, Rocket, Sparkles, Star, Zap, type LucideIcon } from "lucide-react";
@@ -85,7 +86,7 @@ export default function NovaSequencia({
   );
   const mudar = (m: Partial<Pedido>) => setP({ ...p, ...m });
   const campanhas = useQuery({ queryKey: ["mesa", "campanhas", clientId], queryFn: () => lerCampanhas(clientId), enabled: !!clientId, staleTime: 60_000, retry: 1 });
-  const daMarca = useMemo(() => campanhasDaMarca(campanhas.data || [], marcaId), [campanhas.data, marcaId]);
+  const daMarca = useMemo(() => campanhasDaMarca((campanhas.data || []).filter((c) => !campanhaArquivada(c)), marcaId), [campanhas.data, marcaId]);
   const campanha = p.campanhaId ? daMarca.filter((c) => c.id === p.campanhaId)[0] || null : null;
   const novela = p.modelo === NOVELA;
   const estilo: EstiloDaImagem = p.estilo === "destaque" ? "destaque" : "natural";
@@ -163,7 +164,7 @@ export default function NovaSequencia({
       recolher={`mesa:stories:nova:${clientId}`}
       ajuda="Escolha o modelo: cada tela tem um papel (gancho, problema ou desejo, prova, oferta e CTA com adesivo) e a imagem sai do gerador do Estúdio em 9:16, com o texto integrado. Com campanha, o briefing, a identidade, o selo e a fase entram no roteiro e nas imagens."
     >
-      <div className="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4" role="radiogroup" aria-label="Modelo da sequência" data-modelos-de-sequencia="">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4" role="radiogroup" aria-label="Modelo da sequência" data-modelos-de-sequencia="">
         {MODELOS_DE_SEQUENCIA.map((m) => ({ chave: m.chave, nome: m.nome, descricao: m.descricao }))
           .concat([{ chave: NOVELA, nome: "Novela do dia", descricao: "O capítulo do dia: gancho, interação e o gancho para amanhã." }])
           .map((m) => {
@@ -177,12 +178,13 @@ export default function NovaSequencia({
                 aria-checked={ativo}
                 onClick={() => mudar({ modelo: m.chave })}
                 className={juntar(
-                  "flex min-w-0 items-start rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  ativo ? "border-primary bg-primary/[0.06]" : "border-border hover:border-primary/50",
+                  // v4 (referências): ícone num círculo; o modelo escolhido é o cartão de tinta.
+                  "flex min-w-0 items-center rounded-md border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  ativo ? "ds-ink border-transparent" : "border-border bg-card hover:border-foreground/30",
                 )}
                 data-modelo={m.chave}
               >
-                <Icone className={juntar("mr-2.5 mt-0.5 h-4 w-4 shrink-0", ativo ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+                <span aria-hidden="true" className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full", ativo ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground")}><Icone className="h-4 w-4" /></span>
                 <span className="min-w-0">
                   <span className={juntar(texto.corpo, "block truncate font-medium")}>{m.nome}</span>
                   <span className={juntar(texto.auxiliar, "mt-0.5 line-clamp-2 hidden sm:block")}>{m.descricao}</span>

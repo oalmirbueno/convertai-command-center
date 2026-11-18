@@ -64,6 +64,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/ds";
 import {
   Dialog,
   DialogContent,
@@ -218,8 +219,8 @@ function EmptyPanel({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed bg-muted/20 px-6 py-10 text-center">
-      <div className="mb-4 rounded-full border bg-background p-3 shadow-sm">
+    <div className="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 px-6 py-10 text-center">
+      <div className="mb-4 rounded-full border bg-background p-3">
         <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
       </div>
       <h3 className={texto.tituloSecao}>{title}</h3>
@@ -235,34 +236,25 @@ function MetricCard({
   detail,
   icon: Icon,
   tone = "neutral",
+  variant = "default",
 }: {
   label: string;
   value: string;
   detail: string;
   icon: typeof Banknote;
   tone?: "neutral" | "positive" | "negative" | "warning";
+  variant?: "default" | "accent" | "ink";
 }) {
-  const toneClass = {
-    neutral: "bg-primary/10 text-primary",
-    positive: "bg-success/10 text-success",
-    negative: "bg-destructive/10 text-destructive",
-    warning: "bg-warning/10 text-warning",
-  }[tone];
+  // Rodada ousada (15/11/2026): o cartão de indicador do sistema, com número grande; o tom vira a cor do número só quando é negativo.
   return (
-    <Card className="overflow-hidden shadow-none">
-      <CardContent className="flex min-h-36 flex-col justify-between p-5">
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
-          <span className={cn("rounded-lg p-2", toneClass)}>
-            <Icon className="h-4 w-4" aria-hidden="true" />
-          </span>
-        </div>
-        <div className="mt-5">
-          <p className="font-mono text-[24px] font-semibold tabular-nums tracking-tight text-foreground">{value}</p>
-          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">{detail}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <StatCard
+      label={label}
+      value={value}
+      hint={detail}
+      icon={<Icon className="h-4 w-4" aria-hidden="true" />}
+      variant={variant}
+      className={tone === "negative" && variant === "default" ? "[&_.ds-stat-valor]:text-destructive" : tone === "warning" && variant === "default" ? "[&_.ds-stat-valor]:text-warning" : ""}
+    />
   );
 }
 
@@ -291,13 +283,13 @@ function StatusBadge({ status }: { status: string }) {
   }[normalized] || status;
   const className =
     normalized === "settled" || normalized === "paid" || normalized === "active" || normalized === "current"
-      ? "border-success/30 bg-success/10 text-success"
+      ? "border-transparent bg-success-soft text-success"
       : normalized === "overdue"
-        ? "border-destructive/30 bg-destructive/10 text-destructive"
+        ? "border-transparent bg-danger-soft text-destructive"
         : normalized === "pending" || normalized === "partial" || normalized === "review_required" || normalized === "scheduled" || normalized === "draft"
-          ? "border-warning/30 bg-warning/10 text-warning"
-          : "border-border bg-muted text-muted-foreground";
-  return <Badge variant="outline" className={cn("whitespace-nowrap", className)}>{label}</Badge>;
+          ? "border-transparent bg-warning-soft text-warning"
+          : "border-transparent bg-muted text-muted-foreground";
+  return <Badge variant="outline" className={cn("whitespace-nowrap rounded-full", className)}>{label}</Badge>;
 }
 
 function OverviewTab({
@@ -322,8 +314,9 @@ function OverviewTab({
   const modeLabel = MODES.find((item) => item.value === mode)?.label || mode;
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
         <MetricCard
+          variant="accent"
           label="Receitas"
           value={currency(data.income, currencyCode)}
           detail={`${modeLabel} em ${competenceLabel(competence)}`}
@@ -338,6 +331,7 @@ function OverviewTab({
           tone="negative"
         />
         <MetricCard
+          variant={data.net >= 0 ? "ink" : "default"}
           label="Resultado"
           value={currency(data.net, currencyCode)}
           detail={`Saldo inicial de ${currency(data.openingBalance, currencyCode)}`}
@@ -365,10 +359,10 @@ function OverviewTab({
               ["60 dias", data.forecast60Days],
               ["90 dias", data.forecast90Days],
             ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-md border bg-muted/15 p-4">
+              <div key={String(label)} className="rounded-md bg-muted/60 p-4 sm:p-5">
                 <p className={texto.rotulo}>{label}</p>
                 <p className={cn(
-                  "mt-2 font-mono text-[20px] font-semibold tabular-nums",
+                  "mt-2 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums",
                   Number(value) >= 0 ? "text-success" : "text-destructive",
                 )}>
                   {currency(Number(value), currencyCode)}
@@ -394,9 +388,9 @@ function OverviewTab({
               ["Receita recorrente", data.recurringRevenue, "text-primary"],
               ["Saldo projetado", data.openingBalance + data.net, "text-foreground"],
             ].map(([label, value, color]) => (
-              <div key={String(label)} className="rounded-md border bg-muted/15 p-4">
+              <div key={String(label)} className="rounded-md bg-muted/60 p-4 sm:p-5">
                 <p className={texto.rotulo}>{label}</p>
-                <p className={cn("mt-2 font-mono text-[20px] font-semibold tabular-nums", color)}>
+                <p className={cn("mt-2 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums", color)}>
                   {currency(Number(value), currencyCode)}
                 </p>
               </div>
@@ -431,7 +425,7 @@ function OverviewTab({
                         <p className="truncate text-[13px] font-medium text-foreground">{client.clientName}</p>
                         <p className="text-[12px] text-muted-foreground">{client.planName || "Sem plano vinculado"}</p>
                       </div>
-                      <p className="shrink-0 font-mono text-[13px] font-semibold tabular-nums text-destructive">
+                      <p className="shrink-0 text-[13px] font-semibold tabular-nums text-destructive">
                         {currency(client.overdueAmount, currencyCode)}
                       </p>
                     </div>
@@ -459,7 +453,7 @@ function EntryCard({
   const canSettle = !readOnly && entry.canSettle;
   const cashMode = mode === "cash";
   return (
-    <article className={cn(superficie.painel, "p-4 shadow-sm")}>
+    <article className={cn(superficie.painel, "p-4")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
@@ -475,14 +469,14 @@ function EntryCard({
         <StatusBadge status={entry.status} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
-        <div><p className="text-[12px] text-muted-foreground">{cashMode ? "Valor líquido" : "Valor"}</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(cashMode ? entry.signedAmount : entry.amount)}</p></div>
+        <div><p className="text-[12px] text-muted-foreground">{cashMode ? "Valor líquido" : "Valor"}</p><p className="mt-1 font-semibold tabular-nums">{currency(cashMode ? entry.signedAmount : entry.amount)}</p></div>
         <div><p className="text-[12px] text-muted-foreground">{cashMode ? "Liquidação" : "Vencimento"}</p><p className="mt-1 font-medium">{dateLabel(cashMode ? entry.settledAt : entry.dueDate)}</p></div>
         {cashMode ? (
           <div className="col-span-2"><p className="text-[12px] text-muted-foreground">Competência de origem</p><p className="mt-1 font-medium">{entry.competence ? competenceLabel(entry.competence.slice(0, 7)) : "-"}</p></div>
         ) : (
           <>
-            <div><p className="text-[12px] text-muted-foreground">Liquidado</p><p className="mt-1 font-mono tabular-nums">{currency(entry.settledAmount)}</p></div>
-            <div><p className="text-[12px] text-muted-foreground">Em aberto</p><p className="mt-1 font-mono tabular-nums">{currency(entry.outstandingAmount)}</p></div>
+            <div><p className="text-[12px] text-muted-foreground">Liquidado</p><p className="mt-1 tabular-nums">{currency(entry.settledAmount)}</p></div>
+            <div><p className="text-[12px] text-muted-foreground">Em aberto</p><p className="mt-1 tabular-nums">{currency(entry.outstandingAmount)}</p></div>
           </>
         )}
       </div>
@@ -554,7 +548,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard label="Entradas" value={compactCurrency(income)} detail={`${rows.filter((row) => row.direction === "income").length} ${cashMode ? "movimentos" : "lançamentos"}`} icon={ArrowDownToLine} tone="positive" />
+        <MetricCard variant="accent" label="Entradas" value={compactCurrency(income)} detail={`${rows.filter((row) => row.direction === "income").length} ${cashMode ? "movimentos" : "lançamentos"}`} icon={ArrowDownToLine} tone="positive" />
         <MetricCard label="Saídas" value={compactCurrency(expense)} detail={`${rows.filter((row) => row.direction === "expense").length} ${cashMode ? "movimentos" : "lançamentos"}`} icon={ArrowUpFromLine} tone="negative" />
         <MetricCard label={cashMode ? "Saldo líquido" : "Saldo em aberto"} value={compactCurrency(cashMode ? net : open)} detail={cashMode ? "Movimentos pela data de liquidação" : "Recebimentos e pagamentos pendentes"} icon={cashMode ? WalletCards : Clock3} tone={cashMode ? (net >= 0 ? "positive" : "negative") : "warning"} />
       </div>
@@ -567,7 +561,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
         <div className="overflow-x-auto">
           <table className="w-full min-w-[850px] text-[13px]">
             <caption className="sr-only">Lançamentos de {competenceLabel(competence)}</caption>
-            <thead className={cn("border-b bg-muted/40 text-left", texto.rotulo)}>
+            <thead className={cn("bg-muted/70 text-left [&_th]:py-3", texto.rotulo)}>
               <tr>
                 <th className="px-4 py-3 font-medium">Lançamento</th>
                 <th className="px-4 py-3 font-medium">{cashMode ? "Liquidação" : "Vencimento"}</th>
@@ -577,22 +571,22 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
                 <th className="px-4 py-3 text-right font-medium">Ação</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="[&_td]:py-3.5">
               {rows.map((entry) => {
                 const canSettle = !readOnly && entry.canSettle;
                 return (
                   <tr key={entry.id} className="transition-colors hover:bg-muted/30">
                     <td className="px-4 py-4">
                       <div className="flex items-start gap-3">
-                        <span className={cn("mt-0.5 rounded-md p-1.5", entry.direction === "income" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
+                        <span className={cn("mt-0.5 rounded-md p-1.5", entry.direction === "income" ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")}>
                           {entry.direction === "income" ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />}
                         </span>
                         <div><p className="font-medium text-foreground">{entry.description}</p><p className="mt-0.5 text-[12px] text-muted-foreground">{entry.clientName || entry.category || "Sem vínculo"}</p></div>
                       </div>
                     </td>
                     <td className="px-4 py-4 text-muted-foreground">{dateLabel(cashMode ? entry.settledAt : entry.dueDate)}</td>
-                    <td className="px-4 py-4 text-right font-mono tabular-nums">{currency(cashMode ? entry.signedAmount : entry.amount)}</td>
-                    <td className="px-4 py-4 text-right font-mono tabular-nums">{cashMode ? "-" : currency(entry.outstandingAmount)}</td>
+                    <td className="px-4 py-4 text-right tabular-nums">{currency(cashMode ? entry.signedAmount : entry.amount)}</td>
+                    <td className="px-4 py-4 text-right tabular-nums">{cashMode ? "-" : currency(entry.outstandingAmount)}</td>
                     <td className="px-4 py-4"><StatusBadge status={entry.status} /></td>
                     <td className="px-4 py-4 text-right">
                       {canSettle ? <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => openSettlement(entry)}>Liquidar</Button> : <span className="text-[12px] text-muted-foreground">Somente leitura</span>}
@@ -613,7 +607,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-lg border bg-muted/30 p-3 text-[13px]">
-              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Saldo em aberto</span><strong className="font-mono tabular-nums">{currency(selectedEntry?.outstandingAmount || 0)}</strong></div>
+              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Saldo em aberto</span><strong className="tabular-nums">{currency(selectedEntry?.outstandingAmount || 0)}</strong></div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="settlement-amount">Valor liquidado *</Label>
@@ -706,7 +700,7 @@ function ClientRow({
   const summary = client.summary;
   const hasConfiguredTerm = !!summary && summary.status !== "not_configured";
   return (
-    <div className={cn(superficie.painel, "grid gap-4 p-4 shadow-sm lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(110px,0.55fr))_auto] lg:items-center")}>
+    <div className={cn(superficie.painel, "grid gap-4 p-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(110px,0.55fr))_auto] lg:items-center")}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="min-w-0 max-w-full truncate text-[13px] font-semibold text-foreground" title={client.name}>{client.name}</h3>
@@ -721,9 +715,9 @@ function ClientRow({
           </p>
         )}
       </div>
-      <div><p className="text-[12px] text-muted-foreground">Operacional mensal</p><p className="mt-1 font-mono text-[13px] font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.planAmount) : "-"}</p></div>
-      <div><p className="text-[12px] text-muted-foreground">Bruto mensal</p><p className="mt-1 font-mono text-[13px] font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.finalPlanAmount) : "-"}</p></div>
-      <div><p className="text-[12px] text-muted-foreground">Em aberto</p><p className="mt-1 font-mono text-[13px] font-semibold tabular-nums text-warning">{summary ? currency(summary.openAmount) : "-"}</p></div>
+      <div><p className="text-[12px] text-muted-foreground">Operacional mensal</p><p className="mt-1 text-[13px] font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.planAmount) : "-"}</p></div>
+      <div><p className="text-[12px] text-muted-foreground">Bruto mensal</p><p className="mt-1 text-[13px] font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.finalPlanAmount) : "-"}</p></div>
+      <div><p className="text-[12px] text-muted-foreground">Em aberto</p><p className="mt-1 text-[13px] font-semibold tabular-nums text-warning">{summary ? currency(summary.openAmount) : "-"}</p></div>
       {!readOnly && (
         <Button type="button" variant="outline" className="min-h-11 w-full lg:w-auto" onClick={() => onAssign(client)}>
           {hasConfiguredTerm ? "Alterar vínculo" : "Vincular plano"}
@@ -890,12 +884,12 @@ function SubscriptionsTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between")}>
         <div><p className="text-[13px] font-semibold text-foreground">Carteira de mensalidades</p><p className="mt-1 text-[13px] text-muted-foreground">{unlinked} cliente(s) sem termo financeiro vigente.</p></div>
         {!readOnly && <Button type="button" className="min-h-11" onClick={() => openAssign()}><Plus className="h-4 w-4" />Vincular cliente</Button>}
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard label="MRR contratado" value={compactCurrency(mrr)} detail={`${activeSummaries.length} clientes ativos e revisados`} icon={CircleDollarSign} tone="positive" />
+        <MetricCard variant="accent" label="MRR contratado" value={compactCurrency(mrr)} detail={`${activeSummaries.length} clientes ativos e revisados`} icon={CircleDollarSign} tone="positive" />
         <MetricCard label="A receber" value={compactCurrency(open)} detail="Saldo aberto das mensalidades" icon={FileClock} tone="warning" />
         <MetricCard label="Vencido" value={compactCurrency(overdue)} detail="Prioridade de cobrança" icon={CircleAlert} tone={overdue > 0 ? "negative" : "neutral"} />
       </div>
@@ -910,14 +904,14 @@ function SubscriptionsTab({ readOnly }: { readOnly: boolean }) {
           <DialogHeader><DialogTitle>Vincular plano ao cliente</DialogTitle><DialogDescription>Cria um novo termo com vigência própria. O vínculo anterior e as competências geradas permanecem no histórico.</DialogDescription></DialogHeader>
           <div className="space-y-5">
             {assignError && <Alert variant="destructive" role="alert"><CircleAlert className="h-4 w-4" /><AlertTitle>Revise o vínculo</AlertTitle><AlertDescription>{assignError}</AlertDescription></Alert>}
-            <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2">
+            <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2">
               <legend className="px-2 text-[13px] font-semibold text-foreground">Cliente e vigência</legend>
               <div className="space-y-2"><Label htmlFor="assignment-client">Cliente *</Label><Select value={assignDraft.clientId} onValueChange={(value) => { const client = clients.find((item) => item.id === value); const effectiveCompetence = minimumCompetenceForClient(client); setAssignDraft((draft) => ({ ...draft, clientId: value, effectiveCompetence, planVersionId: "" })); }}><SelectTrigger id="assignment-client" className="h-11"><SelectValue placeholder="Selecione o cliente" /></SelectTrigger><SelectContent>{clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="assignment-competence">Vigência por competência *</Label><Input id="assignment-competence" type="month" min={minimumAssignmentCompetence} className="h-11" value={assignDraft.effectiveCompetence} onChange={(event) => setAssignDraft((draft) => ({ ...draft, effectiveCompetence: event.target.value || minimumAssignmentCompetence, planVersionId: "" }))} /></div>
               <div className="space-y-2 sm:col-span-2"><Label htmlFor="assignment-version">Plano e versão válidos *</Label><Select value={assignDraft.planVersionId} onValueChange={selectVersion}><SelectTrigger id="assignment-version" className="h-11"><SelectValue placeholder="Selecione plano e versão" /></SelectTrigger><SelectContent>{versionOptions.map(({ plan, version }) => <SelectItem key={version.id} value={version.id}>{plan.name} · V{version.version} · {currency(version.finalAmount)}</SelectItem>)}</SelectContent></Select>{versionOptions.length === 0 && <p className="text-[12px] text-warning">Nenhuma versão cobre esta competência. Crie ou ajuste uma versão em Planos e preços.</p>}</div>
             </fieldset>
 
-            <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3">
+            <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2 lg:grid-cols-3">
               <legend className="px-2 text-[13px] font-semibold text-foreground">Condição comercial</legend>
               <div className="space-y-2"><Label htmlFor="assignment-pricing-mode">Tipo de preço *</Label><Select value={assignDraft.pricingMode} onValueChange={(value) => setAssignDraft((draft) => ({ ...draft, pricingMode: value as FinancePricingMode }))}><SelectTrigger id="assignment-pricing-mode" className="h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="linked">Vinculado ao plano</SelectItem><SelectItem value="custom">Personalizado</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="assignment-due-day">Dia de vencimento *</Label><Input id="assignment-due-day" type="number" inputMode="numeric" min="1" max="28" className="h-11" value={assignDraft.dueDay} onChange={(event) => setAssignDraft((draft) => ({ ...draft, dueDay: event.target.value }))} /></div>
@@ -930,13 +924,13 @@ function SubscriptionsTab({ readOnly }: { readOnly: boolean }) {
               </>}
             </fieldset>
 
-            <section className="rounded-xl border border-primary/20 bg-primary/5 p-4" aria-labelledby="assignment-preview-title" aria-live="polite">
+            <section className="rounded-md bg-accent-soft p-4" aria-labelledby="assignment-preview-title" aria-live="polite">
               <h3 id="assignment-preview-title" className="text-[13px] font-semibold text-foreground">Preview do novo termo</h3>
               <div className="mt-3 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
-                <div><p className="text-[12px] text-muted-foreground">Operacional</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewOperational)}</p></div>
-                <div><p className="text-[12px] text-muted-foreground">Reserva fiscal</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(Math.max(previewFinal - previewOperational, 0))}</p></div>
-                <div><p className="text-[12px] text-muted-foreground">Valor final</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewFinal)}</p></div>
-                <div><p className="text-[12px] text-muted-foreground">Custo direto</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewDirectCost)}</p></div>
+                <div><p className="text-[12px] text-muted-foreground">Operacional</p><p className="mt-1 font-semibold tabular-nums">{currency(previewOperational)}</p></div>
+                <div><p className="text-[12px] text-muted-foreground">Reserva fiscal</p><p className="mt-1 font-semibold tabular-nums">{currency(Math.max(previewFinal - previewOperational, 0))}</p></div>
+                <div><p className="text-[12px] text-muted-foreground">Valor final</p><p className="mt-1 font-semibold tabular-nums">{currency(previewFinal)}</p></div>
+                <div><p className="text-[12px] text-muted-foreground">Custo direto</p><p className="mt-1 font-semibold tabular-nums">{currency(previewDirectCost)}</p></div>
               </div>
               {previewNeedsReview && <p className="mt-3 text-[12px] font-medium text-warning">Sem alíquota validada, o termo será salvo como “Revisar” e não gerará mensalidade até a revisão.</p>}
             </section>
@@ -1019,8 +1013,8 @@ function FixedCostsTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
-        <div><p className="text-[13px] font-medium text-muted-foreground">Base mensal ativa</p><p className="mt-1 font-mono text-[24px] font-semibold tabular-nums">{currency(activeTotal)}</p></div>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between")}>
+        <div><p className="text-[13px] font-medium text-muted-foreground">Base mensal ativa</p><p className="mt-1 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums">{currency(activeTotal)}</p></div>
         {!readOnly && <Button type="button" className="min-h-11" onClick={() => openRule()}><Plus className="h-4 w-4" />Novo custo fixo</Button>}
       </div>
 
@@ -1033,7 +1027,7 @@ function FixedCostsTab({ readOnly }: { readOnly: boolean }) {
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-foreground">{rule.name}</h3><StatusBadge status={rule.isActive ? "active" : "inactive"} /></div><p className="mt-1 text-[13px] text-muted-foreground">{rule.category || "Sem categoria"} · vence no dia {rule.dueDay || "-"}</p></div>
-                  <p className="shrink-0 font-mono text-[20px] font-semibold tabular-nums">{currency(rule.amount)}</p>
+                  <p className="shrink-0 text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums">{currency(rule.amount)}</p>
                 </div>
                 {rule.description && <p className="mt-4 text-[13px] leading-6 text-muted-foreground">{rule.description}</p>}
                 {!readOnly && <div className="mt-5 flex flex-wrap gap-2">
@@ -1117,7 +1111,7 @@ function PlanCard({ plan, readOnly, onEdit, onVersion, onArchive }: { plan: Fina
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-foreground">{plan.name}</h3><StatusBadge status={plan.isActive ? "active" : "inactive"} /></div><p className={cn(texto.auxiliar, "mt-1")}>{plan.code ? plan.code.toUpperCase() : "Sem código"}</p></div>
           <div className="shrink-0 text-right">
-            <p className="font-mono text-[20px] font-semibold tabular-nums">{version ? currency(version.finalAmount) : "Sem preço vigente"}</p>
+            <p className="text-[20px] font-semibold leading-7 tracking-[-0.02em] tabular-nums">{version ? currency(version.finalAmount) : "Sem preço vigente"}</p>
             {version && <p className="mt-1 text-[12px] text-muted-foreground">operacional {currency(version.amount)}</p>}
           </div>
         </div>
@@ -1126,13 +1120,13 @@ function PlanCard({ plan, readOnly, onEdit, onVersion, onArchive }: { plan: Fina
           <div className="mt-4 space-y-3 rounded-md border bg-muted/20 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-muted-foreground">
               <span>V{version.version} · vigente desde <strong className="text-foreground">{dateLabel(version.effectiveFrom)}</strong></span>
-              {version.amountKind === "needs_review" && <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">Revisar imposto</Badge>}
+              {version.amountKind === "needs_review" && <Badge variant="outline" className="border-transparent bg-warning-soft text-warning">Revisar imposto</Badge>}
             </div>
             <div className="grid grid-cols-2 gap-3 text-[12px] sm:grid-cols-4">
               <div><p className="text-muted-foreground">Imposto</p><p className="mt-1 font-medium text-foreground">{percentageLabel(version.taxRate)}</p></div>
-              <div><p className="text-muted-foreground">Custo direto</p><p className="mt-1 font-mono font-medium tabular-nums text-foreground">{currency(version.directCost)}</p></div>
+              <div><p className="text-muted-foreground">Custo direto</p><p className="mt-1 font-medium tabular-nums text-foreground">{currency(version.directCost)}</p></div>
               <div><p className="text-muted-foreground">Cobrança</p><p className="mt-1 font-medium text-foreground">{BILLING_PERIOD_LABELS[version.billingPeriod]}</p></div>
-              <div><p className="text-muted-foreground">Setup</p><p className="mt-1 font-mono font-medium tabular-nums text-foreground">{currency(version.setupFee)}</p></div>
+              <div><p className="text-muted-foreground">Setup</p><p className="mt-1 font-medium tabular-nums text-foreground">{currency(version.setupFee)}</p></div>
             </div>
           </div>
         ) : !upcoming ? (
@@ -1142,7 +1136,7 @@ function PlanCard({ plan, readOnly, onEdit, onVersion, onArchive }: { plan: Fina
           <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-[12px]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold text-foreground">V{upcoming.version} programada para {dateLabel(upcoming.effectiveFrom)}</span>
-              <span className="font-mono font-semibold tabular-nums text-primary">{currency(upcoming.finalAmount)}</span>
+              <span className="font-semibold tabular-nums text-primary">{currency(upcoming.finalAmount)}</span>
             </div>
             <p className="mt-1 text-muted-foreground">Ainda não é o preço vigente.</p>
           </div>
@@ -1312,7 +1306,7 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-6">
-      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between")}>
         <div><p className="text-[13px] font-semibold text-foreground">Catálogo comercial</p><p className="mt-1 text-[13px] text-muted-foreground">Preços são versionados por vigência; o passado não é reescrito.</p></div>
         {!readOnly && <div className="flex flex-col gap-2 sm:flex-row"><Button type="button" variant="outline" className="min-h-11" onClick={openSettings}><Settings2 className="h-4 w-4" />Configurações</Button><Button type="button" className="min-h-11" onClick={() => openPlan()}><Plus className="h-4 w-4" />Novo plano</Button></div>}
       </div>
@@ -1320,14 +1314,14 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
       <Card className="shadow-none">
         <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
           <div><p className={texto.rotulo}>Moeda</p><p className="mt-1 font-semibold">{settings.data?.currency || "BRL"}</p></div>
-          <div><p className={texto.rotulo}>Saldo inicial</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.openingBalance || 0)}</p></div>
-          <div><p className={texto.rotulo}>Reserva alvo</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.reserveTarget || 0)}</p></div>
+          <div><p className={texto.rotulo}>Saldo inicial</p><p className="mt-1 font-semibold tabular-nums">{currency(settings.data?.openingBalance || 0)}</p></div>
+          <div><p className={texto.rotulo}>Reserva alvo</p><p className="mt-1 font-semibold tabular-nums">{currency(settings.data?.reserveTarget || 0)}</p></div>
           <div><p className={texto.rotulo}>Janela de previsão</p><p className="mt-1 font-semibold">{settings.data?.forecastMonths || 6} meses</p></div>
-          <div><p className={texto.rotulo}>Meta mensal</p><p className="mt-1 font-mono font-semibold tabular-nums">{settings.data?.monthlyGoal === null ? "-" : currency(settings.data?.monthlyGoal || 0)}</p></div>
+          <div><p className={texto.rotulo}>Meta mensal</p><p className="mt-1 font-semibold tabular-nums">{settings.data?.monthlyGoal === null ? "-" : currency(settings.data?.monthlyGoal || 0)}</p></div>
           <div><p className={texto.rotulo}>Retenção do crescimento</p><p className="mt-1 font-semibold">{percentageLabel(settings.data?.growthRetentionRate ?? null)}</p></div>
           <div><p className={texto.rotulo}>Margem mínima</p><p className="mt-1 font-semibold">{percentageLabel(settings.data?.desiredMinimumMargin ?? null)}</p></div>
-          <div><p className={texto.rotulo}>Pró-labore atual / alvo</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.currentProLabore || 0)} / {currency(settings.data?.targetProLabore || 0)}</p></div>
-          <div><p className={texto.rotulo}>Custo direto padrão</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.defaultDirectCost || 0)}</p></div>
+          <div><p className={texto.rotulo}>Pró-labore atual / alvo</p><p className="mt-1 font-semibold tabular-nums">{currency(settings.data?.currentProLabore || 0)} / {currency(settings.data?.targetProLabore || 0)}</p></div>
+          <div><p className={texto.rotulo}>Custo direto padrão</p><p className="mt-1 font-semibold tabular-nums">{currency(settings.data?.defaultDirectCost || 0)}</p></div>
           <div><p className={texto.rotulo}>Reserva mínima</p><p className="mt-1 font-semibold">{settings.data?.minimumReserveMonths ?? "-"} meses</p></div>
           <div className="sm:col-span-2"><p className={texto.rotulo}>Alocação de custos</p><p className="mt-1 font-semibold">{ALLOCATION_METHOD_LABELS[settings.data?.allocationMethod || "equal"]}{settings.data?.includeProLaboreInAllocation ? " · inclui pró-labore" : " · sem pró-labore"}</p></div>
         </CardContent>
@@ -1398,14 +1392,14 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="version-description">Motivo ou observação</Label><Textarea id="version-description" value={versionDraft.description} onChange={(event) => setVersionDraft((draft) => ({ ...draft, description: event.target.value }))} /></div>
           </fieldset>
 
-          <section className="rounded-xl border border-primary/20 bg-primary/5 p-4" aria-labelledby="version-preview-title" aria-live="polite">
+          <section className="rounded-md bg-accent-soft p-4" aria-labelledby="version-preview-title" aria-live="polite">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div><h3 id="version-preview-title" className="text-[13px] font-semibold text-foreground">Preview com gross-up</h3><p className="mt-1 text-[12px] leading-5 text-muted-foreground">O servidor recalcula estes valores ao criar a versão.</p></div>
-              <div className="text-left sm:text-right"><p className={texto.rotulo}>Valor final</p><p className="mt-1 font-mono text-[24px] font-semibold tabular-nums text-primary">{currency(previewFinalAmount)}</p></div>
+              <div className="text-left sm:text-right"><p className={texto.rotulo}>Valor final</p><p className="mt-1 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-primary">{currency(previewFinalAmount)}</p></div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
-              <div><p className="text-[12px] text-muted-foreground">Operacional</p><p className="mt-1 font-mono font-medium tabular-nums">{currency(previewOperationalAmount)}</p></div>
-              <div><p className="text-[12px] text-muted-foreground">Reserva fiscal</p><p className="mt-1 font-mono font-medium tabular-nums">{currency(Math.max(previewFinalAmount - previewOperationalAmount, 0))}</p></div>
+              <div><p className="text-[12px] text-muted-foreground">Operacional</p><p className="mt-1 font-medium tabular-nums">{currency(previewOperationalAmount)}</p></div>
+              <div><p className="text-[12px] text-muted-foreground">Reserva fiscal</p><p className="mt-1 font-medium tabular-nums">{currency(Math.max(previewFinalAmount - previewOperationalAmount, 0))}</p></div>
               <div><p className="text-[12px] text-muted-foreground">Margem após custo direto</p><p className="mt-1 font-medium">{percentageLabel(previewMargin)}</p></div>
               <div><p className="text-[12px] text-muted-foreground">Classificação</p><p className="mt-1 font-medium">{previewAmountKind === "needs_review" ? "Revisão necessária" : "Valor operacional"}</p></div>
             </div>
@@ -1418,7 +1412,7 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
         <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] overflow-y-auto sm:max-w-3xl">
           <DialogHeader><DialogTitle>Configurações financeiras</DialogTitle><DialogDescription>Parâmetros usados no consolidado e nas previsões.</DialogDescription></DialogHeader>
           <div className="space-y-6">
-            <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3">
+            <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2 lg:grid-cols-3">
               <legend className="px-2 text-[13px] font-semibold text-foreground">Base e metas</legend>
               <div className="space-y-2"><Label htmlFor="settings-currency">Moeda</Label><Select value={settingsDraft.currency} onValueChange={(value) => setSettingsDraft((draft) => ({ ...draft, currency: value }))}><SelectTrigger id="settings-currency" className="h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="BRL">BRL · Real</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="settings-due-day">Vencimento padrão</Label><Input id="settings-due-day" type="number" inputMode="numeric" min="1" max="28" className="h-11" value={settingsDraft.defaultDueDay} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, defaultDueDay: Number(event.target.value) }))} /></div>
@@ -1429,13 +1423,13 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
               <div className="space-y-2"><Label htmlFor="settings-minimum-reserve-months">Reserva mínima (meses)</Label><Input id="settings-minimum-reserve-months" type="number" inputMode="decimal" min="0" step="0.1" className="h-11" value={settingsDraft.minimumReserveMonths ?? ""} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, minimumReserveMonths: event.target.value === "" ? null : Number(event.target.value) }))} /></div>
             </fieldset>
 
-            <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2">
+            <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2">
               <legend className="px-2 text-[13px] font-semibold text-foreground">Crescimento e rentabilidade</legend>
               <div className="space-y-2"><Label htmlFor="settings-growth-retention">Retenção do crescimento (%)</Label><Input id="settings-growth-retention" type="number" inputMode="decimal" min="0" max="100" step="0.1" className="h-11" value={percentageInputValue(settingsDraft.growthRetentionRate)} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, growthRetentionRate: percentageFromInput(event.target.value) }))} /><p className="text-[12px] leading-5 text-muted-foreground">Parcela do crescimento que deve permanecer no caixa.</p></div>
               <div className="space-y-2"><Label htmlFor="settings-minimum-margin">Margem mínima desejada (%)</Label><Input id="settings-minimum-margin" type="number" inputMode="decimal" min="-100" max="100" step="0.1" className="h-11" value={percentageInputValue(settingsDraft.desiredMinimumMargin)} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, desiredMinimumMargin: percentageFromInput(event.target.value) }))} /><p className="text-[12px] leading-5 text-muted-foreground">Guardrail para precificação e análise de contribuição.</p></div>
             </fieldset>
 
-            <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3">
+            <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2 lg:grid-cols-3">
               <legend className="px-2 text-[13px] font-semibold text-foreground">Pró-labore e custos</legend>
               <div className="space-y-2"><Label htmlFor="settings-current-pro-labore">Pró-labore atual</Label><Input id="settings-current-pro-labore" type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={settingsDraft.currentProLabore} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, currentProLabore: Number(event.target.value) }))} /></div>
               <div className="space-y-2"><Label htmlFor="settings-target-pro-labore">Pró-labore alvo</Label><Input id="settings-target-pro-labore" type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={settingsDraft.targetProLabore} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, targetProLabore: Number(event.target.value) }))} /></div>
@@ -1515,7 +1509,7 @@ export default function FinanceV2({
         </Alert>
       )}
 
-      <section aria-labelledby="finance-mode-title" className={cn(superficie.painel, "p-3 shadow-sm")}>
+      <section aria-labelledby="finance-mode-title" className={cn(superficie.painel, "p-3")}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="px-1"><h2 id="finance-mode-title" className="text-[13px] font-semibold text-foreground">Modo de leitura</h2><p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{modeDescription}</p></div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Modo de leitura financeira">
@@ -1530,7 +1524,7 @@ export default function FinanceV2({
       </section>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FinanceTab)} className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl p-1 sm:grid-cols-3 xl:grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-lg p-1 sm:grid-cols-3 xl:grid-cols-5">
           {TAB_ITEMS.map((item, index) => (
             <TabsTrigger key={item.value} value={item.value} className={cn("min-h-11 px-3 py-2.5", index === TAB_ITEMS.length - 1 && "col-span-2 sm:col-span-1")}>
               {item.label}

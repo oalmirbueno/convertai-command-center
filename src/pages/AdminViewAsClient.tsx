@@ -18,7 +18,7 @@ import {
   botao,
   foco,
   juntar,
-  lista,
+  superficie,
   texto,
 } from "@/components/sistema";
 import type { UserProfile } from "@/contexts/AuthContext";
@@ -244,7 +244,7 @@ export default function AdminViewAsClient() {
   // No client selected - show client picker
   if (!clientId && !projectId && !loading) {
     return (
-      <div className="min-w-0 space-y-5">
+      <div className="min-w-0 space-y-6 sm:space-y-8">
         <CabecalhoDePagina
           titulo="Ver como cliente"
           voltar={{ para: "/clientes", rotulo: "Clientes" }}
@@ -259,22 +259,24 @@ export default function AdminViewAsClient() {
         ) : ativos.length === 0 ? (
           <EstadoVazio icone={<Eye className="h-5 w-5" />} titulo="Nenhum cliente ativo" descricao="Clientes com plano ativo aparecem aqui." />
         ) : (
-          <ul aria-label="Clientes ativos" className={juntar(lista.aberta, "grid grid-cols-1 gap-x-6 sm:grid-cols-2")}>
+          <ul aria-label="Clientes ativos" className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
             {ativos.map((c: any) => (
               <li key={c.id} className="min-w-0">
                 <button
                   type="button"
                   onClick={() => selectClient(c)}
-                  className={juntar("group flex h-full w-full min-w-0 items-center rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted/40", foco)}
+                  className={juntar(superficie.painel, "group flex h-full w-full min-w-0 items-center p-5 text-left transition-transform duration-200 hover:-translate-y-0.5", foco)}
                 >
-                  <Avatar className="mr-3 h-8 w-8 shrink-0">
-                    <AvatarFallback className="bg-primary/15 text-[11px] font-semibold text-primary">{iniciais(c)}</AvatarFallback>
+                  <Avatar className="mr-4 h-12 w-12 shrink-0">
+                    <AvatarFallback className="bg-foreground text-[13px] font-semibold text-background">{iniciais(c)}</AvatarFallback>
                   </Avatar>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{c.company_name || c.full_name}</span>
-                    <span className={juntar(texto.auxiliar, "block truncate")}>{c.email}</span>
+                    <span className="block truncate text-[15px] font-semibold leading-5 text-foreground">{c.company_name || c.full_name}</span>
+                    <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>{c.email}</span>
                   </span>
-                  <Eye className="ml-3 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                  <span aria-hidden="true" className="ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-accent-solid group-hover:text-on-accent">
+                    <Eye className="h-4 w-4" />
+                  </span>
                 </button>
               </li>
             ))}
@@ -286,7 +288,7 @@ export default function AdminViewAsClient() {
 
   if (erroDeLeitura) {
     return (
-      <div className="min-w-0 space-y-5">
+      <div className="min-w-0 space-y-6 sm:space-y-8">
         <CabecalhoDePagina titulo="Ver como cliente" voltar={{ para: "/clientes", rotulo: "Clientes" }} />
         <EstadoDeErro
           titulo="Não foi possível carregar o portal deste cliente."
@@ -335,18 +337,18 @@ export default function AdminViewAsClient() {
     <ImpersonationProvider profile={impersonatedProfile} clientId={selectedClient?.id}>
       <div className="min-w-0">
         {/* Faixa do modo espelho: fina, numa linha, com a troca de cliente à direita */}
-        <div className="mb-3 flex min-w-0 items-center rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-2 py-1.5">
+        <div className="ds-ink mb-5 flex min-w-0 items-center rounded-full py-1.5 pl-1.5 pr-2">
           <button
             type="button"
             onClick={() => navigate("/clientes")}
-            className={juntar(botao.icone, "text-sky-500 hover:bg-sky-500/10 hover:text-sky-400")}
+            className={juntar(botao.icone, "bg-muted text-foreground hover:bg-accent-solid hover:text-on-accent")}
             aria-label="Voltar para Clientes"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </button>
-          <Eye className="ml-1 mr-2 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
+          <Eye className="ml-3 mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           {/* No celular o nome do cliente fica só no seletor (sem repetir e cortar). */}
-          <p className="mr-2 shrink-0 truncate text-[12px] font-medium text-sky-500 sm:min-w-0 sm:flex-1 sm:shrink">
+          <p className="mr-2 shrink-0 truncate text-[13px] font-medium text-foreground sm:min-w-0 sm:flex-1 sm:shrink">
             Somente leitura<span className="hidden sm:inline"> · visualizando como: {nomeDoCliente}</span>
           </p>
           <div className="ml-auto flex min-w-0 flex-1 justify-end sm:flex-none">
@@ -371,7 +373,7 @@ export default function AdminViewAsClient() {
           valor={activeTab}
           onEscolher={switchTab}
           itens={clientTabs.map((tab) => ({ valor: tab.id, rotulo: tab.label, icone: <tab.icon className="h-3.5 w-3.5" /> }))}
-          className="mb-6 border-b border-border"
+          className="mb-6 border-b border-border sm:mb-8"
         />
 
         {/* Tab content */}

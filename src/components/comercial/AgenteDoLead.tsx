@@ -47,7 +47,7 @@ function LinhaDoFato({ fato, aoConfirmar, aoDescartar }: { fato: FatoDoLead; aoC
         <p className="text-[11px] leading-4 text-muted-foreground" title={fato.evidencia}>
           {fato.detalhe || fato.evidencia}
           {fato.fonte_url && (
-            <a href={fato.fonte_url} target="_blank" rel="noreferrer" className="ml-1 inline-flex items-center underline underline-offset-2">
+            <a href={fato.fonte_url} target="_blank" rel="noreferrer" className="toque-compacto ml-1 inline-flex items-center underline underline-offset-2">
               fonte <ExternalLink className="ml-0.5 h-3 w-3" aria-hidden="true" />
             </a>
           )}
@@ -161,7 +161,7 @@ export default function AgenteDoLead({ lead, aoMudar }: { lead: Lead; aoMudar: (
         {(historia.data || []).length === 0 ? (
           <p className={texto.auxiliar}>Nada registrado pelo agente ainda.</p>
         ) : (
-          <ul className="min-w-0 divide-y divide-border">
+          <ul className="min-w-0">
             {(historia.data || []).map((e) => (
               <li key={e.id} className="py-1.5 text-[13px] leading-5 text-muted-foreground">
                 {e.note}

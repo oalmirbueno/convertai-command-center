@@ -61,6 +61,6 @@ export default function BancadaVideoLivre({ r, mudar, motor, duracao, duracoes, 
         </GrupoDeCampos><CampoDeFormulario rotulo="O que evitar"><input className={campo} value={r.negativo} maxLength={600} onChange={(e) => mudar({ negativo: e.target.value })} placeholder="Opcional" /></CampoDeFormulario></div></details>
       </section>
     </div>
-    <footer className={juntar(superficie.painel, "video-livre-acao p-3")}>{resultado}{gerar}</footer>
+    <footer className={juntar(superficie.painel, "video-livre-acao p-4")}>{resultado}{gerar}</footer>
   </div>;
 }

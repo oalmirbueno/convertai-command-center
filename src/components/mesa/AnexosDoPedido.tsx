@@ -165,7 +165,7 @@ export function BotaoDeAnexar({ anexos, className = "" }: { anexos: ControleDeAn
         aria-label="Anexar imagens"
         title={anexos.cheio ? `Até ${anexos.max} imagens` : "Anexar imagens ou prints (JPG, PNG, WEBP)"}
         // 16/10/2026 (dono: "só o ícone, sem as bordinhas"): sai a borda; o nome segue no aria-label e o detalhe no title.
-        className={`inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 ${className}`}
+        className={`inline-flex h-8 shrink-0 items-center justify-center rounded-full px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 ${className}`}
       >
         <ImagePlus className="h-4 w-4" aria-hidden="true" />
         {anexos.lista.length > 0 && <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{anexos.lista.length}/{anexos.max}</span>}
@@ -238,7 +238,7 @@ export function ZonaDeAnexos({ anexos, children, className = "", rotulo = "Solte
     >
       {children}
       {sobre && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/90 text-[13px] font-medium text-foreground">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-background/90 text-[13px] font-medium text-foreground">
           {rotulo}
         </div>
       )}

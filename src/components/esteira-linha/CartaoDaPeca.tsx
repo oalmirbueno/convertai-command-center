@@ -1,0 +1,76 @@
+import { useNavigate } from "react-router-dom";
+import { ExternalLink, Palette } from "lucide-react";
+import { MenuMais, foco, juntar } from "@/components/sistema";
+import type { CartaoDaEsteira } from "@/lib/esteiraLinha/esteiraLinha";
+import { ESTILO_DA_ETAPA } from "./estilosDaEtapa";
+
+/** Para onde leva "Abrir na página completa" (a mesma regra de linkDoCartao). */
+const ondeAbreAPaginaCompleta = (cartao: Pick<CartaoDaEsteira, "destino">): string =>
+  cartao.destino === "estudio" ? "Estúdio" : "Agenda";
+
+/**
+ * Uma peça na grade (limpeza de 14/11/2026, 21h53): o título e uma linha só
+ * com a etapa, marcada pela cor dela. O formato sai da vista (fica no nome
+ * para leitor de tela e no `title`).
+ *
+ * O clique abre o painel da peça na própria Esteira (21h54): nada de navegar
+ * para a Agenda. "Abrir na página completa" e "Abrir no Estúdio" ficam no
+ * menu "…", que não dispara o clique do cartão.
+ */
+export default function CartaoDaPeca({ cartao, aoAbrir }: { cartao: CartaoDaEsteira; aoAbrir: (cartao: CartaoDaEsteira) => void }) {
+  const navigate = useNavigate();
+  const estilo = ESTILO_DA_ETAPA[cartao.etapa];
+  const pagina = ondeAbreAPaginaCompleta(cartao);
+  const estudio = cartao.linkDoEstudio && cartao.linkDoEstudio !== cartao.link ? cartao.linkDoEstudio : null;
+  const pararClique = (e: { stopPropagation: () => void }) => e.stopPropagation();
+
+  return (
+    <div className="group relative" data-cartao-da-esteira={cartao.chave} data-etapa={cartao.etapa} data-revisao-interna={cartao.revisao ? "sim" : undefined}>
+      <button
+        type="button"
+        onClick={() => aoAbrir(cartao)}
+        title={[cartao.titulo, cartao.formato, cartao.revisao].filter(Boolean).join(" · ")}
+        aria-label={`${cartao.titulo}. ${cartao.formato}. ${cartao.rotuloDaEtapa}. Ver detalhes`}
+        aria-haspopup="dialog"
+        className={juntar(
+          "block w-full rounded-[16px] border border-transparent px-2 py-2.5 text-left transition-colors hover:border-foreground/25 sm:rounded-[18px] sm:px-4 sm:py-3.5 [[data-prioritario=sim]_&]:shadow-card",
+          estilo.cartao,
+          foco,
+        )}
+        data-abrir-peca=""
+      >
+        <span className="line-clamp-2 break-words pr-4 text-[12px] font-semibold leading-4 tracking-[-0.01em] text-foreground sm:text-[13px] sm:leading-[18px]">{cartao.titulo}</span>
+        {/* O fundo do cartão já é a cor da etapa: aqui só o ponto e o nome dela. */}
+        <span className="mt-2 flex min-w-0 items-center text-[11px] font-medium leading-4 text-foreground/75 sm:mt-2.5" data-etapa-da-peca="">
+          <span className={juntar("mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full", cartao.etapa === "no_ar" ? "bg-foreground" : estilo.ponto)} aria-hidden="true" />
+          <span className="truncate">{cartao.rotuloDaEtapa}</span>
+        </span>
+      </button>
+      <div
+        className="absolute right-1 top-1 sm:right-1.5 sm:top-1.5"
+        onClick={pararClique}
+        onPointerDown={pararClique}
+        onKeyDown={pararClique}
+        data-menu-do-cartao=""
+      >
+        <MenuMais
+          rotulo={`Mais ações: ${cartao.titulo}`}
+          className="h-6 w-6 text-foreground/70 opacity-70 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:aria-expanded:opacity-100"
+          itens={[
+            {
+              rotulo: "Abrir na página completa",
+              icone: <ExternalLink className="h-3.5 w-3.5" />,
+              dica: `Abre a ${pagina}`,
+              aoEscolher: () => navigate(cartao.link),
+            },
+            estudio && {
+              rotulo: "Abrir no Estúdio",
+              icone: <Palette className="h-3.5 w-3.5" />,
+              aoEscolher: () => navigate(estudio),
+            },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}

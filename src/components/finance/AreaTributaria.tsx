@@ -146,7 +146,7 @@ export default function AreaTributaria({ brutoRecebidoNoMes }: Props) {
       >
         <Painel>
           <div className="-mb-1 flex min-w-0 flex-wrap items-center [&>*]:mb-1">
-            <span className={juntar(texto.numero, "mr-3")}>{pct(valorNaBarra)}</span>
+            <span className={juntar(texto.numeroGrande, "mr-4")}>{pct(valorNaBarra)}</span>
             {resolvida.presumida && !mudou && (
               /* A diferença que importa: presumido não é confirmado. Sem este
                  aviso o piso pareceria um número que alguém conferiu. */
@@ -164,7 +164,7 @@ export default function AreaTributaria({ brutoRecebidoNoMes }: Props) {
           </div>
 
           {/* A barra: 6 a 9, meio ponto por passo. */}
-          <div className="mt-4">
+          <div className="mt-6">
             <input
               type="range"
               min={ALIQUOTA_MINIMA * 1000}
@@ -173,7 +173,7 @@ export default function AreaTributaria({ brutoRecebidoNoMes }: Props) {
               value={Math.round(valorNaBarra * 1000)}
               disabled={!ehAdmin}
               onChange={(e) => setRascunho(Number(e.target.value) / 1000)}
-              className="w-full accent-primary disabled:opacity-50"
+              className="h-2 w-full accent-primary disabled:opacity-50"
               aria-label="Alíquota do mês"
             />
             <div className={juntar(texto.auxiliar, "mt-1 flex justify-between tabular-nums")}>
@@ -181,7 +181,7 @@ export default function AreaTributaria({ brutoRecebidoNoMes }: Props) {
             </div>
           </div>
 
-          <div className={juntar(superficie.poco, "mt-4 px-3 py-2.5")}>
+          <div className={juntar(superficie.poco, "mt-5 px-4 py-3.5")}>
             <p className="flex min-w-0 items-center text-[13px] leading-5 text-muted-foreground">
               <span className="min-w-0">
                 Sobre <span className="tabular-nums">{fmt(brutoRecebidoNoMes)}</span> recebidos no mês, separa{" "}
@@ -230,12 +230,12 @@ export default function AreaTributaria({ brutoRecebidoNoMes }: Props) {
           <EstadoVazio compacto titulo="Nenhum mês gravado." descricao="Mês sem registro conta como presumido." />
         ) : (
           <RegiaoRolavel memoria="financeiro:tributaria:historico" rotulo="Alíquotas gravadas" className="lg:max-h-[320px]">
-            <ul className="divide-y divide-border">
+            <ul>
               {registros.map((r) => (
-                <li key={r.competencia} className="flex min-w-0 items-center py-2">
-                  <span className="mr-3 shrink-0 text-[13px] capitalize text-foreground">{nomeDoMes(r.competencia)}</span>
+                <li key={r.competencia} className="flex min-w-0 items-center py-3.5">
+                  <span className="mr-3 shrink-0 text-[13px] font-medium capitalize text-foreground">{nomeDoMes(r.competencia)}</span>
                   <span className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 truncate")} title={r.note || undefined}>{r.note || ""}</span>
-                  <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{pct(r.rate)}</span>
+                  <Etiqueta tom="neutro" className="font-semibold">{pct(r.rate)}</Etiqueta>
                 </li>
               ))}
             </ul>

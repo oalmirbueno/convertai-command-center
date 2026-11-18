@@ -163,7 +163,7 @@ export default function AtividadesDoLead({ leadId, donoPadrao, onMudou }: Props)
         {doLead.length === 0 ? (
           <EstadoVazio compacto titulo="Nada agendado." descricao="Lead sem próximo compromisso some do funil." />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul>
             {doLead.map((atividade) => (
               <Linha
                 key={atividade.id}
@@ -203,16 +203,16 @@ function Linha({
   const feita = Boolean(atividade.done_at);
   const atrasada = !feita && atividade.due_at < agora;
   return (
-    <li className={juntar("flex min-w-0 items-center py-2", feita && "opacity-60")}>
+    <li className={juntar("flex min-w-0 items-center py-3", feita && "opacity-60")}>
       <button
         type="button"
         onClick={onAlternar}
         title={feita ? "Reabrir" : "Concluir"}
         aria-label={feita ? `Reabrir ${atividade.title}` : `Concluir ${atividade.title}`}
         className={juntar(
-          "mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors",
+          "toque-compacto mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
           foco,
-          feita ? "border-border text-muted-foreground" : "border-primary/50 text-primary hover:bg-primary/10",
+          feita ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground hover:bg-foreground hover:text-background",
         )}
       >
         {feita ? <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}

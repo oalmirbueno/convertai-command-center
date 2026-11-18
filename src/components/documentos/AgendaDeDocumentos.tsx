@@ -133,7 +133,7 @@ export default function AgendaDeDocumentos({ clientId, marcaId = null }: { clien
             </CampoDeFormulario>
           </GrupoDeCampos>
           {atual && (atual.ultimo_mes || atual.ultimo_erro) && (
-            <p className={juntar(texto.auxiliar, atual.ultimo_erro && "text-amber-700 dark:text-amber-300")}>
+            <p className={juntar(texto.auxiliar, atual.ultimo_erro && "text-warning")}>
               {atual.ultimo_mes ? `Último mês preparado: ${rotuloDoMesDeReferencia(atual.ultimo_mes)}.` : ""} {atual.ultimo_erro || ""}
             </p>
           )}

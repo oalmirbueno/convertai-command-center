@@ -315,7 +315,7 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
             <Button size="sm" variant="outline" className="ml-2 shrink-0" disabled={travado || buscandoVideo || consultaDoVideo.trim().length < 2} onClick={() => void buscarVideos()}>{buscandoVideo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1 h-3.5 w-3.5" />}Buscar vídeo</Button>
           </div>
           {avisosDoVideo.map((a) => <p key={a} className={texto.auxiliar}>{a}</p>)}
-          {videos.length > 0 && <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Vídeos encontrados">
+          {videos.length > 0 && <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3" aria-label="Vídeos encontrados">
             {videos.map((v, i) => <li key={`${v.banco}:${v.id}`} className="min-w-0" data-banco-do-video={v.banco}>
               <button type="button" className="group block w-full min-w-0 text-left" disabled={travado || buscandoVideo} onClick={() => void aplicarVideo(v)} title={`Usar ${v.nome}`} aria-label={`Usar o vídeo ${v.nome}`}>
                 <span className="relative block w-full overflow-hidden rounded-md border border-border bg-secondary transition-colors group-hover:border-primary" style={{ paddingBottom: "56.25%" }}>
@@ -452,7 +452,7 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
       </div>
       {coresDoPerfil("cor_fundo", "Cor do card")}
       {coresDoPerfil("cor_botao", "Cor do botão Seguir")}
-      <div className="grid min-w-0 grid-cols-3 gap-2">
+      <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3">
         {(["posts", "seguidores", "seguindo"] as const).map((k) => <label key={k} className={juntar("block min-w-0", texto.rotulo)}>{k === "posts" ? "Posts" : k === "seguidores" ? "Seguidores" : "Seguindo"}<Input aria-label={`${k} no perfil`} inputMode="numeric" value={typeof perfilAtual[k] === "number" ? String(perfilAtual[k]) : ""} disabled={travado} onChange={(e) => mudarPerfil({ [k]: numeroOuVazio(e.target.value) })} className="mt-1" /></label>)}
       </div>
     </div>

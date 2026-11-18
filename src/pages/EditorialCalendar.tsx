@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,13 +14,27 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
+  AlertTriangle,
+  CalendarClock,
+  CalendarDays,
+  CheckCircle2,
   GripVertical,
+  PenLine,
   RefreshCw,
   Send,
   SquareKanban,
 } from "lucide-react";
 import { toast } from "sonner";
+import { StatTrio } from "@/components/ds";
+import TrilhoDaAgenda from "@/components/editorial/TrilhoDaAgenda";
 import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
+import { useConfirm } from "@/components/shared/confirmDialog";
+import {
+  aprovadosDoFiltro,
+  confirmacaoDeAgendarAprovados,
+  horarioDoAgendamentoEmLote,
+  resumoPorCliente,
+} from "@/lib/editorialAjustesAprovados";
 import {
   AjudaRecolhida,
   CabecalhoDePagina,
@@ -29,6 +43,7 @@ import {
   EstadoDeErro,
   botao,
   juntar,
+  superficie,
   texto,
 } from "@/components/sistema";
 import { useParametrosLembrados } from "@/components/editorial/useParametrosLembrados";
@@ -284,6 +299,36 @@ function resumoDoCalendario(
   return partes.join(" · ");
 }
 
+/**
+ * Números do período SEM cartão, na linha do título (passada estrutural,
+ * 15/11/2026: a fileira de quatro cartões saiu; o calendário sobe). Conta o
+ * mesmo que a linha do cabeçalho (resumoDoCalendario); não lê nada novo. Sem
+ * publicação, não desenha.
+ */
+function NumerosDoCalendario({ posts }: { posts: EditorialPostBundle[] }) {
+  const publications = posts.flatMap((post) => post.publications.map(({ publication }) => publication));
+  if (posts.length === 0 || publications.length === 0) return null;
+  const contar = (estado: string) => publications.filter((publication) => publication.status === estado).length;
+  const agendados = contar("scheduled");
+  const publicados = contar("published");
+  const falhas = contar("failed");
+  const outros = publications.length - agendados - publicados - falhas;
+  return (
+    <div data-faixa-do-calendario="">
+      <StatTrio
+        label={`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"} no período, publicações por estado`}
+        items={[
+          { label: posts.length === 1 ? "Conteúdo" : "Conteúdos", value: posts.length },
+          { label: "Publicados", value: publicados, hint: `de ${publications.length}` },
+          { label: "Agendados", value: agendados },
+          { label: "Em preparo", value: outros },
+          falhas > 0 && { label: "Falhas", value: falhas },
+        ]}
+      />
+    </div>
+  );
+}
+
 export default function EditorialCalendar() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -473,6 +518,18 @@ export default function EditorialCalendar() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [batchScheduling, setBatchScheduling] = useState(false);
 
+  const clientNames = useMemo(
+    () =>
+      new Map(
+        clientRows.map((client) => [
+          client.id,
+          client.company_name || client.full_name || "Cliente",
+        ]),
+      ),
+    [clientRows],
+  );
+  const confirmDialog = useConfirm();
+
   // Fluxo sincronizado: publicações PLANEJADAS cujo conteúdo o cliente já
   // aprovou ficam prontas para confirmar o agendamento em um clique.
   // Data/horário planejados são mantidos; se o horário já passou, vai para
@@ -480,11 +537,12 @@ export default function EditorialCalendar() {
   const approvedReadyToSchedule = useMemo(() => {
     if (!canUseTeamData || !permissions.canPublish) return [] as {
       bundle: EditorialPostBundle;
+      clientId: string;
       publicationId: string;
       version: number;
       scheduledAt: string;
     }[];
-    const out: { bundle: EditorialPostBundle; publicationId: string; version: number; scheduledAt: string }[] = [];
+    const out: { bundle: EditorialPostBundle; clientId: string; publicationId: string; version: number; scheduledAt: string }[] = [];
     posts.forEach((bundle) => {
       if (getEditorialApprovalStage(bundle) !== "approved") return;
       bundle.publications.forEach((publicationBundle) => {
@@ -492,6 +550,7 @@ export default function EditorialCalendar() {
         if (publication.status === "planned" && publication.scheduled_at) {
           out.push({
             bundle,
+            clientId: publication.client_id || bundle.post.client_id,
             publicationId: publication.id,
             version: publication.version,
             scheduledAt: publication.scheduled_at,
@@ -499,22 +558,37 @@ export default function EditorialCalendar() {
         }
       });
     });
-    return out;
-  }, [posts, canUseTeamData, permissions.canPublish]);
+    // 14/11/2026: com um cliente filtrado na tela, só entram as publicações
+    // dele. O lote chegou a agendar posts de outros clientes.
+    return aprovadosDoFiltro(out, forcedClientId || requestedClientId);
+  }, [posts, canUseTeamData, permissions.canPublish, forcedClientId, requestedClientId]);
 
   const scheduleApprovedNow = useCallback(async () => {
     if (batchScheduling || approvedReadyToSchedule.length === 0) return;
+    // Nunca agenda em silêncio: o diálogo diz quantos posts e de quais
+    // clientes. Em "todos os clientes", lista cada cliente com a quantidade.
+    const lote = aprovadosDoFiltro(approvedReadyToSchedule, forcedClientId || requestedClientId);
+    if (lote.length === 0) return;
+    const resumo = resumoPorCliente(lote, (id) => clientNames.get(id) || "Cliente");
+    const textoDoAviso = confirmacaoDeAgendarAprovados(
+      resumo,
+      !(forcedClientId || (requestedClientId !== "all" ? requestedClientId : "")),
+    );
+    const confirmou = await confirmDialog({
+      title: textoDoAviso.title,
+      description: textoDoAviso.description,
+      confirmLabel: textoDoAviso.confirmLabel,
+      cancelLabel: "Não agendar",
+    });
+    if (!confirmou) return;
     setBatchScheduling(true);
     let scheduled = 0;
     let failed = 0;
     // O primeiro erro e o que explica a falha; sem ele o aviso final mandava
     // "tente novamente" sem dizer o motivo.
     let firstError: string | null = null;
-    for (const item of approvedReadyToSchedule) {
-      const planned = new Date(item.scheduledAt);
-      const target = planned.getTime() > Date.now()
-        ? item.scheduledAt
-        : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    for (const item of lote) {
+      const target = horarioDoAgendamentoEmLote(item.scheduledAt);
       try {
         await transitionPublication.mutateAsync({
           publicationId: item.publicationId,
@@ -546,7 +620,7 @@ export default function EditorialCalendar() {
       });
     }
     setBatchScheduling(false);
-  }, [approvedReadyToSchedule, batchScheduling, queryClient, transitionPublication]);
+  }, [approvedReadyToSchedule, batchScheduling, clientNames, confirmDialog, forcedClientId, queryClient, requestedClientId, transitionPublication]);
   const [scheduleDefaultAt, setScheduleDefaultAt] = useState("");
   const [editingPost, setEditingPost] = useState<EditorialPostBundle | null>(
     null,
@@ -569,16 +643,6 @@ export default function EditorialCalendar() {
     useSensor(KeyboardSensor),
   );
 
-  const clientNames = useMemo(
-    () =>
-      new Map(
-        clientRows.map((client) => [
-          client.id,
-          client.company_name || client.full_name || "Cliente",
-        ]),
-      ),
-    [clientRows],
-  );
   const projectNames = useMemo(
     () =>
       new Map(
@@ -1666,33 +1730,41 @@ export default function EditorialCalendar() {
                 // 16/10/2026: no celular sai a linha de números (menos informação).
                 celular ? undefined : (
                 <>
-                  {resumoDoCalendario(
-                    filteredPosts,
-                    canUseTeamData && view === "board" ? tasksForCurrentView.length : undefined,
-                  )}
-                  {canUseTeamData && taskDataLoading && !taskDataError ? " · lendo tarefas do Kanban" : ""}
+                  {/* De 1024 px para cima os mesmos números estão na faixa de cartões logo abaixo: aqui, só quando ela não aparece. */}
+                  <span className={filteredPosts.some((p) => p.publications.length > 0) ? "lg:hidden" : undefined}>
+                    {resumoDoCalendario(
+                      filteredPosts,
+                      canUseTeamData && view === "board" ? tasksForCurrentView.length : undefined,
+                    )}
+                  </span>
+                  {canUseTeamData && taskDataLoading && !taskDataError ? <><span className={filteredPosts.some((p) => p.publications.length > 0) ? "lg:hidden" : undefined}>{" · "}</span>lendo tarefas do Kanban</> : ""}
                 </>
                 )
               }
             />
           }
+          numeros={
+            // Os números do período sem cartão, na linha do título (como nas referências). Enquanto lê, o lugar já está reservado.
+            celular ? undefined : calendarQuery.isLoading
+              ? <div className="h-12 w-[340px] animate-pulse rounded-full bg-muted motion-reduce:animate-none" aria-hidden="true" data-esqueleto-da-faixa="" />
+              : <NumerosDoCalendario posts={filteredPosts} />
+          }
           inicioDaLinha={
             canUseTeamData ? (
               <div className="flex min-w-0 items-center">
-                {/* 16/10/2026: no celular fica só o atalho do Kanban (sem a contagem). */}
-                {!celular && (
-                <span className={juntar(texto.auxiliar, "mr-2 truncate")}>
-                  <span className="font-medium text-violet-500">{productionTasks.length}</span>{" "}
-                  {productionTasks.length === 1 ? "entrega editorial do Kanban" : "entregas editoriais do Kanban"}
-                </span>
-                )}
+                {/* Polimento v4 (15/11/2026): a contagem virou o selo do atalho (o texto inteiro fica na dica). */}
                 <Link
                   to={kanbanHref}
-                  className={botao.icone}
+                  className={juntar(botao.icone, "relative")}
                   aria-label="Abrir Kanban central"
-                  title="Abrir Kanban central"
+                  title={`${productionTasks.length} ${productionTasks.length === 1 ? "entrega editorial do Kanban" : "entregas editoriais do Kanban"} · Abrir Kanban central`}
                 >
                   <SquareKanban className="h-4 w-4" aria-hidden="true" />
+                  {!celular && productionTasks.length > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-violet-600 px-1 text-[10px] font-semibold leading-none tabular-nums text-white" aria-hidden="true">
+                      {productionTasks.length}
+                    </span>
+                  )}
                 </Link>
               </div>
             ) : null
@@ -1761,9 +1833,9 @@ export default function EditorialCalendar() {
         />
 
         {approvedReadyToSchedule.length > 0 && (
-          <div className="mb-2 flex min-w-0 items-center rounded-md border border-success/30 bg-success/5 px-3 py-2">
-            <Send className="mr-2 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-            <p className={juntar(texto.corpo, "mr-1.5 min-w-0 truncate")}>
+          <div className="ds-accent mb-3 flex min-w-0 items-center rounded-lg px-4 py-3 sm:px-5">
+            <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-foreground max-sm:hidden"><Send className="h-4 w-4" aria-hidden="true" /></span>
+            <p className={juntar(texto.corpo, "mr-1.5 min-w-0 truncate font-semibold sm:text-[15px]")}>
               {/* 16/10/2026: frase curta no celular para caber numa linha. */}
               {celular
                 ? `${approvedReadyToSchedule.length} ${approvedReadyToSchedule.length === 1 ? "aprovado" : "aprovados"} para agendar`
@@ -1778,7 +1850,7 @@ export default function EditorialCalendar() {
               type="button"
               onClick={() => void scheduleApprovedNow()}
               disabled={batchScheduling}
-              className={juntar(botao.primario, "ml-auto bg-success text-success-foreground hover:bg-success/90", celular ? "h-11 shrink-0" : "h-8")}
+              className={juntar(botao.primario, "ml-auto bg-foreground text-background hover:bg-foreground/90", celular ? "h-11 shrink-0" : "h-9")}
             >
               {batchScheduling ? "Agendando…" : celular ? "Agendar" : "Agendar aprovados"}
             </button>
@@ -1855,8 +1927,22 @@ export default function EditorialCalendar() {
             estava em cada visão; no celular a página rola normal. */}
         {/* Na visão Conteúdos a principal não rola: o quadro organiza a
             rolagem (colunas de 1280 px para cima), sem rolagem dentro de rolagem. */}
+        <div className="flex min-w-0 items-start">
+        {!celular && view !== "board" && (
+          <TrilhoDaAgenda
+            dateKey={dateKey}
+            todayKey={todayKey}
+            semana={view === "week"}
+            posts={filteredPosts}
+            carregando={calendarQuery.isLoading}
+            podeCriar={canScheduleEditorial}
+            onEscolherDia={(dia) => setParam("date", dia)}
+            onAbrir={openDetail}
+            onCriarNoDia={openCreateOnDate}
+          />
+        )}
         <AreaDeTrabalho
-          className="mt-1"
+          className={juntar("mt-0 min-w-0 flex-1", view !== "board" && "xl:ml-4")}
           principalRolavel={view !== "board"}
           rotuloDoPrincipal="Calendário editorial"
           memoriaDaRolagem={`agenda:${view}`}
@@ -1900,6 +1986,7 @@ export default function EditorialCalendar() {
             />
           )}
         </AreaDeTrabalho>
+        </div>
 
         <p className="sr-only" aria-live="polite">
           {pendingMoveKeys.size > 0

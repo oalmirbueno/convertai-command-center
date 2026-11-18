@@ -241,7 +241,7 @@ export default function PassoConstruir({ site, onIrPara }: { site: LinhaDoSite; 
         <div className="mt-3 min-w-0" data-modelo-da-copy="">
           <TituloRecolhivel titulo="Modelo da copy" recolhido={modeloDaCopyRecolhido} onAlternar={() => setModeloDaCopyRecolhido(!modeloDaCopyRecolhido)} resumo={modeloDaCopy.modelo ? nomeDoModelo(modeloDaCopy.modelo) : "padrão"} />
           {!modeloDaCopyRecolhido && (
-            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
               <SeletorDoModeloDoEscopo estado={modeloDaCopy} />
             </div>
           )}
@@ -271,7 +271,7 @@ export default function PassoConstruir({ site, onIrPara }: { site: LinhaDoSite; 
         <div className="mt-3 min-w-0" data-avancado-da-construcao="">
           <TituloRecolhivel titulo="Avançado" recolhido={avancadoRecolhido} onAlternar={() => setAvancadoRecolhido(!avancadoRecolhido)} resumo={[motor ? ROTULO_DO_MOTOR[motor] : "motor padrão", modelo ? "modelo escolhido" : "modelo padrão"].join(" · ")} />
           {!avancadoRecolhido && (
-            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 desk:grid-cols-1">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2 desk:grid-cols-1">
               <label className="block min-w-0">
                 <span className={juntar(texto.rotulo, "mb-1 block")}>Motor</span>
                 <select value={motor} onChange={(e) => setMotor(e.target.value as MotorDeCodigo | "")} className={campo} data-seletor-de-motor="">

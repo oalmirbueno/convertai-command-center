@@ -1,0 +1,197 @@
+/*
+ * Espaço do CRM: o texto da página dentro do editor (TipTap/ProseMirror).
+ * Cores só pelos tokens do painel, para valer no tema claro e no escuro.
+ * Tamanhos dentro da escala do sistema (13, 14, 15, 20 e 24 px).
+ * Sem gap em flex (Safari 11): o espaço entre a caixa e o texto da tarefa é margem.
+ */
+.espaco-editor .ProseMirror {
+  min-height: 240px;
+  padding-bottom: 96px;
+  outline: none;
+  font-size: 14px;
+  line-height: 1.7;
+  color: hsl(var(--foreground));
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.espaco-editor .ProseMirror > * + * {
+  margin-top: 10px;
+}
+
+.espaco-editor .ProseMirror h1,
+.espaco-editor .ProseMirror h2,
+.espaco-editor .ProseMirror h3 {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  letter-spacing: -0.01em;
+}
+.espaco-editor .ProseMirror h1 {
+  font-size: 24px;
+  line-height: 32px;
+  margin-top: 28px;
+}
+.espaco-editor .ProseMirror h2 {
+  font-size: 20px;
+  line-height: 28px;
+  margin-top: 24px;
+}
+.espaco-editor .ProseMirror h3 {
+  font-size: 15px;
+  line-height: 22px;
+  margin-top: 18px;
+}
+.espaco-editor .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.espaco-editor .ProseMirror ul:not([data-type="taskList"]) {
+  list-style: disc;
+  padding-left: 22px;
+}
+.espaco-editor .ProseMirror ol {
+  list-style: decimal;
+  padding-left: 22px;
+}
+.espaco-editor .ProseMirror li > p {
+  margin: 0;
+}
+.espaco-editor .ProseMirror li + li {
+  margin-top: 4px;
+}
+.espaco-editor .ProseMirror li > ul,
+.espaco-editor .ProseMirror li > ol {
+  margin-top: 4px;
+}
+
+/* Lista de tarefas: a caixa de marcar à esquerda, o texto ao lado. */
+.espaco-editor .ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 2px;
+}
+.espaco-editor .ProseMirror ul[data-type="taskList"] > li {
+  display: flex;
+  align-items: flex-start;
+}
+.espaco-editor .ProseMirror ul[data-type="taskList"] > li > label {
+  flex: 0 0 auto;
+  margin-right: 10px;
+  margin-top: 4px;
+  line-height: 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.espaco-editor .ProseMirror ul[data-type="taskList"] > li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.espaco-editor .ProseMirror ul[data-type="taskList"] input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: hsl(var(--primary));
+}
+.espaco-editor .ProseMirror ul[data-type="taskList"] input[type="checkbox"]:disabled {
+  cursor: default;
+}
+.espaco-editor .ProseMirror ul[data-type="taskList"] > li[data-checked="true"] > div {
+  color: hsl(var(--muted-foreground));
+  text-decoration: line-through;
+}
+
+.espaco-editor .ProseMirror blockquote {
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 14px;
+  color: hsl(var(--muted-foreground));
+}
+.espaco-editor .ProseMirror blockquote > * + * {
+  margin-top: 6px;
+}
+
+.espaco-editor .ProseMirror hr {
+  border: 0;
+  border-top: 1px solid hsl(var(--border));
+  margin: 20px 0;
+}
+.espaco-editor .ProseMirror hr.ProseMirror-selectednode {
+  border-top-color: hsl(var(--primary));
+}
+
+.espaco-editor .ProseMirror code {
+  border-radius: 4px;
+  background: hsl(var(--muted));
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+.espaco-editor .ProseMirror pre {
+  border-radius: 8px;
+  background: hsl(var(--muted));
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.espaco-editor .ProseMirror pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.espaco-editor .ProseMirror a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.espaco-editor .ProseMirror strong {
+  font-weight: 600;
+}
+
+/* A dica do bloco vazio ("Escreva, ou digite / ..."). */
+.espaco-editor .ProseMirror .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: hsl(var(--muted-foreground));
+  opacity: 0.7;
+}
+
+.espaco-editor .ProseMirror ::selection {
+  background: hsl(var(--primary) / 0.25);
+}
+
+/* O título grande da página quebra a palavra comprida em vez de empurrar a tela. */
+.espaco-titulo {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+/* Menu de barra: a lista de tipos de bloco que abre ao digitar "/". Flutua sobre o texto. */
+.espaco-menu-de-barra {
+  position: absolute;
+  z-index: 30;
+  width: 264px;
+  max-width: calc(100% - 8px);
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+@media print {
+  .espaco-so-na-tela {
+    display: none !important;
+  }
+}

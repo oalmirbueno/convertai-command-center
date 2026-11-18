@@ -186,8 +186,9 @@ export async function umaVez(
   ctx: AuthContext,
   idempotencyKey: string,
   fazer: () => Promise<{ ref: string | null; resultado: Record<string, unknown> }>,
+  escopo?: Record<string, string>,
 ): Promise<Record<string, unknown>> {
-  const anterior = await findIdempotentResult(ferramenta, ctx.keyId, idempotencyKey).catch(() => null);
+  const anterior = await findIdempotentResult(ferramenta, ctx.keyId, idempotencyKey, escopo).catch(() => null);
   if (anterior) {
     return {
       ok: true,

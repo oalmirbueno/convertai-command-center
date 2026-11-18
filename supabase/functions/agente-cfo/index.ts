@@ -48,6 +48,7 @@ import {
   ehCapital,
   fatosParaAIa,
   numero,
+  reais,
   respostaDoCFO,
   retratoDoCFO,
   type Retrato,
@@ -56,6 +57,7 @@ import { caixinhasDe, COLUNAS, hojeEmSaoPaulo, montarDadosDoCFO } from "./modulo
 import { descricaoDoGasto, lerRota, perguntasDaRota, type RotaDoCFO } from "./modulos/cfo-rota.ts";
 import { AGENTE_CFO, conferirTrava, propostaDaIntencao } from "./modulos/cfo-acoes.ts";
 import { numerosForaDaConta } from "./modulos/cfo-conferencia.ts";
+import { leituraAmpla, respostaDoHistorico, type LeituraAmpla } from "./modulos/cfo-leitura-ampla.ts";
 // Núcleo comum dos agentes (09/10): só a apresentação e a conferência dos quadros (o CFO é da agência, sem cliente).
 import { conferirApresentacao, encaminharAoHermes, INSTRUCAO_DO_NUCLEO_DAS_MESAS, pedeAoHermes, pedidosAoHermes, quadroDosPedidos } from "../_shared/nucleo-das-mesas.ts";
 import type { FonteDeConsulta } from "../_shared/consultas-do-agente.ts";
@@ -117,10 +119,10 @@ async function identificar(req: Request): Promise<Chamador> {
 }
 
 /** Lê tudo de uma vez (cada leitura falha alto: número pela metade é pior que nenhum). */
-async function lerRetrato(ch: Chamador, meses?: number): Promise<{ retrato: Retrato; metaMensal: number | null }> {
+async function lerRetrato(ch: Chamador, meses?: number): Promise<{ retrato: Retrato; metaMensal: number | null; ampla: LeituraAmpla | null }> {
   const s = servico();
   const desde = new Date(Date.now() - 62 * 86_400_000).toISOString();
-  const [cobrancas, pagamentos, despesas, clientes, config, perfil, metas, travas] = await Promise.all([
+  const [cobrancas, pagamentos, despesas, clientes, config, perfil, metas, travas, produto, extras] = await Promise.all([
     // As contas do CFO são em real: o dólar do freela tem caixa próprio em /freela/caixa.
     s.from("billing").select(COLUNAS.cobrancas).eq("currency", "BRL").limit(5000),
     s.from("project_payments").select(COLUNAS.pagamentos).limit(2000),
@@ -130,6 +132,9 @@ async function lerRetrato(ch: Chamador, meses?: number): Promise<{ retrato: Retr
     s.from("profiles").select("services_config").eq("id", ch.userId).maybeSingle(),
     s.from("cfo_metas").select(COLUNAS.metas).is("arquivado_em", null).order("criado_em", { ascending: true }).limit(50),
     s.from("cfo_eventos").select(COLUNAS.travas).gte("criado_em", desde).limit(500),
+    // Leitura ampla (16/11): o produto CRM e E-mail e os extras dos clientes também entram na conta.
+    s.from("produto_cobrancas").select("valor, valor_liquido, pago_em").eq("estado", "paga").limit(5000),
+    s.from("client_extras").select("client_id, nome, cobranca, valor, status").limit(2000),
   ]);
   const erro = [cobrancas, pagamentos, despesas, clientes, config, perfil].find((r) => r.error);
   if (erro && erro.error) throw new ErroHttp(503, "financeiro_indisponivel", `Não consegui ler o financeiro agora: ${erro.error.message}`);
@@ -147,7 +152,24 @@ async function lerRetrato(ch: Chamador, meses?: number): Promise<{ retrato: Retr
     metas: (metas.data || []) as Record<string, unknown>[],
     travas: (travas.data || []) as Record<string, unknown>[],
   });
-  return { retrato: retratoDoCFO(dados, { meses }), metaMensal: dados.config.metaMensal };
+  if (produto.error) registrarFalha("agente-cfo: CRM e E-mail sem leitura", produto.error);
+  if (extras.error) registrarFalha("agente-cfo: extras sem leitura", extras.error);
+  let ampla: LeituraAmpla | null = null;
+  try {
+    ampla = leituraAmpla({
+      hoje: hojeEmSaoPaulo(),
+      cobrancas: (cobrancas.data || []) as Record<string, unknown>[],
+      pagamentos: (pagamentos.data || []) as Record<string, unknown>[],
+      despesas: (despesas.data || []) as Record<string, unknown>[],
+      clientes: (clientes.data || []) as Record<string, unknown>[],
+      config: config.data as Record<string, unknown> | null,
+      produto: (produto.error ? [] : produto.data || []) as Record<string, unknown>[],
+      extras: (extras.error ? [] : extras.data || []) as Record<string, unknown>[],
+    });
+  } catch (e) {
+    registrarFalha("agente-cfo: leitura ampla falhou (segue o retrato)", e);
+  }
+  return { retrato: retratoDoCFO(dados, { meses }), metaMensal: dados.config.metaMensal, ampla };
 }
 
 /** A carteira de IA que paga o CFO: a da própria agência (cliente interno). Sem ela, o CFO responde sem IA. */
@@ -187,7 +209,8 @@ Regras duras:
 - Se o motor disse "não" para um gasto, você diz "não" e explica. Nunca libere um gasto que o motor travou.
 - Até 8 linhas curtas. Sem markdown, sem asterisco, sem travessão. Valores no formato R$ 1.234,56.
 - Termine com UMA pergunta ou próxima ação concreta (ex.: "Confirmo o corte?", "Quer que eu guarde essas metas?").
-- Cobrança a cliente é ele quem faz: o painel não envia nada sozinho.`;
+- Cobrança a cliente é ele quem faz: o painel não envia nada sozinho.
+Você lê o financeiro inteiro: além do caixa e da projeção, os FATOS trazem o resultado dos últimos 12 meses (entrou, saiu, lucro, margem, caixa no fim), a comparação do lucro com o mês anterior e a média, de onde entrou o dinheiro do mês, quem mais pagou nos últimos 3 meses, para onde foi o dinheiro do mês, os extras dos clientes e o produto CRM e E-mail. Use o que responde à pergunta e aponte o que chama atenção (queda, concentração, gasto que cresceu), sempre com o número dos FATOS.`;
 
 /** O CFO não tem leitura prévia de cliente: a fonte dos quadros é a conta do motor (FATOS + RESPOSTA DO MOTOR). */
 const FONTE_DOS_QUADROS_DO_CFO = `FONTE DOS QUADROS: a RESPOSTA DO MOTOR e os FATOS são a leitura L1 (cite "L1" em "fontes"). Quadro só quando ajuda (comparação, meses, cortes); fora dele, siga as regras acima.`;
@@ -250,7 +273,7 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>): Promise<
   const pedido = String(corpo.pergunta ?? "").trim().slice(0, 1500);
   if (!pedido) throw new ErroHttp(400, "pergunta_vazia", "Escreva a pergunta para o CFO.");
   const modeloId = typeof corpo.modelo_id === "string" && corpo.modelo_id.trim() ? corpo.modelo_id.trim().slice(0, 200) : null;
-  const [{ retrato, metaMensal }, agencia, trocas] = await Promise.all([
+  const [{ retrato, metaMensal, ampla }, agencia, trocas] = await Promise.all([
     lerRetrato(ch, Number(corpo.meses) || undefined),
     carteiraDaAgencia(),
     ultimasTrocas(ch.userId, 8).catch((e) => (registrarFalha("agente-cfo: conversa sem leitura", e), [])),
@@ -262,7 +285,16 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     : rota.intencao === "meta" || rota.intencao === "nova_meta" ? "plano"
     : rota.intencao === "simular" ? "projecao"
     : rota.intencao === "lancar" ? "este_mes" : rota.intencao;
-  let base = respostaDoCFO(retrato, intencaoDoTexto, { avaliacao, meses: Number(corpo.meses) || 6 });
+  let base = rota.intencao === "historico" && ampla
+    ? respostaDoHistorico(ampla.historico, pedido)
+    : respostaDoCFO(retrato, intencaoDoTexto === "historico" ? "saude" : intencaoDoTexto, { avaliacao, meses: Number(corpo.meses) || 6 });
+  // No resumo geral, o lucro do mês até agora e o do mês passado entram junto.
+  if (intencaoDoTexto === "saude" && ampla && ampla.historico.meses.length) {
+    const ms = ampla.historico.meses;
+    const a = ms[ms.length - 1];
+    const b = ms.length > 1 ? ms[ms.length - 2] : null;
+    base += `\nLucro do mês até agora ${reais(a.lucro)}${b ? `; no mês passado foi ${reais(b.lucro)}` : ""}.`;
+  }
   if (rota.intencao === "posso_gastar" && !avaliacao) base = `Qual é o valor? Me diga quanto e se é de uma vez ou todo mês.\n${respostaDoCFO(retrato, "este_mes")}`;
   if ((rota.intencao === "meta" || rota.intencao === "nova_meta") && acao) base = `${acao.resumo}\n${base}`;
   // Editar a meta mensal sem dizer que é ela: pergunta, nada muda.
@@ -279,7 +311,7 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     if (!agencia) aviso = "Sem carteira de IA da agência: mostrei a conta do motor.";
     else {
       try {
-        const r = await explicar(agencia, { pedido, base, fatos: fatosParaAIa(retrato), modeloId, historico: historicoEmTexto(trocas), userId: ch.userId, temProposta: !!acao });
+        const r = await explicar(agencia, { pedido, base, fatos: { ...fatosParaAIa(retrato), ...(ampla ? ampla.fatos : {}) }, modeloId, historico: historicoEmTexto(trocas), userId: ch.userId, temProposta: !!acao });
         resposta = r.texto;
         custo = r.custo;
         modelo = r.modelo;

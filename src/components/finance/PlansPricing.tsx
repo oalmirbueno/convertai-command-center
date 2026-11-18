@@ -19,7 +19,8 @@ import {
   CampoDeFormulario, Carregando, EstadoVazio, GrupoDeCampos, RegiaoRolavel, Secao,
   botao, campo, campoTexto, juntar, superficie, texto, useEstadoDaTela,
 } from "@/components/sistema";
-import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, TituloRecolhivel, botaoDeLinha, corDoTom } from "@/components/finance/pecasDoFinanceiro";
+import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, TituloRecolhivel, botaoDeLinha, botaoPrincipalDeLinha, corDoTom, tabela } from "@/components/finance/pecasDoFinanceiro";
+import { Avatar, CardSurface, OverflowMenu } from "@/components/ds";
 import { aliquotaDigitadaEmFracao } from "@/lib/financeiro/aliquotaDigitada";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -329,11 +330,11 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
     r.margin < 0 ? corDoTom.perigo : r.marginPct < 0.2 ? corDoTom.aviso : corDoTom.sucesso;
 
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="min-w-0 space-y-6 sm:space-y-8">
       {/* Resumo do catálogo */}
       <GradeDeKpis>
-        <Kpi rotulo="Planos ativos" valor={String(activePlans.length)} />
-        <Kpi rotulo="Clientes em planos" valor={String([...clientsByPlanName.values()].reduce((s, v) => s + v.count, 0))} tom="primario" />
+        <Kpi rotulo="Planos ativos" valor={String(activePlans.length)} icone={<BookOpen className="h-4 w-4" />} />
+        <Kpi rotulo="Clientes em planos" valor={String([...clientsByPlanName.values()].reduce((s, v) => s + v.count, 0))} tom="primario" icone={<Users className="h-4 w-4" />} />
         <Kpi rotulo="MRR dos planos" valor={fmt([...clientsByPlanName.values()].reduce((s, v) => s + v.mrr, 0))} tom="sucesso" />
         <Kpi rotulo="Rateio fixo / cliente" valor={fmt(fixedPerClient)} tom="info" />
       </GradeDeKpis>
@@ -360,11 +361,11 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
             {marginRows.length === 0 ? (
               <EstadoVazio compacto titulo="Nenhum cliente com receita ainda." />
             ) : (
-              <RegiaoRolavel memoria="financeiro:planos:margem" rotulo="Margem por cliente" className="lg:max-h-[420px]">
+              <RegiaoRolavel memoria="financeiro:planos:margem" rotulo="Margem por cliente" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden p-3 sm:p-4")} className="lg:max-h-[420px]">
                 {/* Computador: tabela. Celular e tablet: lista. */}
-                <table className="hidden w-full text-[13px] lg:table">
-                  <thead className="bg-background lg:sticky lg:top-0 lg:z-10">
-                    <tr className="border-b border-border">
+                <table className={juntar(tabela.tabela, "hidden lg:table")}>
+                  <thead className={juntar(tabela.cabeca, "bg-card lg:sticky lg:top-0 lg:z-10")}>
+                    <tr>
                       <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Cliente</th>
                       <th className={juntar(texto.rotulo, "px-3 py-2 text-left")}>Plano</th>
                       <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Receita/mês</th>
@@ -374,12 +375,13 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                       <th className={juntar(texto.rotulo, "py-2 pl-3 text-right")}>Margem</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className={tabela.corpo}>
                     {marginRows.map((r) => (
                       <tr key={r.id}>
                         <td className="max-w-[240px] py-2 pr-3 text-foreground">
                           <span className="flex min-w-0 items-center">
-                            <span className="min-w-0 truncate">{r.name}</span>
+                            <Avatar name={r.name} size="sm" className="mr-2.5" />
+                            <span className="min-w-0 truncate font-medium">{r.name}</span>
                             <Etiqueta tom={r.type === "recorrente" ? "primario" : "info"} className="ml-1.5">
                               {r.type === "recorrente" ? "Recorrente" : "Avulso"}
                             </Etiqueta>
@@ -390,14 +392,15 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                         <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(r.taxReserve)}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(r.directCost)}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(r.rateio)}</td>
-                        <td className={juntar("whitespace-nowrap py-2 pl-3 text-right font-medium tabular-nums", tomDaMargem(r))}>
-                          {fmt(r.margin)} ({Math.round(r.marginPct * 100)}%)
+                        <td className="whitespace-nowrap py-2 pl-3 text-right">
+                          <span className={juntar("mr-2 font-semibold tabular-nums", tomDaMargem(r))}>{fmt(r.margin)}</span>
+                          <Etiqueta tom={r.margin < 0 ? "perigo" : r.marginPct < 0.2 ? "aviso" : "sucesso"} semPonto>{Math.round(r.marginPct * 100)}%</Etiqueta>
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-background lg:sticky lg:bottom-0">
-                    <tr className="border-t border-border">
+                  <tfoot className="bg-card lg:sticky lg:bottom-0 [&_td]:border-t [&_td]:border-border [&_td]:px-4 [&_td]:py-3.5">
+                    <tr>
                       <td colSpan={2} className="py-2 pr-3 text-[12px] font-medium text-foreground">Total ({marginRows.length} clientes)</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums text-foreground">{fmt(marginRows.reduce((s, r) => s + r.revenue, 0))}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(marginRows.reduce((s, r) => s + r.taxReserve, 0))}</td>
@@ -410,9 +413,9 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                   </tfoot>
                 </table>
 
-                <ul className="divide-y divide-border lg:hidden">
+                <ul className="px-1 lg:hidden">
                   {marginRows.map((r) => (
-                    <li key={r.id} className="min-w-0 py-2.5">
+                    <li key={r.id} className="min-w-0 py-3">
                       <div className="flex min-w-0 items-center">
                         <span className="mr-2 min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{r.name}</span>
                         <span className={juntar("shrink-0 text-[13px] font-medium tabular-nums", tomDaMargem(r))}>
@@ -466,48 +469,58 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
         ) : activePlans.length === 0 ? (
           <EstadoVazio compacto titulo="Nenhum plano no catálogo." descricao="Importe a tabela do Plano Diretor ou crie o primeiro plano." />
         ) : (
-          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
             {activePlans.map((plan) => {
               const v = plan.currentVersion || plan.versions[0] || null;
               const linked = clientsByPlanName.get(normName(plan.name)) || { count: 0, mrr: 0 };
               const bd = v ? breakdown(v.amount, v.taxRate, v.directCost) : null;
               const needsReview = v?.amountKind === "needs_review" || v?.taxRate === null;
               return (
-                <article key={plan.id} className={juntar(superficie.painel, "flex min-w-0 flex-col")}>
-                  <div className="flex min-w-0 items-start px-4 pt-4">
+                <CardSurface as="article" key={plan.id} padded className="flex min-w-0 flex-col">
+                  <div className="flex min-w-0 items-start">
                     <div className="mr-2 min-w-0 flex-1">
-                      <h3 className="truncate text-[13px] font-semibold text-foreground">{plan.name}</h3>
-                      {plan.description && <p className={juntar(texto.auxiliar, "mt-0.5 line-clamp-2 leading-4")}>{plan.description}</p>}
+                      <h3 className="truncate text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">{plan.name}</h3>
+                      {plan.description && <p className={juntar(texto.auxiliar, "mt-1 line-clamp-2 leading-4")}>{plan.description}</p>}
                     </div>
-                    {needsReview && (
-                      <Etiqueta tom="aviso">
+                    <OverflowMenu
+                      label={`Mais ações de ${plan.name}`}
+                      items={[
+                        { label: "Editar plano", icon: <Pencil className="h-3.5 w-3.5" />, onSelect: () => { setPlanForm({ name: plan.name, description: plan.description || "" }); setPlanModal({ plan }); } },
+                        { label: "Arquivar plano", icon: <Archive className="h-3.5 w-3.5" />, danger: true, onSelect: () => toggleArchive(plan) },
+                      ]}
+                    />
+                  </div>
+                  {needsReview && (
+                    <p className="mt-3">
+                      <Etiqueta tom="aviso" semPonto>
                         <AlertTriangle className="mr-1 h-3 w-3" aria-hidden="true" /> Revisar alíquota
                       </Etiqueta>
-                    )}
-                  </div>
+                    </p>
+                  )}
 
-                  <div className="flex-1 px-4 pb-3 pt-3">
+                  <div className="flex-1 pt-5">
                     {v ? (
                       <>
-                        <p className="flex items-baseline">
-                          <span className="mr-2 text-[20px] font-semibold tabular-nums text-foreground">{fmt(v.amount)}</span>
-                          <span className={texto.auxiliar}>base/mês</span>
+                        <p className="flex min-w-0 items-baseline">
+                          <span className="mr-2 truncate text-[32px] font-semibold leading-10 tracking-[-0.035em] tabular-nums text-foreground">{fmt(v.amount)}</span>
+                          <span className={juntar(texto.auxiliar, "shrink-0")}>base/mês</span>
                         </p>
-                        <dl className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-[12px]">
+                        <p className="mt-2 flex min-w-0 items-center">
+                          <Etiqueta tom={bd!.margin >= 0 ? "sucesso" : "perigo"}>
+                            Margem {fmt(bd!.margin)} ({Math.round(bd!.marginPct * 100)}%)
+                          </Etiqueta>
+                        </p>
+                        <dl className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 text-[13px] leading-5 [&>dd]:border-b [&>dd]:border-border/60 [&>dd]:py-2 [&>dt]:border-b [&>dt]:border-border/60 [&>dt]:py-2">
                           <dt className="text-muted-foreground">Alíquota</dt>
                           <dd className="text-right tabular-nums text-foreground">{pctLabel(v.taxRate)}</dd>
                           <dt className="text-muted-foreground">Cobrança final</dt>
-                          <dd className="text-right tabular-nums text-info">{fmt(bd!.final)}</dd>
+                          <dd className="text-right font-medium tabular-nums text-foreground">{fmt(bd!.final)}</dd>
                           <dt className="text-muted-foreground">Reserva tributária</dt>
                           <dd className="text-right tabular-nums text-muted-foreground">{fmt(bd!.reserve)}</dd>
                           <dt className="truncate text-muted-foreground">Custo direto{v.directCostEstimated ? " (estimado)" : ""}</dt>
-                          <dd className="text-right tabular-nums text-warning">{fmt(v.directCost)}</dd>
+                          <dd className="text-right tabular-nums text-muted-foreground">{fmt(v.directCost)}</dd>
                           <dt className="text-muted-foreground">Rateio fixo/cliente</dt>
-                          <dd className="text-right tabular-nums text-warning">{fmt(fixedPerClient)}</dd>
-                          <dt className="text-muted-foreground">Margem estimada</dt>
-                          <dd className={juntar("text-right tabular-nums", bd!.margin >= 0 ? "text-success" : "text-destructive")}>
-                            {fmt(bd!.margin)} ({Math.round(bd!.marginPct * 100)}%)
-                          </dd>
+                          <dd className="text-right tabular-nums text-muted-foreground">{fmt(fixedPerClient)}</dd>
                           {v.setupFee > 0 && (
                             <>
                               <dt className="text-muted-foreground">Setup</dt>
@@ -516,7 +529,7 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                           )}
                         </dl>
                         {plan.upcomingVersion && (
-                          <p className="mt-2 truncate text-[12px] text-info">
+                          <p className="mt-3 truncate text-[12px] text-info">
                             Programado: {fmt(plan.upcomingVersion.amount)} a partir de {new Date(`${plan.upcomingVersion.effectiveFrom}T12:00:00`).toLocaleDateString("pt-BR")}
                           </p>
                         )}
@@ -524,36 +537,18 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                     ) : (
                       <p className={texto.auxiliar}>Sem preço definido. Crie a primeira versão.</p>
                     )}
-                    <p className={juntar(texto.auxiliar, "mt-3 flex items-center")}>
-                      <Users className="mr-1.5 h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="truncate">{linked.count > 0 ? `${linked.count} cliente(s) · ${fmt(linked.mrr)}/mês` : "Nenhum cliente vinculado"}</span>
-                    </p>
                   </div>
 
-                  <div className="flex min-w-0 items-center border-t border-border px-3 py-2">
-                    <button type="button" onClick={() => openVersionModal(plan)} className={juntar(botaoDeLinha, "mr-auto")}>
+                  <div className="mt-5 flex min-w-0 items-center">
+                    <p className={juntar(texto.auxiliar, "mr-3 flex min-w-0 flex-1 items-center")}>
+                      <Users className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{linked.count > 0 ? `${linked.count} cliente(s) · ${fmt(linked.mrr)}/mês` : "Nenhum cliente vinculado"}</span>
+                    </p>
+                    <button type="button" onClick={() => openVersionModal(plan)} className={botaoPrincipalDeLinha}>
                       Novo preço
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => { setPlanForm({ name: plan.name, description: plan.description || "" }); setPlanModal({ plan }); }}
-                      className={botao.icone}
-                      aria-label={`Editar ${plan.name}`}
-                      title="Editar plano"
-                    >
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleArchive(plan)}
-                      title="Arquivar plano"
-                      aria-label={`Arquivar ${plan.name}`}
-                      className={juntar(botao.icone, "hover:text-destructive")}
-                    >
-                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
                   </div>
-                </article>
+                </CardSurface>
               );
             })}
           </div>
@@ -598,10 +593,10 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
       >
         {oneOffOpen && (
           <div id="financeiro-avulsos">
-            <RegiaoRolavel memoria="financeiro:planos:avulsos" rotulo="Avulsos do Plano Diretor" className="lg:max-h-[420px]">
-              <table className="hidden w-full text-[13px] lg:table">
-                <thead className="bg-background lg:sticky lg:top-0 lg:z-10">
-                  <tr className="border-b border-border">
+            <RegiaoRolavel memoria="financeiro:planos:avulsos" rotulo="Avulsos do Plano Diretor" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden p-3 sm:p-4")} className="lg:max-h-[420px]">
+              <table className={juntar(tabela.tabela, "hidden lg:table")}>
+                <thead className={juntar(tabela.cabeca, "bg-card lg:sticky lg:top-0 lg:z-10")}>
+                  <tr>
                     <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Entrega</th>
                     <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Lançamento</th>
                     <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Padrão</th>
@@ -610,10 +605,10 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                     <th className={juntar(texto.rotulo, "py-2 pl-3 text-right")}>Pagamento</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className={tabela.corpo}>
                   {ONE_OFF_CATALOG.map((o) => (
                     <tr key={o.name}>
-                      <td className="py-2 pr-3 text-foreground">{o.name}</td>
+                      <td className="py-2 pr-3 font-medium text-foreground">{o.name}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-foreground">
                         {o.fromPrice ? "a partir de " : ""}{fmt(o.launchPrice)}
                       </td>
@@ -630,9 +625,9 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
                 </tbody>
               </table>
 
-              <ul className="divide-y divide-border lg:hidden">
+              <ul className="px-1 lg:hidden">
                 {ONE_OFF_CATALOG.map((o) => (
-                  <li key={o.name} className="min-w-0 py-2.5">
+                  <li key={o.name} className="min-w-0 py-3">
                     <div className="flex min-w-0 items-center">
                       <span className="mr-2 min-w-0 flex-1 text-[13px] font-medium text-foreground [overflow-wrap:anywhere]">{o.name}</span>
                       <span className="shrink-0 text-[13px] tabular-nums text-foreground">{o.fromPrice ? "a partir de " : ""}{fmt(o.launchPrice)}</span>
@@ -786,7 +781,7 @@ export default function PlansPricing({ billing: cobrancas = [], projectPayments 
               Entram com o preço de lançamento, alíquota ilustrativa de 6% e custo direto estimado de {fmt(defaultDirectCost)}. Planos que já existem não mudam.
             </p>
             <RegiaoRolavel modo="sempre" sobre="cartao" className="max-h-52">
-              <ul className="divide-y divide-border">
+              <ul>
                 {missingSeeds.map((s) => (
                   <li key={s.code} className="flex min-w-0 items-center py-2 text-[13px]">
                     <span className="mr-3 min-w-0 flex-1 truncate text-foreground">{s.name}</span>

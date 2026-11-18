@@ -191,7 +191,7 @@ export default function PessoasEFunil({ dados, agir }: Props) {
         <p role="alert">{mensagemDoErro(lista.error)}</p>
       ) : (
         <div className="membros-tabela-rolagem">
-          <table className="membros-tabela">
+          <table className="membros-tabela membros-tabela-pessoas">
             <thead>
               <tr>
                 <th>
@@ -253,8 +253,8 @@ export default function PessoasEFunil({ dados, agir }: Props) {
                     {!p.confirmado && <small>Conta ainda não confirmada</small>}
                   </td>
                   <td>{situacoes[p.situacao] || "Sem compra registrada"}</td>
-                  <td>{p.compras}</td>
-                  <td>{p.liberados}</td>
+                  <td data-rotulo="Compras">{p.compras}</td>
+                  <td data-rotulo="Acessos">{p.liberados}</td>
                   <td>
                     <button
                       className="membros-acao"

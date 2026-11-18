@@ -158,11 +158,18 @@ export const partesDaConversaDaCampanha = (catalogo: ModeloIa[], anexos: number)
 
 /** Troca a campanha na lista em cache (ou põe no topo, se for nova). */
 export function trocarCampanhaNoCache(qc: QueryClient, clientId: string, nova: Campanha) {
-  qc.setQueryData<Campanha[]>(chaves.campanhas(clientId), (lista) => {
+  // 16/11/2026: a campanha fica na lista do lado dela (ativas ou arquivadas) e sai da outra.
+  const arquivada = !!nova.arquivada_em;
+  const poe = (lista: Campanha[] | undefined) => {
     const atual = lista || [];
     const tem = atual.some((c) => c.id === nova.id);
     return tem ? atual.map((c) => (c.id === nova.id ? nova : c)) : [nova].concat(atual);
-  });
+  };
+  const tira = (lista: Campanha[] | undefined) => (lista ? lista.filter((c) => c.id !== nova.id) : lista);
+  qc.setQueryData<Campanha[]>(chaves.campanhas(clientId), arquivada ? tira : poe);
+  if (arquivada || qc.getQueryData(chaves.campanhasArquivadas(clientId))) {
+    qc.setQueryData<Campanha[]>(chaves.campanhasArquivadas(clientId), arquivada ? poe : tira);
+  }
 }
 
 /**

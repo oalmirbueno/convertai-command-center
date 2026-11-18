@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,10 +14,8 @@ import { recordMemory } from "@/lib/clientMemory";
 import {
   AreaDeTrabalho,
   BarraDeAcoes,
-  CabecalhoDePagina,
   CampoDeFormulario,
   GrupoDeCampos,
-  Secao,
   SeletorCompacto,
   botao,
   campo,
@@ -26,6 +25,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
+import { Card, PageHeader } from "@/components/ds";
 
 const ehTexto = (v: unknown) => typeof v === "string";
 const ehLista = (v: unknown) => Array.isArray(v);
@@ -91,6 +91,8 @@ const CHART_TYPES = [
 ];
 
 export default function AdminReportCreate({ editId }: { editId?: string }) {
+  // Celular: o tipo de gráfico vira lista (o segmentado de três espremia o título do cartão para "G…").
+  const pequena = useTelaPequena();
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -364,13 +366,13 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   );
 
   return (
-    <div className="min-w-0 space-y-4">
-      <CabecalhoDePagina
-        titulo="Novo relatório"
-        voltar={{ para: "/relatorios", rotulo: "Relatórios" }}
-        descricao={temRascunho ? "Rascunho guardado neste navegador" : undefined}
-        ajuda="Relatório de entrega: números do período, gráfico, análise e anexo. O rascunho fica guardado aqui enquanto você não salva."
-        acoes={
+    <div className="min-w-0 space-y-6">
+      <PageHeader
+        title="Novo relatório"
+        back={{ to: "/relatorios", label: "Relatórios" }}
+        subtitle={temRascunho ? "Rascunho guardado neste navegador" : undefined}
+        help="Relatório de entrega: números do período, gráfico, análise e anexo. O rascunho fica guardado aqui enquanto você não salva."
+        actions={
           <>
             {temRascunho && (
               <button type="button" onClick={descartarRascunho} className={juntar(botao.discreto, "hidden sm:inline-flex")}>
@@ -383,9 +385,10 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       />
 
       <AreaDeTrabalho memoriaDaRolagem="relatorio:novo" rotuloDoPrincipal="Formulário do relatório">
-        <div className="max-w-4xl space-y-6 pb-4">
+        <div className="max-w-4xl space-y-4 pb-4 sm:space-y-5">
           {/* INFORMAÇÕES BÁSICAS */}
-          <GrupoDeCampos titulo="Informações básicas">
+          <Card title="Informações básicas" collapsible={false}>
+          <GrupoDeCampos>
             <CampoDeFormulario rotulo="Cliente" obrigatorio>
               <select value={clientId} onChange={(e) => { setClientId(e.target.value); setProjectId(""); }} className={campo}>
                 <option value="">Selecione</option>
@@ -412,14 +415,15 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
               <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className={campo} />
             </CampoDeFormulario>
           </GrupoDeCampos>
+          </Card>
 
           {/* MÉTRICAS */}
-          <Secao
-            titulo="Métricas"
-            divisoria
-            descricao={parsedSource ? `Fonte: ${parsedSource.label} · ${parsedSource.rows.length} linhas · dimensão ${parsedSource.dimensionKey}` : undefined}
-            ajuda="Importe o export do Google Ads, Meta Ads, Social Media ou Vendas (CSV/XLSX). O sistema detecta o tipo, normaliza as colunas e preenche os números e o gráfico."
-            acao={
+          <Card
+            collapsible={false}
+            title="Métricas"
+            subtitle={parsedSource ? `Fonte: ${parsedSource.label} · ${parsedSource.rows.length} linhas · dimensão ${parsedSource.dimensionKey}` : undefined}
+            help="Importe o export do Google Ads, Meta Ads, Social Media ou Vendas (CSV/XLSX). O sistema detecta o tipo, normaliza as colunas e preenche os números e o gráfico."
+            action={
               <button type="button" onClick={() => csvInputRef.current?.click()} className={botao.secundario} aria-label="Importar CSV ou XLSX">
                 <FileSpreadsheet className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Importar CSV / XLSX</span>
@@ -460,17 +464,18 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
                 <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Adicionar métrica
               </button>
             </div>
-          </Secao>
+          </Card>
 
           {/* DADOS DO GRÁFICO */}
-          <Secao
-            titulo="Gráfico"
-            divisoria
-            descricao={chartData.length ? `${chartData.length} ${chartData.length === 1 ? "linha" : "linhas"}` : undefined}
-            ajuda="Monte a tabela que aparece no gráfico do relatório. Importe via CSV ou adicione linhas à mão."
-            acao={
+          <Card
+            collapsible={false}
+            title="Gráfico"
+            subtitle={chartData.length ? `${chartData.length} ${chartData.length === 1 ? "linha" : "linhas"}` : undefined}
+            help="Monte a tabela que aparece no gráfico do relatório. Importe via CSV ou adicione linhas à mão."
+            action={
               <SeletorCompacto
                 rotulo="Tipo de gráfico"
+                modo={pequena ? "lista" : "segmentado"}
                 opcoes={CHART_TYPES.map((ct) => ({ valor: ct.value, rotulo: ct.label, icone: <ct.icon className="h-3.5 w-3.5" /> }))}
                 valor={chartType}
                 onEscolher={setChartType}
@@ -481,12 +486,12 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
               <div className="mb-2 overflow-x-auto">
                 <table className="w-full min-w-[420px] text-[13px]">
                   <thead>
-                    <tr className="border-b border-border">
-                      <th className={juntar(texto.rotulo, "px-2 py-2 text-left")}>Período</th>
+                    <tr className="bg-muted/60">
+                      <th className={juntar(texto.rotulo, "rounded-l-md px-3 py-2.5 text-left")}>Período</th>
                       {chartColumns.map((col) => (
                         <th key={col} className={juntar(texto.rotulo, "px-2 py-2 text-right")}>{col}</th>
                       ))}
-                      <th className="w-9" />
+                      <th className="w-9 rounded-r-md" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -525,10 +530,11 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
                 <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Adicionar coluna
               </button>
             </div>
-          </Secao>
+          </Card>
 
           {/* ANÁLISE E CONTEÚDO */}
-          <GrupoDeCampos titulo="Análise" colunas={1} className="border-t border-border pt-5">
+          <Card title="Análise" collapsible={false}>
+          <GrupoDeCampos colunas={1}>
             <CampoDeFormulario rotulo="Resumo executivo">
               <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={6} placeholder="Resumo geral do período analisado..." className={campoTexto} />
             </CampoDeFormulario>
@@ -542,9 +548,10 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
               <textarea value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} rows={3} placeholder="Notas internas da equipe..." className={campoTexto} />
             </CampoDeFormulario>
           </GrupoDeCampos>
+          </Card>
 
           {/* ANEXOS */}
-          <Secao titulo="Anexo" divisoria ajuda="Relatório externo em PDF, PPTX ou DOC. Escolha o cliente antes de enviar.">
+          <Card title="Anexo" collapsible={false} help="Relatório externo em PDF, PPTX ou DOC. Escolha o cliente antes de enviar.">
             {fileName ? (
               <div className={juntar(superficie.poco, "flex min-w-0 items-center px-3 py-2")}>
                 <Upload className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -554,13 +561,13 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
                 </button>
               </div>
             ) : (
-              <label className={juntar("flex min-w-0 cursor-pointer items-center justify-center rounded-md border border-dashed border-border px-4 py-6 transition-colors hover:border-primary/50", uploading && "pointer-events-none opacity-70")}>
+              <label className={juntar("flex min-w-0 cursor-pointer items-center justify-center rounded-md border border-dashed border-border bg-muted/40 px-4 py-10 transition-colors hover:border-primary/60 hover:bg-accent-soft", uploading && "pointer-events-none opacity-70")}>
                 {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" /> : <Upload className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />}
                 <span className={texto.auxiliar}>{uploading ? "Enviando..." : "Clique ou arraste um arquivo"}</span>
                 <input type="file" className="hidden" accept=".pdf,.pptx,.doc,.docx" onChange={handleFileUpload} disabled={uploading} />
               </label>
             )}
-          </Secao>
+          </Card>
 
           {/* Celular: as ações ficam no pé, sempre à vista */}
           <BarraDeAcoes fixa className="sm:hidden" inicio={temRascunho ? <button type="button" onClick={descartarRascunho} className="text-[12px] text-muted-foreground underline">Descartar</button> : undefined}>

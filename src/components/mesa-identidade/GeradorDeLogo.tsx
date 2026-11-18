@@ -1,3 +1,4 @@
+import { HelpTooltip } from "@/components/ds";
 import { useMemo, useState } from "react";
 import { Check, Loader2, Shapes, Shuffle, X } from "lucide-react";
 import { toast } from "sonner";
@@ -215,7 +216,7 @@ export default function GeradorDeLogo({ onUsar }: { onUsar: (logo: LogoDoBrandbo
 
       {rodada && rodada.imagens.length > 0 && (
         <>
-          <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Variações de logo" data-rodada-de-logo={rodada.id}>
+          <ul className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4" aria-label="Variações de logo" data-rodada-de-logo={rodada.id}>
             {rodada.imagens.map((v, i) => {
               const ehJev = !!doJev && doJev.id === v.id;
               const usada = escolhidaId === v.id;
@@ -252,7 +253,12 @@ export default function GeradorDeLogo({ onUsar }: { onUsar: (logo: LogoDoBrandbo
           {!doJev && <p className={juntar(texto.auxiliar, "mt-2")}>O Jev não apontou uma escolha nesta rodada.</p>}
         </>
       )}
-      {!rodada && <p className={texto.auxiliar}>Símbolo + logotipo em fundo liso, a partir do que a marca já decidiu. A escolhida vira a logo principal; o vetor final (SVG) a equipe faz no editor.</p>}
+      {!rodada && (
+        <p className={juntar(texto.auxiliar, "flex items-center")}>
+          Símbolo + logotipo em fundo liso.
+          <HelpTooltip className="ml-1">Sai do que a marca já decidiu. A escolhida vira a logo principal; o vetor final (SVG) a equipe faz no editor.</HelpTooltip>
+        </p>
+      )}
     </div>
   );
 }

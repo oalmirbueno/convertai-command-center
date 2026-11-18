@@ -22,7 +22,7 @@ import { botao, juntar } from "@/components/sistema";
 
 function Miniatura({ src, alt }: { src: string | null; alt: string }) {
   return (
-    <span className="relative block w-10 shrink-0 overflow-hidden rounded-md border border-border bg-secondary/40" style={{ paddingTop: "125%" }}>
+    <span className="relative block w-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted/40" style={{ paddingTop: "125%" }}>
       <span className="absolute inset-0 block">
         <Foto src={src} alt={alt} className="h-full w-full" />
       </span>
@@ -123,11 +123,11 @@ export default function VinculoAutomatico() {
       {v && (
         <>
           <div className="mt-2 flex min-w-0 flex-wrap text-[12px]" aria-label="Resumo do vínculo">
-            <span className="mb-1 mr-2 rounded-full bg-secondary px-2 py-0.5">{v.resumo.ja_ligados} já ligados</span>
+            <span className="mb-1 mr-2 rounded-full bg-muted px-2 py-0.5">{v.resumo.ja_ligados} já ligados</span>
             {v.resumo.automaticos > 0 && <span className="mb-1 mr-2 rounded-full bg-success/10 px-2 py-0.5 text-success">{v.resumo.automaticos} reconhecidos agora</span>}
             {v.resumo.pelo_jev > 0 && <span className="mb-1 mr-2 rounded-full bg-success/10 px-2 py-0.5 text-success">{v.resumo.pelo_jev} pelo Jev</span>}
             {v.resumo.confirmar > 0 && <span className="mb-1 mr-2 rounded-full bg-warning/15 px-2 py-0.5 text-warning">{v.resumo.confirmar} para confirmar</span>}
-            <span className="mb-1 mr-2 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{v.resumo.sem_par} feitos fora da Mesa Ads</span>
+            <span className="mb-1 mr-2 rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{v.resumo.sem_par} feitos fora da Mesa Ads</span>
             {v.custo_usd > 0 && <span className="mb-1 mr-2 px-1 py-0.5 tabular-nums text-muted-foreground">Conferência do Jev: {usd(v.custo_usd)}</span>}
           </div>
           {v.jev_erro && <p className="mt-1 text-[12px] text-muted-foreground">O Jev não respondeu agora; os incertos ficaram para você confirmar.</p>}

@@ -426,7 +426,10 @@ export default function LeitorDeProduto({
   const permitido = !somenteOferta && podeAbrir(produto);
   const [selecionado, setSelecionado] = useState(produto.ultimo_material || "");
   const [foco, setFoco] = useState(false);
-  const [sumario, setSumario] = useState(true);
+  // No celular o sumário abre recolhido: a aula aparece primeiro e o botão do topo mostra a lista.
+  const [sumario, setSumario] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 768,
+  );
   const [aba, setAba] = useState<"aula" | "materiais" | "comunidade">("aula");
   const [autoProxima, setAutoProxima] = useState(false);
   const [autoplay, setAutoplay] = useState(false);

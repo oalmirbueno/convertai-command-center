@@ -102,7 +102,7 @@ function CartaoDeImagem({
 }
 
 function Grade({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">{children}</div>;
+  return <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4">{children}</div>;
 }
 
 function LinhaDePasta({ nome, detalhe, onClick }: { nome: string; detalhe?: string; onClick: () => void }) {
@@ -210,7 +210,7 @@ export function ExploradorDePastas<T>({
                   aria-label={aberta ? `Recolher ${p.nome}` : `Expandir ${p.nome}`}
                   className="flex h-6 w-5 shrink-0 items-center justify-center"
                 >
-                  <ChevronRight className={`h-3.5 w-3.5 transition-transform ${aberta ? "rotate-90" : ""}`} />
+                  <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${aberta ? "rotate-90" : ""}`} />
                 </button>
               ) : (
                 <span className="w-5 shrink-0" />
@@ -242,7 +242,7 @@ export function ExploradorDePastas<T>({
           onClick={() => irPara(pai)}
           disabled={atual === RAIZ}
           // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
-          className="mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+          className="mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted disabled:opacity-40"
           aria-label="Voltar"
           title="Voltar"
         >
@@ -299,7 +299,7 @@ export function ExploradorDePastas<T>({
           )}
           {itensAqui.length > 0 && renderizarItens(itensAqui)}
           {!carregando && !erro && subpastas.length === 0 && itensAqui.length === 0 && (
-            <p className="rounded-lg border border-dashed border-border bg-card p-4 text-center text-[12px] text-muted-foreground">{vazio}</p>
+            <p className="rounded-lg bg-muted/50 p-4 text-center text-[12px] text-muted-foreground">{vazio}</p>
           )}
         </div>
       </div>
@@ -420,7 +420,7 @@ function PastasDeArquivos({ onEscolher, marcadoId, ocupado }: { onEscolher: (e: 
         </Grade>
       )}
       {arquivos.data && pastas.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border bg-card p-4 text-center text-[12px] text-muted-foreground">Nenhuma imagem em Arquivos.</p>
+        <p className="rounded-lg bg-muted/50 p-4 text-center text-[12px] text-muted-foreground">Nenhuma imagem em Arquivos.</p>
       )}
     </div>
   );
@@ -480,7 +480,7 @@ function ImagensDoAcervo({ onEscolher, marcadoId, ocupado }: { onEscolher: (e: I
         </section>
       ))}
       {acervo.data && grupos.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border bg-card p-4 text-center text-[12px] text-muted-foreground">
+        <p className="rounded-lg bg-muted/50 p-4 text-center text-[12px] text-muted-foreground">
           {termo ? "Nada no acervo com essa busca." : "O acervo ainda está vazio. Busque as imagens na seção Imagens do contexto."}
         </p>
       )}
@@ -523,7 +523,7 @@ export default function NavegadorDePastas({
             {descricao || "Navegue pelas pastas do Workspace, de Arquivos ou pelo acervo e clique na imagem."}
           </DialogDescription>
         </DialogHeader>
-        <div role="tablist" aria-label="Onde procurar" className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+        <div role="tablist" aria-label="Onde procurar" className="grid grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5">
           {FONTES.map((f) => {
             const Icone = f.icone;
             return (
@@ -533,7 +533,7 @@ export default function NavegadorDePastas({
                 role="tab"
                 aria-selected={fonte === f.valor}
                 onClick={() => setFonte(f.valor)}
-                className={`flex min-w-0 items-center justify-center rounded-lg px-2 py-1.5 text-[13px] font-medium ${
+                className={`toque-compacto flex min-w-0 items-center justify-center rounded-full px-2 py-1.5 text-[13px] font-medium transition-colors ${
                   fonte === f.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >

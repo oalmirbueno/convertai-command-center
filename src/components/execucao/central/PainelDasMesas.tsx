@@ -48,14 +48,14 @@ export function MenuDeFerramentas({ contexto, aoAbrir, aoAbrirNavegador }: { con
           const Icone = ICONE[a.id] || LayoutGrid;
           const semCliente = a.precisaCliente && !contexto.clientId;
           return (
-            <button key={a.id} type="button" onMouseEnter={() => preCarregarFerramenta(a.caminho)} onFocus={() => preCarregarFerramenta(a.caminho)} onClick={() => aoAbrir({ rotulo: a.rotulo, caminho: a.caminho })} title={semCliente ? `${a.descricao}. Abre sem cliente escolhido.` : a.descricao} className="flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2.5 text-center hover:bg-muted">
+            <button key={a.id} type="button" onMouseEnter={() => preCarregarFerramenta(a.caminho)} onFocus={() => preCarregarFerramenta(a.caminho)} onClick={() => aoAbrir({ rotulo: a.rotulo, caminho: a.caminho })} title={semCliente ? `${a.descricao}. Abre sem cliente escolhido.` : a.descricao} className="flex min-w-0 flex-col items-center gap-1 rounded-md px-1 py-2.5 text-center hover:bg-muted">
               <Icone className="h-4 w-4 text-primary" aria-hidden="true" />
               <span className="w-full truncate text-[12px] font-medium">{a.rotulo}</span>
             </button>
           );
         })}
         {aoAbrirNavegador && (
-          <button type="button" onClick={aoAbrirNavegador} title="Sites externos que permitem ser embutidos" className="flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2.5 text-center hover:bg-muted">
+          <button type="button" onClick={aoAbrirNavegador} title="Sites externos que permitem ser embutidos" className="flex min-w-0 flex-col items-center gap-1 rounded-md px-1 py-2.5 text-center hover:bg-muted">
             <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
             <span className="w-full truncate text-[12px] font-medium">Navegador</span>
           </button>
@@ -182,7 +182,7 @@ function Quadro({ src, titulo }: { src: string; titulo: string }) {
       key={src}
       src={src}
       title={titulo}
-      className="block min-h-0 w-full flex-1 rounded-xl border border-border bg-background"
+      className="block min-h-0 w-full flex-1 rounded-lg border border-border bg-background"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
       referrerPolicy="no-referrer"
     />
@@ -211,7 +211,7 @@ export function NavegadorIntegrado() {
         </div>
       )}
       {atual ? <Quadro src={atual} titulo="Navegador integrado" /> : (
-        <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border p-6 text-center text-[12px] text-muted-foreground">Digite um endereço para abrir ao lado da conversa.</div>
+        <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border p-6 text-center text-[12px] text-muted-foreground">Digite um endereço para abrir ao lado da conversa.</div>
       )}
     </div>
   );

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
-import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import { NumerosAbertos } from "@/components/mesa/ousado";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, campo, campoTexto, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { lerValor, reais } from "../../../supabase/functions/_shared/proposta-modelo";
@@ -403,9 +403,8 @@ function HoraTecnica() {
 
   return (
     <div className="space-y-4" data-biblioteca="hora">
-      <FaixaDeNumeros
+      <NumerosAbertos
         colunas={2}
-        semMoldura
         itens={[
           { rotulo: "Custo da hora", valor: reais(doFinanceiro && hora.data ? hora.data.custo_hora : custoDaHora(p)) },
           { rotulo: `Preço da hora (margem ${p.margem_pct}%)`, valor: reais(doFinanceiro && hora.data ? hora.data.preco_hora : precoDaHora(p)) },
@@ -465,7 +464,7 @@ export default function BibliotecaDaAgencia({ aberta, onAberta, aba, onAba }: { 
               type="button"
               role="tab"
               aria-selected={aba === a.valor}
-              className={juntar("toque-compacto mr-4 border-b-2 pb-1.5 text-[13px] font-medium", aba === a.valor ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+              className={juntar("toque-compacto mb-1 mr-1 inline-flex h-8 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium transition-colors", aba === a.valor ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
               onClick={() => onAba(a.valor)}
             >
               {a.rotulo}

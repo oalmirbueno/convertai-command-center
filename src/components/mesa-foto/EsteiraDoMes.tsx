@@ -96,7 +96,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
               type="button"
               onClick={() => setAberta(!aberta)}
               aria-expanded={aberta}
-              className={juntar("inline-flex min-w-0 items-center rounded text-[13px] font-semibold text-foreground", foco)}
+              className={juntar("inline-flex min-w-0 items-center rounded-sm text-[13px] font-semibold text-foreground", foco)}
               data-alternar-esteira=""
             >
               {aberta ? <ChevronDown className="mr-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="mr-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
@@ -104,7 +104,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
               Peças do mês
             </button>
             {pecasQ.isSuccess && (
-              <span className={juntar(etiqueta, "ml-2", aFazer ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")} data-pecas-a-fazer={aFazer}>
+              <span className={juntar(etiqueta, "ml-2", aFazer ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")} data-pecas-a-fazer={aFazer}>
                 {aFazer ? `${aFazer} para fazer` : semPecas ? "nenhuma" : "tudo feito"}
               </span>
             )}
@@ -118,6 +118,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
               <ImagePlus className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
+          {aberta && pecasQ.isLoading && <p className="mt-1.5 h-4" aria-hidden="true"><span className="block h-2.5 w-48 rounded-full bg-muted" /></p>}
           {aberta && semPecas && <p className={juntar(texto.auxiliar, "mt-1.5")}>Nenhuma peça de foto no planejamento deste mês e do próximo.</p>}
           {aberta && temLista && (
             <ul className="mt-2 flex min-w-0 overflow-x-auto pb-1 scrollbar-hidden" data-lista-de-pecas="">
@@ -140,7 +141,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
                         <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{rotuloDaData(p) || "sem data"}</span>
                         {!p.gravada && <span className={juntar(etiqueta, "ml-auto bg-warning/15 text-warning")}>não gravado</span>}
                         {feita && (
-                          <span className={juntar(etiqueta, "ml-auto bg-primary/10 text-primary")}>
+                          <span className={juntar(etiqueta, "ml-auto bg-accent-soft text-primary")}>
                             <Check className="mr-0.5 h-3 w-3" aria-hidden="true" /> feita
                           </span>
                         )}

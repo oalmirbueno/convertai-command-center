@@ -222,7 +222,7 @@ export default function GeracoesRecentes({ arquivos, taskId, criativoId, pedidos
             <li key={p.id} className="flex min-w-0 items-start py-2.5" data-geracao={p.id}>
               <div className="mr-2 flex shrink-0">
                 {envios.slice(0, 4).map((e) => (
-                  <span key={e.n} className="relative mr-1 block w-10 overflow-hidden rounded bg-muted" style={{ paddingBottom: "3.25rem" }} title={e.erro || ROTULO[e.estado] || e.estado}>
+                  <span key={e.n} className="relative mr-1 block w-10 overflow-hidden rounded-sm bg-muted" style={{ paddingBottom: "3.25rem" }} title={e.erro || ROTULO[e.estado] || e.estado}>
                     {e.storage_path ? <MiniaturaDoStorage bucket="mesa" caminho={e.storage_path} alt={`Variação ${e.n}`} className="absolute inset-0 h-full w-full" /> : null}
                   </span>
                 ))}
@@ -236,7 +236,7 @@ export default function GeracoesRecentes({ arquivos, taskId, criativoId, pedidos
                   {envios.find((e) => e.erro) ? ` · ${(envios.find((e) => e.erro) as Envio).erro}` : ""}
                 </p>
               </div>
-              <span className={juntar(etiqueta, "mr-1", (p.estado as string) === "erro" ? "bg-destructive/10 text-destructive" : (p.estado as string) === "pronto" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{ROTULO[p.estado as string] || p.estado}</span>
+              <span className={juntar(etiqueta, "mr-1", (p.estado as string) === "erro" ? "bg-danger-soft text-destructive" : (p.estado as string) === "pronto" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{ROTULO[p.estado as string] || p.estado}</span>
               {ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0 && (
                 <button type="button" className={botao.icone} disabled={!!conferindo} onClick={() => void conferir(p.id)} aria-label={`Conferir ${alvo.titulo || "pedido"}`} title={(p.estado as string) === "baixando" ? "Baixar de novo" : "Conferir"}>
                   {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}

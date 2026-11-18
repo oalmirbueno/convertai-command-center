@@ -153,7 +153,7 @@ export default function EtapaBriefing({ site }: { site: LinhaDoSite; onIrPara?: 
           {d.decupagem && Array.isArray(d.decupagem.itens) && d.decupagem.itens.length > 0 && (
             <div className="flex flex-wrap">
               {d.decupagem.itens.slice(0, 24).map((i, n) => (
-                <span key={n} className="mb-1.5 mr-1.5 inline-flex h-6 items-center rounded bg-muted px-2 text-[12px]" title={i.categoria || ""}>
+                <span key={n} className="mb-1.5 mr-1.5 inline-flex h-6 items-center rounded-sm bg-muted px-2 text-[12px]" title={i.categoria || ""}>
                   {i.texto}
                 </span>
               ))}

@@ -115,7 +115,7 @@ export function ChatDoAgente({
         {mensagens.map((msg, i) => (
           <Fragment key={i}>
           <p
-            className={`max-w-[92%] whitespace-pre-wrap rounded-xl px-3 py-2 text-[13px] leading-[1.5] [overflow-wrap:anywhere] ${msg.papel === "usuario" ? "ml-auto bg-emerald-500/20 text-emerald-50" : "bg-white/[0.07] text-zinc-100"}`}
+            className={`max-w-[92%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[13px] leading-[1.5] [overflow-wrap:anywhere] ${msg.papel === "usuario" ? "ml-auto bg-emerald-500/20 text-emerald-50" : "bg-white/[0.07] text-zinc-100"}`}
             data-mensagem={msg.papel}
           >
             {msg.texto}
@@ -124,7 +124,7 @@ export function ChatDoAgente({
           </Fragment>
         ))}
         {enviando && (
-          <p className="inline-flex items-center rounded-xl bg-white/[0.07] px-3 py-2 text-[13px] text-zinc-300">
+          <p className="inline-flex items-center rounded-lg bg-white/[0.07] px-3 py-2 text-[13px] text-zinc-300">
             <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> pensando
           </p>
         )}
@@ -185,7 +185,7 @@ export function ChatDoAgente({
           />
           {bloqueios.length > 0 && <p className="text-[11px] text-amber-300">{bloqueios[0]}</p>}
           {ultima && (
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900" style={{ height: 180 }}>
+            <div className="overflow-hidden rounded-lg border border-white/10 bg-zinc-900" style={{ height: 180 }}>
               <ImagemDaMesa caminho={ultima.storage_path || ultima.url} bucket={ultima.storage_bucket} alt="Última foto do Resultado" className="h-full w-full !object-contain" />
             </div>
           )}

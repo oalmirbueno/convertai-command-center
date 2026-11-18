@@ -44,7 +44,7 @@ interface Selecao {
 
 function CaixaDeMarcar({ chave, nome, selecao }: { chave: string; nome: string; selecao: Selecao }) {
   return (
-    <label className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
+    <label className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-card">
       <input type="checkbox" checked={selecao.marcadas.indexOf(chave) >= 0} onChange={() => selecao.alternar(chave)} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Marcar ${nome}`} />
     </label>
   );
@@ -71,7 +71,7 @@ function DoLote({ selecao }: { selecao: Selecao }) {
         </button>
       }
     >
-      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-para-revisar="" data-aprovar-do-lote="">
+      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-para-revisar="" data-aprovar-do-lote="">
         {pendentes.map((p, i) => (
           <li key={`${p.ensaio.id}-${p.tomada.id}-${p.versao.versao}`} className={juntar(superficie.painel, "relative min-w-0 p-1.5")} data-pendente={p.tomada.id}>
             <CaixaDeMarcar chave={chaveDaPendente(p)} nome={p.tomada.nome} selecao={selecao} />
@@ -128,7 +128,7 @@ function DoAcervo({ selecao }: { selecao: Selecao }) {
       resumo="Estúdio, ângulo, clone e quadro livre"
       dica="Fotos geradas fora dos lotes (Estúdio, novo ângulo, clone, quadro livre). Foto gerada só vai para as mesas e para o cliente depois da aprovação da equipe."
     >
-      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-aprovar-do-acervo="">
+      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-aprovar-do-acervo="">
         {lista.map((f, i) => (
           <li key={f.id} className={juntar(superficie.painel, "relative min-w-0 p-1.5", f.aprovada && "border-success/50")} data-gerada-para-aprovar={f.id}>
             {!f.aprovada && <CaixaDeMarcar chave={f.id} nome={f.nome} selecao={selecao} />}
@@ -138,7 +138,7 @@ function DoAcervo({ selecao }: { selecao: Selecao }) {
                 type="button"
                 onClick={() => setAmpliada(i)}
                 aria-label={`Ver grande ${f.nome}`}
-                className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+                className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-card hover:text-foreground"
               >
                 <Maximize2 className="h-3.5 w-3.5" />
               </button>

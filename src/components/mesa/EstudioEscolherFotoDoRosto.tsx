@@ -305,7 +305,7 @@ export default function EstudioEscolherFotoDoRosto({
       </li>
     );
   };
-  const grade = (lista: FotoParaRosto[]) => <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">{lista.map(cartao)}</ul>;
+  const grade = (lista: FotoParaRosto[]) => <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4">{lista.map(cartao)}</ul>;
 
   const opcoes = [
     { valor: "acervo", rotulo: "Acervo", icone: <Images className="h-3.5 w-3.5" /> },
@@ -349,7 +349,7 @@ export default function EstudioEscolherFotoDoRosto({
         <div className="flex min-w-0 items-center">
           <CampoDeBusca valor={estado.busca} onMudar={(v) => mudar({ busca: v })} placeholder="Buscar por nome, pasta ou tag" rotulo="Buscar foto" className="flex-1" />
           <label className="ml-3 flex shrink-0 items-center text-[12px] text-foreground">
-            <Switch checked={estado.soPessoas} onCheckedChange={(v) => mudar({ soPessoas: v === true })} aria-label="Só com pessoa" />
+            <Switch className="toque-compacto" checked={estado.soPessoas} onCheckedChange={(v) => mudar({ soPessoas: v === true })} aria-label="Só com pessoa" />
             <span className="ml-1.5 hidden sm:inline">Só com pessoa</span>
           </label>
         </div>

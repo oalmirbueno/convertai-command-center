@@ -221,7 +221,7 @@ function FaltaDaEtapa({ etapa, itens, irPara }: { etapa: EtapaDaIdentidade; iten
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={juntar(toqueCompacto, "inline-flex h-5 max-w-full items-center rounded px-1 align-middle text-[12px] font-medium text-warning underline decoration-dotted underline-offset-2 hover:bg-muted", foco)}
+          className={juntar(toqueCompacto, "inline-flex h-5 max-w-full items-center rounded-sm px-1 align-middle text-[12px] font-medium text-warning underline decoration-dotted underline-offset-2 hover:bg-muted", foco)}
           aria-label={itens.length === 1 ? `${rotulo}. Ver onde completar` : `${rotulo} para concluir. Ver a lista`}
           data-falta-da-etapa={etapa}
         >
@@ -245,7 +245,7 @@ function FaltaDaEtapa({ etapa, itens, irPara }: { etapa: EtapaDaIdentidade; iten
               {i.destino ? (
                 <button
                   type="button"
-                  className={juntar(toqueCompacto, "flex min-h-8 w-full items-center rounded px-2 py-1.5 text-left text-[13px] text-foreground hover:bg-muted", foco)}
+                  className={juntar(toqueCompacto, "flex min-h-8 w-full items-center rounded-sm px-2 py-1.5 text-left text-[13px] text-foreground hover:bg-muted", foco)}
                   onClick={() => {
                     const d = i.destino as DestinoDoQueFalta;
                     levando.current = true;
@@ -333,7 +333,7 @@ export function CabecalhoDaEtapa({
     gravacao.estado === "erro" ? (
       <button
         type="button"
-        className={juntar(toqueCompacto, "inline-flex h-5 items-center rounded px-1 align-middle text-[12px] font-medium text-destructive underline decoration-dotted underline-offset-2 hover:bg-muted", foco)}
+        className={juntar(toqueCompacto, "inline-flex h-5 items-center rounded-sm px-1 align-middle text-[12px] font-medium text-destructive underline decoration-dotted underline-offset-2 hover:bg-muted", foco)}
         title={gravacao.erro || undefined}
         onClick={() => {
           if (gravacoes) void gravacoes.salvarTudo().catch(() => undefined);
@@ -414,7 +414,7 @@ export function ImagemInteira({ caminho, alt, className = "", fundo }: { caminho
 
 /** Pastilha pequena de estado. */
 export function Pastilha({ tom = "neutro", children }: { tom?: "neutro" | "bom" | "alerta" | "ruim"; children: ReactNode }) {
-  const cor = tom === "bom" ? "bg-primary/10 text-primary" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "ruim" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground";
+  const cor = tom === "bom" ? "bg-accent-soft text-primary" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "ruim" ? "bg-danger-soft text-destructive" : "bg-muted text-muted-foreground";
   return <span className={juntar(etiqueta, cor)}>{children}</span>;
 }
 

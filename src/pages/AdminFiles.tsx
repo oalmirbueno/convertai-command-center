@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useClients, useProjects, useAllFiles } from "@/hooks/useSupabaseData";
@@ -41,6 +42,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
+import { ProgressBar, StatCard, StatGrid } from "@/components/ds";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 // Frente DOC (29/09): documentos da entrega do cliente na pasta Entregas (prévia e envio com Confirmar).
 import DocumentosDaEntrega from "@/components/documentos/DocumentosDaEntrega";
@@ -64,9 +66,13 @@ import {
   type FolderId,
 } from "@/lib/fileTaxonomy";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl, fileExtension, mensagemDaFuncao } from "@/lib/fileUrls";
+import { useConfirm } from "@/components/shared/confirmDialog";
 import {
+  mensagemDaRetirada,
+  podeRetirarDaAprovacao,
   releaseFileToClient,
   requestFileAgencyReview,
+  retirarDaAprovacao,
   reviewFileAgency,
   type FileReleaseMode,
 } from "@/lib/fileApprovalActions";
@@ -219,7 +225,7 @@ type AcoesDoArquivoProps = {
 /** Ações de um arquivo: liberar, mover de pasta, baixar e excluir (cada uma só quando vale). */
 function AcoesDoArquivo({ file, podeLiberar, podeMover, podeExcluir, onLiberar, onMover, onBaixar, onExcluir, sobreImagem = false, onMenu }: AcoesDoArquivoProps) {
   const base = sobreImagem
-    ? "inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-foreground transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     : botao.icone;
   return (
     <div className={juntar("flex shrink-0 items-center", sobreImagem && "[&>*+*]:ml-1")}>
@@ -293,31 +299,31 @@ function CartaoDoArquivo({ itensNoCarrossel, onAbrir, formatDate, ...acoes }: It
   // A raiz das reclamações: upload nasce interno e o cliente NÃO vê. Fica na cara.
   const visibilidade = seloDeVisibilidade(file);
   return (
-    <div className="group relative min-w-0">
+    <div className={juntar(superficie.painel, "group relative min-w-0 p-2 transition-transform duration-200 hover:-translate-y-0.5")}>
       <button
         type="button"
         onClick={onAbrir}
         className="block w-full min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         title={`${file.file_name} · ${kindLabel(resolveKind(file))} · ${file.project?.name || "Sem projeto"}`}
       >
-        <span className="relative block overflow-hidden rounded-md" style={{ paddingBottom: "100%" }}>
+        <span className="relative block overflow-hidden rounded-[18px]" style={{ paddingBottom: "100%" }}>
           <FileThumb file={file} />
-          <span className={juntar(etiqueta, "absolute bottom-1.5 left-1.5 bg-background/90", visibilidade.cor)}>{visibilidade.label}</span>
+          <span className={juntar(etiqueta, "absolute bottom-2 left-2 rounded-full bg-background/90 px-2", visibilidade.cor)}>{visibilidade.label}</span>
           {itensNoCarrossel > 1 && (
-            <span className={juntar(etiqueta, "absolute left-1.5 top-1.5 bg-background/90 text-primary")} title="Imagens no carrossel">{itensNoCarrossel}</span>
+            <span className={juntar(etiqueta, "absolute left-2 top-2 rounded-full bg-background/90 px-2 text-primary")} title="Imagens no carrossel">{itensNoCarrossel}</span>
           )}
         </span>
-        <span className="mt-2 flex min-w-0 items-baseline">
-          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{file.file_name}</span>
+        <span className="mt-3 flex min-w-0 items-baseline px-2">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-5 text-foreground">{file.file_name}</span>
           {file.version > 1 && <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">v{file.version}</span>}
         </span>
-        <span className={juntar(texto.auxiliar, "block truncate")}>
+        <span className={juntar(texto.auxiliar, "mb-2 mt-0.5 block truncate px-2")}>
           {revisao.label} · {formatDate(file.created_at)}
         </span>
       </button>
       <div
         className={juntar(
-          "absolute right-1.5 top-1.5 transition-opacity",
+          "absolute right-4 top-4 transition-opacity",
           menuAberto ? "opacity-100" : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100",
         )}
       >
@@ -333,13 +339,13 @@ function LinhaDoArquivo({ itensNoCarrossel, onAbrir, formatDate, ...acoes }: Ite
   const revisao = agencyBadge[file.agency_approval_status] || agencyBadge.not_requested;
   const visibilidade = seloDeVisibilidade(file);
   return (
-    <li className="flex min-w-0 items-center py-2">
+    <li className="flex min-w-0 items-center rounded-lg px-2 py-3 transition-colors hover:bg-muted/50">
       <button
         type="button"
         onClick={onAbrir}
         className="flex min-w-0 flex-1 items-center rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className="relative mr-3 block h-12 w-12 shrink-0 overflow-hidden rounded-md">
+        <span className="relative mr-4 block h-14 w-14 shrink-0 overflow-hidden rounded-md">
           <FileThumb file={file} compacto />
         </span>
         <span className="min-w-0 flex-1">
@@ -394,7 +400,10 @@ function SelectDeCampo({
 }
 
 export default function AdminFiles() {
+  // Celular: a visualização vira lista suspensa (o segmentado de dois deixava a busca com 130 px).
+  const telaPequena = useTelaPequena();
   const { user, profile, loading: loadingAuth } = useAuth();
+  const confirmDialog = useConfirm();
   const isStaff = profile?.role === "admin"
     || ["design", "traffic", "manager"].includes(profile?.role || "");
   const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
@@ -893,6 +902,35 @@ export default function AdminFiles() {
       toast({
         title: "Não foi possível aprovar internamente",
         description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRetirarDaAprovacao = async (file: {
+    id: string;
+    parent_file_id?: string | null;
+    archived_at?: string | null;
+    locked_at?: string | null;
+    visibility?: string | null;
+    approval_status?: string | null;
+  } | null | undefined) => {
+    if (!file || !canReviewAndRelease || !podeRetirarDaAprovacao(file)) return;
+    const segue = await confirmDialog({
+      title: "Retirar da aprovação?",
+      description: "O pedido pendente do cliente é cancelado. O arquivo fica interno e invisível para ele. Nada é apagado.",
+      confirmLabel: "Retirar da aprovação",
+    });
+    if (!segue) return;
+    try {
+      await retirarDaAprovacao(file.id);
+      await invalidateFileViews();
+      setPreviewFile(null);
+      toast({ title: "Arquivo retirado da aprovação", description: "Voltou ao rascunho interno. O cliente não vê mais." });
+    } catch (error: unknown) {
+      toast({
+        title: "Não foi possível retirar da aprovação",
+        description: mensagemDaRetirada(error),
         variant: "destructive",
       });
     }
@@ -1560,6 +1598,7 @@ export default function AdminFiles() {
           acoes={
             <SeletorCompacto
               rotulo="Visualização"
+              modo={telaPequena ? "lista" : "segmentado"}
               valor={viewMode}
               onEscolher={(v) => setViewMode(v === "list" ? "list" : "grid")}
               opcoes={[
@@ -1628,6 +1667,39 @@ export default function AdminFiles() {
               <DocumentosDaEntrega key={selectedClient} clientId={selectedClient} className="mb-6" />
             )}
             {activeFolder === "entregas" && selectedClient === "all" && <Secao className="mb-6" titulo="Documentos da entrega" descricao="escolha um cliente" recolher={false} />}
+            {/* Rodada ousada (15/11/2026): os contadores que o filtro de Status já calcula, em cartões grandes; tocar filtra. */}
+            {allFiles && folderFiles.length > 0 && (
+              <StatGrid cols={4} label="Arquivos desta pasta por status" className="mb-6">
+                <StatCard
+                  variant={statusFilter === "todos" ? "ink" : "default"}
+                  label="Nesta pasta"
+                  value={statusCounts.todos}
+                  hint="Todos os status"
+                  onClick={() => setStatusFilter("todos")}
+                />
+                <StatCard
+                  variant={statusFilter === "cliente" ? "ink" : "accent"}
+                  label="Visível ao cliente"
+                  value={statusCounts.cliente}
+                  chart={<ProgressBar value={statusCounts.cliente} max={statusCounts.todos} height={6} label={`${statusCounts.cliente} de ${statusCounts.todos} visíveis ao cliente`} />}
+                  onClick={() => setStatusFilter("cliente")}
+                />
+                <StatCard
+                  variant={statusFilter === "interno" ? "ink" : "default"}
+                  label="Cliente não vê"
+                  value={statusCounts.interno}
+                  chart={<ProgressBar value={statusCounts.interno} max={statusCounts.todos} height={6} tone={3} label={`${statusCounts.interno} de ${statusCounts.todos} internos`} />}
+                  onClick={() => setStatusFilter("interno")}
+                />
+                <StatCard
+                  variant={statusFilter === "revisao" || statusFilter === "ajustes" ? "ink" : "default"}
+                  label="Em revisão interna"
+                  value={statusCounts.revisao}
+                  hint={statusCounts.ajustes > 0 ? <span className="font-medium text-warning">{statusCounts.ajustes} com ajustes pedidos</span> : "Sem ajustes pedidos"}
+                  onClick={() => setStatusFilter("revisao")}
+                />
+              </StatGrid>
+            )}
             {primeiraCarga ? (
               <Carregando forma={viewMode === "list" ? "lista" : "grade"} linhas={viewMode === "list" ? 6 : 8} rotulo="Carregando arquivos" />
             ) : filesReadFailed && !allFiles ? (
@@ -1674,13 +1746,13 @@ export default function AdminFiles() {
                 />
               )
             ) : viewMode === "grid" ? (
-              <div className="grid grid-cols-2 gap-x-3 gap-y-4 p-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6">
+              <div className="grid grid-cols-2 gap-3 p-1 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 desk:grid-cols-5">
                 {filteredFiles.map((f: any) => (
                   <CartaoDoArquivo key={f.id} {...propsDoItem(f)} />
                 ))}
               </div>
             ) : (
-              <ul className="divide-y divide-border border-y border-border">
+              <ul className={juntar(superficie.painel, "divide-y divide-border/60 overflow-hidden p-2 sm:p-3")}>
                 {filteredFiles.map((f: any) => (
                   <LinhaDoArquivo key={f.id} {...propsDoItem(f)} />
                 ))}
@@ -1844,6 +1916,16 @@ export default function AdminFiles() {
             >
               <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Baixar
             </button>
+            {canReviewAndRelease && podeRetirarDaAprovacao(previewFile) && (
+              <button
+                type="button"
+                className={juntar(botao.secundario, "m-1")}
+                disabled={acting}
+                onClick={() => runActing(() => handleRetirarDaAprovacao(previewFile))}
+              >
+                Retirar da aprovação
+              </button>
+            )}
             {isEditableFile(previewFile) && (
               <>
                 <button

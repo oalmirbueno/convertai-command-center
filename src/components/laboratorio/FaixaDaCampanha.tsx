@@ -1,3 +1,4 @@
+import { lerComFiltroDoArquivo } from "../../../supabase/functions/_shared/arquivo-da-campanha";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -130,15 +131,13 @@ function Sugestao({ s, aoDecidir }: { s: SugestaoDaPonte; aoDecidir?: (aceitar: 
 
 type CampanhaDoCliente = { id: string; nome: string; status: string; periodo_inicio: string | null; periodo_fim: string | null };
 
-async function lerCampanhasDoCliente(clienteId: string): Promise<CampanhaDoCliente[]> {
-  const { data, error } = await (supabase as any)
-    .from("mesa_campanhas")
-    .select("id, nome, status, periodo_inicio, periodo_fim")
-    .eq("client_id", clienteId)
-    .order("atualizado_em", { ascending: false })
-    .limit(60);
-  if (error) throw error;
-  return (data || []) as CampanhaDoCliente[];
+/** 16/11/2026: só as não arquivadas, filtradas no banco antes do limite (sem a coluna ainda: todas). */
+export async function lerCampanhasDoCliente(clienteId: string): Promise<CampanhaDoCliente[]> {
+  const { linhas } = await lerComFiltroDoArquivo<CampanhaDoCliente>((filtrar) =>
+    filtrar((supabase as any).from("mesa_campanhas").select("id, nome, status, periodo_inicio, periodo_fim").eq("client_id", clienteId))
+      .order("atualizado_em", { ascending: false })
+      .limit(60));
+  return linhas;
 }
 
 function JanelaDeLigar({ aberta, clienteId, onFechar, onEscolher }: { aberta: boolean; clienteId: string; onFechar: () => void; onEscolher: (id: string) => Promise<void> }) {
@@ -314,9 +313,12 @@ export default function FaixaDaCampanha({ projetoId, clienteId, antesDeChamar, a
   if (estado.isError || estado.isLoading) return null;
 
   return (
-    <section className={juntar(superficie.poco, "mb-2 min-w-0 px-3 py-2")} aria-label="Campanha deste canvas" data-faixa-da-campanha={campanha ? "ligada" : "solta"}>
+    // v4 (15/11/2026): faixa fina em pílula, com o megafone num círculo; sem campanha e sem cliente é só uma linha discreta.
+    <section className={juntar("mb-2 min-w-0 rounded-[22px] px-1.5 py-1.5", campanha || clienteId ? "bg-card shadow-card" : "bg-transparent py-0")} aria-label="Campanha deste canvas" data-faixa-da-campanha={campanha ? "ligada" : "solta"}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        <Megaphone className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary" aria-hidden="true">
+          <Megaphone className="h-4 w-4" />
+        </span>
         {campanha ? (
           <>
             <span className={juntar(texto.corpo, "min-w-0 truncate")}>

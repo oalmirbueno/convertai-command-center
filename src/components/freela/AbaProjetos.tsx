@@ -7,7 +7,9 @@ import { useConfirm } from "@/components/shared/confirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, etiqueta, GrupoDeCampos, juntar, Painel, RegiaoRolavel, SeletorCompacto, texto,
+  superficie,
 } from "@/components/sistema";
+import { Avatar, ProgressBar } from "@/components/ds";
 import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dadosFreela";
 import {
   dataBR, fmtMoeda, hojeISO, normalizar, ROTULO_STATUS_PARCELA, ROTULO_STATUS_PROJETO,
@@ -29,17 +31,17 @@ const formVazio = {
 };
 
 const corDoStatus: Record<string, string> = {
-  kickoff: "bg-info/15 text-info",
-  em_andamento: "bg-warning/15 text-warning",
-  entrega: "bg-primary/10 text-primary",
-  pago: "bg-success/15 text-success",
+  kickoff: "bg-info-soft text-info",
+  em_andamento: "bg-warning-soft text-warning",
+  entrega: "bg-accent-soft text-primary",
+  pago: "bg-success-soft text-success",
   arquivado: "bg-muted text-muted-foreground",
 };
 
 const corDaParcela: Record<string, string> = {
-  aberta: "bg-warning/15 text-warning",
-  atrasada: "bg-destructive/15 text-destructive",
-  paga: "bg-success/15 text-success",
+  aberta: "bg-warning-soft text-warning",
+  atrasada: "bg-danger-soft text-destructive",
+  paga: "bg-success-soft text-success",
   cancelada: "bg-muted text-muted-foreground",
 };
 
@@ -329,7 +331,7 @@ export default function AbaProjetos() {
 
   return (
     <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
-      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2 pb-1">
         <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por título ou contato" rotulo="Buscar projeto" className="min-w-[180px] flex-1 sm:max-w-[420px]" />
         <SeletorCompacto
           opcoes={[
@@ -359,38 +361,40 @@ export default function AbaProjetos() {
             descricao="Aceite uma proposta e vire projeto, ou crie direto aqui."
           />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className={juntar(superficie.painel, "overflow-hidden py-1.5 [&>li]:px-4 sm:[&>li]:px-6")}>
             {lista.map((p) => {
               const doProjeto = parcelasPorProjeto.get(p.id) || [];
               const pagas = doProjeto.filter((x) => x.status === "paga").length;
               return (
-                <li key={p.id} className="flex min-w-0 items-center gap-2 px-1 py-2.5">
-                  <div className="mr-1 min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <p className={juntar(texto.corpo, "truncate font-medium")}>{p.titulo}</p>
-                      <span className={juntar(etiqueta, corDoStatus[p.status] || "bg-muted text-muted-foreground")}>
+                <li key={p.id} className="flex min-w-0 flex-wrap items-center py-3.5 transition-colors hover:bg-muted/40 [&>*]:my-0.5">
+                  <Avatar name={nomeDoContato(p.contato_id) || p.titulo} className="mr-3 hidden sm:inline-flex" />
+                  <div className="mr-3 min-w-0 flex-1 basis-48">
+                    <div className="flex min-w-0 items-center">
+                      <p className={juntar(texto.corpo, "mr-2 truncate font-medium")}>{p.titulo}</p>
+                      <span className={juntar(etiqueta, "h-[22px]", corDoStatus[p.status] || "bg-muted text-muted-foreground")}>
                         {ROTULO_STATUS_PROJETO[p.status] || p.status}
                       </span>
                     </div>
-                    <p className={juntar(texto.auxiliar, "truncate")}>
+                    <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
                       {nomeDoContato(p.contato_id)}
-                      {" · "}<span className="tabular-nums text-foreground">{fmtMoeda(p.valor_fechado, p.moeda)}</span>
                       {p.prazo_date && <> · prazo {dataBR(p.prazo_date)}</>}
                       {doProjeto.length > 0 && <> · {pagas}/{doProjeto.length} parcelas pagas</>}
                     </p>
+                    {doProjeto.length > 0 && <ProgressBar className="mt-2 max-w-[260px]" value={pagas} max={doProjeto.length} height={6} label={`${pagas} de ${doProjeto.length} parcelas pagas`} />}
                   </div>
+                  <span className="mr-3 shrink-0 text-[15px] font-semibold leading-5 tabular-nums text-foreground">{fmtMoeda(p.valor_fechado, p.moeda)}</span>
                   <select
                     value={p.status}
                     onChange={(e) => void mudarStatus(p, e.target.value)}
-                    className={juntar(campo, "h-8 w-auto shrink-0 text-[12px]")}
+                    className={juntar(campo, "mr-1 h-8 w-auto shrink-0 rounded-full px-3 text-[12px]")}
                     aria-label={`Status de ${p.titulo}`}
                   >
                     {Object.entries(ROTULO_STATUS_PROJETO).map(([valor, rotulo]) => (
                       <option key={valor} value={valor}>{rotulo}</option>
                     ))}
                   </select>
-                  <button type="button" onClick={() => abrirParcelas(p)} className={botao.barra} aria-label={`Parcelas de ${p.titulo}`}>
-                    <Receipt className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                  <button type="button" onClick={() => abrirParcelas(p)} className={juntar(botao.secundario, "mr-1 h-8 px-3 text-[12px] max-sm:w-8 max-sm:px-0")} aria-label={`Parcelas de ${p.titulo}`}>
+                    <Receipt className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
                     <span className="hidden sm:inline">Parcelas</span>
                   </button>
                   <button type="button" onClick={() => abrirEdicao(p)} className={botao.barra} aria-label={`Editar ${p.titulo}`}>
@@ -469,11 +473,11 @@ export default function AbaProjetos() {
               {parcelasAbertas.length === 0 ? (
                 <EstadoVazio compacto titulo="Nenhuma parcela ainda" descricao="Gere parcelas iguais ou adicione uma a uma." />
               ) : (
-                <ul className="divide-y divide-border rounded-md border border-border">
+                <ul className="rounded-md bg-muted/60">
                   {parcelasAbertas.map((parcela) => {
                     const visual = statusVisualDaParcela(parcela);
                     return (
-                      <li key={parcela.id} className="flex min-w-0 items-center gap-2 px-3 py-2">
+                      <li key={parcela.id} className="flex min-w-0 items-center gap-2 px-4 py-3">
                         <div className="mr-1 min-w-0 flex-1">
                           <p className={juntar(texto.corpo, "truncate")}>
                             Parcela {parcela.numero} · <span className="tabular-nums">{fmtMoeda(parcela.valor, parcela.moeda)}</span>

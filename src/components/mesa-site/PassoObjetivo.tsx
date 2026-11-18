@@ -26,7 +26,7 @@ export const ICONE_DO_OBJETIVO: Record<string, ComponentType<{ className?: strin
  * Grade das opções dos passos (objetivo e partida), 25/10: a mesma em todos, na largura das mesas
  * (1, 2, 3 e 4 colunas), para o cartão ter o mesmo tamanho de um passo para o outro.
  */
-export const gradeDeOpcoes = "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 desk:grid-cols-4";
+export const gradeDeOpcoes = "grid min-w-0 grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 desk:grid-cols-4";
 
 /** Opção em grade (item que é uma coisa): borda fina, a escolhida com a cor da marca. */
 export const opcaoDaGrade = (escolhida: boolean) =>

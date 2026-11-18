@@ -94,14 +94,16 @@ const elo = juntar("toque-compacto inline-flex h-9 min-w-0 shrink-0 items-center
 
 /** PRO3: o caminho de volta no lugar do seletor de mesa (a proposta mora em Clientes). */
 export function CaminhoDasPropostas() {
+  // v4: no celular o caminho vira um elo só ("Propostas", que mora em Clientes); a barra não cabe os dois sem sobrepor as ações.
   return (
     <nav aria-label="Caminho" className="flex min-w-0 shrink-0 items-center" data-caminho-da-proposta="">
-      <Link to="/clientes" className={elo}>
+      <Link to="/clientes" className={juntar(elo, "max-sm:hidden")}>
         <Users className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
         Clientes
       </Link>
-      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <Link to="/clientes?propostas=1" className={elo}>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground max-sm:hidden" aria-hidden="true" />
+      <Link to="/clientes?propostas=1" className={juntar(elo, "max-sm:px-1")}>
+        <Users className="mr-1.5 h-4 w-4 shrink-0 text-primary sm:hidden" aria-hidden="true" />
         Propostas
       </Link>
     </nav>
@@ -445,7 +447,7 @@ export default function MesaProposta() {
       }
     >
       {!clientId && (
-        <EstadoVazio
+        <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
           icone={<BriefcaseBusiness className="h-5 w-5" />}
           titulo={lead ? `Escolha o cliente da proposta de ${lead.company || lead.name}.` : "Escolha um cliente para abrir a Mesa Proposta."}
           descricao={lead ? "Lead sem ficha: em Clientes › Propostas, Nova proposta cria o cliente na hora." : "Proposta comercial com link e aceite."}

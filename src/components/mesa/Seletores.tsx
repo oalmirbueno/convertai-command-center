@@ -60,7 +60,7 @@ function ItemDoModelo({ m, qualidade }: { m: ModeloIa; qualidade: Qualidade }) {
           {cap.raciocinio && <Brain className="ml-1 h-3.5 w-3.5" aria-hidden="true" />}
         </span>
       )}
-      {novo && <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>novo</span>}
+      {novo && <span className={juntar(etiqueta, "ml-1.5 bg-accent-soft text-primary")}>novo</span>}
     </SelectPrimitive.Item>
   );
 }

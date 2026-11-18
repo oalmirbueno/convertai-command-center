@@ -339,7 +339,7 @@ export default function EtapaSistema() {
                   setSugeridas(sugeridas.filter((x) => x !== h));
                 }}
               >
-                <span className="mr-1.5 inline-block h-4 w-4 rounded border border-border" style={{ background: h }} /> {h}
+                <span className="mr-1.5 inline-block h-4 w-4 rounded-full border border-border" style={{ background: h }} /> {h}
               </button>
             ))}
           </div>
@@ -557,7 +557,7 @@ export default function EtapaSistema() {
           <CampoDeFormulario rotulo="Significado do logo" largo>
             <textarea className={juntar(campoTexto, "min-h-[72px]")} value={regras.significado_do_logo} maxLength={1500} onChange={(e) => pRegras.mudar({ ...regras, significado_do_logo: e.target.value })} />
           </CampoDeFormulario>
-          <div className="grid min-w-0 grid-cols-3 gap-3">
+          <div className="grid min-w-0 grid-cols-3 gap-3 sm:gap-4">
             <CampoDeFormulario rotulo="Proteção (%)">
               <input className={campo} inputMode="numeric" value={regras.protecao} onChange={(e) => pRegras.mudar({ ...regras, protecao: e.target.value.replace(/[^0-9]/g, "").slice(0, 3) })} />
             </CampoDeFormulario>
@@ -668,7 +668,7 @@ function SlotDaLogo({ slot, rotulo, varios, itens, ocupado, onArquivo, onTirar, 
       )}
       {itens.map((l, i) => (
         <div key={l.caminho} className="mb-2 min-w-0">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <ImagemInteira caminho={l.previa_png || l.caminho} alt={`${rotulo} sobre claro`} className="h-24 border border-border p-2" fundo="#F4F6F4" />
             <ImagemInteira caminho={l.previa_png || l.caminho} alt={`${rotulo} sobre escuro`} className="h-24 p-2" fundo="#151B17" />
           </div>

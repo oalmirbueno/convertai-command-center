@@ -68,8 +68,8 @@ const PARTES_ANTIGAS: Record<string, string> = { versoes: "historico", trilha: "
 
 const COR_DO_STATUS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
-  sent: "bg-warning/15 text-warning",
-  completed: "bg-success/15 text-success",
+  sent: "bg-warning-soft text-warning",
+  completed: "bg-success-soft text-success",
   cancelled: "bg-muted text-muted-foreground",
   substituido: "bg-muted text-muted-foreground",
 };
@@ -359,7 +359,7 @@ export default function DetalheDoContrato({
           ajuda={`Modelo ${p.revisao_juridica || "sem revisão registrada"}. Só a equipe vê esta marca; o cliente nunca. O rascunho muda à vontade; ao assinar pela agência, o texto trava com um código SHA-256 e qualquer mudança depois vira versão nova, com link novo.`}
           acao={
             <div className="flex min-w-0 items-center [&>*+*]:ml-1.5">
-              <span className={juntar(etiqueta, "hidden sm:inline-flex", COR_DO_STATUS[c.status] || COR_DO_STATUS.draft)}>{rotuloDoStatus}</span>
+              <span className={juntar(etiqueta, "hidden h-7 px-3 text-[12px] sm:inline-flex", COR_DO_STATUS[c.status] || COR_DO_STATUS.draft)}>{rotuloDoStatus}</span>
               {rascunho && (
                 <button
                   type="button"

@@ -8,11 +8,14 @@ import { getProjectBrand, matchesBrandFilter, BrandFilter, BRAND_FILTERS } from 
 import { useMemo } from "react";
 import { Briefcase, TrendingUp, Users, Zap, Target, BarChart3 } from "lucide-react";
 import {
-  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, Painel, RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela,
+  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Painel, RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela,
   botao, etiqueta, juntar, superficie, texto,
 } from "@/components/sistema";
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { Avatar, ChartLegend, Donut, ProgressBar, StatusPill } from "@/components/ds";
+import { Numeros, grafico } from "@/components/finance/pecasDoFinanceiro";
 import { moedaDe } from "@/lib/freela/freelaLib";
+import { useLarguraMinima } from "@/hooks/useLarguraMinima";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -140,7 +143,6 @@ export default function AdminProjection() {
     ...(recurringTotal > 0 ? [{ name: "Recorrente", value: recurringTotal }] : []),
     ...(indivTotal > 0 ? [{ name: "Projetos", value: indivTotal }] : []),
   ];
-  const PIE_COLORS = ["hsl(var(--success))", "hsl(var(--info))"];
 
   // Comparison chart
   const comparisonData = [
@@ -222,10 +224,12 @@ export default function AdminProjection() {
   }, [activeClients, gap, projectPayments]);
 
   const priorityColor = (p: string) => {
-    if (p === "alta") return "bg-destructive/10 text-destructive";
-    if (p === "média") return "bg-warning/10 text-warning";
-    return "bg-info/10 text-info";
+    if (p === "alta") return "bg-danger-soft text-destructive";
+    if (p === "média") return "bg-warning-soft text-warning";
+    return "bg-info-soft text-info";
   };
+
+  const telaLarga = useLarguraMinima(640);
 
   if (!isAdmin) {
     return <Navigate to="/financeiro" replace />;
@@ -234,23 +238,23 @@ export default function AdminProjection() {
   const primeiraCarga = (billingQuery.isLoading && !billing) || (paymentsQuery.isLoading && !projectPayments);
   const erroAoLer = (billingQuery.isError && !billing) || (paymentsQuery.isError && !projectPayments);
   const numeros = [
-    { rotulo: "Mês atual", valor: fmt(currentMonthRevenue), sub: MONTHS_FULL[thisMonth], icone: <BarChart3 className="h-3.5 w-3.5" />, cor: "text-foreground", corIcone: "text-muted-foreground" },
+    { rotulo: "Mês atual", valor: fmt(currentMonthRevenue), sub: MONTHS_FULL[thisMonth], icone: <BarChart3 className="h-4 w-4" />, cor: "text-foreground", corIcone: "text-muted-foreground" },
     {
       rotulo: "Projeção",
       valor: fmt(projectedTotal),
-      sub: showMonthly && showIndiv ? `Recorrente ${fmt(recurringTotal)} · Parcelas ${fmt(indivTotal)}` : MONTHS_FULL[nextMonth],
-      icone: <Briefcase className="h-3.5 w-3.5" />,
+      sub: MONTHS_FULL[nextMonth],
+      icone: <Briefcase className="h-4 w-4" />,
       cor: "text-info",
       corIcone: "text-info",
     },
-    { rotulo: "Meta 2x", valor: fmt(doubleTarget), sub: "Dobro da projeção", icone: <Target className="h-3.5 w-3.5" />, cor: "text-success", corIcone: "text-success" },
-    { rotulo: "Diferença", valor: fmt(gap), sub: "Falta para chegar a 2x", icone: <TrendingUp className="h-3.5 w-3.5" />, cor: "text-warning", corIcone: "text-warning" },
+    { rotulo: "Meta 2x", valor: fmt(doubleTarget), sub: "Dobro da projeção", icone: <Target className="h-4 w-4" />, cor: "text-success", corIcone: "text-success" },
+    { rotulo: "Diferença", valor: fmt(gap), sub: "Falta para chegar a 2x", icone: <TrendingUp className="h-4 w-4" />, cor: "text-warning", corIcone: "text-warning" },
   ];
 
   return (
-    <div className="min-w-0 space-y-6 pb-4">
+    <div className="min-w-0 space-y-6 pb-4 sm:space-y-8">
       <CabecalhoDePagina
-        titulo={`Projeção de ${MONTHS_FULL[nextMonth]}`}
+        titulo={telaLarga ? `Projeção de ${MONTHS_FULL[nextMonth]}` : `Projeção de ${MONTHS_FULL[nextMonth].slice(0, 3).toLowerCase()}.`}
         descricao={String(nextYear)}
         voltar={{ para: "/financeiro", rotulo: "Financeiro" }}
         ajuda="Receita projetada para o próximo mês (planos ativos e parcelas que vencem) e o que falta para dobrar o faturamento."
@@ -282,25 +286,33 @@ export default function AdminProjection() {
       ) : (
         <>
           {/* Os quatro números numa faixa só (antes, um cartão por número). */}
-          <FaixaDeNumeros
+          <Numeros
             rotulo="Números da projeção"
             colunas={4}
-            itens={numeros.map((n) => ({ rotulo: n.rotulo, valor: n.valor, apoio: n.sub, corDoValor: n.cor }))}
+            itens={numeros.map((n, i) => ({
+              rotulo: n.rotulo,
+              valor: n.valor,
+              apoio: n.sub,
+              icone: n.icone,
+              variante: i === 0 ? ("ink" as const) : i === 1 ? ("accent" as const) : ("default" as const),
+              // Quanto a projeção já cobre da meta de dobrar (a mesma conta dos números ao lado).
+              extra: i === 3 && doubleTarget > 0 ? <ProgressBar value={projectedTotal} max={doubleTarget} striped label={`Projeção ${fmt(projectedTotal)} de ${fmt(doubleTarget)} da meta`} /> : undefined,
+            }))}
           />
 
           <Secao titulo="Receita" divisoria>
-            <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
-              <Painel titulo="Comparativo" descricao="Mês atual, projeção e meta">
-                <div className="h-[220px] min-w-0">
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
+              <Painel titulo="Comparativo" descricao="Mês atual, projeção e meta" className={pieData.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}>
+                <div className="h-[260px] min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={comparisonData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                      <Bar dataKey="valor" radius={[6, 6, 0, 0]} isAnimationActive={false}>
+                    <BarChart data={comparisonData} barCategoryGap="30%">
+                      <CartesianGrid {...grafico.grade} />
+                      <XAxis dataKey="name" {...grafico.eixo} />
+                      <YAxis {...grafico.eixo} width={52} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(v: number) => fmt(v)} {...grafico.dica} />
+                      <Bar dataKey="valor" radius={[12, 12, 12, 12]} maxBarSize={72} isAnimationActive={false}>
                         {comparisonData.map((_, i) => (
-                          <Cell key={i} fill={i === 0 ? "hsl(var(--muted-foreground))" : i === 1 ? "hsl(var(--info))" : "hsl(var(--success))"} />
+                          <Cell key={i} fill={i === 0 ? grafico.cor(3) : i === 1 ? grafico.cor(1) : grafico.cor(2)} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -310,27 +322,15 @@ export default function AdminProjection() {
 
               {pieData.length > 0 && (
                 <Painel titulo="Composição" descricao={`Projeção de ${MONTHS_FULL[nextMonth]}`}>
-                  <div className="flex min-w-0 flex-col items-center sm:flex-row">
-                    <div className="h-[180px] w-[180px] shrink-0">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={78} dataKey="value" stroke="none" isAnimationActive={false}>
-                            {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                          </Pie>
-                          <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <ul className="mt-3 w-full min-w-0 flex-1 divide-y divide-border sm:ml-5 sm:mt-0">
-                      {pieData.map((d, i) => (
-                        <li key={d.name} className="flex min-w-0 items-center py-2">
-                          <span className="mr-2.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PIE_COLORS[i] }} aria-hidden="true" />
-                          <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{d.name}</span>
-                          <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">{((d.value / projectedTotal) * 100).toFixed(0)}%</span>
-                          <span className="ml-3 shrink-0 text-[13px] tabular-nums text-foreground">{fmt(d.value)}</span>
-                        </li>
-                      ))}
-                    </ul>
+                  <div className="flex min-w-0 flex-col items-center">
+                    <Donut size={176} thickness={20} segments={pieData.map((d) => ({ value: d.value, label: d.name }))}>
+                      <span className="text-[11px] leading-4 text-muted-foreground">Projeção</span>
+                      <span className="max-w-full truncate text-[15px] font-semibold leading-5 tabular-nums">{fmt(projectedTotal)}</span>
+                    </Donut>
+                    <ChartLegend
+                      className="mt-4 w-full"
+                      items={pieData.map((d) => ({ label: `${d.name} · ${((d.value / projectedTotal) * 100).toFixed(0)}%`, value: fmt(d.value) }))}
+                    />
                   </div>
                 </Painel>
               )}
@@ -341,8 +341,6 @@ export default function AdminProjection() {
             titulo="Itens projetados"
             descricao={[
               `${allItems.length} ${allItems.length === 1 ? "item" : "itens"}`,
-              showMonthly ? `Recorrente ${fmt(recurringTotal)}` : "",
-              showIndiv ? `Parcelas ${fmt(indivTotal)}` : "",
             ].filter(Boolean).join(" · ")}
             divisoria
           >
@@ -351,21 +349,22 @@ export default function AdminProjection() {
             ) : (
               <div className={juntar(superficie.painel, "overflow-hidden")}>
                 <RegiaoRolavel memoria="projecao:itens" rotulo="Itens projetados" sobre="cartao" className="lg:max-h-[60vh]">
-                  <ul className="divide-y divide-border">
+                  <ul className="py-1.5">
                     {allItems.map((item) => (
-                      <li key={item.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
-                        <span className={juntar("mr-3 h-2 w-2 shrink-0 rounded-full", item.type === "recurring" ? "bg-success" : "bg-info")} aria-hidden="true" />
+                      <li key={item.id} className="flex min-w-0 items-center px-4 py-3 transition-colors hover:bg-muted/40 sm:px-6">
+                        <Avatar name={item.client} className="mr-3 hidden sm:inline-flex" />
                         <div className="mr-3 min-w-0 flex-1">
-                          <p className={juntar(texto.corpo, "truncate")}>{item.label}</p>
-                          <p className={juntar(texto.auxiliar, "truncate")}>
+                          <p className={juntar(texto.corpo, "truncate font-medium")}>{item.label}</p>
+                          <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
                             {item.client}
-                            <span className="hidden sm:inline"> · {item.brand} · {item.type === "recurring" ? "Recorrente" : "Parcela"}</span>
+                            <span className="hidden sm:inline"> · {item.brand}</span>
                           </p>
                         </div>
+                        <StatusPill tone={item.type === "recurring" ? "success" : "info"} className="mr-4 max-sm:hidden">{item.type === "recurring" ? "Recorrente" : "Parcela"}</StatusPill>
                         <div className="flex shrink-0 flex-col items-end">
-                          <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(item.amount)}</span>
+                          <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(item.amount)}</span>
                           {item.due && (
-                            <span className="text-[11px] tabular-nums text-muted-foreground">{new Date(item.due + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+                            <span className="mt-0.5 text-[12px] tabular-nums text-muted-foreground">{new Date(item.due + "T00:00:00").toLocaleDateString("pt-BR")}</span>
                           )}
                         </div>
                       </li>
@@ -377,22 +376,23 @@ export default function AdminProjection() {
           </Secao>
 
           <Secao titulo="Como dobrar o faturamento" ajuda="Sugestões calculadas com o ticket médio dos planos e dos projetos atuais." divisoria>
-            <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+            <ul className={juntar(superficie.painel, "overflow-hidden py-1.5")}>
               {recommendations.map((rec, i) => (
-                <li key={i} className="flex min-w-0 items-start px-3 py-3 sm:px-4">
-                  <span className={juntar(superficie.poco, "mr-3 flex h-8 w-8 shrink-0 items-center justify-center")} aria-hidden="true">
-                    <rec.icon className="h-4 w-4 text-foreground" />
+                <li key={i} className="flex min-w-0 items-start px-4 py-3.5 sm:px-6 sm:py-4">
+                  <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full sm:mr-4", i === 0 ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground")} aria-hidden="true">
+                    <rec.icon className="h-4 w-4" />
                   </span>
                   <div className="mr-3 min-w-0 flex-1">
                     <div className="flex min-w-0 flex-wrap items-center">
-                      <p className={juntar(texto.corpo, "mr-2 min-w-0 font-medium")}>{rec.title}</p>
-                      <span className={juntar(etiqueta, priorityColor(rec.priority))}>{rec.priority}</span>
+                      <p className={juntar(texto.corpo, "mr-2 min-w-0 font-semibold")}>{rec.title}</p>
+                      <span className={juntar(etiqueta, "h-[22px] capitalize", priorityColor(rec.priority))}>{rec.priority}</span>
                     </div>
-                    <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>{rec.description}</p>
+                    <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>{rec.description}</p>
+                    <p className="mt-1.5 text-[12px] leading-4 text-muted-foreground sm:hidden">Impacto <span className="font-semibold tabular-nums text-foreground">{rec.impact}</span></p>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="shrink-0 text-right max-sm:hidden">
                     <p className={texto.rotulo}>Impacto</p>
-                    <p className="text-[13px] font-semibold tabular-nums text-success">{rec.impact}</p>
+                    <p className="mt-0.5 text-[15px] font-semibold leading-5 tabular-nums text-foreground max-sm:text-[13px]">{rec.impact}</p>
                   </div>
                 </li>
               ))}

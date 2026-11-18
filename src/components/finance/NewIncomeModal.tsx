@@ -11,9 +11,13 @@ import { format, addDays } from "date-fns";
 import { Loader2, Sparkles, FolderPlus } from "lucide-react";
 import {
   buildPaymentInstallments,
+  buildPlanoComEntrada,
+  lerValorBR,
   normalizeMoney,
+  percentualDaEntrada,
   splitAmount,
 } from "@/lib/paymentInstallments";
+import { somarMeses } from "@/lib/extrasDoCliente";
 import { compensateNewIncome } from "@/lib/newIncomeCompensation";
 import { CampoDeFormulario, GrupoDeCampos, SeletorCompacto, botao, campo, campoTexto, juntar, superficie, texto } from "@/components/sistema";
 
@@ -58,6 +62,18 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   const [firstDueDate, setFirstDueDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [alreadyPaid, setAlreadyPaid] = useState(false);
   const [paidInstallments, setPaidInstallments] = useState("0");
+  // Parcelado (16/11): entrada de qualquer valor + o restante em N parcelas.
+  const [entrada, setEntrada] = useState("");
+  const [entradaPaga, setEntradaPaga] = useState(true);
+  const [primeiraParcela, setPrimeiraParcela] = useState(() => somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
+  // Suporte mensal que entra junto (vira um extra mensal do cliente) e a indicação sobre ele.
+  const [temSuporte, setTemSuporte] = useState(false);
+  const [suporteValor, setSuporteValor] = useState("");
+  const [suporteDepoisDaEntrega, setSuporteDepoisDaEntrega] = useState(true);
+  const [suporteInicio, setSuporteInicio] = useState(() => somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
+  const [temAfiliado, setTemAfiliado] = useState(false);
+  const [afiliadoNome, setAfiliadoNome] = useState("");
+  const [afiliadoPct, setAfiliadoPct] = useState("");
 
   const selectedClient = useMemo(
     () => (clients || []).find((c: any) => c.id === clientId),
@@ -110,7 +126,12 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     setGenerateTasks(true); setTotalValue(""); setPaymentMode("a_vista");
     setInstallmentsCount("2"); setFirstDueDate(format(new Date(), "yyyy-MM-dd"));
     setAlreadyPaid(false); setPaidInstallments("0");
+    setEntrada(""); setEntradaPaga(true); setPrimeiraParcela(somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
+    setTemSuporte(false); setSuporteValor(""); setSuporteDepoisDaEntrega(true);
+    setSuporteInicio(somarMeses(format(new Date(), "yyyy-MM-dd"), 1));
+    setTemAfiliado(false); setAfiliadoNome(""); setAfiliadoPct("");
   };
+  const numeroBR = lerValorBR;
 
   const handleSave = async () => {
     if (!clientId) return toast.error("Selecione o cliente");
@@ -122,6 +143,13 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     }
     if (projectMode === "existing" && !existingProjectId) return toast.error("Selecione o projeto");
     if (projectMode === "new" && !name.trim()) return toast.error("Informe o nome do projeto");
+    const valorDaEntrada = paymentMode === "parcelado" ? numeroBR(entrada) : 0;
+    if (valorDaEntrada > total) return toast.error("A entrada é maior que o valor total");
+    if (temSuporte && !(numeroBR(suporteValor) > 0)) return toast.error("Informe o valor do suporte por mês");
+    if (temSuporte && !suporteDepoisDaEntrega && !suporteInicio) return toast.error("Informe quando o suporte começa");
+    if (temSuporte && temAfiliado && (afiliadoNome.trim().length < 2 || !(numeroBR(afiliadoPct) > 0) || numeroBR(afiliadoPct) > 100)) {
+      return toast.error("Informe o nome de quem indicou e o percentual (até 100%)");
+    }
 
     setSaving(true);
     let createdProjectId: string | null = null;
@@ -211,6 +239,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
       const paidCount = alreadyPaid
         ? (paymentMode === "a_vista" ? iCount : Math.min(parseInt(paidInstallments) || 0, iCount))
         : 0;
+      const entradaV = paymentMode === "parcelado" ? Math.min(numeroBR(entrada), total) : 0;
 
       const { data: paymentData, error: payErr } = await supabase
         .from("project_payments")
@@ -218,8 +247,8 @@ export default function NewIncomeModal({ open, onClose }: Props) {
           project_id: projectId,
           client_id: clientId,
           total_value: total,
-          entry_percentage: 0,
-          entry_amount: 0,
+          entry_percentage: percentualDaEntrada(total, entradaV),
+          entry_amount: entradaV,
           installments_count: iCount,
           created_by: user?.id,
         } as any)
@@ -228,13 +257,24 @@ export default function NewIncomeModal({ open, onClose }: Props) {
       if (payErr) throw payErr;
       createdPaymentId = paymentData.id;
 
-      const instRows = buildPaymentInstallments({
-        paymentId: paymentData.id,
-        total,
-        installmentsCount: iCount,
-        firstDueDate,
-        paidInstallments: paidCount,
-      });
+      const instRows = paymentMode === "parcelado"
+        ? buildPlanoComEntrada({
+          paymentId: paymentData.id,
+          total,
+          entrada: entradaV,
+          entradaEm: firstDueDate,
+          entradaPaga: entradaV > 0 && entradaPaga,
+          parcelas: iCount,
+          primeiraEm: entradaV > 0 ? primeiraParcela : firstDueDate,
+          parcelasPagas: paidCount,
+        })
+        : buildPaymentInstallments({
+          paymentId: paymentData.id,
+          total,
+          installmentsCount: iCount,
+          firstDueDate,
+          paidInstallments: paidCount,
+        });
       const { error: installmentError } = await supabase
         .from("payment_installments")
         .insert(instRows);
@@ -265,6 +305,30 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         }
       }
 
+      // Suporte mensal: vira um extra do cliente (Extras e produtos), com a cobrança de cada mês pelo banco.
+      if (temSuporte) {
+        const nomeDoProjeto = projectMode === "new" ? name.trim() : (existingProjects.find((p) => p.id === existingProjectId)?.name || "projeto");
+        const { data: extra, error: extraError } = await (supabase as any).rpc("extra_salvar", {
+          _dados: {
+            client_id: clientId,
+            nome: `Suporte e manutenção · ${nomeDoProjeto}`.slice(0, 120),
+            categoria: "suporte",
+            cobranca: "mensal",
+            valor: numeroBR(suporteValor),
+            inicio: suporteDepoisDaEntrega ? null : suporteInicio,
+          },
+        });
+        if (extraError) {
+          console.warn("Falha ao criar o suporte mensal", extraError);
+          toast.warning("Entrada salva, mas o suporte mensal não. Adicione na ficha do cliente, em Extras e produtos.");
+        } else if (temAfiliado && extra?.id) {
+          const { error: afError } = await (supabase as any).from("client_extras")
+            .update({ afiliado_nome: afiliadoNome.trim(), afiliado_percentual: numeroBR(afiliadoPct) })
+            .eq("id", extra.id);
+          if (afError) toast.warning("Suporte criado, mas a indicação não. Edite o suporte na ficha do cliente.");
+        }
+      }
+
       toast.success("Entrada avulsa registrada");
       await Promise.allSettled([
         qc.invalidateQueries({ queryKey: ["all-project-payments-finance"] }),
@@ -273,6 +337,8 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         qc.invalidateQueries({ queryKey: ["clients"] }),
         qc.invalidateQueries({ queryKey: ["expenses"] }),
         qc.invalidateQueries({ queryKey: ["billing"] }),
+        qc.invalidateQueries({ queryKey: ["extras-do-cliente", clientId] }),
+        qc.invalidateQueries({ queryKey: ["extras-mensais-ativos"] }),
         qc.refetchQueries({ queryKey: ["all-project-payments-finance"] }),
       ]);
       reset();
@@ -308,13 +374,17 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     : paymentMode === "a_vista"
       ? <>Total <span className="tabular-nums text-foreground">R$ {normalizedPreviewTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>
       : (() => {
+          const ent = Math.min(numeroBR(entrada), normalizedPreviewTotal);
+          const resto = Math.round((normalizedPreviewTotal - ent) * 100) / 100;
+          if (resto <= 0) return <>Tudo na entrada · <span className="tabular-nums text-foreground">R$ {ent.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>;
           const amounts = splitAmount(
-            normalizedPreviewTotal,
+            resto,
             Math.max(parseInt(installmentsCount) || 1, 1),
           );
           const regular = amounts[0];
           const last = amounts[amounts.length - 1];
           return <>
+            {ent > 0 && <>Entrada <span className="tabular-nums text-foreground">R$ {ent.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span> · restante </>}
             {amounts.length}× · primeiras <span className="tabular-nums text-foreground">R$ {regular.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
             {last !== regular && <> · última <span className="tabular-nums text-foreground">R$ {last.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>}
           </>;
@@ -428,12 +498,32 @@ export default function NewIncomeModal({ open, onClose }: Props) {
 
             {paymentMode === "parcelado" ? (
               <>
-                <CampoDeFormulario rotulo="Nº de parcelas">
-                  <Input type="number" inputMode="numeric" step="1" min="2" value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} className="h-9" />
+                <CampoDeFormulario rotulo="Entrada (R$)" apoio="Qualquer valor. Vazio = sem entrada.">
+                  <Input inputMode="decimal" value={entrada} onChange={(e) => setEntrada(e.target.value)} className="h-9" placeholder="0,00" data-entrada-livre="" />
                 </CampoDeFormulario>
-                <CampoDeFormulario rotulo="1ª data">
-                  <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-9" />
+                {numeroBR(entrada) > 0 && (
+                  <>
+                    <CampoDeFormulario rotulo="Data da entrada">
+                      <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-9" />
+                    </CampoDeFormulario>
+                    <div className="min-w-0">
+                      <p className={juntar(texto.rotulo, "mb-1.5")}>A entrada</p>
+                      <SeletorCompacto opcoes={[{ valor: "sim", rotulo: "Já pagou" }, { valor: "nao", rotulo: "Vai pagar" }]} valor={entradaPaga ? "sim" : "nao"} onEscolher={(v) => setEntradaPaga(v === "sim")} rotulo="A entrada" larguraTotal />
+                    </div>
+                  </>
+                )}
+                <CampoDeFormulario rotulo={numeroBR(entrada) > 0 ? "Restante em quantas parcelas" : "Nº de parcelas"}>
+                  <Input type="number" inputMode="numeric" step="1" min="1" value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} className="h-9" />
                 </CampoDeFormulario>
+                {numeroBR(entrada) > 0 ? (
+                  <CampoDeFormulario rotulo="1ª parcela em">
+                    <Input type="date" value={primeiraParcela} onChange={(e) => setPrimeiraParcela(e.target.value)} className="h-9" />
+                  </CampoDeFormulario>
+                ) : (
+                  <CampoDeFormulario rotulo="1ª data">
+                    <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-9" />
+                  </CampoDeFormulario>
+                )}
               </>
             ) : (
               <CampoDeFormulario rotulo="Data do pagamento">
@@ -444,15 +534,58 @@ export default function NewIncomeModal({ open, onClose }: Props) {
             <label className="flex min-w-0 cursor-pointer items-center sm:col-span-full">
               <input type="checkbox" checked={alreadyPaid} onChange={(e) => setAlreadyPaid(e.target.checked)} className="mr-2.5 h-4 w-4 shrink-0 accent-primary" />
               <span className="min-w-0 flex-1">
-                <span className={juntar(texto.corpo, "block font-medium")}>Já foi pago</span>
-                <span className={juntar(texto.auxiliar, "block truncate")}>Marca a entrada como recebida no fluxo de caixa.</span>
+                <span className={juntar(texto.corpo, "block font-medium")}>{paymentMode === "parcelado" ? "Parcelas já pagas" : "Já foi pago"}</span>
+                <span className={juntar(texto.auxiliar, "block truncate")}>{paymentMode === "parcelado" ? "Para lançar um plano que já está andando." : "Marca a entrada como recebida no fluxo de caixa."}</span>
               </span>
             </label>
 
             {alreadyPaid && paymentMode === "parcelado" && (
-              <CampoDeFormulario rotulo="Parcelas já pagas" apoio={`de ${installmentsCount}`}>
+              <CampoDeFormulario rotulo="Quantas já foram pagas" apoio={`de ${installmentsCount}`}>
                 <Input type="number" inputMode="numeric" step="1" min="0" max={installmentsCount} value={paidInstallments} onChange={(e) => setPaidInstallments(e.target.value)} className="h-9" />
               </CampoDeFormulario>
+            )}
+          </GrupoDeCampos>
+
+          <GrupoDeCampos titulo="Depois da entrega" className="border-t border-border pt-4">
+            <label className="flex min-w-0 cursor-pointer items-center sm:col-span-full">
+              <input type="checkbox" checked={temSuporte} onChange={(e) => setTemSuporte(e.target.checked)} className="mr-2.5 h-4 w-4 shrink-0 accent-primary" data-tem-suporte="" />
+              <span className="min-w-0 flex-1">
+                <span className={juntar(texto.corpo, "block font-medium")}>Tem suporte mensal</span>
+                <span className={juntar(texto.auxiliar, "block truncate")}>Vira uma mensalidade do cliente, em Extras e produtos.</span>
+              </span>
+            </label>
+            {temSuporte && (
+              <>
+                <CampoDeFormulario rotulo="Valor por mês (R$)" obrigatorio>
+                  <Input inputMode="decimal" value={suporteValor} onChange={(e) => setSuporteValor(e.target.value)} className="h-9" placeholder="0,00" />
+                </CampoDeFormulario>
+                <div className="min-w-0">
+                  <p className={juntar(texto.rotulo, "mb-1.5")}>Começa</p>
+                  <SeletorCompacto opcoes={[{ valor: "entrega", rotulo: "Depois da entrega" }, { valor: "data", rotulo: "Numa data" }]} valor={suporteDepoisDaEntrega ? "entrega" : "data"} onEscolher={(v) => setSuporteDepoisDaEntrega(v === "entrega")} rotulo="Quando o suporte começa" larguraTotal />
+                </div>
+                {!suporteDepoisDaEntrega && (
+                  <CampoDeFormulario rotulo="Primeira mensalidade em">
+                    <Input type="date" value={suporteInicio} onChange={(e) => setSuporteInicio(e.target.value)} className="h-9" />
+                  </CampoDeFormulario>
+                )}
+                <label className="flex min-w-0 cursor-pointer items-center sm:col-span-full">
+                  <input type="checkbox" checked={temAfiliado} onChange={(e) => setTemAfiliado(e.target.checked)} className="mr-2.5 h-4 w-4 shrink-0 accent-primary" data-tem-afiliado="" />
+                  <span className="min-w-0 flex-1">
+                    <span className={juntar(texto.corpo, "block font-medium")}>Veio por indicação</span>
+                    <span className={juntar(texto.auxiliar, "block truncate")}>Cada mensalidade paga gera o repasse em Despesas.</span>
+                  </span>
+                </label>
+                {temAfiliado && (
+                  <>
+                    <CampoDeFormulario rotulo="Quem indicou" obrigatorio>
+                      <Input value={afiliadoNome} onChange={(e) => setAfiliadoNome(e.target.value)} className="h-9" placeholder="Nome" />
+                    </CampoDeFormulario>
+                    <CampoDeFormulario rotulo="Repasse (%)" obrigatorio apoio={numeroBR(afiliadoPct) > 0 && numeroBR(suporteValor) > 0 ? `R$ ${(Math.round(numeroBR(suporteValor) * numeroBR(afiliadoPct)) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} por mês` : undefined}>
+                      <Input inputMode="decimal" value={afiliadoPct} onChange={(e) => setAfiliadoPct(e.target.value)} className="h-9" placeholder="Ex.: 10" />
+                    </CampoDeFormulario>
+                  </>
+                )}
+              </>
             )}
           </GrupoDeCampos>
 

@@ -55,12 +55,14 @@ export default function EvolucaoDoCliente({ clientes }: { clientes: { id: string
       }
       acao={
         clientes.length > 0 ? (
-          <select aria-label="Cliente" className={juntar(campo, "w-48")} value={clienteId} onChange={(e) => setEscolhido(e.target.value)}>
+          <select aria-label="Cliente" className={juntar(campo, "w-[104px] sm:w-48")} value={clienteId} onChange={(e) => setEscolhido(e.target.value)}>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         ) : undefined
       }
     >
+      {/* Altura mínima igual à do "carregando": vazio, carregando e erro ocupam o mesmo lugar (o resto da tela não pula). */}
+      <div className="min-h-[136px] min-w-0">
       {!clientes.length ? (
         <EstadoVazio compacto titulo="Nenhum cliente." descricao="A evolução aparece quando houver cliente com peças." />
       ) : evolucao.isLoading ? (
@@ -127,6 +129,7 @@ export default function EvolucaoDoCliente({ clientes }: { clientes: { id: string
           </table>
         </div>
       )}
+      </div>
     </Secao>
   );
 }

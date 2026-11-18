@@ -116,7 +116,7 @@ function LinhaDoPost({ post, aberto, onAbrir }: { post: PostDeFotos; aberto: boo
             {dataCurta(post.item ? post.item.due_date : null)} · {post.cards.length ? `${post.cards.length} ${post.cards.length === 1 ? "foto" : "fotos"}` : "sem fotos"}
           </span>
         </span>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
       </button>
     </li>
   );
@@ -342,13 +342,13 @@ export function MontarOPost({
                   <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold">{i + 1}</span>
                 </Moldura>
                 <div className="mt-1 flex items-center justify-between">
-                  <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === 0} onClick={() => mover(i, -1)} aria-label={`Mover ${f.nome} para antes`}>
+                  <button type="button" className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === 0} onClick={() => mover(i, -1)} aria-label={`Mover ${f.nome} para antes`}>
                     <ArrowLeft className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-destructive" onClick={() => setIds(ids.filter((x) => x !== f.id))} aria-label={`Tirar ${f.nome} do post`}>
+                  <button type="button" className="rounded-sm p-0.5 text-muted-foreground hover:text-destructive" onClick={() => setIds(ids.filter((x) => x !== f.id))} aria-label={`Tirar ${f.nome} do post`}>
                     <X className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === fotos.length - 1} onClick={() => mover(i, 1)} aria-label={`Mover ${f.nome} para depois`}>
+                  <button type="button" className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === fotos.length - 1} onClick={() => mover(i, 1)} aria-label={`Mover ${f.nome} para depois`}>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -371,16 +371,16 @@ export function MontarOPost({
         </div>
         <div className="min-w-0">
           <p className="mb-1 text-[12px] font-medium text-muted-foreground">Formato</p>
-          <div role="radiogroup" aria-label="Formato do post" className="inline-grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
+          <div role="radiogroup" aria-label="Formato do post" className="inline-grid grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5">
             {FORMATOS_DO_POST_DE_FOTOS.map((f) => (
-              <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded px-2 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
+              <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded-full px-2 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-card" : "text-muted-foreground")}>
                 {ROTULO_DO_FORMATO_DE_FOTOS[f]}
               </button>
             ))}
           </div>
         </div>
         {!post && !destinoFixo && (
-          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
             <CampoDeFormulario rotulo="Onde entra na Agenda">
               <SeletorCompacto modo="lista" rotulo="Item da Agenda" opcoes={opcoesDeDestino} valor={destino} onEscolher={setDestino} className="w-full" />
             </CampoDeFormulario>
@@ -524,7 +524,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
       titulo={estudio ? "" : <span className="block truncate">{post.item ? post.item.title : "Post de fotos"}</span>}
       recolher={estudio ? false : `mesa-foto:agenda:post:${post.id}`}
       resumo={estado.rotulo}
-      acao={estudio ? undefined : <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
+      acao={estudio ? undefined : <span className={`rounded-full px-2.5 py-1 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
     >
       <div className="min-w-0 space-y-4" data-post-aberto={post.id}>
         <p className="text-[12px] text-muted-foreground">
@@ -825,7 +825,7 @@ export default function EtapaAgenda() {
         )}
         {/* 28/09: a lista segue a rolagem da região principal (uma rolagem por região). */}
         {pendentes.length > 0 && (
-          <ul className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+          <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-2">
             {pendentes.map((p) => (
               <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
             ))}
@@ -834,7 +834,7 @@ export default function EtapaAgenda() {
         {publicados.length > 0 && (
           <details className="mt-3">
             <summary className="cursor-pointer text-[12px] text-muted-foreground">No ar ({publicados.length})</summary>
-            <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+            <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-2">
               {publicados.map((p) => (
                 <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
               ))}

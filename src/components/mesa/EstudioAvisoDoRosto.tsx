@@ -92,7 +92,7 @@ export function EstudioAvisosDaGeracao({ versao }: { versao: { avisos_da_geracao
         <TriangleAlert className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">{primeiro}</span>
         {avisos.length > 1 && <span className="ml-1 shrink-0 tabular-nums text-muted-foreground">+{avisos.length - 1}</span>}
-        <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
+        <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
       {aberto && (
         <ul className="mb-1 ml-5 mt-0.5 space-y-1 text-[12px] leading-snug text-muted-foreground">

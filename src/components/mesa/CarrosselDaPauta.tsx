@@ -30,7 +30,7 @@ export default function CarrosselDaPauta({ fotos, onOrdem, onTrocar, entrega, so
   const atual = fotos.find((f) => f.id === escolhida) || null;
   return <section aria-label="Carrossel do post" className="min-w-0 space-y-3" data-carrossel-da-pauta="">
     <p role="status" className="text-[12px] text-muted-foreground">{!fotos.length ? "Escolha ou gere fotos para montar o carrossel." : fotos.length === 1 ? "Foto única." : `${fotos.length} lâminas. A primeira é a capa.`}{baixas.length ? ` ${baixas.length} abaixo de ${LADO_DE_ALTA} px.` : ""}</p>
-    <ol className="grid grid-cols-2 gap-2" aria-label="Ordem do carrossel">
+    <ol className="grid grid-cols-2 gap-2 sm:gap-3" aria-label="Ordem do carrossel">
       {fotos.map((f, i) => <li key={f.id} className={juntar("min-w-0 rounded-md", arrastando === i ? "opacity-50" : "")} data-lamina={i + 1}
         draggable={!somenteLeitura} onDragStart={(e) => { setArrastando(i); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); }}
         onDragOver={(e) => { if (!somenteLeitura) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); const de = Number(e.dataTransfer.getData("text/plain")); if (Number.isFinite(de)) mover(de, i); setArrastando(null); }} onDragEnd={() => setArrastando(null)}>

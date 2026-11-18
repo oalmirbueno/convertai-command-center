@@ -168,8 +168,9 @@ export default function Lancador({
           title={comAgente ? `Aceleriq e ajuda (${ATALHO_DO_AGENTE} abre o agente)` : "Ajuda"}
           data-botao-do-lancador=""
           className={juntar(
-            "flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:text-foreground",
-            aberto ? "text-foreground" : comAgente ? "text-primary" : "text-muted-foreground",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors xl:h-11 xl:w-11",
+            // v4: ícone num círculo com fundo próprio, como os outros da barra; o do agente é o círculo na cor da marca.
+            aberto ? "bg-foreground text-background" : comAgente ? "bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_hsl(var(--primary)/0.7)] hover:bg-foreground hover:text-background" : "border border-border bg-card text-foreground shadow-card hover:bg-foreground hover:text-background",
             foco,
           )}
         >
@@ -199,7 +200,7 @@ export default function Lancador({
           aria-label={papel === "cliente" ? "Ajuda" : "Aceleriq e ajuda"}
           className={juntar(
             MENU_DO_LANCADOR[variante],
-            "w-72 max-w-[calc(100vw-16px)] rounded-lg border border-border bg-popover p-1.5 text-left text-popover-foreground shadow-lg",
+            "w-72 max-w-[calc(100vw-16px)] rounded-lg border border-border bg-popover p-1.5 text-left text-popover-foreground shadow-pop",
           )}
           data-menu-do-lancador=""
         >
@@ -214,15 +215,15 @@ export default function Lancador({
                       role="menuitem"
                       data-opcao={o.chave}
                       onClick={() => escolher(o.chave)}
-                      className={juntar("flex w-full min-w-0 items-center rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted", foco)}
+                      className={juntar("flex w-full min-w-0 items-center rounded-md px-2.5 py-2.5 text-left transition-colors hover:bg-muted", foco)}
                     >
-                      <IconeDaOpcao className={juntar("mr-2.5 h-4 w-4 shrink-0", o.chave === "agente" ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+                      <span aria-hidden="true" className={juntar("mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full", o.chave === "agente" ? "bg-accent-solid text-on-accent" : "bg-muted text-foreground")}><IconeDaOpcao className="h-4 w-4" aria-hidden="true" /></span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{o.rotulo}</span>
                         <span className="block truncate text-[12px] leading-4 text-muted-foreground">{o.detalhe}</span>
                       </span>
                       {o.atalho && (
-                        <kbd className="ml-2 hidden shrink-0 rounded border border-border px-1 font-mono text-[11px] leading-4 text-muted-foreground md:inline">{o.atalho}</kbd>
+                        <kbd className="ml-2 hidden shrink-0 rounded-full bg-muted px-2 font-mono text-[11px] leading-5 text-muted-foreground md:inline">{o.atalho}</kbd>
                       )}
                     </button>
                   </li>
@@ -247,7 +248,7 @@ export default function Lancador({
                 <ol className="max-h-64 space-y-2 overflow-y-auto pr-1">
                   {passosDaTela.slice(0, 6).map((p, i) => (
                     <li key={`${i}-${p.title}`} className="flex min-w-0 items-start">
-                      <span className="mr-2 mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">{i + 1}</span>
+                      <span className="mr-2 mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-semibold tabular-nums text-primary">{i + 1}</span>
                       <span className="min-w-0">
                         <span className="block text-[13px] font-medium leading-5 text-foreground">{p.title}</span>
                         <span className="line-clamp-3 block text-[12px] leading-4 text-muted-foreground">{p.description}</span>
@@ -283,7 +284,7 @@ export default function Lancador({
                 {ATALHOS_DO_PAINEL.filter((a) => podeUsarAgente || a.teclas !== ATALHO_DO_AGENTE).map((a) => (
                   <li key={a.teclas} className="flex min-w-0 items-center justify-between text-[12px]">
                     <span className="mr-2 min-w-0 truncate text-foreground">{a.o_que}</span>
-                    <kbd className="shrink-0 rounded border border-border px-1.5 font-mono text-[11px] leading-5 text-muted-foreground">{a.teclas}</kbd>
+                    <kbd className="shrink-0 rounded-full bg-muted px-2 font-mono text-[11px] leading-5 text-muted-foreground">{a.teclas}</kbd>
                   </li>
                 ))}
               </ul>

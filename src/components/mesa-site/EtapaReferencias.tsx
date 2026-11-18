@@ -195,7 +195,7 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
             {fotos.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo o acervo" />}
             {fotos.isError && <EstadoDeErro titulo="O acervo não foi lido." acao={<button type="button" className={botao.discreto} onClick={() => void fotos.refetch()}>Tentar de novo</button>} />}
             {fotos.data && !fotos.data.fotos.length && <EstadoVazio compacto titulo="Nenhuma foto no acervo da marca." />}
-            <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 lg:grid-cols-6">
               {(fotos.data ? fotos.data.fotos : []).slice(0, 36).map((f) => (
                 <button key={f.id} type="button" className="relative min-w-0 overflow-hidden rounded-md" title={`Usar ${f.nome} como referência`} onClick={() => void rodar("A foto não entrou", () => chamarSite("referencia_adicionar", { site_id: site.id, tipo: "acervo", imagem_id: f.id }))}>
                   <ImagemDaMesa caminho={f.storage_path} bucket={f.storage_bucket} alt={f.nome} className="h-20 w-full" />
@@ -204,7 +204,7 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
             </div>
           </div>
         )}
-        <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
           <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={leitor ? leitor.id : ""} onChange={setLeitorId} rotulo="Leitor das referências" />
         </div>
         <div className="min-w-0 truncate">{leitor && refs.length > 0 && <EstimativaInline partes={[{ modeloId: leitor.id, tipo: "texto", tokensEntrada: 3000 + 1600 * Math.min(6, imagensNaLeitura), tokensSaida: 1600 }]} />}</div>
@@ -245,7 +245,7 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
         >
           <div className="flex flex-wrap">
             {dna.atributos.map((a: { id: string; prob: number | null }) => (
-              <span key={a.id} className={juntar(etiqueta, "mb-1.5 mr-1.5 bg-primary/10 text-primary")}>
+              <span key={a.id} className={juntar(etiqueta, "mb-1.5 mr-1.5 bg-accent-soft text-primary")}>
                 {rotuloDoAtributo(a.id)}
                 {typeof a.prob === "number" ? ` ${Math.round(a.prob * 100)}%` : ""}
               </span>

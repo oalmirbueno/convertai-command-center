@@ -44,7 +44,7 @@ export default function TextoDoAgente({ texto, clientId, className = "" }: { tex
         ? <TextoFormatado key={`t-${i}`} texto={p.texto} className={className} />
         : <BlocosDeResposta key={`b-${i}`} blocos={p.blocos} aoAbrirFonte={abrirFonte} />)}
       {fonteAberta && r.evidencias[fonteAberta] && (
-        <div className="rounded-lg border border-border bg-background/60 p-2.5" data-evidencia-aberta={fonteAberta}>
+        <div className="rounded-md bg-muted p-2.5" data-evidencia-aberta={fonteAberta}>
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-[11px] font-semibold text-foreground">{fonteAberta}</span>
             <span className="text-[11px] text-muted-foreground">lido agora no OS</span>

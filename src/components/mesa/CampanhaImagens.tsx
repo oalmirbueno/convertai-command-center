@@ -109,8 +109,8 @@ function CartaoDaImagem({
               aria-pressed={imagem.papel === p.valor}
               disabled={desabilitado}
               onClick={() => (imagem.papel === p.valor ? undefined : onMudar({ ...imagem, papel: p.valor as PapelDaImagemDaCampanha }))}
-              className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
-                imagem.papel === p.valor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+              className={`mb-1 mr-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                imagem.papel === p.valor ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-card text-muted-foreground hover:text-foreground"
               }`}
             >
               {p.rotulo}
@@ -218,7 +218,7 @@ export default function CampanhaImagens({
   return (
     <div className="min-w-0 space-y-3">
       {valor.length > 0 ? (
-        <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2" aria-label="Imagens da campanha">
+        <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2" aria-label="Imagens da campanha">
           {valor.map((img) => (
             <CartaoDaImagem
               key={img.imagem_id}

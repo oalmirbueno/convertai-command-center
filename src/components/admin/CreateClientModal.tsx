@@ -25,6 +25,7 @@ import type { Database } from "@/integrations/supabase/types";
 
 type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 type BillingInsert = Database["public"]["Tables"]["billing"]["Insert"];
+import { cobrancasDaPrimeiraMensalidade, conferirDivisao, diaSeguinte, type ModoDaPrimeira } from "@/lib/primeiraMensalidade";
 
 /**
  * Senha provisória que SEMPRE passa na régua do manage-team (12+ com minúscula,
@@ -109,7 +110,11 @@ export default function CreateClientModal({ open, onClose }: Props) {
    * caçar a linha errada. Recebido continua sendo o padrão (é o caso comum);
    * a diferença é que agora é uma ESCOLHA.
    */
-  const [mensalidadeRecebida, setMensalidadeRecebida] = useState(true);
+  // 12/11/2026: a primeira mensalidade pode ser dividida (parte agora, o resto numa data). Antes a
+  // divisão era lançada como "projeto" e o caixa contava a mensalidade inteira mais a entrada.
+  const [modoDaPrimeira, setModoDaPrimeira] = useState<ModoDaPrimeira>("recebida");
+  const [recebidoAgora, setRecebidoAgora] = useState("");
+  const [restanteVence, setRestanteVence] = useState("");
   const [entradaRecebida, setEntradaRecebida] = useState(true);
   /** Valor da 1ª parcela quando difere do rateio (entrada maior ou menor). */
   const [entradaValor, setEntradaValor] = useState("");
@@ -142,6 +147,10 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const handleSave = async () => {
     if (!fullName.trim() || !company.trim() || !email.trim()) {
       toast.error("Preencha nome, empresa e email");
+      return;
+    }
+    if (clientType !== "one_off" && erroDaDivisao) {
+      toast.error(erroDaDivisao);
       return;
     }
     setSaving(true);
@@ -205,26 +214,16 @@ export default function CreateClientModal({ open, onClose }: Props) {
       // sempre que o combinado era pagar depois.
       if (showRecurring && planValueNum > 0) {
         const todayStr = new Date().toISOString().slice(0, 10);
-        const rowsRec: BillingInsert[] = [{
-          client_id: newUserId,
-          type: "renewal",
-          amount: planValueNum,
-          due_date: todayStr,
-          paid_date: mensalidadeRecebida ? todayStr : null,
-          paid_amount: mensalidadeRecebida ? planValueNum : null,
-          description: `Mensalidade · ${company.trim() || fullName.trim()}${mensalidadeRecebida ? " (pago no cadastro)" : " (a receber)"}`,
-          status: mensalidadeRecebida ? "paid" : "pending",
-        }];
-        if (planRenewalDate && planRenewalDate > todayStr) {
-          rowsRec.push({
-            client_id: newUserId,
-            type: "renewal",
-            amount: planValueNum,
-            due_date: planRenewalDate,
-            description: `Mensalidade · ${company.trim() || fullName.trim()}`,
-            status: "pending",
-          });
-        }
+        const rowsRec: BillingInsert[] = cobrancasDaPrimeiraMensalidade({
+          clienteId: newUserId,
+          nome: company.trim() || fullName.trim(),
+          valor: planValueNum,
+          modo: modoDaPrimeira,
+          hoje: todayStr,
+          recebidoAgora: parseFloat(recebidoAgora) || 0,
+          restanteVence: restanteVence || diaSeguinte(todayStr),
+          renovacao: planRenewalDate || null,
+        });
         const { error: recurringBillingError } = await supabase
           .from("billing")
           .insert(rowsRec);
@@ -381,6 +380,12 @@ export default function CreateClientModal({ open, onClose }: Props) {
       />
     </CampoDeFormulario>
   );
+
+  const valorDoPlano = parseFloat(planValue) || 0;
+  const restanteDaDivisao = Math.max(0, Math.round((valorDoPlano - (parseFloat(recebidoAgora) || 0)) * 100) / 100);
+  const erroDaDivisao = modoDaPrimeira === "dividida" && valorDoPlano > 0
+    ? conferirDivisao(valorDoPlano, parseFloat(recebidoAgora) || 0, restanteVence, new Date().toISOString().slice(0, 10))
+    : null;
 
   const parcelaTexto = (() => {
     const v = parseFloat(projectValue) || 0;
@@ -550,10 +555,29 @@ export default function CreateClientModal({ open, onClose }: Props) {
                   <CampoDeFormulario rotulo="Próxima renovação" ajuda="Gera a 1ª fatura mensal nesta data. As próximas são criadas automaticamente.">
                     <input value={planRenewalDate} onChange={(e) => setPlanRenewalDate(e.target.value)} type="date" className={campo} />
                   </CampoDeFormulario>
-                  {escolha("Primeira mensalidade", mensalidadeRecebida, setMensalidadeRecebida, [
-                    { v: true, label: "Recebida no cadastro", hint: "O dinheiro já caiu" },
-                    { v: false, label: "Vai pagar", hint: "Fica pendente no financeiro" },
+                  {escolha("Primeira mensalidade", modoDaPrimeira, (v: ModoDaPrimeira) => {
+                    setModoDaPrimeira(v);
+                    // Ao escolher dividir, já sugere metade agora e o resto amanhã.
+                    if (v === "dividida") {
+                      const valor = parseFloat(planValue) || 0;
+                      if (!recebidoAgora && valor > 0) setRecebidoAgora(String(Math.round((valor / 2) * 100) / 100));
+                      if (!restanteVence) setRestanteVence(diaSeguinte(new Date().toISOString().slice(0, 10)));
+                    }
+                  }, [
+                    { v: "recebida", label: "Recebida", hint: "O dinheiro já caiu inteiro" },
+                    { v: "dividida", label: "Dividida", hint: "Uma parte agora e o resto numa data. O mês seguinte segue cheio." },
+                    { v: "a_receber", label: "Vai pagar", hint: "Fica pendente no financeiro" },
                   ])}
+                  {modoDaPrimeira === "dividida" && (
+                    <>
+                      <CampoDeFormulario rotulo="Recebido agora (R$)" erro={erroDaDivisao && recebidoAgora ? erroDaDivisao : undefined}>
+                        <input value={recebidoAgora} onChange={(e) => setRecebidoAgora(e.target.value)} type="number" step="0.01" min="0" placeholder="0,00" className={juntar(campo, "tabular-nums")} data-recebido-agora="" />
+                      </CampoDeFormulario>
+                      <CampoDeFormulario rotulo="Restante vence em" apoio={restanteDaDivisao > 0 ? `Falta R$ ${restanteDaDivisao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : undefined}>
+                        <input value={restanteVence} onChange={(e) => setRestanteVence(e.target.value)} type="date" className={campo} data-restante-vence="" />
+                      </CampoDeFormulario>
+                    </>
+                  )}
                 </GrupoDeCampos>
               )}
 

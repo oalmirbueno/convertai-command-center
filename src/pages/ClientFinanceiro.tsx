@@ -5,9 +5,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
-import { MessageCircle, Check, X, AlertTriangle, Zap, ArrowRight } from "lucide-react";
-import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Painel, Secao, botao, etiqueta, foco, juntar, lista, superficie, texto } from "@/components/sistema";
-import { Progress } from "@/components/ui/progress";
+import { MessageCircle, Check, X, AlertTriangle, Zap, ArrowRight, Clock } from "lucide-react";
+import { AjudaRecolhida, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, espaco, juntar, superficie, texto } from "@/components/sistema";
+import { Card, CardSurface, Chip, List, ListRow, MiniBars, PageHeader, ProgressBar, StatCard, StatusPill, type Tone } from "@/components/ds";
+import { Bolha, type TomDaBolha } from "@/components/client/pecasOusadas";
 import { getProjectBrand } from "@/lib/brandHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { parseAppDate } from "@/lib/dateBR";
@@ -43,6 +44,21 @@ function receivedOf(row: any) {
 // DATE ("AAAA-MM-DD") lido como dia de calendário: `new Date(d)` mostrava o vencimento um dia antes em UTC-3.
 const formatDate = (d: string) => dataDoPortal(d);
 
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** Valor em reais com os centavos apagados e menores (o número que importa fica na frente). */
+function Dinheiro({ valor }: { valor: number }) {
+  const escrito = formatCurrency(valor);
+  const virgula = escrito.lastIndexOf(",");
+  if (virgula < 0) return <>{escrito}</>;
+  return (
+    <>
+      {escrito.slice(0, virgula)}
+      <span className="text-[0.6em] font-medium tracking-normal text-muted-foreground">{escrito.slice(virgula)}</span>
+    </>
+  );
+}
+
 export default function ClientFinanceiro() {
   const { user, profile: authProfile } = useAuth();
   const { clientId, profile, isImpersonating } = useClientIdentity();
@@ -67,7 +83,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: wallets, isError: erroNasWallets } = useQuery({
+  const { data: wallets, isLoading: loadingWallets, isError: erroNasWallets } = useQuery({
     queryKey: ["ads-wallet-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -81,7 +97,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: rechargeRequests, isError: erroNasRecargas } = useQuery({
+  const { data: rechargeRequests, isLoading: loadingRecargas, isError: erroNasRecargas } = useQuery({
     queryKey: ["recharge-requests-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -96,7 +112,7 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
-  const { data: myProjectPayments } = useQuery({
+  const { data: myProjectPayments, isLoading: loadingProjetos } = useQuery({
     queryKey: ["client-project-payments", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -155,18 +171,7 @@ export default function ClientFinanceiro() {
       : planStatus === "warning"
         ? "Renova em breve"
         : "Pendente";
-  const planStatusColor =
-    planStatus === "active"
-      ? "bg-success/10 text-success"
-      : planStatus === "warning"
-        ? "bg-warning/10 text-warning"
-        : "bg-destructive/10 text-destructive";
-  const barColor =
-    planStatus === "active"
-      ? "bg-success"
-      : planStatus === "warning"
-        ? "bg-warning"
-        : "bg-destructive";
+  const planStatusTone: Tone = planStatus === "active" ? "success" : planStatus === "warning" ? "warning" : "danger";
 
   // ===== ACTIONS =====
   const handleConfirmRecharge = async (
@@ -238,20 +243,33 @@ export default function ClientFinanceiro() {
     const isOverdue = cobrancaAtrasada(status, dueDate);
     return {
       label: status === "paid" ? "Pago" : status === "partial" ? "Parcial" : isOverdue ? "Atrasado" : "Pendente",
-      dot: status === "paid" ? "bg-success" : status === "partial" ? "bg-info" : isOverdue ? "bg-destructive" : "bg-warning",
-      badge: status === "paid" ? "bg-success/10 text-success" : status === "partial" ? "bg-info/10 text-info" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning",
+      tone: (status === "paid" ? "success" : status === "partial" ? "info" : isOverdue ? "danger" : "warning") as Tone,
     };
   };
   const falarSobreRenovacao = () => openWhatsApp("Olá! Gostaria de falar sobre a renovação do meu plano.");
 
   // ===== RENDER =====
+  const temRecargaPendente = pendingRecharges.length > 0;
+  // A próxima cobrança em aberto (a de vencimento mais próximo) e a série das últimas cobranças, da mais antiga
+  // à mais recente: tudo já está na lista "Pagamentos" desta tela; aqui só ganha destaque.
+  const proximaCobranca = [...(billing || [])]
+    .filter((b: any) => b.status === "pending" || b.status === "partial")
+    .sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date)))[0] as any;
+  const ultimasCobrancas = [...(billing || [])].sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date))).slice(-6);
+  const mostrarProxima = !temRecargaPendente && !!proximaCobranca;
+  const aoLadoDoPlano = temRecargaPendente || mostrarProxima;
+  const corDoPlano = planStatus === "active" ? "text-primary" : planStatus === "warning" ? "text-warning" : "text-destructive";
+  const iconeDoPagamento = (status: string, tone: Tone) =>
+    status === "paid" ? <Check className="h-4 w-4" /> : tone === "danger" ? <AlertTriangle className="h-4 w-4" /> : <Clock className="h-4 w-4" />;
+  const tomDaBolha = (tone: Tone): TomDaBolha => (tone === "success" ? "sucesso" : tone === "info" ? "info" : tone === "danger" ? "perigo" : "alerta");
+
   return (
-    <div className="w-full min-w-0 space-y-6">
-      <CabecalhoDePagina
-        titulo="Financeiro"
-        descricao={pendingRecharges.length ? `${pendingRecharges.length} ${pendingRecharges.length === 1 ? "recarga esperando você" : "recargas esperando você"}` : undefined}
-        ajuda="Seu plano, o saldo dos anúncios, as recargas que a equipe pediu e o histórico de pagamentos. Recarga só acontece depois que você confirma."
-        acoes={
+    <div className={juntar(espaco.pagina, "w-full")}>
+      <PageHeader
+        title="Financeiro"
+        subtitle={temRecargaPendente ? `${pendingRecharges.length} ${pendingRecharges.length === 1 ? "recarga esperando você" : "recargas esperando você"}` : undefined}
+        help="Seu plano, o saldo dos anúncios, as recargas que a equipe pediu e o histórico de pagamentos. Recarga só acontece depois que você confirma."
+        actions={
           latestPlan && (
             <button type="button" onClick={falarSobreRenovacao} className={botao.secundario} aria-label="Falar sobre renovação">
               <MessageCircle className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
@@ -269,60 +287,137 @@ export default function ClientFinanceiro() {
       )}
 
       {/* ===== LOADING ===== */}
-      {loadingBilling ? (
+      {/* Espera a primeira carga de tudo: saldo e projetos chegando depois empurravam "Pagamentos" para baixo. */}
+      {loadingBilling || loadingWallets || loadingRecargas || loadingProjetos ? (
         <Carregando forma="aba" rotulo="Carregando dados financeiros" />
       ) : (
       <>
-      {/* ========== SEÇÃO 1: MEU PLANO ========== */}
-      <Secao titulo="Plano">
-        {latestPlan ? (
-          <>
-            <div className="flex min-w-0 flex-wrap items-end justify-between">
-              <div className="mr-4 min-w-0">
-                <p className={juntar(texto.tituloSecao, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
-                <p className={juntar(texto.numero, "mt-1 font-light")}>
-                  {formatCurrency(Number(latestPlan.amount))}
-                  <span className="ml-1 text-[13px] font-normal text-muted-foreground">/mês</span>
-                </p>
-              </div>
-              <div className="mt-2 flex items-center">
-                <span className={juntar(etiqueta, planStatusColor)}>{planStatusLabel}</span>
-                {renewalDate && <span className={juntar(texto.auxiliar, "ml-2")}>Renova em {formatDate(renewalDateStr!)}</span>}
-              </div>
-            </div>
-
-            {renewalDate && (
-              <div className="mt-4">
-                <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${timePercent}%` }} />
+      {/* ========== SEÇÃO 1: MEU PLANO (cartão de tinta) + SEÇÃO 3: RECARGAS PARA CONFIRMAR (cartão sólido) ========== */}
+      <div className={juntar(espaco.grade, "grid-cols-1 items-stretch", aoLadoDoPlano && "lg:grid-cols-5")}>
+        <Card title="Plano" variant="ink" collapsible={false} className={aoLadoDoPlano ? "lg:col-span-3" : undefined}>
+          {latestPlan ? (
+            <>
+              <div className="flex min-w-0 flex-wrap items-end justify-between">
+                <div className="mr-4 min-w-0">
+                  <p className={juntar(texto.rotulo, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
+                  <p className="mt-2 text-[48px] font-semibold leading-[52px] tracking-[-0.04em] tabular-nums text-foreground max-sm:text-[32px] max-sm:leading-10">
+                    <Dinheiro valor={Number(latestPlan.amount)} />
+                    <span className="ml-1.5 text-[15px] font-normal tracking-normal text-muted-foreground">/mês</span>
+                  </p>
                 </div>
-                <p className={juntar(texto.auxiliar, "mt-1.5")}>{daysLeft > 0 ? `${daysLeft} dias restantes` : "Período vencido"}</p>
+                <div className="mt-3 flex min-w-0 items-center">
+                  <StatusPill tone={planStatusTone}>{planStatusLabel}</StatusPill>
+                  {renewalDate && <span className={juntar(texto.auxiliar, "ml-2.5")}>Renova em {formatDate(renewalDateStr!)}</span>}
+                </div>
               </div>
-            )}
-          </>
-        ) : (
-          <p className={texto.auxiliar}>Nenhum plano encontrado</p>
+
+              {renewalDate && (
+                <div className="mt-6 sm:mt-8">
+                  <ProgressBar value={timePercent} max={100} height={10} striped className={corDoPlano} label={`${Math.round(timePercent)}% do período do plano`} />
+                  <p className="mt-2.5 flex min-w-0 items-baseline text-[13px] leading-5 text-muted-foreground">
+                    {daysLeft > 0 ? (
+                      <>
+                        <span className="mr-1.5 text-[20px] font-semibold leading-7 tabular-nums text-foreground">{daysLeft}</span>
+                        {daysLeft === 1 ? "dia restante" : "dias restantes"}
+                      </>
+                    ) : (
+                      "Período vencido"
+                    )}
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className={texto.auxiliar}>Nenhum plano encontrado</p>
+          )}
+        </Card>
+
+        {mostrarProxima && (() => {
+          const st = statusDoPagamento(proximaCobranca.status, proximaCobranca.due_date);
+          const falta = proximaCobranca.status === "partial" ? Math.max(Number(proximaCobranca.amount) - receivedOf(proximaCobranca), 0) : Number(proximaCobranca.amount);
+          return (
+            <CardSurface variant="accent" padded className="flex flex-col lg:col-span-2" data-proxima-cobranca="">
+              <div className="flex min-w-0 items-center">
+                <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-foreground">
+                  <Clock className="h-4 w-4" />
+                </span>
+                <h2 className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-muted-foreground">Próximo pagamento</h2>
+                <StatusPill tone={st.tone} className="ml-2">{st.label}</StatusPill>
+              </div>
+              <p className="mt-5 text-[48px] font-semibold leading-[52px] tracking-[-0.04em] tabular-nums text-foreground max-sm:text-[36px] max-sm:leading-10">
+                <Dinheiro valor={falta} />
+              </p>
+              <p className="mt-1.5 min-w-0 text-[13px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                {proximaCobranca.description || typeLabels[proximaCobranca.type] || proximaCobranca.type} · vence em {formatDate(proximaCobranca.due_date)}
+              </p>
+              {ultimasCobrancas.length >= 3 && (
+                <div className="mt-auto min-w-0 pt-5">
+                  <MiniBars
+                    values={ultimasCobrancas.map((b: any) => Number(b.amount) || 0)}
+                    highlightIndex={ultimasCobrancas.findIndex((b: any) => b.id === proximaCobranca.id)}
+                    height={56}
+                    tone="current"
+                    showLabels
+                    labels={ultimasCobrancas.map((b: any) => MESES_CURTOS[Number(String(b.due_date).slice(5, 7)) - 1] || "")}
+                    label={`Valor das últimas ${ultimasCobrancas.length} cobranças; a próxima em destaque`}
+                  />
+                </div>
+              )}
+            </CardSurface>
+          );
+        })()}
+
+        {temRecargaPendente && (
+          <Card
+            variant="accent"
+            className="lg:col-span-2"
+            collapsible={`financeiro:recargas:${clientId || ""}`}
+            title={
+              <span className="inline-flex min-w-0 items-center">
+                <AlertTriangle className="mr-1.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">Recargas para confirmar</span>
+              </span>
+            }
+            subtitle={`${pendingRecharges.length} ${pendingRecharges.length === 1 ? "pedido" : "pedidos"} da equipe`}
+          >
+            <List label="Recargas para confirmar">
+              {pendingRecharges.map((r: any) => (
+                <ListRow
+                  key={r.id}
+                  onClick={() => setRechargePopup(r)}
+                  leading={<Bolha tom="tinta"><Zap className="h-4 w-4" /></Bolha>}
+                  title={`Recarga ${platformLabels[r.platform] || r.platform}`}
+                  subtitle={
+                    <>
+                      Pedido em {formatDate(r.created_at)}
+                      {r.reason ? <span className="hidden sm:inline">{` · ${r.reason}`}</span> : ""}
+                    </>
+                  }
+                  value={<span className="whitespace-nowrap text-[15px]">{formatCurrency(Number(r.amount))}</span>}
+                  action={<ArrowRight className="pointer-events-none h-4 w-4" aria-hidden="true" />}
+                />
+              ))}
+            </List>
+          </Card>
         )}
-      </Secao>
+      </div>
 
       {/* ========== SEÇÃO 2: INVESTIMENTO EM ANÚNCIOS ========== */}
       {showTraffic && (wallets || []).length > 0 && (
         <Secao
-          divisoria
           titulo="Saldo de anúncios"
           descricao={pendingRecharges.length === 0 ? "Nenhuma recarga pendente" : undefined}
           ajuda="Quanto ainda tem de saldo em cada plataforma. A barra enche até R$ 2.000; abaixo de R$ 500 a equipe já avisa que vai precisar de recarga."
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className={juntar(espaco.grade, "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3")}>
             {(wallets || []).map((w: any) => {
               const balance = Number(w.balance);
-              const gaugePercent = Math.min((balance / 2000) * 100, 100);
               const gaugeColor =
                 balance > 500
-                  ? "bg-success"
+                  ? "text-success"
                   : balance > 100
-                    ? "bg-warning"
-                    : "bg-destructive";
+                    ? "text-warning"
+                    : "text-destructive";
               const statusText =
                 balance > 500
                   ? "Saldo OK"
@@ -331,73 +426,33 @@ export default function ClientFinanceiro() {
                     : balance === 0
                       ? "Sem saldo"
                       : "Saldo crítico";
-              const statusTextColor =
-                balance > 500
-                  ? "text-success"
-                  : balance > 100
-                    ? "text-warning"
-                    : "text-destructive";
+              const statusTone: Tone = balance > 500 ? "success" : balance > 100 ? "warning" : "danger";
 
               return (
-                <Painel key={w.id}>
-                  <p className={texto.rotulo}>{platformLabels[w.platform] || w.platform}</p>
-                  <p className="mt-1.5 text-[20px] leading-7 font-light tabular-nums text-foreground">{formatCurrency(balance)}</p>
-                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
-                    <div className={`h-full rounded-full ${gaugeColor}`} style={{ width: `${gaugePercent}%` }} />
-                  </div>
-                  <p className="mt-1.5 truncate text-[12px] leading-4">
-                    <span className={statusTextColor}>{statusText}</span>
-                    {w.last_recharge_date && <span className="text-muted-foreground"> · última recarga {formatDate(w.last_recharge_date)}</span>}
-                  </p>
-                </Painel>
+                <StatCard
+                  key={w.id}
+                  size="xl"
+                  icon={<Zap className="h-4 w-4" />}
+                  label={platformLabels[w.platform] || w.platform}
+                  value={formatCurrency(balance)}
+                  corner={<StatusPill tone={statusTone}>{statusText}</StatusPill>}
+                  chart={
+                    <>
+                      <ProgressBar value={Math.min(Math.max(balance, 0), 2000)} max={2000} height={10} striped className={gaugeColor} label={`Saldo de ${formatCurrency(balance)}; a barra enche até R$ 2.000`} />
+                      {w.last_recharge_date && <span className={juntar(texto.auxiliar, "mt-2.5 block min-w-0 truncate")}>última recarga {formatDate(w.last_recharge_date)}</span>}
+                    </>
+                  }
+                />
               );
             })}
           </div>
         </Secao>
       )}
 
-      {/* ========== SEÇÃO 3: RECARGAS PENDENTES ========== */}
-      {pendingRecharges.length > 0 && (
-        <Secao
-          divisoria
-          recolher={`financeiro:recargas:${clientId || ""}`}
-          titulo={
-            <span className="inline-flex min-w-0 items-center">
-              <AlertTriangle className="mr-1.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
-              <span className="truncate">Recargas para confirmar</span>
-            </span>
-          }
-          descricao={`${pendingRecharges.length} ${pendingRecharges.length === 1 ? "pedido" : "pedidos"} da equipe`}
-        >
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
-            {pendingRecharges.map((r: any) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  onClick={() => setRechargePopup(r)}
-                  className={juntar("flex w-full min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40", foco)}
-                >
-                  <Zap className="mr-3 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-foreground">Recarga {platformLabels[r.platform] || r.platform}</span>
-                    <span className={juntar(texto.auxiliar, "block truncate")}>
-                      Pedido em {formatDate(r.created_at)}
-                      {r.reason ? <span className="hidden sm:inline">{` · ${r.reason}`}</span> : ""}
-                    </span>
-                  </span>
-                  <span className="ml-3 shrink-0 whitespace-nowrap text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</span>
-                  <ArrowRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Secao>
-      )}
-
       {/* ========== SEÇÃO: PROJETOS INDIVIDUAIS ========== */}
       {(myProjectPayments || []).length > 0 && (
-        <Secao divisoria titulo="Projetos avulsos">
-          <div className="space-y-3">
+        <Secao titulo="Projetos avulsos">
+          <div className="space-y-4 sm:space-y-5">
             {(myProjectPayments || []).map((pp: any) => {
               const installments = pp.installments || [];
               const paid = installments.reduce((s: number, i: any) => s + (i.status === "paid" ? Number(i.amount) : i.status === "partial" ? Number(i.paid_amount || 0) : 0), 0);
@@ -406,50 +461,44 @@ export default function ClientFinanceiro() {
               const sortedInstallments = [...installments].sort((a: any, b: any) => a.installment_number - b.installment_number);
 
               return (
-                <Painel key={pp.id}>
-                  <div className="flex min-w-0 flex-wrap items-start justify-between">
+                <CardSurface key={pp.id} padded>
+                  <div className="flex min-w-0 flex-wrap items-end justify-between">
                     <div className="mr-4 min-w-0">
                       <div className="flex min-w-0 items-center">
-                        <p className="mr-2 truncate text-[14px] font-semibold text-foreground">{pp.project?.name || "Projeto"}</p>
-                        <span className={juntar(etiqueta, "bg-secondary text-muted-foreground")}>{getProjectBrand(pp.project?.project_type)}</span>
+                        <p className="mr-2 truncate text-[15px] font-semibold leading-5 text-foreground">{pp.project?.name || "Projeto"}</p>
+                        <Chip>{getProjectBrand(pp.project?.project_type)}</Chip>
                       </div>
-                      <p className="mt-1 text-[20px] leading-7 font-light tabular-nums text-foreground">{formatCurrency(Number(pp.total_value))}</p>
+                      <p className={juntar(texto.numeroGrande, "mt-2")}><Dinheiro valor={Number(pp.total_value)} /></p>
                     </div>
-                    <div className="text-right tabular-nums">
-                      <p className="text-[12px] text-success">{formatCurrency(paid)} pago</p>
-                      {remaining > 0 && <p className="text-[12px] text-warning">{formatCurrency(remaining)} restante</p>}
+                    <div className="mt-2 flex min-w-0 flex-wrap items-center tabular-nums sm:flex-col sm:items-end">
+                      <Chip tone="success" dot className="mr-2 sm:mr-0">{formatCurrency(paid)} pago</Chip>
+                      {remaining > 0 && <Chip tone="warning" dot className="sm:mt-1.5">{formatCurrency(remaining)} restante</Chip>}
                     </div>
                   </div>
 
-                  <div className="mt-3">
-                    <Progress value={pct} className="h-1.5" />
-                    <p className={juntar(texto.auxiliar, "mt-1")}>{pct}% concluído</p>
+                  <div className="mt-5">
+                    <ProgressBar value={paid} max={Number(pp.total_value)} height={10} tone={1} striped label={`${pct}% pago`} />
+                    <p className={juntar(texto.auxiliar, "mt-2")}>{pct}% pago</p>
                   </div>
 
-                  <ul className="mt-2 divide-y divide-border">
+                  <List className="mt-3" label={`Parcelas de ${pp.project?.name || "Projeto"}`}>
                     {sortedInstallments.map((inst: any) => {
                       const st = statusDoPagamento(inst.status, inst.due_date);
                       return (
-                        <li key={inst.id} className="flex min-w-0 items-center py-2.5">
-                          <span className={`mr-3 h-2 w-2 shrink-0 rounded-full ${st.dot}`} aria-hidden="true" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[13px] text-foreground">
-                              {inst.installment_number === 0 ? "Entrada" : `Parcela ${inst.installment_number}`}
-                            </p>
-                            <p className={texto.auxiliar}>{formatDate(inst.due_date)}<span className="sm:hidden"> · {st.label}</span></p>
-                          </div>
-                          <div className="ml-2 whitespace-nowrap text-right tabular-nums">
-                            <p className={`text-[13px] ${inst.status === "partial" ? "text-info" : "text-foreground"}`}>
-                              {formatCurrency(inst.status === "pending" ? Number(inst.amount) : receivedOf(inst))}
-                            </p>
-                            {inst.status === "partial" && <p className="text-[11px] text-muted-foreground">de {formatCurrency(Number(inst.amount))}</p>}
-                          </div>
-                          <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", st.badge)}>{st.label}</span>
-                        </li>
+                        <ListRow
+                          key={inst.id}
+                          dense
+                          leading={<Bolha tom={tomDaBolha(st.tone)} tamanho="sm">{iconeDoPagamento(inst.status, st.tone)}</Bolha>}
+                          title={inst.installment_number === 0 ? "Entrada" : `Parcela ${inst.installment_number}`}
+                          subtitle={formatDate(inst.due_date)}
+                          status={<StatusPill tone={st.tone}>{st.label}</StatusPill>}
+                          value={<span className={juntar("whitespace-nowrap", inst.status === "partial" && "text-info")}>{formatCurrency(inst.status === "pending" ? Number(inst.amount) : receivedOf(inst))}</span>}
+                          valueHint={inst.status === "partial" ? `de ${formatCurrency(Number(inst.amount))}` : undefined}
+                        />
                       );
                     })}
-                  </ul>
-                </Painel>
+                  </List>
+                </CardSurface>
               );
             })}
           </div>
@@ -457,34 +506,28 @@ export default function ClientFinanceiro() {
       )}
 
       {/* ========== SEÇÃO 4: HISTÓRICO ========== */}
-      <Secao divisoria titulo="Pagamentos" descricao={billing && billing.length ? `${billing.length} ${billing.length === 1 ? "registro" : "registros"}` : undefined}>
+      <Card title="Pagamentos" subtitle={billing && billing.length ? `${billing.length} ${billing.length === 1 ? "registro" : "registros"}` : undefined}>
         {(!billing || billing.length === 0) ? (
           <EstadoVazio compacto titulo="Nenhum pagamento registrado." />
         ) : (
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <List label="Pagamentos">
             {billing.map((b: any) => {
               const st = statusDoPagamento(b.status, b.due_date);
               return (
-                <li key={b.id} className="flex min-w-0 items-center px-2 py-3">
-                  <span className={`mr-3 h-2 w-2 shrink-0 rounded-full ${st.dot}`} aria-hidden="true" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] text-foreground">{b.description || typeLabels[b.type] || b.type}</p>
-                    {/* Celular (16/10/2026): a situação vai na linha de apoio; a etiqueta à direita só de 640 px para cima. */}
-                    <p className={texto.auxiliar}>{formatDate(b.due_date)}<span className="sm:hidden"> · {st.label}</span></p>
-                  </div>
-                  <div className="ml-2 whitespace-nowrap text-right tabular-nums">
-                    <p className={`text-[13px] ${b.status === "partial" ? "text-info" : "text-foreground"}`}>
-                      {formatCurrency(b.status === "pending" ? Number(b.amount) : receivedOf(b))}
-                    </p>
-                    {b.status === "partial" && <p className="text-[11px] text-muted-foreground">de {formatCurrency(Number(b.amount))}</p>}
-                  </div>
-                  <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", st.badge)}>{st.label}</span>
-                </li>
+                <ListRow
+                  key={b.id}
+                  leading={<Bolha tom={tomDaBolha(st.tone)}>{iconeDoPagamento(b.status, st.tone)}</Bolha>}
+                  title={b.description || typeLabels[b.type] || b.type}
+                  subtitle={formatDate(b.due_date)}
+                  status={<StatusPill tone={st.tone}>{st.label}</StatusPill>}
+                  value={<span className={juntar("whitespace-nowrap", b.status === "partial" && "text-info")}>{formatCurrency(b.status === "pending" ? Number(b.amount) : receivedOf(b))}</span>}
+                  valueHint={b.status === "partial" ? `de ${formatCurrency(Number(b.amount))}` : undefined}
+                />
               );
             })}
-          </ul>
+          </List>
         )}
-      </Secao>
+      </Card>
       </>
       )}
 
@@ -518,7 +561,7 @@ export default function ClientFinanceiro() {
 
                 <div className="space-y-4 px-5 py-5">
                   <div className="text-center">
-                    <p className="text-[24px] leading-8 font-semibold tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</p>
+                    <p className="text-[40px] font-semibold leading-[44px] tracking-[-0.035em] tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</p>
                     {isPeriodic && <p className={juntar(texto.auxiliar, "mt-1")}>Investimento {period} em anúncios</p>}
                   </div>
 
@@ -531,7 +574,7 @@ export default function ClientFinanceiro() {
 
                   {/* Actions */}
                   {isImpersonating ? (
-                    <p className="text-center text-[12px] text-sky-500" role="note">
+                    <p className="text-center text-[12px] text-info" role="note">
                       Somente leitura: nenhuma decisão pode ser registrada neste modo.
                     </p>
                   ) : (

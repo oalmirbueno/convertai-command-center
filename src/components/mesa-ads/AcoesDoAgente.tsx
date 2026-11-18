@@ -117,9 +117,9 @@ function AntesDepois({ i }: { i: ItemDaAcao }) {
   if (!antes && !depois) return null;
   return (
     <span className="mt-0.5 flex min-w-0 flex-wrap items-center text-[12px]">
-      <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground [overflow-wrap:anywhere]">{antes}</span>
+      <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground [overflow-wrap:anywhere]">{antes}</span>
       <ArrowRight className="mx-1 h-3 w-3 shrink-0 text-muted-foreground" />
-      <span className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary [overflow-wrap:anywhere]">{depois}</span>
+      <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary [overflow-wrap:anywhere]">{depois}</span>
       {i.limitado && <span className="ml-1.5 text-[11px] text-muted-foreground">limitado a 30% por vez</span>}
     </span>
   );
@@ -308,7 +308,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
     // Depois da escolha, só o item escolhido fica (os outros não foram tocados).
     const visiveis = estado === "aberta" ? atual.itens : atual.itens.filter((i) => !(i.resultado && !i.resultado.ok && i.resultado.motivo === "Não marcado nesta confirmação."));
     return (
-      <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-3")} aria-label="Qual delas?" data-escolher-um={estado}>
+      <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-4")} aria-label="Qual delas?" data-escolher-um={estado}>
         <p className="flex min-w-0 items-center text-[13px] font-semibold">
           <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
           {estado === "aberta" ? `Qual delas? (${atual.itens.length} com o mesmo nome)` : "Escolhido"}
@@ -361,11 +361,11 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   }
 
   return (
-    <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-3")} aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
+    <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-4")} aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
       <p className="flex min-w-0 flex-wrap items-center text-[13px] font-semibold">
         <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
         {feitosSozinho.length && estado === "aberta" ? `Já fiz ${feitosSozinho.length} · o resto espera você` : `Ações propostas · ${atual.itens.length}`}
-        {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning">Modo ensaio</span>}
+        {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning">Modo ensaio</span>}
       </p>
       {atual.resumo && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{atual.resumo}</p>}
       {ensaio && estado === "aberta" && (
@@ -405,12 +405,12 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   {i.alvo ? <span className="font-normal text-muted-foreground">{` · ${nomeDoNivel(i.alvo.nivel)} `}</span> : null}
                   {i.alvo ? i.alvo.nome : i.tipo === "tarefa_equipe" && i.texto ? `: ${i.texto}` : ""}
                   {i.criativo ? <span className="font-normal text-muted-foreground">{` com ${i.criativo.nome}`}</span> : null}
-                  {sozinho && r && r.ok && !r.desfeito && <span className="ml-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">Já fiz</span>}
+                  {sozinho && r && r.ok && !r.desfeito && <span className="ml-1.5 rounded-sm bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">Já fiz</span>}
                 </span>
                 <AntesDepois i={i} />
                 {i.troca && <ResumoDaTroca i={i} />}
                 {i.montagem && <ResumoDaMontagem i={i} />}
-                {i.ensaio && estado === "aberta" && <span className="mt-0.5 inline-block rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">Seria feito assim</span>}
+                {i.ensaio && estado === "aberta" && <span className="mt-0.5 inline-block rounded-sm bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">Seria feito assim</span>}
                 {i.motivo && <span className="mt-0.5 block text-muted-foreground [overflow-wrap:anywhere]">{i.motivo}</span>}
                 {i.indisponivel && estado === "aberta" && !sozinho && <span className="mt-0.5 block text-[12px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
                 {r && !r.ok && (estado !== "aberta" || sozinho) && r.motivo && <span className="mt-0.5 block text-[12px] text-destructive [overflow-wrap:anywhere]">{r.motivo}</span>}
@@ -432,7 +432,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                 {r && r.ok && !r.desfeito && i.tipo === "montar_campanha_do_plano" && (
                   <span className="mt-1 flex min-w-0 flex-wrap items-center">
                     {r.ativada_em ? (
-                      <span className="mb-1 mr-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">Ativada</span>
+                      <span className="mb-1 mr-1.5 rounded-sm bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">Ativada</span>
                     ) : (
                       <Button type="button" size="sm" className="mb-1 mr-1.5 h-7 text-[12px]" disabled={!!fazendo} onClick={() => void ativar(i)} title="Começa a gastar a verba do plano. O Desfazer arquiva a campanha.">
                         {fazendo === `ativar:${i.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1 h-3.5 w-3.5" />}
@@ -462,7 +462,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
       )}
       <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
         {estado === "aberta" && resolvidoSozinho ? (
-          <span className={juntar("mb-1 mr-2 inline-flex items-center rounded-full px-2.5 py-1 text-[12px]", falhasSozinho.length && !feitosSozinho.length ? "bg-destructive/10 text-destructive" : "bg-success/15")} data-resolvido={falhasSozinho.length ? (feitosSozinho.length ? "em-parte" : "nao-feito") : "feito"}>
+          <span className={juntar("mb-1 mr-2 inline-flex items-center rounded-full px-2.5 py-1 text-[12px]", falhasSozinho.length && !feitosSozinho.length ? "bg-danger-soft text-destructive" : "bg-success/15")} data-resolvido={falhasSozinho.length ? (feitosSozinho.length ? "em-parte" : "nao-feito") : "feito"}>
             {falhasSozinho.length && !feitosSozinho.length ? <X className="mr-1 h-3 w-3" /> : <Check className="mr-1 h-3 w-3" />}
             {falhasSozinho.length ? (feitosSozinho.length ? `Feito em parte: ${feitosSozinho.length} feito, ${falhasSozinho.length} não deu` : "Não feito: o motivo está no item") : "Feito e conferido na Meta"}
           </span>

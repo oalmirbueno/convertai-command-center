@@ -22,7 +22,7 @@ export default function PreviaDaPagina({ pagina, carregando }: { pagina: PaginaN
     return <p className={juntar(texto.auxiliar, "px-1 py-6 text-center")}>{carregando ? "Lendo a página do Facebook..." : "Página não lida."}</p>;
   }
   return (
-    <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-xl border border-border bg-background" data-previa-da-pagina="">
+    <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-lg border border-border bg-background" data-previa-da-pagina="">
       <div className="relative h-[110px] w-full bg-muted">
         {pagina.capa_url && <ImagemDaMeta url={pagina.capa_url} alt={`Capa de ${pagina.nome}`} className="absolute inset-0 h-full w-full object-cover" />}
       </div>

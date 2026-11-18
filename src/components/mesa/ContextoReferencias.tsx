@@ -53,7 +53,7 @@ function AcoesDaReferencia({ r, onMudou }: { r: ReferenciaComDestaque; onMudou: 
 
   return (
     <div className="mt-1.5 space-y-1.5">
-      <div role="group" aria-label="Papel da referência" className="grid grid-cols-2 gap-0.5 rounded-md bg-muted p-0.5">
+      <div role="group" aria-label="Papel da referência" className="grid grid-cols-2 gap-0.5 rounded-full bg-muted p-0.5">
         {(["identidade", "tecnica"] as PapelDaReferencia[]).map((p) => (
           <button
             key={p}
@@ -63,7 +63,7 @@ function AcoesDaReferencia({ r, onMudou }: { r: ReferenciaComDestaque; onMudou: 
             }}
             aria-pressed={r.papel === p}
             title={PAPEIS[p].dica}
-            className={`min-w-0 truncate rounded px-1 py-0.5 text-[11px] ${r.papel === p ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`toque-compacto min-w-0 truncate rounded-full px-1.5 py-0.5 text-[11px] transition-colors ${r.papel === p ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             {PAPEIS[p].curto}
           </button>
@@ -71,16 +71,16 @@ function AcoesDaReferencia({ r, onMudou }: { r: ReferenciaComDestaque; onMudou: 
       </div>
       <div className="flex items-center justify-between">
         <label className="flex items-center text-[11px] text-muted-foreground">
-          <Switch checked={r.ativa} onCheckedChange={(v) => void salvar({ ativa: v })} className="mr-1 scale-75" />
+          <Switch checked={r.ativa} onCheckedChange={(v) => void salvar({ ativa: v })} className="toque-compacto mr-1 scale-75" />
           {r.ativa ? "em uso" : "fora"}
         </label>
         <div className="flex items-center">
           {r.url_origem && (
-            <a href={r.url_origem} target="_blank" rel="noopener noreferrer" className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:text-foreground" aria-label="Abrir origem">
+            <a href={r.url_origem} target="_blank" rel="noopener noreferrer" className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground" aria-label="Abrir origem">
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           )}
-          <button type="button" onClick={() => void apagar()} className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:text-destructive" aria-label="Tirar referência">
+          <button type="button" onClick={() => void apagar()} className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-destructive" aria-label="Tirar referência">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>

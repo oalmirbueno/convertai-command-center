@@ -5,11 +5,28 @@ export interface EditorialSchedulePayloadInput {
   projectId: string;
   asset: EditorialApprovedMediaAsset;
   publicationTargets: readonly EditorialSchedulePublicationTarget[];
-  scheduledAtIso: string;
+  /**
+   * Horário do agendamento. null grava o plano sem horário: as publicações
+   * ficam planejadas e nada entra na agenda (o banco só agenda publicação
+   * planejada que tem horário).
+   */
+  scheduledAtIso: string | null;
   timezone: string;
   postIdempotencyKey: string;
   mutationId: string;
   existingPost?: EditorialScheduleExistingPost | null;
+  /**
+   * Formato escolhido no agendamento (ex.: "story"). Story é escolha
+   * explícita de quem agenda: a mídia nunca vira story sozinha. No caminho
+   * de conteúdo aprovado o banco ignora content_type no save: o post que já
+   * existe mantém o próprio formato e o post que nasce usa o formato da
+   * mídia. Por isso a tela nunca agenda no mesmo save que cria um post em
+   * formato diferente do da mídia: grava o post novo primeiro como planejado
+   * (scheduledAtIso null), ajusta o formato com
+   * ajustar_formato_publicacao_aprovada e só então agenda, como post que já
+   * existe. Se o ajuste falha, nada foi agendado.
+   */
+  contentType?: string | null;
 }
 
 export interface EditorialSchedulePublicationTarget {
@@ -180,7 +197,8 @@ export function buildEditorialSchedulePayload(
     project_id: input.projectId,
     primary_file_id: input.asset.root.id,
     title: input.existingPost?.title.trim() || input.asset.root.file_name.trim(),
-    content_type: input.existingPost?.contentType || input.asset.contentType,
+    content_type:
+      input.contentType || input.existingPost?.contentType || input.asset.contentType,
     objective:
       input.existingPost?.objective === undefined
         ? objective

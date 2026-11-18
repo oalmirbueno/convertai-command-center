@@ -294,7 +294,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   return (
     <div
       ref={raiz}
-      className={juntar("flex min-h-0 flex-col bg-background", ampliado ? "fixed inset-2 z-[60] rounded-lg border border-border shadow-2xl sm:inset-4" : "h-full")}
+      className={juntar("flex min-h-0 flex-col bg-background", ampliado ? "fixed inset-2 z-[60] rounded-lg border border-border shadow-pop sm:inset-4" : "h-full")}
       role={ampliado ? "dialog" : undefined}
       aria-modal={ampliado || undefined}
       aria-label={ampliado ? `Navegador de ${cliente.nome} ampliado` : undefined}

@@ -152,7 +152,7 @@ export default function SeletorDeClientesDaMesa({
           aria-label={`Voltar ${c.nome} ao padrão da mesa`}
           disabled={gravando === c.id}
           onClick={() => void alternar(c, c.padrao)}
-          className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
         >
           <RotateCcw className="h-3.5 w-3.5" />
         </button>
@@ -162,7 +162,7 @@ export default function SeletorDeClientesDaMesa({
         aria-label={`${c.naMesa ? "Retirar" : "Incluir"} ${c.nome}`}
         disabled={gravando === c.id}
         onClick={() => void alternar(c, !c.naMesa)}
-        className={`ml-1 inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[12px] transition-colors disabled:opacity-50 ${
+        className={`ml-1 inline-flex h-7 shrink-0 items-center rounded-full px-2 text-[12px] transition-colors disabled:opacity-50 ${
           c.naMesa ? "text-muted-foreground hover:bg-muted hover:text-destructive" : "text-primary hover:bg-primary/10"
         }`}
       >
@@ -186,7 +186,7 @@ export default function SeletorDeClientesDaMesa({
           className={
             soIcone
               ? `toque-compacto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${aberto ? "bg-muted" : ""}`
-              : `flex h-9 min-w-0 max-w-full items-center rounded-md px-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[320px] ${valor && nome ? "max-sm:h-8 max-sm:w-8 max-sm:justify-center max-sm:rounded-full max-sm:px-0" : ""} ${aberto ? "bg-muted" : ""}`
+              : `flex h-9 min-w-0 max-w-full items-center rounded-full px-3 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[320px] ${valor && nome ? "max-sm:h-8 max-sm:w-8 max-sm:justify-center max-sm:rounded-full max-sm:px-0" : ""} ${aberto ? "bg-muted" : ""}`
           }
         >
           {soIcone ? (
@@ -226,7 +226,7 @@ export default function SeletorDeClientesDaMesa({
                 setGerenciando(false);
                 setBusca("");
               }}
-              className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
             </button>
@@ -290,7 +290,7 @@ export default function SeletorDeClientesDaMesa({
                     >
                       <span className="min-w-0 flex-1 truncate">{c.nome}</span>
                       {c.avulso && ehMesaDeCriacao(mesa) && (
-                        <span aria-hidden="true" className="ml-2 inline-flex h-5 shrink-0 items-center rounded bg-muted px-1.5 text-[11px] font-medium leading-none text-muted-foreground" data-marca-avulso="">
+                        <span aria-hidden="true" className="ml-2 inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 text-[11px] font-medium leading-none text-muted-foreground" data-marca-avulso="">
                           Avulso
                         </span>
                       )}
@@ -336,7 +336,7 @@ export default function SeletorDeClientesDaMesa({
                     }}
                     aria-label="Gerenciar clientes"
                     title="Gerenciar clientes"
-                    className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     <Settings2 className="h-4 w-4" aria-hidden="true" />
                   </button>

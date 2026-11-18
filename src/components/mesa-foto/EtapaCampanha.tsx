@@ -341,13 +341,13 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
           <EstadoVazio compacto titulo="O diretor não montou fotos." descricao="Planeje de novo com outro pedido." />
         ) : (
           // 28/09 (dono: "uma rolagem por região"): a grade segue a rolagem da região principal.
-          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {ensaio.tomadas.map((t) => (
               <FotoDaCampanha key={t.id} ensaio={ensaio} tomada={t} modeloId={modelo} qualidade={qualidade} onAmpliar={() => setAmpliada(comVersao.indexOf(t))} />
             ))}
           </ul>
         )}
-        <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
+        <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
           <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setModeloId} qualidade={qualidade} />
           <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
         </div>
@@ -493,7 +493,7 @@ export default function EtapaCampanha() {
               recolher={false}
               dica="O diretor monta as fotos (cena, luz, ação). Planejar não gera imagem: depois de planejar, Gerar todas mostra o total antes. Cada foto se aprova, refaz ou usa no próprio resultado."
               acao={
-                <button className={juntar(botao.icone, "disabled:opacity-50", (arsenal) && "bg-primary/10 text-primary")} type="button" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="" aria-label="Arsenal" title="Arsenal">
+                <button className={juntar(botao.icone, "disabled:opacity-50", (arsenal) && "bg-accent-soft text-primary")} type="button" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="" aria-label="Arsenal" title="Arsenal">
                   <BookImage className="h-4 w-4" aria-hidden="true" />
                 </button>
               }

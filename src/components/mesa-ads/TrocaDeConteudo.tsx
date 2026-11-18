@@ -80,7 +80,7 @@ export default function TrocaDeConteudo({ troca, onFechar }: { troca: TrocaParaA
         <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold">
           {estado === "pendente" ? `Conteúdo novo para ${troca.ids.length} criativo${troca.ids.length === 1 ? "" : "s"}` : estado === "feita" ? "Conteúdo trocado" : "Troca desfeita"}
         </h4>
-        <button type="button" aria-label="Fechar" className="ml-2 rounded p-1 text-muted-foreground hover:text-foreground" onClick={onFechar}>
+        <button type="button" aria-label="Fechar" className="ml-2 rounded-sm p-1 text-muted-foreground hover:text-foreground" onClick={onFechar}>
           <X className="h-3.5 w-3.5" />
         </button>
       </div>

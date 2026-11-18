@@ -36,7 +36,7 @@ describe("Agenda do Almir", () => {
 describe("Google por R$ 297", () => {
   it("é adicional do plano mensal e custa o mesmo avulso; a verba segue à parte", () => {
     expect(ADICIONAL_GOOGLE.valor).toBe(297);
-    expect(valorDoFechamento(planoPorId("start_assistido")!, true)).toBe(1244 + 297);
+    expect(valorDoFechamento(planoPorId("start_assistido")!, true)).toBe(847 + 297);
     expect(valorDoFechamento(planoPorId("google_avulso")!)).toBe(297);
   });
 });

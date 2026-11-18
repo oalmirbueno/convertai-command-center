@@ -1,4 +1,6 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { botao } from "@/components/sistema/estilos";
+import { ENDERECO_DO_APP, ehSubdominioDeVenda } from "@/lib/produto/venda";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { agendarPreCargaEmSegundoPlano } from "@/lib/appRefresh";
 import { preCarregarModulo } from "@/lib/lazyComPreCarga";
@@ -18,6 +20,7 @@ import { PaginaMesaSite } from "@/lib/mesa/preCarga";
 import { PaginaLaboratorio } from "@/lib/mesa/preCarga";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useProduto } from "@/hooks/useProduto";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
@@ -47,6 +50,19 @@ const Login = rotas.lazy(() => import("@/pages/Login"));
 const AreaDeMembros = rotas.lazy(() => import("@/pages/AreaDeMembros"));
 const AdminMembros = rotas.lazy(() => import("@/pages/AdminMembros"));
 const SolucoesAceleriq = rotas.lazy(() => import("@/pages/SolucoesAceleriq"));
+// 13/11/2026: o produto CRM e E-mail (um lugar à parte), a página de venda e a administração dele.
+const ProdutoApp = rotas.lazy(() => import("@/pages/ProdutoApp"));
+const ProdutoFormulario = rotas.lazy(() => import("@/pages/ProdutoFormulario"));
+const ProdutoLanding = rotas.lazy(() => import("@/pages/ProdutoLanding"));
+// crm.aceleriq.online mostra só a página de venda; qualquer outro caminho abre no endereço do produto.
+const NO_SUBDOMINIO_DE_VENDA = typeof window !== "undefined" && ehSubdominioDeVenda(window.location.hostname);
+if (NO_SUBDOMINIO_DE_VENDA && window.location.pathname !== "/") {
+  window.location.replace(ENDERECO_DO_APP + window.location.pathname + window.location.search + window.location.hash);
+}
+const ProdutoComecar = rotas.lazy(() => import("@/pages/ProdutoComecar"));
+const EmailLanding = rotas.lazy(() => import("@/pages/EmailLanding"));
+const EmailPedir = rotas.lazy(() => import("@/pages/EmailPedir"));
+const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
 const ClientDashboard = rotas.lazy(() => import("@/pages/ClientDashboard"));
@@ -81,6 +97,8 @@ const MetaUsuarioDoSistema = rotas.lazy(() => import("@/pages/MetaUsuarioDoSiste
 const Hoje = rotas.lazy(() => import("@/pages/Hoje"));
 const AdminCiclo = rotas.lazy(() => import("@/pages/AdminCiclo"));
 const AdminEsteira = rotas.lazy(() => import("@/pages/AdminEsteira"));
+// 14/11/2026: Esteira em linha do tempo (fase 1, só leitura). Não é a tela do Ciclo acima.
+const EsteiraLinhaDoTempo = rotas.lazy(() => import("@/pages/EsteiraLinhaDoTempo"));
 const ClientFinanceiro = rotas.lazy(() => import("@/pages/ClientFinanceiro"));
 const AdminReports = rotas.lazy(() => import("@/pages/AdminReports"));
 const ClientReports = rotas.lazy(() => import("@/pages/ClientReports"));
@@ -166,9 +184,9 @@ const persistencia = opcoesDePersistencia();
 function EsqueletoDaPagina() {
   return (
     <div aria-busy="true" aria-label="Abrindo a página" className="space-y-4 pb-10">
-      <div className="h-8 w-56 animate-pulse rounded-lg bg-muted" />
-      <div className="h-24 animate-pulse rounded-xl bg-muted/80" />
-      <div className="h-[45vh] animate-pulse rounded-xl bg-muted/60" />
+      <div className="h-8 w-56 animate-pulse rounded-full bg-muted" />
+      <div className="h-24 animate-pulse rounded-lg bg-muted/80" />
+      <div className="h-[45vh] animate-pulse rounded-lg bg-muted/60" />
     </div>
   );
 }
@@ -178,12 +196,12 @@ function EsqueletoDaMesa() {
   return (
     <div aria-busy="true" aria-label="Abrindo a Mesa" className="space-y-5 pb-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="h-8 w-52 animate-pulse rounded-lg bg-muted" />
-        <div className="h-9 w-full animate-pulse rounded-lg bg-muted sm:ml-auto sm:w-[280px]" />
+        <div className="h-8 w-52 animate-pulse rounded-full bg-muted" />
+        <div className="h-9 w-full animate-pulse rounded-full bg-muted sm:ml-auto sm:w-[280px]" />
       </div>
-      <div className="h-16 animate-pulse rounded-xl bg-muted" />
-      <div className="h-10 animate-pulse rounded-xl bg-muted" />
-      <div className="h-[55vh] animate-pulse rounded-xl bg-muted/70" />
+      <div className="h-16 animate-pulse rounded-lg bg-muted" />
+      <div className="h-10 animate-pulse rounded-full bg-muted" />
+      <div className="h-[55vh] animate-pulse rounded-lg bg-muted/70" />
     </div>
   );
 }
@@ -252,10 +270,21 @@ function StaffRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Quem não tem papel no painel: se a pessoa é de uma empresa do CRM e E-mail
+ * (ou foi convidada), o lugar dela é o produto; senão, a área de membros.
+ */
+function DestinoDeQuemNaoEDoPainel() {
+  const produto = useProduto();
+  if (produto.isLoading) return <LoadingScreen />;
+  const noProduto = !!produto.data && (!!produto.data.conta || !!produto.data.convite);
+  return <Navigate to={noProduto ? "/app" : "/membros"} replace />;
+}
+
 /** A biblioteca não concede entrada no painel. A barreira de dados também existe no banco. */
 export function OperationalRoute({children}:{children:ReactNode}) {
   const {profile}=useAuth();
-  if (!profile || !["admin","client","design","traffic","manager"].includes(profile.role)) return <Navigate to="/membros" replace/>;
+  if (!profile || !["admin","client","design","traffic","manager"].includes(profile.role)) return <DestinoDeQuemNaoEDoPainel />;
   return <>{children}</>;
 }
 
@@ -295,14 +324,14 @@ function ProfileErrorScreen() {
         <button
           type="button"
           onClick={() => { void retryProfile(); }}
-          className="rounded-xl bg-primary px-5 py-2.5 text-[13px] leading-5 font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+          className={botao.primario}
         >
           Tentar de novo
         </button>
         <button
           type="button"
           onClick={() => { void logout(); }}
-          className="rounded-xl border border-border px-5 py-2.5 text-[13px] leading-5 font-medium text-foreground hover:border-primary/50 transition-colors cursor-pointer bg-transparent"
+          className={botao.secundario}
         >
           Sair
         </button>
@@ -359,6 +388,17 @@ export function AppRoutes() {
       <Route path="/membros" element={<ProtectedRoute><AreaDeMembros /></ProtectedRoute>} />
       <Route path="/membros/administrar" element={<ProtectedRoute>{profile?.role==="admin"?<AdminMembros/>:<Navigate to="/membros" replace/>}</ProtectedRoute>} />
       <Route path="/solucoes" element={<SolucoesAceleriq />} />
+      {/* O produto CRM e E-mail roda fora do AppLayout e da área de membros: casca, menu e endereço próprios. */}
+      <Route path="/crm" element={<ProdutoLanding />} />
+      {/* A chegada vem antes do cadastro: ramo, objetivo, empresa e funil; o acesso é o último passo. */}
+      <Route path="/crm/comecar" element={<ProdutoComecar />} />
+      <Route path="/f/:token" element={<ProdutoFormulario />} />
+      {/* A venda do E-mail profissional (produto à parte do CRM) e o pedido curto que sai dela. */}
+      <Route path="/email" element={<EmailLanding />} />
+      <Route path="/email/pedir" element={<EmailPedir />} />
+      <Route path="/app" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
+      <Route path="/app/:secao" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
+      <Route path="/app/:secao/:aba" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/oauth/meta/callback" element={<ProtectedRoute><MetaOAuthCallback /></ProtectedRoute>} />
 
       {/* Ciclo roda fora do AppLayout: é um aplicativo à parte, abre em tela
@@ -388,6 +428,7 @@ export function AppRoutes() {
         {/* 26/10: boletim do Hermes, mudanças nas contas e o que precisa do dono, numa página só. */}
         <Route path="/anuncios/hoje" element={<StaffRoute><AnunciosHoje /></StaffRoute>} />
         <Route path="/hoje" element={<StaffRoute><Hoje /></StaffRoute>} />
+        <Route path="/esteira" element={<StaffRoute><EsteiraLinhaDoTempo /></StaffRoute>} />
         <Route path="/calendario" element={<EditorialCalendar />} />
         <Route path="/clientes" element={<StaffRoute><Clients /></StaffRoute>} />
         <Route path="/equipe" element={<StaffRoute><Team /></StaffRoute>} />
@@ -404,6 +445,7 @@ export function AppRoutes() {
         <Route path="/timeline" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <TimelinePage /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/ver-como-cliente" element={<StaffRoute><AdminViewAsClient /></StaffRoute>} />
         <Route path="/financeiro" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</>} />
+        <Route path="/produto" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/comercial" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
         {/* Cada area do departamento tem endereco proprio: o menu aponta
             direto para ela, o voltar do navegador funciona e o link pode
@@ -457,7 +499,7 @@ export function AppRoutes() {
         <Route path="/contratos" element={<StaffRoute><AdminContracts /></StaffRoute>} />
       </Route>
 
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={NO_SUBDOMINIO_DE_VENDA ? <ProdutoLanding /> : <Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       </RouteErrorBoundary>

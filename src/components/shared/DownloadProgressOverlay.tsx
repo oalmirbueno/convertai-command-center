@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, CheckCircle2, AlertCircle } from "lucide-react";
+import { juntar, superficie } from "@/components/sistema";
 
 type Item = {
   id: string;
@@ -65,7 +66,7 @@ export default function DownloadProgressOverlay() {
         return (
           <div
             key={it.id}
-            className="rounded-xl border border-border bg-card/95 backdrop-blur shadow-sm px-3 py-2.5"
+            className={juntar(superficie.painel, "px-3 py-2.5 shadow-pop")}
           >
             <div className="flex items-center gap-2">
               {it.status === "done" ? (

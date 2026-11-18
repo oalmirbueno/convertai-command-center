@@ -23,6 +23,8 @@
 
 import { linhaDaMarca } from "./heranca-da-marca.ts";
 import { normalizarDiretrizes, perfilExcluido } from "./diretrizes-da-marca.ts";
+// 11/11: o molde do carrossel (só a estrutura) entra nos posts que mais funcionaram.
+import { type MoldeNaPauta, moldeParaAPauta } from "../perfis-instagram/modulos/molde-do-carrossel.ts";
 
 // deno-lint-ignore no-explicit-any
 type Banco = { from: (tabela: string) => any };
@@ -46,6 +48,7 @@ export type PostDoPerfil = {
   vezes_a_mediana: number | null;
   fora_da_curva: boolean;
   link: string | null;
+  molde?: MoldeNaPauta | null;
 };
 
 export type PerfilNoPrompt = {
@@ -56,6 +59,8 @@ export type PerfilNoPrompt = {
   resumo: { padrao_visual: string; padrao_editorial: string; o_que_funciona: string; o_que_evitar: string } | null;
   melhores: PostDoPerfil[];
   novidades: PostDoPerfil[];
+  /** Moldes de carrossel do perfil (só estrutura), os que mais performaram primeiro. */
+  moldes?: Array<MoldeNaPauta & { desempenho?: string }>;
 };
 
 const texto = (v: unknown, max: number) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, max);
@@ -72,6 +77,7 @@ export function postDaLinha(l: Record<string, unknown>): PostDoPerfil {
     vezes_a_mediana: numero(l.vezes_a_mediana),
     fora_da_curva: l.fora_da_curva === true,
     link: typeof l.permalink === "string" ? l.permalink : null,
+    molde: moldeParaAPauta(l.molde),
   };
 }
 
@@ -118,7 +124,7 @@ export async function lerPerfisParaOPrompt(db: Banco, clientId: string, marca: M
     const ha120 = new Date(Date.now() - 120 * DIA_MS).toISOString();
     const { data: posts, error } = await db
       .from("cliente_perfis_posts")
-      .select("perfil_id, publicado_em, formato, formato_editorial, pilar, leitura, legenda, vezes_a_mediana, fora_da_curva, permalink")
+      .select("perfil_id, publicado_em, formato, formato_editorial, pilar, leitura, legenda, vezes_a_mediana, fora_da_curva, permalink, molde")
       .eq("client_id", clientId)
       .in("perfil_id", escolhidos.map((p) => String(p.id)))
       .is("arquivado_em", null)
@@ -127,7 +133,8 @@ export async function lerPerfisParaOPrompt(db: Banco, clientId: string, marca: M
       .limit(400);
     const todos = error ? [] : ((posts ?? []) as Array<Record<string, unknown>>);
     return escolhidos.map((p) => {
-      const { melhores, novidades } = escolherPosts(todos.filter((x) => x.perfil_id === p.id).map(postDaLinha), hoje);
+      const doPerfil = todos.filter((x) => x.perfil_id === p.id).map(postDaLinha);
+      const { melhores, novidades } = escolherPosts(doPerfil, hoje);
       return {
         handle: texto(p.handle, 60).replace(/^@/, ""),
         nome: texto(p.nome, 80) || null,
@@ -136,11 +143,20 @@ export async function lerPerfisParaOPrompt(db: Banco, clientId: string, marca: M
         resumo: resumoDoPerfil(p.resumo),
         melhores,
         novidades,
+        moldes: moldesDoPerfil(doPerfil),
       } as PerfilNoPrompt;
     });
   } catch {
     return null;
   }
+}
+
+/** Até MOLDES_POR_PERFIL moldes do perfil, do carrossel que mais performou para o que menos. */
+export const MOLDES_POR_PERFIL = 2;
+export function moldesDoPerfil(posts: PostDoPerfil[], quantos = MOLDES_POR_PERFIL): Array<MoldeNaPauta & { desempenho?: string }> {
+  const forca = (p: PostDoPerfil) => (p.fora_da_curva ? 100 : 0) + (p.vezes_a_mediana ?? 1);
+  return posts.filter((p) => !!p.molde).sort((a, b) => forca(b) - forca(a)).slice(0, quantos)
+    .map((p) => ({ ...(p.molde as MoldeNaPauta), ...(p.vezes_a_mediana ? { desempenho: `${p.vezes_a_mediana.toFixed(1).replace(".", ",")}x a mediana do perfil` } : {}) }));
 }
 
 const postCurto = (p: PostDoPerfil, foco: FocoDosPerfis) => ({
@@ -159,7 +175,8 @@ const COMO_USAR: Record<FocoDosPerfis, string> = {
   conteudo: `COMO USAR NO CONTEÚDO
 - Referências são a BASE do gosto: pilares, formatos, ganchos e ritmo que funcionam nelas guiam as pautas, adaptados ao negócio e à oferta deste cliente.
 - Concorrentes: leia o que postaram nos últimos ${DIAS_DA_NOVIDADE} dias ("postou_agora") e decida por pauta: ANTECIPAR (o assunto que eles vão puxar e ainda não puxaram), RESPONDER com ângulo melhor ou mais completo, OCUPAR o espaço que nenhum deles cobre, ou LIDERAR com um formato que funcionou neles e o cliente ainda não usa. Diga qual perfil e qual movimento no campo gancho_do_momento (quando existir): "Concorrente @perfil: antecipar" (ou responder, ocupar, liderar).
-- MISTURE, nunca copie: junte o detalhe de um perfil com o de outro e com a base de conhecimento e o que o cliente já publicou (ex.: o formato de @a com o gancho de @b no pilar do cliente). Nunca o texto, o gancho literal nem a sequência de um post específico.`,
+- MISTURE, nunca copie: junte o detalhe de um perfil com o de outro e com a base de conhecimento e o que o cliente já publicou (ex.: o formato de @a com o gancho de @b no pilar do cliente). Nunca o texto, o gancho literal nem a sequência de um post específico.
+- "moldes_de_carrossel" são a ESTRUTURA de um carrossel que funcionou (tipo, fórmula do gancho, o papel de cada lâmina, chamada final), sem o texto deles. Em pauta de carrossel, aproveite um molde quando couber: o mesmo papel de cada lâmina, na mesma ordem, com assunto, palavras e oferta do cliente.`,
   arte: `COMO USAR NA ARTE
 - Referências são o GOSTO visual: tratamento, tipografia, composição, ritmo do carrossel e formatos delas valem como direção, sempre dentro do kit da marca.
 - MISTURE, nunca copie: combine um detalhe de uma referência (ex.: o recorte, o grid) com outro de outra (a textura, a escala do título) e com a base de conhecimento e as artes já feitas do cliente, para cada peça sair nova sem sair do gosto. Nunca o layout inteiro de um post específico.
@@ -178,6 +195,7 @@ export function blocoDosPerfis(perfis: PerfilNoPrompt[] | null | undefined, foco
     ...(p.seguidores ? { seguidores: p.seguidores } : {}),
     ...(p.resumo ? { padrao: foco === "arte" ? { visual: p.resumo.padrao_visual, evitar: p.resumo.o_que_evitar } : p.resumo } : {}),
     ...(p.melhores.length ? { posts_que_mais_funcionaram: p.melhores.slice(0, n).map((x) => postCurto(x, foco)) } : {}),
+    ...(foco === "conteudo" && p.moldes && p.moldes.length ? { moldes_de_carrossel: p.moldes } : {}),
     ...(p.papel === "concorrente" && p.novidades.length && foco !== "arte" ? { postou_agora: p.novidades.map((x) => postCurto(x, foco)) } : {}),
   });
   const referencias = perfis.filter((p) => p.papel === "referencia" && (p.resumo || p.melhores.length));

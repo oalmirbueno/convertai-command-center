@@ -1,5 +1,5 @@
 import { createElement as h } from "react";
-import { configure, render, screen } from "@testing-library/react";
+import { configure, render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -101,12 +101,17 @@ describe("Clientes no celular (16/10/2026)", () => {
     expect(screen.getByRole("button", { name: "Mais ações de Loja da Joana" })).toBeTruthy();
   });
 
-  it("no computador nada muda: números, financeiro da linha e Novo cliente no topo", async () => {
+  it("no computador: números e Novo cliente no topo; a grade financeira da linha recolhe e o botão abre (09/11)", async () => {
     larguraDaJanela(1280);
     const { container } = montar();
     await screen.findByRole("button", { name: "Abrir cadastro do cliente Loja da Joana" });
     expect(screen.getByRole("region", { name: "Resumo financeiro dos clientes" })).toBeTruthy();
+    // Recolhida: fica só o valor e a situação na linha.
+    expect(container.querySelector(`#client-finance-${CLIENTE}`)).toBeNull();
+    expect(container.querySelector(`[data-resumo-da-cobranca="${CLIENTE}"]`)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar plano, custo e margem de cada cliente" }));
     expect(container.querySelector(`#client-finance-${CLIENTE}`)).toBeTruthy();
+    expect(container.querySelector(`[data-resumo-da-cobranca="${CLIENTE}"]`)).toBeNull();
     expect(container.querySelector("[data-barra-da-lista]")).toBeNull();
     const novos = screen.getAllByRole("button", { name: "Novo cliente" });
     expect(novos).toHaveLength(1);

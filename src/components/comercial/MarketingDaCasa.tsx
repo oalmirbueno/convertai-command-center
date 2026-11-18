@@ -4,14 +4,14 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isInternalClient } from "@/lib/clientFlags";
-import { AreaDeTrabalho, EstadoVazio, Painel, Secao, botao, juntar, texto } from "@/components/sistema";
+import { AreaDeTrabalho, EstadoVazio, Secao, botao, juntar, texto } from "@/components/sistema";
 import {
   type Campanha,
   type Lead,
   dinheiro,
   proximoMes,
 } from "@/lib/comercial";
-import { FaixaDeNumeros } from "@/components/sistema";
+import { Card, Donut, ProgressBar, StatCard, StatGrid, chartColor } from "@/components/ds";
 
 /**
  * O marketing da propria casa.
@@ -111,20 +111,23 @@ export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {
   }, [leads, periodo, fim]);
 
   const carregando = conteudo === undefined;
+  const totalDoMes = porOrigem.reduce((s, l) => s + l.total, 0);
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Marketing da casa" memoriaDaRolagem="comercial:marketing">
-      <div className="min-w-0 space-y-5">
-        <FaixaDeNumeros
-          tamanho="compacto"
-          apoioAoLado
-          rotulo="Números do marketing da casa"
-          itens={[
-            { rotulo: "Conteúdo no ar", valor: carregando ? "…" : String(conteudo.publicadas), apoio: "no mês" },
-            { rotulo: "Já agendado", valor: carregando ? "…" : String(conteudo.agendadas), apoio: "esperando a data" },
-            { rotulo: "Investido", valor: dinheiro(investido), apoio: "somando as campanhas" },
-          ]}
-        />
+      <div className="min-w-0 space-y-6 sm:space-y-8">
+        {/* Rodada ousada (15/11/2026): os três números em cartões; o publicado sobre o planejado do mês vira barra. */}
+        <StatGrid cols={3} label="Números do marketing da casa">
+          <StatCard
+            variant="accent"
+            label="Conteúdo no ar"
+            value={carregando ? "…" : String(conteudo.publicadas)}
+            hint="no mês"
+            chart={!carregando && conteudo.publicadas + conteudo.agendadas > 0 ? <ProgressBar value={conteudo.publicadas} max={conteudo.publicadas + conteudo.agendadas} tone="current" striped label={`${conteudo.publicadas} no ar de ${conteudo.publicadas + conteudo.agendadas} do mês`} /> : undefined}
+          />
+          <StatCard label="Já agendado" value={carregando ? "…" : String(conteudo.agendadas)} hint="esperando a data" />
+          <StatCard variant="ink" className="max-lg:col-span-2" label="Investido" value={dinheiro(investido)} hint="somando as campanhas" />
+        </StatGrid>
 
         <Secao
           titulo="O conteúdo da casa"
@@ -153,25 +156,35 @@ export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {
           {porOrigem.length === 0 ? (
             <EstadoVazio compacto titulo="Nenhum lead entrou neste mês." />
           ) : (
-            <Painel semEspaco>
-              <ul className="divide-y divide-border">
-                {porOrigem.map((linha) => (
-                  <li key={linha.origem} className="flex min-w-0 items-center px-4 py-2.5">
-                    <span className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>
-                      {ROTULO_DA_ORIGEM[linha.origem] || linha.origem}
-                    </span>
-                    {linha.ganhos > 0 && (
-                      <span className="mr-3 shrink-0 text-[12px] font-medium tabular-nums text-success">
-                        {linha.ganhos} fechou
-                      </span>
-                    )}
-                    <span className={juntar(texto.auxiliar, "w-16 shrink-0 text-right tabular-nums")}>
-                      {linha.total} {linha.total === 1 ? "lead" : "leads"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Painel>
+            <Card>
+              <div className="flex min-w-0 flex-col items-center lg:flex-row lg:items-start">
+                <Donut segments={porOrigem.map((l) => ({ label: ROTULO_DA_ORIGEM[l.origem] || l.origem, value: l.total }))} size={156} thickness={18} className="mb-5 lg:mb-0 lg:mr-8" label="Leads do mês por origem">
+                  <span className="block text-[28px] font-semibold leading-8 tracking-[-0.03em] tabular-nums">{totalDoMes}</span>
+                  <span className="block text-[11px] font-medium leading-4 text-muted-foreground">{totalDoMes === 1 ? "lead" : "leads"}</span>
+                </Donut>
+                <ul className="w-full min-w-0 flex-1">
+                  {porOrigem.map((linha, i) => (
+                    <li key={linha.origem} className="min-w-0 py-3">
+                      <div className="flex min-w-0 items-center">
+                        <span aria-hidden="true" className="mr-2.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartColor(undefined, i) }} />
+                        <span className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>
+                          {ROTULO_DA_ORIGEM[linha.origem] || linha.origem}
+                        </span>
+                        {linha.ganhos > 0 && (
+                          <span className="mr-3 inline-flex h-6 shrink-0 items-center rounded-full bg-success-soft px-2.5 text-[12px] font-medium tabular-nums text-success">
+                            {linha.ganhos} fechou
+                          </span>
+                        )}
+                        <span className="w-16 shrink-0 text-right text-[13px] font-semibold tabular-nums text-foreground">
+                          {linha.total} {linha.total === 1 ? "lead" : "leads"}
+                        </span>
+                      </div>
+                      <ProgressBar className="mt-2" value={linha.total} max={totalDoMes} height={6} tone={((i % 5) + 1) as 1 | 2 | 3 | 4 | 5} label={`${ROTULO_DA_ORIGEM[linha.origem] || linha.origem}: ${linha.total} de ${totalDoMes} leads`} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Card>
           )}
         </Secao>
       </div>

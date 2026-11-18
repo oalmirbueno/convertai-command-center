@@ -588,7 +588,7 @@ function ModeloVisual({ visual, mudou, onVisual }: { visual: VisualDaProposta; m
       descricao={`${(TEMAS_DA_PROPOSTA.find((t) => t.id === visual.tema) || TEMAS_DA_PROPOSTA[0]).nome}${mudou ? " · não salvo" : ""}`}
       ajuda="Escolha como a proposta aparece para o cliente e veja na prévia ao lado. Cores do cliente usa a paleta da marca aberta na capa e nos destaques; a logo do cliente entra na capa pelo código. O Salvar fica na barra do pé da etapa, junto com os blocos."
     >
-      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Modelos visuais">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4" role="radiogroup" aria-label="Modelos visuais">
         {TEMAS_DA_PROPOSTA.map((t) => {
           const semCor = t.id === "cliente" && !visual.cores.length;
           return (
@@ -724,7 +724,7 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
     [proposta ? proposta.id : "", proposta ? proposta.versao : 0, aceita, mesa.clientId],
   );
 
-  if (!proposta || !atual) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
+  if (!proposta || !atual) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
 
   const mudarBloco = (tipo: TipoDeBloco, m: Partial<Pick<Bloco, "titulo" | "visivel" | "dados">>) => {
     setRascunho({ titulo: atual.titulo, conteudo: comBloco(atual.conteudo, tipo, m) });

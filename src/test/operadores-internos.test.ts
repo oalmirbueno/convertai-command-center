@@ -292,7 +292,7 @@ describe("hierarquia por funcao, organizada pelo Hermes", () => {
   });
 
   it("o painel agrupa a base por funcao e le a ordem do banco", () => {
-    expect(organograma).toContain('o.area?.trim() || "Sem área definida"');
+    expect(organograma).toContain('o.area?.trim() || SEM_AREA');
     expect(pagina).toContain('.order("display_order", { ascending: true })');
   });
 

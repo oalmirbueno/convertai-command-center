@@ -22,10 +22,10 @@ import RascunhoDoSite from "./RascunhoDoSite";
 
 const TOM: Record<string, string> = {
   na_fila: "bg-muted text-muted-foreground",
-  executando: "bg-primary/10 text-primary",
-  parando: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  feito: "bg-primary/10 text-primary",
-  falhou: "bg-destructive/10 text-destructive",
+  executando: "bg-accent-soft text-primary",
+  parando: "bg-warning-soft text-warning",
+  feito: "bg-accent-soft text-primary",
+  falhou: "bg-danger-soft text-destructive",
   parado: "bg-muted text-foreground",
   cancelado: "bg-muted text-muted-foreground",
 };
@@ -232,7 +232,7 @@ export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { 
                   <label key={s} className="flex min-w-0 cursor-pointer items-center py-1 text-[13px]">
                     <input type="checkbox" className="mr-2 shrink-0" checked={escolhidas.indexOf(s) >= 0} onChange={() => setEscolhidas((l) => (l.indexOf(s) >= 0 ? l.filter((x) => x !== s) : secoesDoSite.filter((x) => x === s || l.indexOf(x) >= 0)))} />
                     <span className="truncate">{rotuloDaSecao(s)}</span>
-                    {feitas.indexOf(s) >= 0 && <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>pronta</span>}
+                    {feitas.indexOf(s) >= 0 && <span className={juntar(etiqueta, "ml-1.5 bg-accent-soft text-primary")}>pronta</span>}
                   </label>
                 ))}
               </div>

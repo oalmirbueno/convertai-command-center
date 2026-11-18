@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import Secao from "@/components/sistema/Secao";
-import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import { NumerosAbertos } from "@/components/mesa/ousado";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
 import { dataCurta, textoDoTotal } from "../../../supabase/functions/_shared/proposta-modelo";
@@ -59,7 +59,7 @@ export default function EtapaAcompanhar({ proposta, onAbrir }: { proposta: Propo
   const [gerandoContrato, setGerandoContrato] = useState(false);
   const [duplicando, setDuplicando] = useState(false);
 
-  if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
+  if (!proposta) return <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
   const lendoEventos = eventos.isLoading;
   const erroNosEventos = eventos.isError && !eventos.data;
   const r = resumoDoRastreio(eventos.data || []);
@@ -139,9 +139,8 @@ export default function EtapaAcompanhar({ proposta, onAbrir }: { proposta: Propo
         acao={acao}
       >
         <p className={juntar(texto.corpo, "mb-4")}>{linha}</p>
-        <FaixaDeNumeros
+        <NumerosAbertos
           colunas={erroNosEventos ? 1 : 3}
-          semMoldura
           itens={
             erroNosEventos
               ? [aceite]

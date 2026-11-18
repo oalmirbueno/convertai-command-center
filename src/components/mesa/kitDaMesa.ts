@@ -72,7 +72,7 @@ export async function gravarNoKit(alvo: AlvoDoKit, campos: Record<string, unknow
 
 /** Chaves de cache que mudam quando o kit (do cliente ou da marca) muda. */
 export function chavesDoKit(clientId: string): (readonly unknown[])[] {
-  return [["mesa", "kit", clientId], ["mesa", "kit-tons", clientId], chaveDasMarcas(clientId)];
+  return [["mesa", "kit", clientId], ["mesa", "kit-tons", clientId], chaveDasMarcas(clientId), ["fotos-dos-clientes"]];
 }
 
 /**

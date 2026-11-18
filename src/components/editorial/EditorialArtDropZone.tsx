@@ -285,7 +285,7 @@ export default function EditorialArtDropZone({
       </label>
 
       {enviando ? (
-        <p className="mb-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[12px] font-medium text-primary">
+        <p className="mb-2 flex items-center justify-center gap-2 rounded-md border border-dashed border-primary/40 bg-accent-soft px-3 py-2 text-[12px] font-medium text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Enviando e vinculando…
         </p>

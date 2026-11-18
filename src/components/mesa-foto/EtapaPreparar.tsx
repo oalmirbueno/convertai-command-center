@@ -141,7 +141,7 @@ export default function EtapaPreparar() {
       {preparando ? (
         <AreasNaFoto alturaMaxima={Math.max(320, Math.min(520, (area.altura || 600) - 100))} foto={foto} areas={[]} onMudar={() => undefined} marcando={false} estiloDaImagem={VELADO}>
           <div className="absolute inset-0 flex items-center justify-center p-2" aria-live="polite">
-            <span className="inline-flex items-center rounded-full bg-card px-3 py-1.5 text-[13px] font-medium shadow-sm">
+            <span className="inline-flex items-center rounded-full bg-card px-3 py-1.5 text-[13px] font-medium shadow-card">
               <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-primary" /> Preparando: {modoAtual.rotulo.toLowerCase()}
             </span>
           </div>
@@ -171,7 +171,7 @@ export default function EtapaPreparar() {
           resumo={areas.length ? `${areas.length} ${areas.length === 1 ? "área protegida" : "áreas protegidas"}` : undefined}
           acao={
             <>
-              <div role="group" aria-label="Como comparar" className="mb-1 mr-2 grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
+              <div role="group" aria-label="Como comparar" className="mb-1 mr-2 grid grid-cols-3 gap-0.5 rounded-full bg-muted p-0.5">
                 {(
                   [
                     { v: "lado", r: "Lado a lado" },
@@ -184,7 +184,7 @@ export default function EtapaPreparar() {
                     type="button"
                     aria-pressed={vista === o.v}
                     onClick={() => setVista(o.v)}
-                    className={juntar("rounded px-2 py-1 text-[12px]", foco, vista === o.v ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}
+                    className={juntar("rounded-full px-2 py-1 text-[12px]", foco, vista === o.v ? "bg-card font-medium shadow-card" : "text-muted-foreground")}
                   >
                     {o.r}
                   </button>
@@ -206,7 +206,7 @@ export default function EtapaPreparar() {
           <div className="mt-3 flex min-w-0 flex-wrap items-center">
             <button
               type="button"
-              className={juntar(botao.icone, "mb-1.5 mr-2", marcando && "bg-primary/10 text-primary")}
+              className={juntar(botao.icone, "mb-1.5 mr-2", marcando && "bg-accent-soft text-primary")}
               onClick={() => {
                 setMarcando(!marcando);
                 if (!marcando && vista === "depois") setVista("lado");
@@ -311,7 +311,7 @@ export default function EtapaPreparar() {
           </Cartao>
 
           <Cartao titulo="Gerar a versão tratada" dica="Gera uma derivada nova no acervo; o original não muda. Se o motor não fizer o que o modo exige, a Mesa avisa e não troca por um modo pior. Nada escurece a foto para dar destaque.">
-            <div className="grid min-w-0 grid-cols-2 gap-2">
+            <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
               <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloEscolhido} onChange={setModeloId} qualidade={qualidade} />
               <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
             </div>

@@ -180,9 +180,9 @@ function CartaoDoAnuncio({
   const { catalogo } = useMesa();
   const m = a.metricas;
   return (
-    <article className={juntar(superficie.painel, "min-w-0 p-3")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
+    <article className={juntar(superficie.painel, "min-w-0 p-4")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
       <div className="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-3 sm:grid-cols-[112px_minmax(0,1fr)]">
-        <button type="button" onClick={onFicha} className="block min-w-0 self-start overflow-hidden rounded-md bg-secondary/40" aria-label={`Ver ${a.nome}`}>
+        <button type="button" onClick={onFicha} className="block min-w-0 self-start overflow-hidden rounded-md bg-muted/40" aria-label={`Ver ${a.nome}`}>
           <div className="relative w-full" style={{ paddingTop: "125%" }}>
             <div className="absolute inset-0">
               <Foto src={a.imagem_url} alt={a.nome} className="h-full w-full" />
@@ -205,7 +205,7 @@ function CartaoDoAnuncio({
               {a.corpo}
             </p>
           )}
-          <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-[11px] sm:grid-cols-5">
+          <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-[11px] [&_dd]:text-[13px] [&_dd]:font-semibold [&_dd]:leading-5 sm:grid-cols-5">
             <div className="min-w-0">
               <dt className="truncate text-muted-foreground">Gasto</dt>
               <dd className="truncate font-medium tabular-nums">{brl(m.gasto)}</dd>
@@ -287,12 +287,12 @@ function PainelDaAnalise({
       <div className="flex min-w-0 items-start">
         <Sparkles className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[13px] font-semibold">Leitura do estrategista</h3>
+          <h3 className="truncate text-[15px] font-semibold">Leitura do estrategista</h3>
           {quando && <p className="truncate text-[11px] text-muted-foreground" title="Os números vêm da conta; a leitura, do estrategista.">Feita {dataEHora(quando)}</p>}
         </div>
       </div>
       {analise.resumo && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{analise.resumo}</p>}
-      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
         {grupos.map((g) => (
           <div key={g.titulo} className={juntar(superficie.poco, "min-w-0 p-3")}>
             <p className={`text-[12px] font-semibold ${g.tom}`}>
@@ -330,14 +330,14 @@ function PainelDaAnalise({
       {analise.proximos_testes.length > 0 && (
         <div className="min-w-0">
           <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Próximos testes</p>
-          <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+          <ul className="grid min-w-0 grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
             {analise.proximos_testes.map((t, k) => (
               <li key={`${t.titulo}-${k}`} className={juntar(superficie.poco, "flex min-w-0 flex-col p-3")}>
                 <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
                 {t.hipotese && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{t.hipotese}</p>}
                 <div className="mt-auto flex min-w-0 flex-wrap items-center pt-2">
-                  {t.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]">{humanizar(t.estilo_visual)}</span>}
-                  {t.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(t.objetivo)}</span>}
+                  {t.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[11px]">{humanizar(t.estilo_visual)}</span>}
+                  {t.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(t.objetivo)}</span>}
                   <span className="mb-1 ml-auto">
                     <BotaoComCusto
                       rotulo="Criar plano deste teste"
@@ -638,10 +638,11 @@ export default function AbaConta({
             }
           />
         )}
-        {conta.isLoading && <Carregando forma="aba" rotulo="Lendo a conta" />}
+        {/* v4: enquanto a conta carrega, só a espera (altura da tela); as partes entram juntas, já no lugar. */}
+        {conta.isLoading && <div className="min-h-[calc(100vh-260px)]"><Carregando forma="aba" rotulo="Lendo a conta" /></div>}
 
         {dados && !dados.conta.conectada && (
-          <EstadoVazio
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
             icone={<BarChart3 className="h-5 w-5" />}
             titulo="A conta de anúncios deste cliente não está conectada"
             descricao="Conecte a conta da Meta no cadastro do cliente para ver campanhas, anúncios e métricas aqui."
@@ -649,13 +650,13 @@ export default function AbaConta({
         )}
 
         {/* 12/10/2026: alertas da conta (fadiga, custo, ROAS abaixo do equilíbrio), com a régua da memória. */}
-        {(!dados || dados.conta.conectada) && <AlertasDaConta onPedirAoAgente={levarAoAgente} />}
+        {!conta.isLoading && (!dados || dados.conta.conectada) && <AlertasDaConta onPedirAoAgente={levarAoAgente} />}
 
         {/* Frente ADM (01/10): os números da Meta como no Gerenciador (objetivo, nível, colunas e horário). */}
-        {(!dados || dados.conta.conectada) && <MetricasDaMeta clientId={clientId} periodo={periodo} rotuloDoPeriodo={trechoDoPeriodo(periodo)} />}
+        {!conta.isLoading && (!dados || dados.conta.conectada) && <MetricasDaMeta clientId={clientId} periodo={periodo} rotuloDoPeriodo={trechoDoPeriodo(periodo)} />}
 
         {/* 2. O Gerenciador ao vivo: campanha, conjunto e anúncio, com as ações e a prova. */}
-        {(!dados || dados.conta.conectada) && (
+        {!conta.isLoading && (!dados || dados.conta.conectada) && (
           <section className="min-w-0" aria-label="Gerenciador">
             <CabecalhoDaParte
               titulo="Gerenciador"
@@ -700,7 +701,7 @@ export default function AbaConta({
               recolher={{ recolhido: resultadosRecolhido, onAlternar: () => setResultadosRecolhido(!resultadosRecolhido) }}
               acoes={
                   <BotaoComCusto
-                    rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar com o estrategista</>}
+                    rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar<span className="hidden sm:inline">&nbsp;com o estrategista</span></>}
                     titulo="Analisar a conta"
                     descricao="O estrategista lê os números da conta (calculados em código) e diz o que escalar, pausar e renovar, o que a copy ensina e os próximos testes."
                     className="h-9"
@@ -720,7 +721,7 @@ export default function AbaConta({
               <>
                 <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
                 <details className="min-w-0 border-y border-border py-2">
-                  <summary className={juntar("cursor-pointer rounded text-[13px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
+                  <summary className={juntar("cursor-pointer rounded-sm text-[13px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
                   <div className="mt-3 min-w-0 space-y-3">
                     <ResumoDaConta totais={dados.conta.totais} extras={extras} />
                     <SaldosDasContas contas={extras.contas} />

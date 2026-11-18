@@ -52,7 +52,7 @@ function Arvore({ nos, aberto, onAbrir, mudados, nivel = 0 }: { nos: NoDaArvore[
           <li key={n.caminho} className="min-w-0" role="treeitem" aria-expanded={n.pasta ? !fechada : undefined} aria-selected={!n.pasta && aberto === n.caminho}>
             <button
               type="button"
-              className={juntar("flex w-full min-w-0 items-center rounded px-1.5 py-0.5 text-left", texto.corpo, !n.pasta && aberto === n.caminho ? "bg-primary/10" : "hover:bg-muted/60")}
+              className={juntar("flex w-full min-w-0 items-center rounded-sm px-1.5 py-0.5 text-left", texto.corpo, !n.pasta && aberto === n.caminho ? "bg-primary/10" : "hover:bg-muted/60")}
               style={{ paddingLeft: 6 + nivel * 12 }}
               onClick={() => {
                 if (!n.pasta) return onAbrir(n.caminho);
@@ -68,7 +68,7 @@ function Arvore({ nos, aberto, onAbrir, mudados, nivel = 0 }: { nos: NoDaArvore[
               {n.pasta ? (fechada ? <ChevronRight className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ChevronDown className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />) : <span className="mr-1 w-3.5 shrink-0" />}
               {n.pasta ? <Folder className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
               <span className="min-w-0 flex-1 truncate">{n.nome}</span>
-              {!n.pasta && mudados.has(n.caminho) && <span className="ml-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-label="alterado" />}
+              {!n.pasta && mudados.has(n.caminho) && <span className="ml-1 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-label="alterado" />}
             </button>
             {n.pasta && !fechada && <Arvore nos={n.filhos} aberto={aberto} onAbrir={onAbrir} mudados={mudados} nivel={nivel + 1} />}
           </li>
@@ -211,7 +211,7 @@ export default function EditorDeCodigo({ site, aberta, onMudar }: { site: LinhaD
       <ul className={juntar(rolagem.janela, "mt-1 min-w-0 sm:max-h-none")} data-achados="">
         {achados.map((a) => (
           <li key={`${a.caminho}:${a.linha}`}>
-            <button type="button" className={juntar(texto.auxiliar, "block w-full min-w-0 truncate rounded px-1.5 py-0.5 text-left hover:bg-muted/60")} onClick={() => irParaLinha(a.caminho, a.linha)} title={`${a.caminho}:${a.linha}`}>
+            <button type="button" className={juntar(texto.auxiliar, "block w-full min-w-0 truncate rounded-sm px-1.5 py-0.5 text-left hover:bg-muted/60")} onClick={() => irParaLinha(a.caminho, a.linha)} title={`${a.caminho}:${a.linha}`}>
               <span className="text-foreground">{`${a.caminho.split("/").pop()}:${a.linha}`}</span> {a.trecho}
             </button>
           </li>

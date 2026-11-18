@@ -1,3 +1,4 @@
+import { HelpTooltip } from "@/components/ds";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Library, Link2, Loader2, Upload } from "lucide-react";
@@ -188,11 +189,11 @@ export default function ReferenciasDoCriativo({
   return (
     <div className="min-w-0 space-y-4">
       <section className="min-w-0 space-y-2 rounded-lg border border-border bg-background p-3" aria-label="Mandar uma referência">
-        <p className="text-[12px] font-medium">Mandar uma referência para este criativo</p>
-        <p className="text-[12px] leading-snug text-muted-foreground">
-          Envie a imagem ou cole o link (Pinterest, Instagram, Behance, imagem ou página). Ela entra nas escolhidas e o gerador segue de perto.
-          {valerParaIrmaos && irmaos.length ? ` Vale também para ${irmaos.length} formato(s) irmão(s).` : ""}
+        <p className="flex items-center text-[12px] font-medium">
+          Mandar uma referência para este criativo
+          <HelpTooltip className="ml-1">Envie a imagem ou cole o link (Pinterest, Instagram, Behance, imagem ou página). Ela entra nas escolhidas e o gerador segue de perto.</HelpTooltip>
         </p>
+        {valerParaIrmaos && irmaos.length ? <p className="text-[12px] leading-snug text-muted-foreground">{`Vale também para ${irmaos.length} formato(s) irmão(s).`}</p> : null}
         <div className="flex min-w-0 flex-wrap items-center">
           <input ref={entrada} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => void enviarArquivos(e.target.files)} aria-label="Enviar imagem de referência" />
           <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" disabled={ocupado !== null} onClick={() => entrada.current && entrada.current.click()} aria-label="Enviar imagem" title="Enviar imagem">
@@ -224,7 +225,7 @@ export default function ReferenciasDoCriativo({
             </div>
             {referencias.isLoading && <p className="px-1 text-[12px] text-muted-foreground">Carregando o banco…</p>}
             {!referencias.isLoading && !banco.length && <p className="px-1 text-[12px] text-muted-foreground">Nada aqui ainda. Traga referências na etapa Referências ou cole um link acima.</p>}
-            <ul className="grid grid-cols-2 gap-2 lg:max-h-[360px] lg:overflow-y-auto lg:overscroll-contain">
+            <ul className="grid grid-cols-2 gap-2 sm:gap-3 lg:max-h-[360px] lg:overflow-y-auto lg:overscroll-contain">
               {banco.map((r) => {
                 const capa = capaDaReferencia(r);
                 const estilo = estiloDaReferencia(r);
@@ -235,7 +236,7 @@ export default function ReferenciasDoCriativo({
                         {capa ? (
                           <Foto src={capa} alt={r.titulo} className="h-full w-full" />
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-secondary/60 p-2 text-center text-[11px] leading-snug text-foreground/80">
+                          <div className="flex h-full w-full items-center justify-center bg-muted/60 p-2 text-center text-[11px] leading-snug text-foreground/80">
                             {r.ficha.gancho_verbal ? `“${String(r.ficha.gancho_verbal)}”` : rotuloDaOrigem(r.origem)}
                           </div>
                         )}

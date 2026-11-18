@@ -283,7 +283,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
           </div>
         )}
         {!planos.length ? (
-          <EstadoVazio titulo="Nenhum plano ainda" descricao="Use um kit ou peça ao diretor para montar o roteiro." acao={<button type="button" className={botao.secundario} onClick={() => irPara("kit")}>Escolher kit</button>} />
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" titulo="Nenhum plano ainda" descricao="Use um kit ou peça ao diretor para montar o roteiro." acao={<button type="button" className={botao.secundario} onClick={() => irPara("kit")}>Escolher kit</button>} />
         ) : (
           <>
             {/* 28/09: sem altura fixa e sem região própria. A principal da AreaDeTrabalho já rola
@@ -312,7 +312,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
                           </span>
                         </span>
                       </button>
-                      {doPlano.some((a) => a.nivel === "erro") && <span className={juntar(etiqueta, "mr-1 bg-destructive/10 text-destructive")}>{doPlano.filter((a) => a.nivel === "erro").length}</span>}
+                      {doPlano.some((a) => a.nivel === "erro") && <span className={juntar(etiqueta, "mr-1 bg-danger-soft text-destructive")}>{doPlano.filter((a) => a.nivel === "erro").length}</span>}
                       {p.escolhido && <CheckCircle2 className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" aria-label="Com resultado escolhido" />}
                       <span className="mr-1 text-[12px] tabular-nums text-muted-foreground">{custo === null ? "Sem cotação" : textoDoCusto({ usd: custo, incerto: !!(m && m.preco && m.preco.incerto) })}</span>
                     </div>
@@ -413,7 +413,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
                                 </button>
                               )}
                             </div>
-                            <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4" aria-label={`Resultados de ${p.ref}`}>
+                            <ul className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4" aria-label={`Resultados de ${p.ref}`}>
                               {res.map((a) => (
                                 <li key={a.id}>
                                   <button type="button" onClick={() => mudarPlano(p.ref, { escolhido: p.escolhido === a.id ? null : a.id })} className={juntar("relative block w-full overflow-hidden rounded-md bg-muted", p.escolhido === a.id ? "ring-2 ring-primary" : "")} style={{ paddingBottom: "125%" }} aria-label={`${p.escolhido === a.id ? "Tirar" : "Escolher"} ${a.nome}`}>

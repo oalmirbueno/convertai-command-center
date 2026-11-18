@@ -202,7 +202,7 @@ const ETAPAS_EM_COLUNA: string[] = ["acervo", "estudio"];
 
 function EsqueletoDoDiretor() {
   return (
-    <div aria-busy="true" aria-label="Abrindo o diretor" className={juntar(superficie.painel, "flex h-full min-h-[320px] flex-col p-3")}>
+    <div aria-busy="true" aria-label="Abrindo o diretor" className={juntar(superficie.painel, "flex h-full min-h-[320px] flex-col p-4")}>
       <div className="h-8 w-2/3 animate-pulse rounded-md bg-muted" />
       <div className="mt-auto h-20 animate-pulse rounded-md bg-muted/70" />
     </div>
@@ -543,7 +543,7 @@ export default function MesaFoto() {
             {/* Linha de produção (frente FTL, 30/09): 5 passos. 16/10/2026 (dono: "deixa só o ícone"):
                 em toda largura só o passo aberto mostra o nome; os outros ficam no ícone (o número e o
                 nome vão no leitor de tela e na dica). */}
-            <div className="flex min-w-0 flex-1 rounded-lg bg-muted p-0.5" data-caminho-principal="" data-linha-de-producao="">
+            <div className="flex min-w-0 flex-1 rounded-full bg-muted p-0.5" data-caminho-principal="" data-linha-de-producao="">
               {PASSOS_PRINCIPAIS.map((p, i) => {
                 const ativo = !!passoAtual && passoAtual.passo === p.passo;
                 const recomendado = !ativo && !!passoRecomendado && passoRecomendado.passo === p.passo;
@@ -562,9 +562,9 @@ export default function MesaFoto() {
                     data-proximo={recomendado ? "" : undefined}
                     data-pula={pula ? "" : undefined}
                     className={juntar(
-                      "inline-flex h-8 min-w-0 items-center justify-center rounded-md text-[13px] font-medium transition-colors",
+                      "inline-flex h-8 min-w-0 items-center justify-center rounded-full text-[13px] font-medium transition-colors",
                       i > 0 && "ml-0.5",
-                      ativo ? "flex-1 bg-card px-2 text-foreground shadow-sm" : "shrink-0 px-1.5 sm:flex-1 sm:shrink sm:px-2",
+                      ativo ? "flex-1 bg-card px-2 text-foreground shadow-card" : "shrink-0 px-1.5 sm:flex-1 sm:shrink sm:px-2",
                       foco,
                       !ativo && (recomendado ? "text-primary hover:bg-card/60" : pula ? "text-muted-foreground/60 hover:text-foreground" : "text-muted-foreground hover:text-foreground"),
                     )}
@@ -633,7 +633,7 @@ export default function MesaFoto() {
       }
     >
 
-      {!clientId && <EstadoVazio icone={<Camera className="h-5 w-5" />} titulo="Escolha um cliente" descricao="A Mesa Foto abre com as fotos dele." />}
+      {!clientId && <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground" icone={<Camera className="h-5 w-5" />} titulo="Escolha um cliente" descricao="A Mesa Foto abre com as fotos dele." />}
 
       {valor && (
         <MesaProvider valor={valor}>
@@ -659,7 +659,8 @@ export default function MesaFoto() {
             >
               <div key={valor.clientId} className={emColuna ? "relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : "relative min-w-0 pb-6"} data-etapa-da-mesa-foto={etapa}>
                 {/* A faixa das peças do mês fica fora do Canvas (o quadro precisa da altura); a janela da peça vale em todas. */}
-                <Suspense fallback={null}>
+                {/* v4: a faixa guarda o lugar enquanto o código dela chega (a etapa não desce depois). */}
+                <Suspense fallback={noCanvas ? null : <div className="mb-4 h-11 sm:h-8" aria-hidden="true" />}>
                   <EsteiraDoMes mostrarFaixa={!noCanvas} pedido={pedidoDePeca} onPedidoAtendido={() => setPedidoDePeca(null)} />
                 </Suspense>
                 <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>

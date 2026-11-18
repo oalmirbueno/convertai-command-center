@@ -635,7 +635,7 @@ function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDire
         </p>
       )}
       {m.sugestoes.length > 0 && (
-        <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2">
+        <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:gap-3">
           {m.sugestoes.map((s) =>
             s.tipo === "plano_de_variacoes" ? (
               <CartaoDoPlanoDeVariacoes key={s.chave} sugestao={s} mensagemId={m.mensagemId} />
@@ -773,7 +773,7 @@ function Conversa({ mensagens, pendente, anexos, onOpcao }: { mensagens: Mensage
         <Mensagem key={m.id} m={m} anexosDaConversa={anexos} onOpcao={i === mensagens.length - 1 ? onOpcao : undefined} ocupado={!!pendente} />
       ))}
       {pendente && (
-        <p role="status" className="mr-6 inline-flex items-center rounded-xl bg-muted px-3.5 py-2.5 text-[13px] text-muted-foreground">
+        <p role="status" className="mr-6 inline-flex items-center rounded-lg bg-muted px-3.5 py-2.5 text-[13px] text-muted-foreground">
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> O diretor está pensando...
         </p>
       )}

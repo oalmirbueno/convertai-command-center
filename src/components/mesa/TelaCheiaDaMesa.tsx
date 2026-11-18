@@ -185,7 +185,7 @@ export function BotaoDeTelaCheia({ tela, className = "" }: { tela: TelaCheiaDaMe
       aria-label={rotulo}
       title={tela.cheia ? "Sair da tela cheia (Esc)" : "Tela cheia: só a mesa na tela, sem o menu do painel"}
       data-botao-tela-cheia=""
-      className={`inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={`inline-flex h-8 shrink-0 items-center justify-center rounded-full px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         tela.cheia ? "bg-muted text-foreground" : ""
       } ${className}`}
     >

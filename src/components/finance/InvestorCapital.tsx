@@ -13,7 +13,8 @@ import {
   AjudaRecolhida, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel, RegiaoRolavel, Secao, SeletorCompacto,
   botao, campo, campoTexto, juntar, superficie, texto,
 } from "@/components/sistema";
-import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi } from "@/components/finance/pecasDoFinanceiro";
+import { AcoesDoDialogo, Etiqueta, GradeDeKpis, IconeDaLinha, Kpi, grafico, linhaDeLista, listaDeLinhas } from "@/components/finance/pecasDoFinanceiro";
+import { Avatar, ChartLegend, OverflowMenu, ProgressBar } from "@/components/ds";
 import { todayBR } from "@/lib/dateBR";
 
 const fmt = (v: number) =>
@@ -275,7 +276,7 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
   const primeiraCarga = isLoading && (allExpenses || []).length === 0;
 
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="min-w-0 space-y-6 sm:space-y-8">
       <Secao
         titulo="Capital de investidor"
         descricao={hasData ? `${investorEntries.length} ${investorEntries.length === 1 ? "lançamento" : "lançamentos"}` : undefined}
@@ -314,6 +315,7 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
               valor={fmt(investor.total)}
               apoio={investor.contributors.length === 1 ? "1 investidor" : `${investor.contributors.length} investidores`}
               tom="primario"
+              icone={<Briefcase className="h-4 w-4" />}
             />
             <Kpi
               rotulo="Aporte deste mês"
@@ -331,6 +333,7 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
               valor={investor.total > 0 ? `${roiBruto.toFixed(1)}%` : "-"}
               apoio={returns.net >= 0 ? "Antes da divisão de custos" : "Ainda em recuperação"}
               tom={roiBruto >= 0 ? "sucesso" : "perigo"}
+              grafico={investor.total > 0 ? <ProgressBar value={recoveryPct} max={100} height={6} striped label={`${recoveryPct.toFixed(1)}% do capital recuperado`} /> : undefined}
             />
           </GradeDeKpis>
         )}
@@ -343,17 +346,22 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
             divisoria
             titulo="Recuperação do capital"
             ajuda="Quanto do total aportado já voltou pela operação, bruto. ROI bruto = receitas confirmadas menos despesas operacionais pagas, divididas pelo total aportado. Ainda não considera a divisão de custo entre sócios: esse rateio acontece numa etapa posterior."
-            acao={<span className="text-[15px] font-semibold tabular-nums text-primary">{recoveryPct.toFixed(1)}%</span>}
           >
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(recoveryPct)} aria-label="Recuperação do capital">
-              <div
-                className={juntar("h-full", returns.net >= 0 ? "bg-primary" : "bg-destructive")}
-                style={{ width: `${Math.max(2, recoveryPct)}%` }}
-              />
-            </div>
-            <div className={juntar(texto.auxiliar, "mt-1.5 flex items-center justify-between tabular-nums")}>
-              <span>R$ 0</span>
-              <span>{fmt(investor.total)}</span>
+            <div className="ds-ink rounded-lg p-5 sm:p-6">
+              <div className="flex min-w-0 items-end justify-between">
+                <span className="text-[40px] font-semibold leading-[44px] tracking-[-0.035em] tabular-nums text-foreground max-sm:text-[32px] max-sm:leading-10">{recoveryPct.toFixed(1)}%</span>
+                <span className={juntar(texto.auxiliar, "mb-1 ml-3 truncate tabular-nums")}>de {fmt(investor.total)}</span>
+              </div>
+              <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(recoveryPct)} aria-label="Recuperação do capital">
+                <div
+                  className={juntar("h-full rounded-full", returns.net >= 0 ? "bg-primary" : "bg-destructive")}
+                  style={{ width: `${Math.max(2, recoveryPct)}%` }}
+                />
+              </div>
+              <div className={juntar(texto.auxiliar, "mt-2 flex items-center justify-between tabular-nums")}>
+                <span>R$ 0</span>
+                <span>{fmt(investor.total)}</span>
+              </div>
             </div>
           </Secao>
 
@@ -363,36 +371,34 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
             titulo="Capital e retorno"
             ajuda="Aporte acumulado e retorno bruto acumulado, mês a mês, desde o primeiro aporte."
             acao={
-              <div className={juntar(texto.auxiliar, "hidden items-center sm:flex")}>
-                <span className="mr-3 flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-primary" /> Aporte</span>
-                <span className="flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-success" /> Retorno</span>
-              </div>
+              <ChartLegend className="hidden divide-y-0 sm:flex [&>li+li]:ml-5 [&>li]:py-0" items={[{ label: "Aporte", tone: 2 }, { label: "Retorno", tone: 1 }]} />
             }
           >
             <Painel>
-              <div className="h-[260px]">
+              <div className="h-[280px]">
                 <ResponsiveContainer>
                   <AreaChart data={series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="aporteGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
+                        <stop offset="0%" stopColor={grafico.cor(2)} stopOpacity={0.35} />
+                        <stop offset="100%" stopColor={grafico.cor(2)} stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="retornoGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0.05} />
+                        <stop offset="0%" stopColor={grafico.cor(1)} stopOpacity={0.35} />
+                        <stop offset="100%" stopColor={grafico.cor(1)} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
+                    <CartesianGrid {...grafico.grade} />
+                    <XAxis dataKey="label" {...grafico.eixo} />
+                    <YAxis {...grafico.eixo} width={44}
                       tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                     <Tooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                      {...grafico.dica}
+                      cursor={{ stroke: "hsl(var(--border))" }}
                       formatter={(v: any) => fmt(Number(v))}
                     />
-                    <Area type="monotone" dataKey="acumAporte" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#aporteGrad)" name="Aporte acumulado" isAnimationActive={false} />
-                    <Area type="monotone" dataKey="acumRetorno" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#retornoGrad)" name="Retorno acumulado" isAnimationActive={false} />
+                    <Area type="monotone" dataKey="acumAporte" stroke={grafico.cor(2)} strokeWidth={3} fill="url(#aporteGrad)" name="Aporte acumulado" isAnimationActive={false} />
+                    <Area type="monotone" dataKey="acumRetorno" stroke={grafico.cor(1)} strokeWidth={3} fill="url(#retornoGrad)" name="Retorno acumulado" isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -400,71 +406,77 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
           </Secao>
 
           {/* INVESTIDORES + ALOCAÇÃO */}
-          <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
             <Secao titulo="Investidores" ajuda="Participação de cada um no capital total aportado." className="lg:col-span-2">
-              <ul className="divide-y divide-border">
+              <Painel>
+              <ul className="-my-2">
                 {investor.contributors.map((c, i) => {
                   const pct = investor.total > 0 ? (c.value / investor.total) * 100 : 0;
                   return (
-                    <li key={i} className="min-w-0 py-2.5">
-                      <div className="mb-1.5 flex min-w-0 items-center">
-                        <span className="mr-3 min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{c.name}</span>
-                        <span className="mr-3 shrink-0 text-[12px] font-semibold tabular-nums text-primary">{pct.toFixed(1)}%</span>
-                        <span className="shrink-0 text-[13px] tabular-nums text-foreground">{fmt(c.value)}</span>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                    <li key={i} className="flex min-w-0 items-center py-3.5">
+                      <Avatar name={c.name} tone={i === 0 ? "solid" : "neutral"} className="mr-3" />
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-2 flex min-w-0 items-center">
+                          <span className="mr-3 min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{c.name}</span>
+                          <span className="mr-3 shrink-0 text-[12px] tabular-nums text-muted-foreground">{pct.toFixed(1)}%</span>
+                          <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{fmt(c.value)}</span>
+                        </div>
+                        <ProgressBar value={pct} max={100} height={6} tone={i === 0 ? 1 : 2} label={`${c.name}: ${pct.toFixed(1)}% do capital`} />
                       </div>
                     </li>
                   );
                 })}
               </ul>
+              </Painel>
             </Secao>
 
             <Secao titulo="Alocação" ajuda="Para onde o capital está sendo direcionado.">
               {investor.allocation.length === 0 ? (
                 <EstadoVazio compacto titulo="Sem dados." />
               ) : (
-                <>
-                  <div className="h-[160px]">
+                <Painel>
+                  <div className="relative mx-auto h-[184px] w-[184px]">
                     <ResponsiveContainer>
                       <PieChart>
-                        <Pie data={investor.allocation} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={2} isAnimationActive={false}>
+                        <Pie data={investor.allocation} dataKey="value" innerRadius={62} outerRadius={88} paddingAngle={3} cornerRadius={6} stroke="none" isAnimationActive={false}>
                           {investor.allocation.map((d, i) => <Cell key={i} fill={d.color} />)}
                         </Pie>
-                        <Tooltip formatter={(v: any) => fmt(Number(v))}
-                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }} />
+                        <Tooltip formatter={(v: any) => fmt(Number(v))} {...grafico.dica} />
                       </PieChart>
                     </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-[11px] leading-4 text-muted-foreground">Total</span>
+                      <span className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{fmtCompact(investor.allocation.reduce((a, x) => a + x.value, 0))}</span>
+                    </div>
                   </div>
-                  <ul className="mt-3 space-y-1.5">
+                  <ul className="mt-4">
                     {investor.allocation.slice(0, 5).map((c, i) => {
                       const tot = investor.allocation.reduce((a, x) => a + x.value, 0);
                       const pct = tot > 0 ? (c.value / tot) * 100 : 0;
                       return (
-                        <li key={i} className="flex min-w-0 items-center text-[12px]">
-                          <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
-                          <span className="mr-2 min-w-0 flex-1 truncate text-foreground">{c.name}</span>
-                          <span className="mr-2 shrink-0 tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
-                          <span className="shrink-0 tabular-nums text-foreground">{fmtCompact(c.value)}</span>
+                        <li key={i} className="flex min-w-0 items-center py-2 text-[13px] leading-5">
+                          <span className="mr-2.5 h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                          <span className="mr-2 min-w-0 flex-1 truncate text-muted-foreground">{c.name}</span>
+                          <span className="mr-3 shrink-0 text-[12px] tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
+                          <span className="shrink-0 font-medium tabular-nums text-foreground">{fmtCompact(c.value)}</span>
                         </li>
                       );
                     })}
                   </ul>
-                </>
+                </Painel>
               )}
             </Secao>
           </div>
 
           {/* MOVIMENTAÇÕES */}
           <Secao divisoria titulo="Histórico de aportes" descricao={`${investorEntries.length} ${investorEntries.length === 1 ? "lançamento" : "lançamentos"}`}>
-            <RegiaoRolavel memoria="financeiro:capital:aportes" rotulo="Histórico de aportes" className="lg:max-h-[60vh]">
-              <ul className="divide-y divide-border">
+            <RegiaoRolavel memoria="financeiro:capital:aportes" rotulo="Histórico de aportes" sobre="cartao" classeDeFora={juntar(superficie.painel, "overflow-hidden")} className="lg:max-h-[60vh]">
+              <ul className={listaDeLinhas}>
                 {investorEntries.map((e: any) => {
                   const cm = catMeta(e.category);
                   return (
-                    <li key={e.id} className="flex min-w-0 flex-wrap items-center py-2.5">
-                      <span className="mr-3 h-2 w-2 shrink-0 rounded-full" style={{ background: cm.color }} aria-hidden="true" />
+                    <li key={e.id} className={linhaDeLista}>
+                      <IconeDaLinha className="hidden sm:inline-flex"><span className="h-2.5 w-2.5 rounded-full" style={{ background: cm.color }} /></IconeDaLinha>
                       <div className="mr-3 min-w-0 flex-1 basis-48">
                         <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
                         <p className={juntar(texto.auxiliar, "truncate")}>
@@ -476,13 +488,14 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
                         <Etiqueta tom={e.status === "paid" ? "primario" : "aviso"} className="mr-3">
                           {e.status === "paid" ? "Aportado" : "Previsto"}
                         </Etiqueta>
-                        <span className="mr-1 text-[13px] font-semibold tabular-nums text-primary">{fmt(Number(e.amount))}</span>
-                        <button type="button" onClick={() => setModal({ data: e })} className={botao.icone} aria-label={`Editar ${e.description}`} title="Editar">
-                          <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <button type="button" onClick={() => setConfirmDel(e.id)} className={juntar(botao.icone, "hover:text-destructive")} aria-label={`Remover ${e.description}`} title="Remover">
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
+                        <span className="mr-1 text-[13px] font-semibold tabular-nums text-foreground">{fmt(Number(e.amount))}</span>
+                        <OverflowMenu
+                          label={`Mais ações de ${e.description}`}
+                          items={[
+                            { label: "Editar", icon: <Edit3 className="h-3.5 w-3.5" />, onSelect: () => setModal({ data: e }) },
+                            { label: "Remover", icon: <Trash2 className="h-3.5 w-3.5" />, danger: true, onSelect: () => setConfirmDel(e.id) },
+                          ]}
+                        />
                       </div>
                     </li>
                   );

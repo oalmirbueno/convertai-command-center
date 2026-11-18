@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Building2, ChevronDown, ChevronRight, Pencil, Star, User, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { StatusPill } from "@/components/ds";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AreaDeTrabalho,
@@ -149,7 +150,7 @@ export default function EmpresasCRM({
           )
         ) : (
           <Painel semEspaco as="section" aria-label="Fichas de empresa">
-            <ul className="divide-y divide-border">
+            <ul>
               {fichas.map((ficha) => {
                 const expandida = aberta === ficha.empresa.id;
                 return (
@@ -158,22 +159,21 @@ export default function EmpresasCRM({
                       type="button"
                       onClick={() => setAberta(expandida ? null : ficha.empresa.id)}
                       aria-expanded={expandida}
-                      className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                      className={juntar("flex w-full min-w-0 items-center px-4 py-3.5 text-left transition-colors hover:bg-muted/50 sm:px-6 sm:py-4", foco)}
                     >
-                      <Building2 className="mr-3 h-4 w-4 shrink-0 text-muted-foreground max-sm:hidden" aria-hidden="true" />
                       {/* 16/10/2026: no celular, item de lista de app (inicial num círculo). */}
                       <span
                         aria-hidden="true"
                         className={juntar(
-                          "mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold sm:hidden",
-                          ficha.abertos > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                          "mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold sm:mr-4 sm:h-11 sm:w-11",
+                          ficha.abertos > 0 ? "bg-accent-solid text-on-accent" : ficha.ganhos > 0 ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
                         )}
                       >
                         {(ficha.empresa.name.trim().charAt(0) || "?").toUpperCase()}
                       </span>
                       <span className="mr-3 min-w-0 flex-1">
-                        <span className={juntar(texto.corpo, "block truncate font-medium max-sm:text-[14px]")}>{ficha.empresa.name}</span>
-                        <span className={juntar(texto.auxiliar, "block truncate")}>
+                        <span className="block truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground max-sm:text-[14px]">{ficha.empresa.name}</span>
+                        <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
                           {[
                             ficha.empresa.segment,
                             ficha.empresa.city,
@@ -183,19 +183,20 @@ export default function EmpresasCRM({
                             .join(" · ")}
                         </span>
                       </span>
-                      <span className="mr-2 shrink-0 text-right">
-                        <span className="block text-[12px] font-medium tabular-nums text-foreground">
+                      <span className="mr-3 flex shrink-0 items-center text-right">
+                        {ficha.mrrGanho > 0 && (
+                          <span className="mr-4 block text-right max-sm:hidden">
+                            <span className="block text-[15px] font-semibold tabular-nums tracking-[-0.01em] text-foreground">{dinheiro(ficha.mrrGanho)}</span>
+                            <span className="block text-[11px] leading-4 text-muted-foreground">/mês fechado</span>
+                          </span>
+                        )}
+                        <StatusPill tone={ficha.abertos > 0 ? "accent" : ficha.ganhos > 0 ? "success" : "neutral"}>
                           {ficha.abertos > 0
                             ? `${ficha.abertos} em aberto`
                             : ficha.ganhos > 0
                               ? "cliente"
                               : "sem negócio"}
-                        </span>
-                        {ficha.mrrGanho > 0 && (
-                          <span className="block text-[11px] tabular-nums text-success max-sm:hidden">
-                            {dinheiro(ficha.mrrGanho)}/mês fechado
-                          </span>
-                        )}
+                        </StatusPill>
                       </span>
                       {expandida ? (
                         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -205,7 +206,7 @@ export default function EmpresasCRM({
                     </button>
 
                     {expandida && (
-                      <div className="grid min-w-0 gap-5 border-t border-border px-4 pb-4 pt-3 lg:grid-cols-3">
+                      <div className="mx-3 mb-4 grid min-w-0 gap-6 rounded-md bg-muted/60 p-4 sm:mx-6 sm:p-5 lg:grid-cols-3">
                         {/* A ficha em si: o que se sabe da empresa, em campos. */}
                         <div className="min-w-0">
                           <Subtitulo
@@ -257,9 +258,9 @@ export default function EmpresasCRM({
                           {ficha.contatos.length === 0 ? (
                             <p className={texto.auxiliar}>Nenhuma pessoa cadastrada.</p>
                           ) : (
-                            <ul className="divide-y divide-border">
+                            <ul>
                               {ficha.contatos.map((contato) => (
-                                <li key={contato.id} className="flex min-w-0 items-center py-1.5">
+                                <li key={contato.id} className="flex min-w-0 items-center py-2">
                                   <User className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                                   <span className="min-w-0 flex-1">
                                     <span className={juntar(texto.corpo, "flex min-w-0 items-center font-medium")}>
@@ -283,13 +284,13 @@ export default function EmpresasCRM({
                           {ficha.negocios.length === 0 ? (
                             <p className={texto.auxiliar}>Nenhum negócio ainda.</p>
                           ) : (
-                            <ul className="divide-y divide-border">
+                            <ul>
                               {ficha.negocios.map((negocio) => (
                                 <li key={negocio.id} className="min-w-0">
                                   <button
                                     type="button"
                                     onClick={() => onAbrirLead(negocio)}
-                                    className={juntar("flex w-full min-w-0 items-center rounded-sm py-1.5 text-left transition-colors hover:bg-muted/40", foco)}
+                                    className={juntar("flex w-full min-w-0 items-center rounded-sm py-2 text-left transition-colors hover:bg-muted/40", foco)}
                                   >
                                     <span className="mr-2 min-w-0 flex-1">
                                       <span className={juntar(texto.corpo, "block truncate font-medium")}>{negocio.name}</span>
@@ -302,11 +303,12 @@ export default function EmpresasCRM({
                                     <span
                                       className={juntar(
                                         etiqueta,
+                                        "h-6 px-2.5",
                                         negocio.stage === "ganho"
-                                          ? "bg-success/15 text-success"
+                                          ? "bg-success-soft text-success"
                                           : negocio.stage === "perdido"
-                                            ? "bg-destructive/10 text-destructive"
-                                            : "bg-muted text-muted-foreground",
+                                            ? "bg-danger-soft text-destructive"
+                                            : "bg-card text-muted-foreground",
                                       )}
                                     >
                                       {negocio.stage === "ganho" ? "ganho" : negocio.stage === "perdido" ? "perdido" : "aberto"}

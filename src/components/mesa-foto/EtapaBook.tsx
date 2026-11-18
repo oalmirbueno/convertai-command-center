@@ -327,10 +327,10 @@ function ArsenalDePrompts({ aberto, paraODiretor, onParaODiretor }: { aberto: Bo
                   {i.titulo}
                 </span>
                 <span className="mt-0.5 flex flex-wrap">
-                  <button type="button" className={juntar("mr-2 rounded text-[11px] font-medium text-primary hover:underline", foco)} onClick={() => porNaFila(i)}>
+                  <button type="button" className={juntar("mr-2 rounded-sm text-[11px] font-medium text-primary hover:underline", foco)} onClick={() => porNaFila(i)}>
                     Pôr na fila
                   </button>
-                  <button type="button" aria-pressed={marcado} className={juntar("rounded text-[11px] text-muted-foreground hover:text-foreground", foco)} onClick={() => onParaODiretor(marcado ? paraODiretor.filter((x) => x !== i.id) : paraODiretor.concat([i.id]).slice(-8))}>
+                  <button type="button" aria-pressed={marcado} className={juntar("rounded-sm text-[11px] text-muted-foreground hover:text-foreground", foco)} onClick={() => onParaODiretor(marcado ? paraODiretor.filter((x) => x !== i.id) : paraODiretor.concat([i.id]).slice(-8))}>
                     {marcado ? "tirar do diretor" : "mandar ao diretor"}
                   </button>
                 </span>
@@ -388,7 +388,7 @@ function DiretorDoBook({ aberto, paraODiretor, onLimpar }: { aberto: BookAberto;
               <span className="truncate">{i.titulo}</span>
             </span>
           ))}
-          <button type="button" className={juntar("mb-1 rounded text-[11px] text-muted-foreground hover:text-foreground", foco)} onClick={onLimpar}>
+          <button type="button" className={juntar("mb-1 rounded-sm text-[11px] text-muted-foreground hover:text-foreground", foco)} onClick={onLimpar}>
             limpar
           </button>
         </div>
@@ -491,7 +491,7 @@ function FilaDePedidos({ aberto }: { aberto: BookAberto }) {
                           key={r.id}
                           type="button"
                           aria-pressed={usa}
-                          className={juntar("mb-1 mr-1 max-w-[140px] truncate rounded-full border px-2 py-px", usa ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground", foco)}
+                          className={juntar("mb-1 mr-1 max-w-[140px] truncate rounded-full border px-2 py-px", usa ? "border-primary bg-accent-soft text-primary" : "border-border text-muted-foreground", foco)}
                           onClick={() => mudar(p.id, { referencias: usa ? p.referencias.filter((x) => x !== r.id) : p.referencias.concat([r.id]).slice(-MAX_ESTILO_POR_FOTO) })}
                         >
                           {r.titulo}
@@ -605,7 +605,7 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               </button>
             </div>
             <div className="flex min-w-0 flex-wrap items-center">
-              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (noBook(fotoAberta.id)) && "bg-primary/10 text-primary")} type="button" onClick={() => alternar(fotoAberta.id)} aria-label={noBook(fotoAberta.id) ? "No book" : "Pôr no book"} title={noBook(fotoAberta.id) ? "No book" : "Pôr no book"}>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (noBook(fotoAberta.id)) && "bg-accent-soft text-primary")} type="button" onClick={() => alternar(fotoAberta.id)} aria-label={noBook(fotoAberta.id) ? "No book" : "Pôr no book"} title={noBook(fotoAberta.id) ? "No book" : "Pôr no book"}>
                 <BookImage className="h-4 w-4" aria-hidden="true" />
               </button>
               <AprovarFoto foto={fotoAberta} onMudou={mudou} />
@@ -651,7 +651,7 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               <button type="button" className={juntar("block w-full rounded-lg", foco)} onClick={() => setAberta(f.id)} aria-label={`Abrir ${f.nome}`}>
                 <MiniaturaDaFoto foto={f} />
               </button>
-              <button type="button" onClick={() => setAmpliada(i)} aria-label={`Ver grande ${f.nome}`} className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm">
+              <button type="button" onClick={() => setAmpliada(i)} aria-label={`Ver grande ${f.nome}`} className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-card">
                 <Maximize2 className="h-3 w-3" />
               </button>
             </div>
@@ -661,7 +661,7 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               onClick={() => alternar(f.id)}
               aria-label={noBook(f.id) ? "No book" : "Pôr no book"}
               title={noBook(f.id) ? "No book (toque para tirar)" : "Pôr no book"}
-              className={juntar(botao.icone, "mt-1 w-full", noBook(f.id) && "bg-primary/10 text-primary")}
+              className={juntar(botao.icone, "mt-1 w-full", noBook(f.id) && "bg-accent-soft text-primary")}
             >
               {/* 16/10/2026: só o ícone; ligado fica na cor da marca. */}
               {noBook(f.id) ? <Check className="h-4 w-4" aria-hidden="true" /> : <BookImage className="h-4 w-4" aria-hidden="true" />}
@@ -1133,7 +1133,7 @@ function DiretorDoPlano({ onCriado }: { onCriado: (b: Book) => void }) {
                   <div className="flex min-w-0 items-center">
                     <span className="mr-1.5 w-5 shrink-0 text-center text-[11px] font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
                     <Input value={t.titulo} onChange={(e) => mudarTomada(t.id, { titulo: e.target.value })} aria-label={`Título da foto ${i + 1}`} className="mr-1.5 h-8 min-w-0 flex-1 text-[13px] font-medium" />
-                    <button type="button" className={juntar("mr-1 shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground", foco)} aria-expanded={aberta === t.id} onClick={() => setAberta(aberta === t.id ? null : t.id)}>
+                    <button type="button" className={juntar("mr-1 shrink-0 rounded-sm px-1 text-[11px] text-muted-foreground hover:text-foreground", foco)} aria-expanded={aberta === t.id} onClick={() => setAberta(aberta === t.id ? null : t.id)}>
                       prompt
                     </button>
                     <button type="button" aria-label={`Tirar a foto ${i + 1}`} className={botao.icone} onClick={() => setTomadas(tomadas.filter((x) => x.id !== t.id))}>

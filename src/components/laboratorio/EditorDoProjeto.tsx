@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, ArrowLeft, BookmarkPlus, Check, CircleStop, Copy, Fullscreen, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, PanelTopOpen, Play, RefreshCw, Trash2, Workflow } from "lucide-react";
+import { Archive, ArrowLeft, BookmarkPlus, Check, CircleStop, Copy, Fullscreen, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, PanelTopOpen, Play, RefreshCw, Sparkles, Trash2, Wand2, Workflow } from "lucide-react";
 import { Carregando, EstadoDeErro, JanelaCentral, MenuMais, botao, campo, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,6 +59,7 @@ import {
 } from "@/lib/laboratorio/nos";
 import QuadroDoLab from "./QuadroDoLab";
 import Paleta from "./Paleta";
+import { HACHURA, botaoEmCirculo } from "./visual";
 import Inspetor from "./Inspetor";
 import ModoListaDoLab from "./ModoListaDoLab";
 import AgenteDoProjeto from "./AgenteDoProjeto";
@@ -189,9 +190,11 @@ interface PropsDoEditor {
   /** Tela cheia vinda da página (todas as abas); sem isso, o editor guarda a sua. */
   telaCheia?: boolean;
   onTelaCheia?: (v: boolean) => void;
+  /** O chip de créditos do Laboratório: com o projeto aberto ele mora na barra do editor. */
+  creditos?: ReactNode;
 }
 
-function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTelaCheia }: PropsDoEditor) {
+function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTelaCheia, creditos }: PropsDoEditor) {
   const queryClient = useQueryClient();
   const q = useQuery({ queryKey: ["laboratorio", "projeto", projetoId], queryFn: () => lerProjeto(projetoId), staleTime: 0, gcTime: 0 });
 
@@ -224,7 +227,15 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   const [escolhendo, setEscolhendo] = useState<{ no: string; indice: number } | null>(null);
   const [lista, setLista] = useState<boolean>(() => typeof window !== "undefined" && (window.innerWidth || 1024) < 768);
   const [largo, setLargo] = useState<boolean>(() => typeof window === "undefined" || (window.innerWidth || 1024) >= 1024);
-  const [agente, setAgente] = useState<boolean>(() => typeof window === "undefined" || (window.innerWidth || 1024) >= 1280);
+  // Passada estrutural (15/11/2026): no computador o agente é uma aba do painel lateral (a outra é "Criar", o
+  // Canvas Studio, que abre primeiro); no celular segue numa janela. Depois de aberto, a conversa não se perde ao trocar de aba.
+  const [agente, setAgenteCru] = useState<boolean>(false);
+  const [agenteMontado, setAgenteMontado] = useState(false);
+  const setAgente = useCallback((v: boolean) => {
+    setAgenteCru(v);
+    if (v) setAgenteMontado(true);
+  }, []);
+  const [painelAberto, setPainelAberto] = useEstadoDaTela<boolean>("laboratorio:painel-lateral", true, { validar: (v) => typeof v === "boolean" });
   const [salvarComo, setSalvarComo] = useState<string | null>(null);
   /** Janela "Duplicar para outro cliente": null fechada; "" é Livre; senão o id do cliente. */
   const [duplicarPara, setDuplicarPara] = useState<string | null>(null);
@@ -847,14 +858,21 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
       projetoId={projetoId}
       antesDePlanejar={garantirSalvo}
       onAplicar={aplicarDoAgente}
-      semMoldura={!largo}
+      semMoldura
       registro={registro}
     />
   );
 
+  // Computador: grade de duas colunas (o quadro e o painel lateral com Criar e Agente). A etapa das
+  // perguntas toma a largura toda; o "só o canvas" esconde tudo menos o quadro.
+  const comPainel = largo && !soCanvas;
+  const painelVisivel = comPainel && (painelAberto || etapa);
+  const duasColunas = painelVisivel && !etapa;
   const sairDoSoCanvas = () => setSoCanvas(false);
   const abrirStudio = () => {
     setStudioRecolhido(false);
+    setPainelAberto(true);
+    setAgenteCru(false);
     setSoCanvas(false);
   };
 
@@ -863,22 +881,35 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     // 24 px para baixo, com o cabeçalho do Laboratório aparecendo por cima ("uma bordinha").
     <ProvedorDasPrevias canvas={canvas} execucoes={Object.values(execucoes)}>
     <div
-      className={juntar("min-w-0", cobre && "fixed inset-0 z-40 !m-0 flex flex-col bg-background")}
+      className={juntar(
+        "min-w-0",
+        cobre && "fixed inset-0 z-40 !m-0 bg-background",
+        cobre && !comPainel && "flex flex-col",
+        comPainel && "grid gap-x-3",
+        comPainel && (duasColunas ? "grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_364px]" : "grid-cols-1"),
+        comPainel && cobre && "grid-rows-[auto_minmax(0,1fr)]",
+      )}
       style={cobre ? AREA_SEGURA : undefined}
       data-editor-do-projeto={projetoId}
       data-tela-cheia-do-editor={cheia ? "" : undefined}
       data-so-canvas={soCanvas ? "" : undefined}
     >
-      {/* Topo: a barra e o Canvas Studio (a altura do canvas acompanha o tamanho daqui). Some no "só o canvas". */}
-      <div ref={refDoTopo} className={juntar("min-w-0", soCanvas && "hidden", cheia && "px-3 pt-2", cobre && etapa && "min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3")} data-topo-do-editor="">
-      <div className="mb-2 flex min-w-0 flex-wrap items-center" data-barra-do-editor="">
-        <button type="button" className={juntar(botao.icone, "mr-1")} onClick={onVoltar} aria-label="Voltar aos projetos" title="Voltar aos projetos">
+      {/* Topo: a barra e, no celular, o Canvas Studio. No computador ele não tem caixa própria (os filhos entram na grade). Some no "só o canvas". */}
+      <div ref={refDoTopo} className={juntar("min-w-0", soCanvas ? "hidden" : comPainel && "contents", !comPainel && cheia && "px-3 pt-2", !comPainel && cobre && etapa && "min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3")} data-topo-do-editor="">
+      {/*
+        Barra do editor (passada estrutural, 15/11/2026): sem faixa de cartão. À esquerda, voltar em círculo, o
+        nome e o estado do salvar; à direita, as vistas numa pílula só, os créditos e "Rodar tudo", a única ação
+        cheia (verde com texto escuro); o resto mora no "…". No celular são duas linhas arrumadas.
+      */}
+      <div className={juntar("mb-3 flex min-w-0 flex-wrap items-center", comPainel && "col-span-full row-start-1", comPainel && cheia && "mx-3 mt-2")} data-barra-do-editor="">
+        <div className="order-1 flex min-w-0 flex-1 items-center">
+        <button type="button" className={juntar(botaoEmCirculo, "mr-2 h-10 w-10 bg-card shadow-card hover:bg-muted")} onClick={onVoltar} aria-label="Voltar aos projetos" title="Voltar aos projetos">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </button>
         <input
           aria-label="Nome do projeto"
           title={nome}
-          className={juntar(campo, "mr-2 h-8 w-auto min-w-[96px] max-w-[260px] flex-1 truncate border-transparent bg-transparent px-1.5 text-[15px] font-semibold hover:border-input")}
+          className={juntar(campo, "mr-2 h-10 w-auto min-w-[96px] max-w-[420px] flex-1 truncate rounded-full border-transparent bg-transparent px-2.5 text-[18px] font-medium tracking-[-0.01em] hover:border-input sm:text-[20px]")}
           value={nome}
           onChange={(e) => {
             setNome(e.target.value);
@@ -886,10 +917,10 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
             setSalvar((s) => (s.estado === "conflito" ? s : { estado: "pendente", erro: "" }));
           }}
         />
-        {/* Celular (< 640): "Salvo"/"Salvando" só no ícone (nome no title); aviso de erro ou conflito continua com texto. */}
-        <span role="status" className={juntar(texto.auxiliar, "mr-2 inline-flex shrink-0 items-center", (salvar.estado === "erro" || salvar.estado === "conflito") && "text-warning")} data-estado-do-salvar={salvar.estado} title={salvar.erro || rotuloDoSalvar}>
-          {salvar.estado === "salvando" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> : salvar.estado === "salvo" ? <Check className="mr-1 h-3 w-3" aria-hidden="true" /> : null}
-          <span className={salvar.estado === "salvo" || salvar.estado === "salvando" ? "sr-only sm:not-sr-only" : undefined}>{rotuloDoSalvar}</span>
+        {/* "Salvo"/"Salvando" só no ícone (nome no title); aviso de erro ou conflito continua com texto. */}
+        <span role="status" className={juntar("mr-2 inline-flex h-6 shrink-0 items-center rounded-full px-1.5 text-[11px] font-medium leading-none", salvar.estado === "erro" || salvar.estado === "conflito" ? "bg-warning-soft text-warning" : "text-muted-foreground")} data-estado-do-salvar={salvar.estado} title={salvar.erro || rotuloDoSalvar}>
+          {salvar.estado === "salvando" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : salvar.estado === "salvo" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+          <span className={salvar.estado === "salvo" || salvar.estado === "salvando" ? "sr-only" : undefined}>{rotuloDoSalvar}</span>
         </span>
         {salvar.estado === "conflito" && (
           <button type="button" className={juntar(botao.secundario, "mr-2 h-8")} onClick={() => void recarregar()} data-recarregar-projeto="">
@@ -902,28 +933,40 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
             Tentar salvar
           </button>
         )}
-        {/* No celular o nome ocupa a sobra (sem espaçador); de 640 para cima o espaçador empurra as ações. */}
-        <span className="hidden flex-1 sm:block" />
-        {projeto ? <ExportarProjeto projeto={{ ...projeto, nome, client_id: clienteDoProjeto }} canvas={canvas} execucoes={Object.values(execucoes)} clienteNome={nomeDoCliente(clientes, clienteDoProjeto)} disabled={rodando} /> : null}
-        {/* Celular (< 640): só ícone, nome no title; o nome do projeto fica visível ao lado. */}
-        <button type="button" className={juntar(botao.primario, "h-8 w-8 shrink-0 px-0 sm:w-auto sm:px-3")} onClick={() => void pedirCusto({ tipo: "tudo" })} disabled={!!estimando || rodando || !canvas.nos.length} aria-label="Rodar tudo" title="Rodar tudo (mostra o custo antes)" data-rodar-tudo="">
-          {estimando === "tudo" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" aria-hidden="true" /> : <Play className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />}
-          <span className="hidden sm:inline">Rodar tudo</span>
-        </button>
-        <button type="button" className={juntar(botao.icone, "ml-1", agente && "text-primary")} onClick={() => setAgente(!agente)} aria-label={agente ? "Fechar o agente do projeto" : "Abrir o agente do projeto"} title="Agente do projeto" aria-pressed={agente}>
-          {agente ? <PanelRightClose className="h-4 w-4" aria-hidden="true" /> : <PanelRightOpen className="h-4 w-4" aria-hidden="true" />}
-        </button>
-        <button type="button" className={botao.icone} onClick={() => setLista(!lista)} aria-label={lista ? "Ver o quadro" : "Modo lista"} title={lista ? "Ver o quadro" : "Modo lista"}>
+        </div>
+        <div className="order-3 mt-2 flex w-full min-w-0 items-center sm:order-2 sm:mt-0 sm:w-auto">
+        <div className="inline-flex shrink-0 items-center rounded-full bg-card p-1 shadow-card" role="group" aria-label="Vistas do projeto">
+        {largo ? null : (
+          <button type="button" className={juntar(botao.icone, "h-8 w-8", agente && "bg-foreground text-background hover:bg-foreground/85 hover:text-background")} onClick={() => setAgente(!agente)} aria-label={agente ? "Fechar o agente do projeto" : "Abrir o agente do projeto"} title="Agente do projeto" aria-pressed={agente}>
+            {agente ? <PanelRightClose className="h-4 w-4" aria-hidden="true" /> : <PanelRightOpen className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        )}
+        <button type="button" className={juntar(botao.icone, "h-8 w-8", lista && "bg-foreground text-background hover:bg-foreground/85 hover:text-background")} onClick={() => setLista(!lista)} aria-label={lista ? "Ver o quadro" : "Modo lista"} title={lista ? "Ver o quadro" : "Modo lista"}>
           {lista ? <Workflow className="h-4 w-4" aria-hidden="true" /> : <LayoutList className="h-4 w-4" aria-hidden="true" />}
         </button>
-        <button type="button" className={botao.icone} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia}>
+        <button type="button" className={juntar(botao.icone, "h-8 w-8", cheia && "bg-foreground text-background hover:bg-foreground/85 hover:text-background")} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia}>
           {cheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
         </button>
         {!lista && !etapa ? (
-          <button type="button" className={botao.icone} onClick={() => setSoCanvas(true)} aria-label="Canvas em tela cheia" title="Canvas em tela cheia: só o quadro, de ponta a ponta (Esc sai)" data-botao-so-canvas="">
+          <button type="button" className={juntar(botao.icone, "h-8 w-8")} onClick={() => setSoCanvas(true)} aria-label="Canvas em tela cheia" title="Canvas em tela cheia: só o quadro, de ponta a ponta (Esc sai)" data-botao-so-canvas="">
             <Fullscreen className="h-4 w-4" aria-hidden="true" />
           </button>
         ) : null}
+        {projeto ? <ExportarProjeto projeto={{ ...projeto, nome, client_id: clienteDoProjeto }} canvas={canvas} execucoes={Object.values(execucoes)} clienteNome={nomeDoCliente(clientes, clienteDoProjeto)} disabled={rodando} /> : null}
+        {largo && !etapa ? (
+          <button type="button" className={juntar(botao.icone, "h-8 w-8", painelAberto && "bg-foreground text-background hover:bg-foreground/85 hover:text-background")} onClick={() => setPainelAberto(!painelAberto)} aria-label={painelAberto ? "Recolher o painel lateral" : "Abrir o painel lateral"} title={painelAberto ? "Recolher o painel lateral" : "Abrir o painel lateral (Criar e Agente)"} aria-pressed={painelAberto} data-painel-lateral-botao="">
+            {painelAberto ? <PanelRightClose className="h-4 w-4" aria-hidden="true" /> : <PanelRightOpen className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        ) : null}
+        </div>
+        <span className="min-w-2 flex-1 sm:w-2 sm:flex-none" />
+        {creditos}
+        <button type="button" className={juntar(botao.primario, "ml-2 h-10 shrink-0 px-3 font-semibold sm:pl-3.5 sm:pr-5")} onClick={() => void pedirCusto({ tipo: "tudo" })} disabled={!!estimando || rodando || !canvas.nos.length} aria-label="Rodar tudo" title="Rodar tudo (mostra o custo antes)" data-rodar-tudo="">
+          {estimando === "tudo" ? <Loader2 className="h-4 w-4 animate-spin sm:mr-2" aria-hidden="true" /> : <Play className="h-4 w-4 fill-current sm:mr-2" aria-hidden="true" />}
+          <span className="hidden sm:inline">Rodar tudo</span>
+        </button>
+        </div>
+        <div className="order-2 ml-2 shrink-0 sm:order-3">
         <MenuMais
           rotulo="Mais ações do projeto"
           itens={[
@@ -948,41 +991,76 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
             { rotulo: "Excluir projeto", icone: <Trash2 className="h-4 w-4" />, perigo: true, aoEscolher: () => setExcluir(true) },
           ]}
         />
+        </div>
       </div>
 
-      <FaixaDaCampanha projetoId={projetoId} clienteId={clienteDoProjeto} antesDeChamar={garantirSalvo} aoMudarCanvas={() => void recarregarDaPonte()} />
-
-      <CanvasStudio
-        projetoId={projetoId}
-        nosNoQuadro={canvas.nos.length}
-        clienteId={clienteDoProjeto}
-        clientes={clientesDoSeletor}
-        onCliente={mudarCliente}
-        antesDePlanejar={garantirSalvo}
-        onConstruir={construirDoStudio}
-        onGerar={async (ids) => {
-          if (!ids.length) { toast.info("Quadro atualizado", { description: "Os conteúdos prontos foram preservados. Use Gerar no nó para criar uma nova versão." }); return; }
-          await pedirCusto({ tipo: "lista", ids, titulo: "Gerar os conteúdos do pedido" });
-        }}
-        onDesfazer={antesDaConstrucao ? desfazerConstrucao : null}
-        onConversa={(pedido, resposta) => setRegistro({ id: String(Date.now()), pedido, resposta })}
-        recolhido={studioRecolhido}
-        onRecolher={setStudioRecolhido}
-        onEtapa={setEtapa}
-      />
+      {/*
+        Painel lateral (computador), como o das referências: um cartão com duas abas, "Criar" (a caixa do Canvas
+        Studio, os atalhos em lista e a campanha) e "Agente". Recolhe pelo botão da barra. No celular é só o
+        Studio e a campanha acima da lista. Com a etapa das perguntas aberta, ocupa a largura toda.
+      */}
+      <aside
+        className={juntar(
+          "min-w-0",
+          comPainel && !etapa && "col-start-2 row-start-2 flex flex-col overflow-hidden rounded-[28px] bg-card shadow-card",
+          comPainel && !etapa && cobre && "mb-3 mr-3 min-h-0",
+          comPainel && etapa && juntar("col-span-full", cobre && "min-h-0 overflow-y-auto overscroll-contain px-3 pb-3"),
+          comPainel && !painelVisivel && "hidden",
+        )}
+        style={comPainel && !etapa && !cobre ? { height: altura } : undefined}
+        aria-label="Criar e agente do projeto"
+        data-painel-lateral-do-editor=""
+      >
+        {comPainel && !etapa ? (
+          <div className="flex shrink-0 items-center p-2.5 pb-1">
+            <div className="flex min-w-0 flex-1 rounded-full bg-muted p-1" role="group" aria-label="Abas do painel lateral">
+              <button type="button" className={juntar("inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-full text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", agente ? "text-muted-foreground hover:text-foreground" : "bg-primary text-primary-foreground")} onClick={() => setAgente(false)} aria-pressed={!agente} aria-label="Aba Criar" data-aba-do-painel="criar">
+                <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Criar
+              </button>
+              <button type="button" className={juntar("inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-full text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", agente ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setAgente(!agente)} aria-pressed={agente} aria-label={agente ? "Fechar o agente do projeto" : "Abrir o agente do projeto"} title="Agente do projeto" data-aba-do-painel="agente">
+                <Wand2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Agente
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <div className={juntar("min-w-0", comPainel && !etapa && juntar("min-h-0 flex-1 overflow-y-auto overscroll-contain p-2.5 [scrollbar-width:thin]", agente && "hidden"))} data-aba-criar="">
+          <CanvasStudio
+            projetoId={projetoId}
+            nosNoQuadro={canvas.nos.length}
+            clienteId={clienteDoProjeto}
+            clientes={clientesDoSeletor}
+            onCliente={mudarCliente}
+            antesDePlanejar={garantirSalvo}
+            onConstruir={construirDoStudio}
+            onGerar={async (ids) => {
+              if (!ids.length) { toast.info("Quadro atualizado", { description: "Os conteúdos prontos foram preservados. Use Gerar no nó para criar uma nova versão." }); return; }
+              await pedirCusto({ tipo: "lista", ids, titulo: "Gerar os conteúdos do pedido" });
+            }}
+            onDesfazer={antesDaConstrucao ? desfazerConstrucao : null}
+            onConversa={(pedido, resposta) => setRegistro({ id: String(Date.now()), pedido, resposta })}
+            recolhido={studioRecolhido}
+            onRecolher={setStudioRecolhido}
+            onEtapa={setEtapa}
+            painel={comPainel && !etapa}
+          />
+          <div className={juntar(etapa && "hidden", comPainel && "mt-3")}>
+            <FaixaDaCampanha projetoId={projetoId} clienteId={clienteDoProjeto} antesDeChamar={garantirSalvo} aoMudarCanvas={() => void recarregarDaPonte()} />
+          </div>
+        </div>
+        {comPainel && agenteMontado ? <div className={juntar("min-h-0 flex-1", (!agente || etapa) && "hidden")}>{painelDoAgente}</div> : null}
+      </aside>
       </div>
 
       {/* Perguntas primeiro: com a etapa aberta no Studio, o quadro sai (nada de canvas espremido embaixo). */}
       {etapa ? null : lista ? (
-        <ModoListaDoLab canvas={canvas} execucoes={execucoes} selecionado={selecionado} onSelecionar={setSelecionado} onPor={(t) => por(t)} inspetor={inspetor} travas={motivosDasTravas} />
+        <div className={juntar("min-w-0", comPainel && "col-start-1 row-start-2", comPainel && cobre && "min-h-0 overflow-y-auto overscroll-contain pb-3 pl-3", comPainel && cobre && !duasColunas && "pr-3")}>
+          <ModoListaDoLab canvas={canvas} execucoes={execucoes} selecionado={selecionado} onSelecionar={setSelecionado} onPor={(t) => por(t)} inspetor={inspetor} travas={motivosDasTravas} />
+        </div>
       ) : (
-        <div ref={refDoCorpo} className={juntar("relative flex min-w-0", cobre && "min-h-0 flex-1", cheia && !soCanvas && "px-3 pb-3")} style={cobre ? undefined : { height: altura }} data-corpo-do-editor="">
-          {soCanvas ? null : (
-            <div className="mr-2 flex shrink-0 flex-col border-r border-border pr-1">
-              <Paleta onPor={(t) => por(t)} />
-            </div>
-          )}
-          <div className={juntar("relative min-w-0 flex-1 overflow-hidden", !soCanvas && "rounded-md border border-border")} data-area-do-quadro="">
+        <div ref={refDoCorpo} className={juntar("relative flex min-w-0", comPainel && "col-start-1 row-start-2", cobre && "min-h-0 flex-1", cheia && !soCanvas && (duasColunas ? "pb-3 pl-3" : "px-3 pb-3"))} style={cobre ? undefined : { height: altura }} data-corpo-do-editor="">
+          <div className={juntar("relative min-w-0 flex-1 overflow-hidden", !soCanvas && "rounded-[28px] bg-card shadow-card")} data-area-do-quadro="">
             <QuadroDoLab
               canvas={canvas}
               execucoes={execucoes}
@@ -1014,22 +1092,34 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               onRodarAutomatico={rodarAutomatico}
               onNovaExecucao={aoNovaExecucao}
             />
+            {/* A paleta flutua dentro do quadro, à esquerda, como a coluna de círculos das referências. */}
+            {soCanvas ? null : (
+              <div className="pointer-events-none absolute bottom-[68px] left-3 top-3 z-[5] flex flex-col" data-paleta-flutuante="">
+                <Paleta onPor={(t) => por(t)} />
+              </div>
+            )}
             {!canvas.nos.length && (
-              <p className={juntar(texto.auxiliar, "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center")}>Peça no Canvas Studio acima, toque num ícone da paleta ou fale com o agente do projeto.</p>
+              <div className="pointer-events-none absolute left-1/2 top-1/2 w-[84%] max-w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-[24px] px-6 py-8 text-center" style={HACHURA} data-quadro-vazio="">
+                <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-card" aria-hidden="true">
+                  <Workflow className="h-5 w-5" />
+                </span>
+                <p className="text-[15px] font-semibold leading-5 text-foreground">Quadro vazio</p>
+                <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>{comPainel ? "Peça em Criar, ao lado, ou toque num círculo da paleta." : "Peça no Canvas Studio acima, toque num ícone da paleta ou fale com o agente do projeto."}</p>
+              </div>
             )}
             {avisoDoQuadro && (
-              <p role="alert" className={juntar(texto.corpo, "absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-md border border-warning/40 bg-background px-3 py-2 text-warning")} data-aviso-do-quadro="">
+              <p role="alert" className={juntar(texto.corpo, "absolute bottom-16 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-full bg-warning-soft px-4 py-2 text-warning shadow-pop")} data-aviso-do-quadro="">
                 {avisoDoQuadro}
               </p>
             )}
             {inspetor && detalhes && (
-              <div className="nowheel nodrag nopan absolute bottom-2 right-2 top-2 z-10 w-[300px] max-w-[85%] overflow-y-auto overscroll-contain rounded-md border border-border bg-background p-3 shadow-sm" data-painel-do-inspetor="">
+              <div className="nowheel nodrag nopan absolute bottom-2 right-2 top-2 z-10 w-[320px] max-w-[85%] overflow-y-auto overscroll-contain rounded-[22px] bg-card p-4 shadow-pop" data-painel-do-inspetor="">
                 {inspetor}
               </div>
             )}
             {soCanvas && (
               // Mini barra flutuante do "só o canvas": sair, abrir o Studio e Rodar tudo.
-              <div className="nowheel nodrag nopan absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center rounded-lg border border-border bg-background p-1 shadow-sm" role="toolbar" aria-label="Barra do canvas em tela cheia" data-mini-barra-do-canvas="">
+              <div className="nowheel nodrag nopan absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center rounded-full bg-popover p-1 shadow-pop" role="toolbar" aria-label="Barra do canvas em tela cheia" data-mini-barra-do-canvas="">
                 <button type="button" className={botao.icone} onClick={sairDoSoCanvas} aria-label="Sair do canvas em tela cheia" title="Sair do canvas em tela cheia (Esc)">
                   <Minimize2 className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -1042,7 +1132,6 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               </div>
             )}
           </div>
-          {agente && largo && !soCanvas && <div className="ml-3 w-[340px] shrink-0">{painelDoAgente}</div>}
         </div>
       )}
 

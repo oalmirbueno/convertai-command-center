@@ -19,11 +19,11 @@ describe("Fala do executivo", () => {
 });
 
 describe("Fechamento pelo Asaas", () => {
-  it("o valor vem da tabela: entrada mais a primeira mensalidade", () => {
-    expect(valorDoFechamento(planoPorId("start_assistido")!)).toBe(1244);
-    expect(valorDoFechamento(planoPorId("crescimento")!)).toBe(3994);
-    expect(valorDoFechamento(planoPorId("crescimento")!, true)).toBe(4291);
-    expect(valorDoFechamento(planoPorId("start_assistido")!, false, true)).toBe(1116.95);
+  it("o valor vem da tabela: só a primeira mensalidade, adiantada (não existe entrada)", () => {
+    expect(valorDoFechamento(planoPorId("start_assistido")!)).toBe(847);
+    expect(valorDoFechamento(planoPorId("crescimento")!)).toBe(2997);
+    expect(valorDoFechamento(planoPorId("crescimento")!, true)).toBe(3294);
+    expect(valorDoFechamento(planoPorId("start_assistido")!, false, true)).toBe(719.95);
     expect(valorDoFechamento(planoPorId("google_avulso")!, false, true)).toBe(297);
     expect(planoPorId("inventado")).toBeNull();
   });

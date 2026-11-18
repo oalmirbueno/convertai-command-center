@@ -90,7 +90,7 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
 
   return (
     <div className="min-w-0 space-y-3" data-outra-rede={rede}>
-      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
         <div className="min-w-0 rounded-md bg-success/5 px-3 py-2">
           <p className="text-[13px] font-medium text-foreground">O que dá para fazer hoje</p>
           <ul className="mt-1 space-y-0.5 text-[13px] leading-5 text-foreground">
@@ -126,7 +126,7 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
           {conectadas.map((c, i) => (
             <li key={`c-${i}`} className="flex min-w-0 items-center text-[13px]">
               <span className="min-w-0 truncate">{c.endereco || "Conta conectada"}</span>
-              <span className={juntar(etiqueta, "ml-2 bg-success/15 text-success")}>conectada</span>
+              <span className={juntar(etiqueta, "ml-2 bg-success-soft text-success")}>conectada</span>
             </li>
           ))}
           {adicionadas.map((c) => (

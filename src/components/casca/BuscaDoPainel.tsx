@@ -61,8 +61,8 @@ export default function BuscaDoPainel({
   return (
     <CommandDialog open={aberto} onOpenChange={onAbertoChange}>
       <CommandInput placeholder="Ir para uma página..." aria-label="Buscar página" />
-      <CommandList>
-        <CommandEmpty>Nenhuma página com esse nome.</CommandEmpty>
+      <CommandList className="max-h-[420px] pb-1">
+        <CommandEmpty className="py-8 text-center text-[13px] text-muted-foreground">Nenhuma página com esse nome.</CommandEmpty>
         {grupos.map((grupo) => (
           <CommandGroup key={grupo} heading={grupo}>
             {paginas
@@ -75,9 +75,9 @@ export default function BuscaDoPainel({
                     onAbertoChange(false);
                     navigate(p.url);
                   }}
-                  className="text-[13px]"
+                  className="rounded-md text-[13px] data-[selected=true]:!bg-muted data-[selected=true]:!text-foreground"
                 >
-                  <p.icon className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <p.icon className="mr-2.5 !h-4 !w-4 shrink-0 text-muted-foreground" />
                   {p.title}
                 </CommandItem>
               ))}

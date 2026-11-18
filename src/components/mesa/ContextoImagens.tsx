@@ -144,7 +144,7 @@ function EditorDaImagem({ imagem, onFechar }: { imagem: ImagemDoAcervo; onFechar
               <Textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={3} placeholder="O que aparece na foto" />
             </Campo>
             <label className="flex items-center text-[13px]">
-              <Switch checked={ativa} onCheckedChange={setAtiva} className="mr-2" />
+              <Switch checked={ativa} onCheckedChange={setAtiva} className="toque-compacto mr-2" />
               {ativa ? "Ativa: o Estúdio pode usar" : "Desativada: o Estúdio não usa"}
             </label>
           </div>
@@ -192,7 +192,7 @@ function CartaoDoAcervo({ imagem, onAbrir, onAmpliar }: { imagem: ImagemDoAcervo
         onClick={onAmpliar}
         aria-label={`Ver ${imagem.nome} maior`}
         title="Ver maior"
-        className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-foreground shadow-sm hover:bg-background"
+        className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm hover:bg-background"
       >
         <Maximize2 className="h-3.5 w-3.5" />
       </button>
@@ -341,14 +341,14 @@ export default function ContextoImagens() {
                   type="button"
                   onClick={() => setAgrupar(a)}
                   aria-pressed={agrupar === a}
-                  className={`rounded-md px-3 py-1 text-[12px] ${agrupar === a ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"}`}
+                  className={`toque-compacto rounded-md px-3 py-1 text-[12px] ${agrupar === a ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"}`}
                 >
                   Por {a}
                 </button>
               ))}
             </div>
             <label className="flex items-center text-[12px] text-muted-foreground">
-              <Switch checked={mostrarInativas} onCheckedChange={setMostrarInativas} className="mr-2" />
+              <Switch checked={mostrarInativas} onCheckedChange={setMostrarInativas} className="toque-compacto mr-2" />
               Mostrar desativadas
             </label>
           </div>
@@ -360,10 +360,10 @@ export default function ContextoImagens() {
       )}
       {acervo.isError && <AvisoDeErro erro={acervo.error} />}
       {acervo.data && todas.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border p-6 text-center text-[13px] text-muted-foreground">Acervo vazio. Use "Buscar imagens" para trazer as fotos.</p>
+        <p className="rounded-lg bg-muted/50 p-6 text-center text-[13px] text-muted-foreground">Acervo vazio. Use "Buscar imagens" para trazer as fotos.</p>
       )}
       {todas.length > 0 && grupos.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border p-4 text-center text-[13px] text-muted-foreground">Nenhuma imagem com essa busca.</p>
+        <p className="rounded-lg bg-muted/50 p-4 text-center text-[13px] text-muted-foreground">Nenhuma imagem com essa busca.</p>
       )}
 
       {agrupar === "pasta" && !termo && todas.length > 0 && (
@@ -380,7 +380,7 @@ export default function ContextoImagens() {
             vazio="Nenhuma foto nesta pasta."
             alturaMax="min(70vh, 720px)"
             renderizarItens={(lista) => (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
                 {lista.map((i, n) => (
                   <CartaoDoAcervo key={i.id} imagem={i} onAbrir={() => setEditando(i)} onAmpliar={() => setAmpliada({ lista, indice: n })} />
                 ))}
@@ -404,7 +404,7 @@ export default function ContextoImagens() {
             acao={<span className="text-[11px] text-muted-foreground">{imagens.length}</span>}
             corpoClassName="space-y-2"
           >
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
               {visiveis.map((i, n) => (
                 <CartaoDoAcervo key={i.id} imagem={i} onAbrir={() => setEditando(i)} onAmpliar={() => setAmpliada({ lista: imagens, indice: n })} />
               ))}

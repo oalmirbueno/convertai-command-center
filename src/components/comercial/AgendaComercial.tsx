@@ -187,10 +187,10 @@ export default function AgendaComercial({
 
   return (
     <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal="Agenda do comercial">
-      <div className="grid min-w-0 gap-4 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
+      <div className="grid min-w-0 gap-5 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
         <RegiaoRolavel rotulo="Calendário do mês" memoria="comercial:agenda:mes" className="lg:pr-1">
           <Painel
-            titulo={inicialMaiuscula(mesAberto.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }))}
+            titulo={inicialMaiuscula(mesAberto.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })).replace(" de ", " ")}
             descricao={
               abertasAtrasadas > 0 ? (
                 <span className="text-warning">
@@ -201,9 +201,9 @@ export default function AgendaComercial({
             }
             acao={navegacaoDoMes}
           >
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
               {DIAS_DA_SEMANA.map((dia) => (
-                <p key={dia} className={juntar(texto.rotulo, "pb-1 text-center")}>
+                <p key={dia} className={juntar(texto.rotulo, "pb-2 text-center")}>
                   {dia}
                 </p>
               ))}
@@ -222,15 +222,16 @@ export default function AgendaComercial({
                     aria-pressed={escolhido}
                     aria-label={`${data.toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}${abertas.length ? `, ${abertas.length} ${abertas.length === 1 ? "compromisso" : "compromissos"}` : ""}`}
                     className={juntar(
-                      "flex min-h-[52px] min-w-0 flex-col items-start rounded-md p-1 text-left transition-colors lg:min-h-[64px]",
+                      "flex min-h-[56px] min-w-0 flex-col items-start rounded-md p-1.5 text-left transition-colors sm:p-2 lg:min-h-[76px]",
                       foco,
-                      escolhido ? "bg-primary/10 ring-1 ring-inset ring-primary" : doMes ? "hover:bg-muted" : "opacity-50 hover:bg-muted",
+                      // Rodada ousada (15/11/2026): o dia escolhido é o bloco de tinta; os outros, poços suaves.
+                      escolhido ? "bg-foreground text-background" : doMes ? "bg-muted/60 hover:bg-muted" : "opacity-50 hover:bg-muted",
                     )}
                   >
                     <span
                       className={juntar(
-                        "flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
-                        chave === hojeIso ? "bg-primary text-primary-foreground" : doMes ? "text-foreground" : "text-muted-foreground",
+                        "flex h-6 w-6 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums",
+                        chave === hojeIso ? "bg-accent-solid text-on-accent" : escolhido ? "text-background" : doMes ? "text-foreground" : "text-muted-foreground",
                       )}
                       aria-hidden="true"
                     >
@@ -240,8 +241,8 @@ export default function AgendaComercial({
                       <span
                         aria-hidden="true"
                         className={juntar(
-                          "mt-0.5 w-full truncate rounded px-1 text-[11px] font-medium leading-4 tabular-nums",
-                          temAtraso ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary",
+                          "mt-auto w-full truncate rounded-full px-1.5 text-[11px] font-semibold leading-5 tabular-nums",
+                          temAtraso ? "bg-warning text-background" : "bg-accent-solid text-on-accent",
                         )}
                       >
                         {abertas.length}
@@ -271,13 +272,13 @@ export default function AgendaComercial({
                 <EstadoVazio compacto titulo="Nenhum compromisso neste dia." />
               </div>
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="px-2 pb-2">
                 {doDia.map((atividade) => {
                   const lead = atividade.lead_id ? porLead.get(atividade.lead_id) : null;
                   const feita = Boolean(atividade.done_at);
                   const atrasada = !feita && atividade.due_at < agoraIso;
                   return (
-                    <li key={atividade.id} className={juntar("flex min-w-0 items-center px-4 py-2.5", feita && "opacity-60")}>
+                    <li key={atividade.id} className={juntar("flex min-w-0 items-center rounded-md px-3 py-3.5 transition-colors hover:bg-muted/50", feita && "opacity-60")}>
                       <button
                         type="button"
                         onClick={async () => {
@@ -288,9 +289,9 @@ export default function AgendaComercial({
                         aria-label={feita ? `Reabrir ${atividade.title}` : `Concluir ${atividade.title}`}
                         aria-pressed={feita}
                         className={juntar(
-                          "mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors",
+                          "toque-compacto mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors",
                           foco,
-                          feita ? "border-border text-muted-foreground" : "border-primary/50 text-primary hover:bg-primary/10",
+                          feita ? "bg-accent-solid text-on-accent" : "bg-muted text-muted-foreground hover:bg-foreground hover:text-background",
                         )}
                       >
                         <Check className="h-3.5 w-3.5" aria-hidden="true" />

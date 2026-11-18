@@ -101,7 +101,7 @@ export default function LerPaginaDoCliente({
         </button>
       </form>
 
-      {motivo && <p className={juntar(texto.auxiliar, "whitespace-normal", leitura ? "text-amber-700 dark:text-amber-400" : "text-destructive")} data-motivo-da-leitura="">{motivo}</p>}
+      {motivo && <p className={juntar(texto.auxiliar, "whitespace-normal", leitura ? "text-warning" : "text-destructive")} data-motivo-da-leitura="">{motivo}</p>}
 
       {leitura && (
         <div className="min-w-0" data-leitura-do-link={leitura.host}>
@@ -125,7 +125,7 @@ export default function LerPaginaDoCliente({
                 {a.id === "cores" && (
                   <span className="mt-1.5 flex flex-wrap" aria-hidden="true">
                     {leitura.cores.map((c) => (
-                      <span key={c} className="mb-1 mr-1.5 inline-block h-5 w-5 rounded border border-border" style={{ background: c }} title={c} />
+                      <span key={c} className="mb-1 mr-1.5 inline-block h-5 w-5 rounded-full border border-border" style={{ background: c }} title={c} />
                     ))}
                   </span>
                 )}
@@ -144,7 +144,7 @@ export default function LerPaginaDoCliente({
           {(leitura.imagens.length > 0 || leitura.logo) && (
             <div className="min-w-0 pt-2">
               <span className={juntar(texto.rotulo, "block")}>Imagens principais (ficam guardadas na leitura)</span>
-              <ul className="mt-1.5 grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6" data-imagens-lidas="">
+              <ul className="mt-1.5 grid min-w-0 grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-6" data-imagens-lidas="">
                 {(leitura.logo ? [{ url: leitura.logo, alt: "Logo" }] : []).concat(leitura.imagens).slice(0, 6).map((i) => (
                   <li key={i.url} className="min-w-0">
                     <img src={i.url} alt={i.alt || "Imagem da página"} title={i.alt || undefined} loading="lazy" referrerPolicy="no-referrer" className="h-16 w-full rounded-md border border-border object-cover" />

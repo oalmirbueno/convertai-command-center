@@ -7,7 +7,7 @@ import type { TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-
 const PONTO: Record<Estado["tom"], string> = {
   ok: "bg-primary",
   andando: "bg-primary animate-pulse motion-reduce:animate-none",
-  atencao: "bg-amber-500",
+  atencao: "bg-warning",
   erro: "bg-destructive",
 };
 
@@ -41,7 +41,7 @@ export default function EstadoDoMotor({ estado, compacto = false }: { estado: Es
           <span className="mt-1.5 block">Desligado: os pedidos esperam na fila. Para ligar, na máquina da agência: pasta workers/motor-codigo, npm run iniciar (as chaves ficam no .env de lá). A prévia rápida e as edições de conteúdo funcionam mesmo assim.</span>
           <span className="mt-1.5 block">Rodando: mostra a seção da vez, quantas já saíram e o gasto contra o teto. Parou no meio: o worker caiu; ligue de novo ou pare o trabalho.</span>
           {estado.avisos.map((a) => (
-            <span key={a} className="mt-1.5 block text-amber-700 dark:text-amber-400">
+            <span key={a} className="mt-1.5 block text-warning">
               {a}
             </span>
           ))}

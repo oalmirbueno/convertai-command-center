@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lerAgendaDoCliente } from "./agendaInteligenteApi";
 import { avisoDoDia, dataBr, horaLivre, proximoEspaco, somarDias as somarDiasNaAgenda } from "../../../supabase/functions/_shared/agenda-inteligente";
 import { Link, useSearchParams } from "react-router-dom";
-import { Archive, CalendarPlus, FileText, ImagePlus, Link2, ListChecks, Loader2, Paperclip, Plus, Sparkles, Wand2, X, Zap } from "lucide-react";
+import { Archive, CalendarPlus, Eye, FileText, ImagePlus, Link2, ListChecks, Loader2, Paperclip, Plus, Sparkles, Wand2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,7 +162,7 @@ function EscolhaDaCampanha({
   const escolhida = valor && valor !== "auto" ? ativas.filter((c) => c.id === valor)[0] || null : null;
   const pilula = (ativa: boolean) =>
     `mb-1.5 mr-1.5 inline-flex h-9 max-w-full shrink-0 items-center rounded-full border px-3 text-[13px] transition-colors ${
-      ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
+      ativa ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground hover:bg-muted"
     }`;
   return (
     <div className="min-w-0">
@@ -178,7 +178,7 @@ function EscolhaDaCampanha({
             aria-checked={valor === "auto"}
             className={pilula(valor === "auto")}
             onClick={() => onValor("auto")}
-            title="O agente reconhece a campanha quando o pedido cita (nome, produto ou oferta)"
+            title="O agente procura a campanha que o pedido cita (nome, produto ou oferta); sem certeza, segue só a marca e avisa"
           >
             <Sparkles className="mr-1 h-3.5 w-3.5 shrink-0" /> Automático
           </button>
@@ -196,8 +196,6 @@ function EscolhaDaCampanha({
         <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-base-da-campanha={escolhida.id}>
           A arte puxa a base inteira: {resumoDaBaseDaCampanha(escolhida) || "tema e identidade"}. {periodoCurto(escolhida.periodo_inicio, escolhida.periodo_fim)}.
         </p>
-      ) : valor === "auto" ? (
-        <p className="mt-0.5 text-[12px] text-muted-foreground">O agente procura a campanha que o pedido cita; sem certeza, segue só a marca e avisa.</p>
       ) : null}
     </div>
   );
@@ -484,7 +482,7 @@ function PedidoDaArteRapida({
             </AjudaRecolhida>
           )}
         </div>
-        <div className="rounded-xl border border-border bg-background focus-within:border-primary/60">
+        <div className="rounded-lg border border-border bg-background focus-within:border-primary/60">
           <Textarea
             id="pedido-da-arte-rapida"
             value={pedido}
@@ -494,10 +492,10 @@ function PedidoDaArteRapida({
             className="min-h-[112px] resize-y border-0 bg-transparent px-3 py-2.5 text-[14px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           {(fotosDoAcervo.length > 0 || anexos.lista.length > 0) && (
-            <ul className="grid grid-cols-3 gap-2 px-3 pb-2 sm:grid-cols-4 xl:grid-cols-6" aria-label="Imagens do pedido">
+            <ul className="grid grid-cols-3 gap-2 sm:gap-3 px-3 pb-2 sm:grid-cols-4 xl:grid-cols-6" aria-label="Imagens do pedido">
               {fotosDoAcervo.map((f) => (
                 <li key={f.id} className="min-w-0">
-                  <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: "100%" }}>
+                  <div className={`relative overflow-hidden rounded-md bg-muted ${primeiraImagem ? "" : "ds-hatch"}`} style={{ paddingBottom: "100%" }}>
                     <ImagemDaMesa caminho={f.caminho} bucket={f.bucket} alt={f.nome} className="absolute inset-0 h-full w-full object-cover" />
                     <button type="button" onClick={() => setFotosDoAcervo((l) => l.filter((x) => x.id !== f.id))} aria-label={`Tirar ${f.nome}`} title={`Tirar ${f.nome}`} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
                       <X className="h-3.5 w-3.5" />
@@ -508,7 +506,7 @@ function PedidoDaArteRapida({
               ))}
               {anexos.lista.map((a) => (
                 <li key={a.id} className="min-w-0">
-                  <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: "100%" }}>
+                  <div className={`relative overflow-hidden rounded-md bg-muted ${primeiraImagem ? "" : "ds-hatch"}`} style={{ paddingBottom: "100%" }}>
                     {a.previa ? <img src={a.previa} alt={a.nome} className="absolute inset-0 h-full w-full object-cover" /> : <ImagemDaMesa caminho={a.caminho} alt={a.nome} className="absolute inset-0 h-full w-full object-cover" />}
                     {a.estado === "subindo" && (
                       <span className="absolute inset-0 flex items-center justify-center bg-background/60"><Loader2 className="h-4 w-4 animate-spin" /></span>
@@ -617,7 +615,7 @@ function PedidoDaArteRapida({
                   onClick={() => setModoDoPost(m)}
                   className={juntar(
                     "mb-1 mr-1.5 h-8 rounded-full border px-3 text-[12px] transition-colors",
-                    modoDoPost === m ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50",
+                    modoDoPost === m ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border bg-background text-foreground hover:border-primary/50",
                   )}
                 >
                   {ROTULO_DO_MODO_DO_POST[m]}
@@ -657,7 +655,7 @@ function PedidoDaArteRapida({
       <div className="min-w-0">
         <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Peça</p>
         <div className="flex min-w-0 flex-wrap items-center">
-          <div role="radiogroup" aria-label="Peça" className="mb-1 mr-3 inline-flex min-w-0 rounded-lg border border-border bg-background p-0.5">
+          <div role="radiogroup" aria-label="Peça" className="mb-1 mr-3 inline-flex min-w-0 rounded-full bg-muted p-0.5">
             {(["auto", "unica", "carrossel"] as PecaPedida[]).map((v) => (
               <button
                 key={v}
@@ -666,8 +664,8 @@ function PedidoDaArteRapida({
                 aria-checked={peca === v}
                 onClick={() => setPeca(v)}
                 className={juntar(
-                  "toque-compacto h-8 min-w-0 rounded-md px-3 text-[13px] font-medium transition-colors",
-                  peca === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                  "toque-compacto h-8 min-w-0 rounded-full px-3.5 text-[13px] font-medium transition-colors",
+                  peca === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
                 title={v === "auto" ? "O agente decide pelo pedido: arte única ou carrossel" : undefined}
               >
@@ -696,7 +694,7 @@ function PedidoDaArteRapida({
               <SeletorDeFormatoCompacto valor={formato} onMudar={setFormato} />
             </div>
             <label className="flex min-w-0 items-start text-[13px]">
-              <Switch checked={gerarLogo} onCheckedChange={setGerarLogo} className="mr-2 mt-0.5 shrink-0" aria-label="Gerar a arte logo em seguida" />
+              <Switch checked={gerarLogo} onCheckedChange={setGerarLogo} className="toque-compacto mr-2 mt-0.5 shrink-0" aria-label="Gerar a arte logo em seguida" />
               <span className="min-w-0">
                 Gerar a arte logo em seguida
                 <span className="block text-[12px] text-muted-foreground">Arte única: a lâmina entra na fila assim que a direção fica pronta. Carrossel: você confere a direção e gera.</span>
@@ -731,23 +729,26 @@ function PedidoDaArteRapida({
   );
 
   const cabecalho = (
-    <div className="flex min-w-0 items-baseline">
-      <h2 className="mr-2 shrink-0 text-[15px] font-semibold leading-tight">{origem === "laboratorio" ? "Estúdio livre" : "Arte rápida"}</h2>
-      <p className="min-w-0 truncate text-[12px] text-muted-foreground">
+    <div className="flex min-w-0 items-center">
+      <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-solid text-on-accent"><Zap className="h-4 w-4" /></span>
+      <h2 className="shrink-0 text-[18px] font-medium leading-6 tracking-[-0.02em]">{origem === "laboratorio" ? "Estúdio livre" : "Arte rápida"}</h2>
+      {/* 14/11/2026 (dono: "explicação longa atrás do ?"): a linha explicativa saiu do lado do título. */}
+      <AjudaRecolhida className="ml-1.5" rotulo={origem === "laboratorio" ? "O que é o Estúdio livre" : "O que é a Arte rápida"}>
         {origem === "laboratorio" ? "Trabalho avulso, com o diretor de arte de sempre. Fica no arquivo livre, fora da Mesa do cliente." : "Fora do plano do mês, com a marca, a campanha e o diretor de arte de sempre."}
-      </p>
+      </AjudaRecolhida>
     </div>
   );
 
   // Prévia à direita (tela larga): como a peça vai sair, com o que já foi escolhido.
   const previa = (
     <aside className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-col overflow-hidden")} aria-label="Como vai sair" data-previa-da-arte-rapida="">
-      <div className="shrink-0 border-b border-border px-4 py-3">
-        <p className="text-[13px] font-semibold">Como vai sair</p>
+      <div className="flex shrink-0 items-center px-4 pb-1 pt-4">
+        <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary"><Eye className="h-4 w-4" /></span>
+        <p className="min-w-0 truncate text-[15px] font-medium tracking-[-0.01em]">Como vai sair</p>
       </div>
       <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="space-y-4 p-4" sobre="cartao">
         <div className="mx-auto w-full max-w-[220px]">
-          <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: `${Math.round(100 / (FORMATOS_DO_POST.filter((f) => f.valor === formato)[0] || FORMATOS_DO_POST[0]).proporcao)}%` }}>
+          <div className={`relative overflow-hidden rounded-md bg-muted ${primeiraImagem ? "" : "ds-hatch"}`} style={{ paddingBottom: `${Math.round(100 / (FORMATOS_DO_POST.filter((f) => f.valor === formato)[0] || FORMATOS_DO_POST[0]).proporcao)}%` }}>
             {primeiraImagem ? (
               primeiraImagem.src ? (
                 <img src={primeiraImagem.src} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -762,7 +763,7 @@ function PedidoDaArteRapida({
                 <SeloDaCampanha campanha={escolhida} tamanho="h-8 w-8" />
               </span>
             )}
-            <span className="absolute bottom-2 right-2 rounded bg-background/90 px-1.5 text-[11px] font-medium tabular-nums">{rotuloDoFormato}</span>
+            <span className="absolute bottom-2 right-2 inline-flex h-6 items-center rounded-full bg-foreground px-2 text-[11px] font-semibold tabular-nums text-background">{rotuloDoFormato}</span>
           </div>
         </div>
         <dl className="space-y-2.5 text-[13px]">
@@ -784,10 +785,19 @@ function PedidoDaArteRapida({
             <dd className="ml-3 text-right font-medium tabular-nums">{documentos.length}</dd>
           </div>
         </dl>
-        <ol className="space-y-1.5 border-t border-border pt-3 text-[12px] leading-snug text-muted-foreground">
-          <li>1. {semMarca ? "O diretor lê só o pedido e as imagens, sem marca de cliente." : `O diretor lê o pedido com a marca${escolhida ? " e a campanha" : ""}.`}</li>
-          <li>2. {geraJunto ? "A arte única já entra na fila de geração." : "Você confere a direção e gera."}</li>
-          <li>3. {origem === "laboratorio" ? "Depois: ajustar no Estúdio e guardar no arquivo livre (fora da Mesa do cliente)." : "Depois: ajustar no Estúdio e levar para a Agenda com a data."}</li>
+        {/* v4 (etapas das referências): os três passos com o número num círculo e a linha ligando. */}
+        <ol className="rounded-md bg-muted/60 p-3 text-[12px] leading-snug text-muted-foreground">
+          {[
+            semMarca ? "O diretor lê só o pedido e as imagens, sem marca de cliente." : `O diretor lê o pedido com a marca${escolhida ? " e a campanha" : ""}.`,
+            geraJunto ? "A arte única já entra na fila de geração." : "Você confere a direção e gera.",
+            origem === "laboratorio" ? "Depois: ajustar no Estúdio e guardar no arquivo livre (fora da Mesa do cliente)." : "Depois: ajustar no Estúdio e levar para a Agenda com a data.",
+          ].map((passo, i, todos) => (
+            <li key={i} className="relative flex min-w-0 pb-3 last:pb-0">
+              {i < todos.length - 1 && <span aria-hidden="true" className="absolute bottom-0 left-[11px] top-6 w-px bg-border" />}
+              <span aria-hidden="true" className={`mr-2.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums ${i === 0 ? "bg-accent-solid text-on-accent" : "bg-card text-foreground"}`}>{i + 1}</span>
+              <span className="min-w-0 flex-1 pt-0.5"><span className="sr-only">{i + 1}. </span>{passo}</span>
+            </li>
+          ))}
         </ol>
       </RegiaoRolavel>
     </aside>
@@ -1107,7 +1117,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
             <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" onClick={() => onAbrirItem(taskFeito)}>
               Continuar no item
             </Button>
-            <Link to={`/calendario?client=${clientId}`} className="mb-1 inline-flex h-8 items-center rounded-md px-2 text-[12px] font-medium text-primary hover:underline">
+            <Link to={`/calendario?client=${clientId}`} className="mb-1 inline-flex h-8 items-center rounded-full px-2 text-[12px] font-medium text-primary hover:underline">
               Ver na Agenda
             </Link>
           </div>
@@ -1120,7 +1130,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
               Escolha a data, a hora e como entregar: o item nasce na Agenda, a arte vai para Arquivos (no projeto da marca) e para o post, a data fica confirmada e, conforme a opção, o cliente recebe para aprovar, a peça já fica aprovada e agendada, ou fica só em Arquivos.
             </AjudaRecolhida>
           </p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <label className="min-w-0 text-[12px] text-muted-foreground">
               Data
               <Input type="date" value={data} onChange={(e) => { setData(e.target.value); setDataEscolhida(true); }} className="mt-1 h-10 min-w-0" aria-label="Data do post" />
@@ -1287,7 +1297,7 @@ export default function EstudioArteRapida({
   ) : peca ? (
     peca
   ) : daOutraMarca ? (
-    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-xl border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-arte-de-outra-marca="">
+    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-lg border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-arte-de-outra-marca="">
       <p className="text-[14px] font-semibold">Esta arte é de outra marca</p>
       <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. Aqui o Estúdio mostra e gera só a marca {marca ? marca.nome : "aberta"}.</p>
       <Button type="button" className="mt-4 h-10 w-10 p-0" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)} aria-label="Nova arte" title="Nova arte">
@@ -1326,7 +1336,13 @@ export default function EstudioArteRapida({
         </div>
       )}
       {lista.isError && <p className="p-2 text-[12px] text-destructive">{textoDoErro(lista.error)}</p>}
-      {lista.isSuccess && !historico.length && <p className="px-2 py-4 text-center text-[12px] text-muted-foreground">Nenhuma arte rápida ainda. As que você criar ficam aqui para voltar e ajustar.</p>}
+      {lista.isSuccess && !historico.length && (
+        <div className="ds-hatch flex flex-col items-center rounded-md px-3 py-6 text-center" data-empty-state="">
+          <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-card"><Zap className="h-4 w-4" /></span>
+          <p className="mt-3 text-[13px] font-medium text-foreground">Nenhuma arte rápida ainda</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">As que você criar ficam aqui.</p>
+        </div>
+      )}
       <ul className="space-y-0.5" aria-label="Histórico da arte rápida">
         {historico.map((t) => (
           <li key={t.id} className="min-w-0">
@@ -1376,7 +1392,7 @@ export default function EstudioArteRapida({
   // Celular e tablet em pé: uma coluna; o histórico recolhe em cima, o pedido ou a peça embaixo.
   return (
     <div className="min-w-0 space-y-3" data-arte-rapida-tela="pilha">
-      <div className={juntar(superficie.painel, "p-2.5")}>
+      <div className={juntar(superficie.painel, "p-4")}>
         <div className="mb-2 flex min-w-0">{topo}</div>
         <div className="flex min-w-0 items-center">
           <div className="min-w-0 flex-1">
@@ -1406,7 +1422,7 @@ function SeletorDeFidelidade({ valor, escolhida, onValor }: { valor: Fidelidade;
           {FIDELIDADES.map((f) => `${ROTULO_DA_FIDELIDADE[f]}: ${DICA_DA_FIDELIDADE[f]}`).join(" ")}
         </AjudaRecolhida>
       </p>
-      <div role="radiogroup" aria-label="Fidelidade ao conteúdo" className="inline-flex min-w-0 rounded-lg border border-border bg-background p-0.5">
+      <div role="radiogroup" aria-label="Fidelidade ao conteúdo" className="inline-flex min-w-0 rounded-full bg-muted p-0.5">
         {FIDELIDADES.map((f) => (
           <button
             key={f}
@@ -1416,8 +1432,8 @@ function SeletorDeFidelidade({ valor, escolhida, onValor }: { valor: Fidelidade;
             title={DICA_DA_FIDELIDADE[f]}
             onClick={() => onValor(f)}
             className={juntar(
-              "toque-compacto h-8 min-w-0 rounded-md px-3 text-[13px] font-medium transition-colors",
-              valor === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+              "toque-compacto h-8 min-w-0 rounded-full px-3.5 text-[13px] font-medium transition-colors",
+              valor === f ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {ROTULO_DA_FIDELIDADE[f]}

@@ -145,16 +145,32 @@ const statusLabels: Record<string, string> = {
 // Antes tudo que nao estivesse agendado/publicado saia cinza, entao rascunho,
 // producao e pronto ficavam identicos no calendario. Classes literais para o
 // Tailwind nao purgar.
+/**
+ * Zona vazia hachurada (referências: listras diagonais finas para "vazio" e
+ * "solte aqui"), no lugar da caixa tracejada com texto cinza.
+ */
+const HACHURA =
+  "bg-[repeating-linear-gradient(135deg,hsl(var(--foreground)/0.06)_0px,hsl(var(--foreground)/0.06)_2px,transparent_2px,transparent_8px)]";
+
+/** Cartão do quadro em pastel pela etapa (as mesmas cores dos blocos do calendário). */
+const FUNDO_DO_CARTAO: Record<string, string> = {
+  draft: "border-border bg-card shadow-card",
+  production: "border-transparent bg-violet-500/[0.16]",
+  ready: "border-transparent bg-warning-soft",
+  scheduled: "border-transparent bg-info-soft",
+  delivery: "border-transparent bg-success-soft",
+};
+
 const stageClasses: Record<string, string> = {
-  draft: "border-slate-400/30 bg-slate-400/10 text-foreground",
-  production: "border-violet-500/30 bg-violet-500/10 text-violet-500",
-  ready: "border-amber-500/30 bg-amber-500/10 text-amber-500",
-  scheduled: "border-sky-500/30 bg-sky-500/10 text-sky-500",
+  draft: "border-border bg-card text-foreground",
+  production: "border-transparent bg-violet-500/20 text-foreground",
+  ready: "border-transparent bg-warning-soft text-foreground",
+  scheduled: "border-transparent bg-info-soft text-foreground",
   // Passou da hora e nao saiu: precisa saltar aos olhos, nao se confundir com
   // um agendamento normal.
-  overdue: "border-warning/40 bg-warning/15 text-warning",
-  published: "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
-  failed: "border-destructive/30 bg-destructive/10 text-destructive",
+  overdue: "border-warning/50 bg-warning-soft text-foreground",
+  published: "border-transparent bg-success-soft text-foreground",
+  failed: "border-destructive/30 bg-danger-soft text-foreground",
   cancelled: "border-border bg-muted text-muted-foreground",
 };
 
@@ -391,11 +407,14 @@ function ContentDirection({
   theme,
   context,
   compact = false,
+  soTema = false,
   className,
 }: {
   theme: string;
   context?: string | null;
   compact?: boolean;
+  /** Só o tema à vista; o contexto fica para o leitor de tela, a dica e a ficha (cartão da semana). */
+  soTema?: boolean;
   className?: string;
 }) {
   const normalizedTheme =
@@ -418,17 +437,17 @@ function ContentDirection({
         )}
         title={`Tema: ${normalizedTheme}`}
       >
-        <span className="font-semibold opacity-60">Tema:</span>{" "}
+        <span className="sr-only">Tema:</span>{" "}
         {normalizedTheme}
       </p>
       <p
         className={cn(
-          "opacity-75",
-          compact ? "truncate" : "line-clamp-2 leading-4",
+          "text-muted-foreground",
+          soTema ? "sr-only" : compact ? "truncate" : "line-clamp-2 leading-4",
         )}
         title={`Contexto: ${normalizedContext}`}
       >
-        <span className="font-semibold">Contexto:</span>{" "}
+        <span className="sr-only">Contexto:</span>{" "}
         {normalizedContext}
       </p>
     </div>
@@ -490,7 +509,7 @@ export function EditorialFileThumbnail({
   return (
     <span
       className={cn(
-        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-secondary",
+        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted",
         className,
       )}
       aria-hidden="true"
@@ -528,10 +547,11 @@ export function EditorialFileThumbnail({
       {showArtBadge && (
         <span
           className={cn(
-            "absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold backdrop-blur-sm",
+            "absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+            // Contraste (polimento v4): branco sobre verde escuro e preto sobre âmbar, os dois acima de 4,5:1.
             file
-              ? "bg-emerald-600/90 text-white"
-              : "bg-amber-500/90 text-black",
+              ? "bg-emerald-800 text-white"
+              : "bg-amber-400 text-black",
           )}
         >
           {file ? "Com arte" : "Sem arte"}
@@ -660,6 +680,11 @@ function PublicationPill({
   );
   const status = EDITORIAL_VISUAL_STAGE_LABELS[stage] || publication.status;
   const context = postContentContext(item.post, item.publication);
+  const temArte = Boolean(
+    item.publication.publication.file_id
+      ? item.publication.file
+      : item.post.primaryFile,
+  );
   const draggable = isEditorialPublicationDraggable(
     item.post,
     item.publication,
@@ -694,7 +719,8 @@ function PublicationPill({
       // Arrasta pelo cartão inteiro; o clique continua abrindo o conteúdo.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group relative min-h-11 w-full rounded-lg border text-left transition-colors hover:border-primary/40",
+        "group relative w-full rounded-[14px] border text-left transition-colors hover:border-foreground/30",
+        compact ? "min-h-8" : "min-h-11",
         stageClasses[stage] || stageClasses.draft,
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
@@ -706,71 +732,93 @@ function PublicationPill({
         onClick={onClick}
         aria-label={`Tema: ${item.post.post.title}. Contexto: ${context || "não informado"}. ${platform}, ${time}, ${status}`}
         className={cn(
-          "block min-h-11 w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50",
-          compact ? "px-2 py-1.5" : "p-2.5",
-          draggable && !moving && "pr-12",
+          "block w-full rounded-[14px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50",
+          compact ? "min-h-8 px-2 py-1" : "min-h-11 p-3",
+          draggable && !moving && !compact && "pr-3",
         )}
       >
       {compact ? (
         <>
-          <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
-            {/* Miniatura da arte direto no calendário mensal. */}
-            <EditorialFileThumbnail
-              post={item.post}
-              publication={item.publication}
-              className="h-7 w-7 shrink-0 rounded-md"
-            />
+          <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4">
+            {/* Miniatura da arte direto no calendário mensal; o ponto da rede fica no canto dela. */}
+            {temArte ? (
+              <span className="relative shrink-0">
+                <EditorialFileThumbnail
+                  post={item.post}
+                  publication={item.publication}
+                  className="h-7 w-7 rounded-full"
+                />
+                <span
+                  className={cn(
+                    "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card",
+                    platformDots[publication.platform] ||
+                      "bg-muted-foreground",
+                  )}
+                  title={platform}
+                />
+              </span>
+            ) : (
+              // Sem arte não há o que mostrar: sai o ícone de "sem imagem" repetido em toda linha e fica só o ponto da rede.
+              <span
+                className={cn(
+                  "ml-1 h-2 w-2 shrink-0 rounded-full",
+                  platformDots[publication.platform] ||
+                    "bg-muted-foreground",
+                )}
+                title={platform}
+              />
+            )}
             <span
-              className={cn(
-                "h-2 w-2 shrink-0 rounded-full",
-                platformDots[publication.platform] ||
-                  "bg-muted-foreground",
-              )}
-            />
-            <span
-              className="truncate font-medium"
+              className="min-w-0 flex-1 truncate font-medium tracking-[-0.01em]"
               title={`Tema: ${item.post.post.title}`}
             >
-              <span className="font-semibold opacity-60">Tema:</span>{" "}
+              <span className="sr-only">Tema:</span>{" "}
               {item.post.post.title}
             </span>
-            <span className="ml-auto shrink-0 opacity-75">{time}</span>
+            {/* Com o trilho ao lado a célula é estreita: a hora só entra quando há largura (segue na dica e no leitor de tela). */}
+            <span className="shrink-0 text-[11px] tabular-nums opacity-70 xl:max-[1599px]:hidden">{time}</span>
           </div>
+          {/* Polimento v4: o contexto sai da célula do mês (fica na dica e na ficha); o bloco é uma linha só. */}
           <p
-            className="mt-0.5 truncate text-[11px] opacity-75"
+            className="sr-only"
             title={`Contexto: ${context || "Não informado"}`}
           >
-            <span className="font-semibold">Contexto:</span>{" "}
+            <span className="sr-only">Contexto:</span>{" "}
             {context || "Não informado"}
           </p>
         </>
       ) : (
-        <div className="flex min-w-0 gap-2">
-          <EditorialFileThumbnail
-            post={item.post}
-            publication={item.publication}
-            className="h-10 w-10"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5 text-[11px] opacity-80">
-            <span
-              className={cn(
-                "h-2 w-2 shrink-0 rounded-full",
-                platformDots[publication.platform] ||
-                  "bg-muted-foreground",
-              )}
+        <div className="min-w-0">
+          {/* Passada estrutural: a arte, quando existe, vai em cima e larga (como nas referências); sem arte, nenhum ícone de "sem imagem". */}
+          {temArte && (
+            <EditorialFileThumbnail
+              post={item.post}
+              publication={item.publication}
+              className="mb-2.5 h-[88px] w-full rounded-[10px] border-0"
             />
-            <span className="truncate font-medium">
-              {platform}
-              {account?.handle ? ` · ${account.handle}` : ""}
-            </span>
-            <span className="ml-auto shrink-0">{time}</span>
-            </div>
+          )}
+          <div className="min-w-0">
             <ContentDirection
               theme={item.post.post.title}
               context={context}
-              className="mt-1"
+              soTema
+              className="text-[13px] leading-[18px]"
             />
+            {/* Hora em destaque e a rede ao lado (antes "Inst…" cortado em cima do título). */}
+            <div className="mt-2 flex min-w-0 items-center gap-1.5 text-[11px]">
+              <span className="shrink-0 font-semibold tabular-nums">{time}</span>
+              <span
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
+                  platformDots[publication.platform] ||
+                    "bg-muted-foreground",
+                )}
+              />
+              <span className="truncate opacity-70">
+                {platform}
+                {account?.handle ? ` · ${account.handle}` : ""}
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -778,12 +826,13 @@ function PublicationPill({
       {draggable && !moving && (
         <button
           type="button"
-          className="absolute inset-y-0 right-0 inline-flex min-h-11 w-11 touch-none cursor-grab items-center justify-center rounded-r-lg border-l border-current/10 opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 active:cursor-grabbing"
+          data-alca-compacta={compact ? "" : undefined}
+          className="toque-compacto absolute inset-y-0 right-0 inline-flex w-6 touch-none cursor-grab items-center justify-center rounded-r-[14px] text-muted-foreground opacity-0 transition-opacity data-[alca-compacta]:w-5 data-[alca-compacta]:bg-card data-[alca-compacta]:opacity-0 data-[alca-compacta]:focus-visible:opacity-100 data-[alca-compacta]:group-hover:opacity-100 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 group-hover:opacity-80 active:cursor-grabbing"
           {...listeners}
           {...attributes}
           aria-label={`Mover ${item.post.post.title} no calendário`}
         >
-          <GripVertical className="h-4 w-4" aria-hidden="true" />
+          <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       )}
     </div>
@@ -837,25 +886,25 @@ function AnchoredPostPill({
       aria-label={`Abrir o conteúdo "${post.post.title}". Etapa: ${nomeEtapa}. Dia herdado do prazo da tarefa; ainda sem agendamento de publicação.`}
       title={`${post.post.title} · ${nomeEtapa} · dia herdado do prazo da tarefa`}
       className={cn(
-        "group flex w-full items-center gap-1.5 rounded-lg border text-left text-foreground transition-colors hover:border-primary/50",
+        "group flex w-full items-center gap-1.5 rounded-[14px] border text-left text-foreground transition-colors hover:border-primary/50",
         cor.borda,
         cor.fundo,
-        compact ? "px-1.5 py-1" : "p-2.5",
+        compact ? "min-h-9 px-1.5 py-1" : "p-3",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
     >
       <EditorialFileThumbnail
         post={post}
-        className={compact ? "h-6 w-6 shrink-0" : "h-10 w-10 shrink-0"}
+        className={compact ? "h-7 w-7 shrink-0 rounded-full" : "h-10 w-10 shrink-0"}
       />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1">
+      <span className={cn("min-w-0 flex-1", compact && "flex items-center gap-1.5")}>
+        <span className={cn("flex items-center gap-1", compact && "order-2 shrink-0")}>
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cor.ponto)} />
-          <span className={cn("truncate text-[11px] font-semibold", cor.texto)}>
+          <span className={cn("truncate text-[11px] font-semibold", cor.texto, compact && "sr-only")}>
             {nomeEtapa}
           </span>
         </span>
-        <span className={cn("block truncate font-medium", compact ? "text-[11px]" : "text-[12px]")}>
+        <span className={cn("block truncate font-medium", compact ? "min-w-0 flex-1 text-[12px] leading-4 tracking-[-0.01em]" : "text-[12px]")}>
           {post.post.title}
         </span>
         {!compact && (
@@ -899,49 +948,49 @@ function TaskSchedulePill({
       onClick={onClick}
       aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban. Prazo em ${dueDateLabel}. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}.${descricaoDaArteDoEstudio(arte)}`}
       className={cn(
-        "group w-full rounded-lg border border-violet-500/25 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/[0.14]",
-        compact ? "px-2 py-1.5" : "p-2.5",
+        "group w-full rounded-[14px] border border-dashed border-violet-500/40 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/60 hover:bg-violet-500/15",
+        compact ? "min-h-9 px-1.5 py-1" : "p-3",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
     >
       {compact ? (
         <>
-          <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
+          <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4">
             {arte ? (
               <MiniaturaDaArteDoEstudio
                 arte={arte}
-                className="h-7 w-7 shrink-0 rounded-md"
+                className="h-7 w-7 shrink-0 rounded-full"
               />
             ) : (
-              <Palette
-                className="h-3.5 w-3.5 shrink-0 text-violet-500"
-                aria-hidden="true"
-              />
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/15" aria-hidden="true">
+                <Palette className="h-3.5 w-3.5 text-violet-600 dark:text-violet-300" />
+              </span>
             )}
             <span
-              className="min-w-0 truncate font-medium"
+              className="min-w-0 flex-1 truncate font-medium tracking-[-0.01em]"
               title={`Tema: ${task.title}`}
             >
-              <span className="font-semibold opacity-60">Tema:</span>{" "}
+              <span className="sr-only">Tema:</span>{" "}
               {task.title}
             </span>
             <span
-              className="ml-auto shrink-0 text-[11px] text-violet-500"
+              className="shrink-0 text-[11px] font-medium text-violet-700 dark:text-violet-300"
               title={`Prazo do Kanban · ${deliveryType}`}
             >
-              Prazo · {deliveryType}
+              <span className="sr-only">Prazo · {deliveryType}</span>
+              <span aria-hidden="true">Prazo</span>
             </span>
           </div>
           {arte ? (
-            <p className="mt-0.5 flex min-w-0">
+            <p className="mt-0.5 flex min-w-0 pl-[34px]">
               <SeloDaArteDoEstudio arte={arte} compact />
             </p>
           ) : (
             <p
-              className="mt-0.5 truncate text-[11px] text-muted-foreground"
+              className="sr-only"
               title={`Contexto: ${context || "Não informado"}`}
             >
-              <span className="font-semibold">Contexto:</span>{" "}
+              <span className="sr-only">Contexto:</span>{" "}
               {context || "Não informado"}
             </p>
           )}
@@ -998,12 +1047,15 @@ function EmptyState({ canCreate }: { canCreate: boolean }) {
 function DroppableDay({
   dateKey,
   className,
+  style,
   canDrop,
   semGrade = false,
   children,
 }: {
   dateKey: string;
   className?: string;
+  /** Só posição na grade (ex.: a coluna do dia 1 no mês do celular). */
+  style?: React.CSSProperties;
   canDrop: boolean;
   /** Faixa de dias do celular (16/10/2026): solta igual, mas não é célula de grade. */
   semGrade?: boolean;
@@ -1024,6 +1076,7 @@ function DroppableDay({
       ref={setNodeRef}
       role={semGrade ? undefined : "gridcell"}
       aria-label={semGrade ? undefined : `Dia ${dateKey}`}
+      style={style}
       className={cn(
         "transition-colors",
         className,
@@ -1264,12 +1317,22 @@ function MobileAgenda({
   return (
     <div className="min-w-0 md:hidden">
       {/* Faixa de dias presa no topo da área enquanto a lista rola. */}
-      <div className="sticky top-0 z-10 -mt-1 bg-background pb-2 pt-1">
+      {/* Semana: faixa presa no topo enquanto a lista rola. Mês (polimento v4, 15/11/2026): um calendário
+          de verdade, sete colunas, sem rolar para o lado; cada dia continua sendo lugar de soltar. */}
+      <div className={cn(poucosDias ? "sticky top-0 z-10 -mt-1 bg-background pb-2 pt-1" : "mb-2 rounded-lg bg-card p-2.5 shadow-card")}>
+        {!poucosDias && (
+          <div className="mb-1 grid grid-cols-7" aria-hidden="true">
+            {["seg", "ter", "qua", "qui", "sex", "sáb", "dom"].map((nome) => (
+              <span key={nome} className="flex h-7 items-center justify-center text-[11px] font-medium capitalize text-muted-foreground">{nome}</span>
+            ))}
+          </div>
+        )}
         <div
           ref={faixaRef}
-          className="scrollbar-hidden flex min-w-0 overflow-x-auto overscroll-x-contain"
+          className={cn("min-w-0", poucosDias ? "scrollbar-hidden flex overflow-x-auto overscroll-x-contain" : "grid grid-cols-7 gap-y-0.5")}
           role="group"
           aria-label="Dias"
+          data-dias-do-celular={poucosDias ? "faixa" : "mes"}
         >
           {days.map((day, index) => {
             const key = keys[index];
@@ -1286,9 +1349,10 @@ function MobileAgenda({
                 canDrop={canCreate || canEdit || canPublish}
                 className={cn(
                   "rounded-xl",
-                  poucosDias ? "min-w-[44px] flex-1" : "w-12 shrink-0",
-                  index > 0 && "ml-1",
+                  poucosDias ? "min-w-[44px] flex-1" : "min-w-0",
+                  poucosDias && index > 0 && "ml-1",
                 )}
+                style={!poucosDias && index === 0 ? { gridColumnStart: ((day.getDay() + 6) % 7) + 1 } : undefined}
               >
                 <button
                   type="button"
@@ -1297,23 +1361,29 @@ function MobileAgenda({
                   aria-pressed={escolhido}
                   aria-label={`${format(day, "EEEE, dd 'de' MMMM", { locale: ptBR })}${total > 0 ? `, ${total} ${total === 1 ? "item" : "itens"}` : ""}`}
                   className={cn(
-                    "flex h-16 w-full flex-col items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-                    escolhido
-                      ? "bg-primary text-primary-foreground"
-                      : key === todayKey
-                        ? "text-primary"
+                    "flex w-full flex-col items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                    poucosDias ? "h-16" : "mx-auto h-11 max-w-[44px]",
+                    // Hoje é verde (sólido quando é o dia aberto); outro dia aberto é a pílula de tinta.
+                    key === todayKey
+                      ? escolhido
+                        ? "bg-accent-solid text-on-accent"
+                        : "bg-accent-soft text-primary"
+                      : escolhido
+                        ? "bg-foreground text-background"
                         : "text-foreground active:bg-muted",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "text-[11px] font-medium capitalize",
-                      escolhido ? "opacity-85" : "text-muted-foreground",
-                    )}
-                  >
-                    {format(day, "EEEEEE", { locale: ptBR })}
-                  </span>
-                  <span className="mt-0.5 text-[15px] font-semibold leading-6 tabular-nums">
+                  {poucosDias && (
+                    <span
+                      className={cn(
+                        "text-[11px] font-medium capitalize",
+                        escolhido ? "opacity-80" : key === todayKey ? "" : "text-muted-foreground",
+                      )}
+                    >
+                      {format(day, "EEEEEE", { locale: ptBR })}
+                    </span>
+                  )}
+                  <span className={cn("font-semibold tracking-[-0.02em] tabular-nums", poucosDias ? "mt-0.5 text-[18px] leading-6" : "text-[15px] leading-5")}>
                     {format(day, "d")}
                   </span>
                   <span
@@ -1322,7 +1392,7 @@ function MobileAgenda({
                       total === 0
                         ? "bg-transparent"
                         : escolhido
-                          ? "bg-primary-foreground"
+                          ? "bg-current"
                           : "bg-primary",
                     )}
                     aria-hidden="true"
@@ -1355,11 +1425,24 @@ function MobileAgenda({
       </div>
 
       {vazio ? (
-        <p className="py-8 text-center text-[13px] text-muted-foreground">
-          Nada marcado neste dia
-        </p>
+        // Vazio padrão das referências: zona hachurada com a ação num círculo (antes, uma frase solta no meio da tela).
+        <div className={cn("flex min-h-[148px] flex-col items-center justify-center rounded-lg px-4 text-center", HACHURA)}>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => onCreateOnDate(selectedKey)}
+              className="mb-2.5 inline-flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              aria-label={`Criar conteúdo em ${selectedKey} (dia vazio)`}
+            >
+              <Plus className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
+          <p className="text-[13px] text-muted-foreground">
+            Nada marcado neste dia
+          </p>
+        </div>
       ) : (
-        <div className="min-w-0 divide-y divide-border/60">
+        <div className="min-w-0 space-y-0.5">
           {dayAnchored.map((bundle) => {
             const agregado = aggregateEditorialStatus(
               bundle.publications.map(({ publication }) => publication),
@@ -1502,10 +1585,10 @@ function MonthView({
 
   return (
     <>
-      <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
-        <div className="min-w-[840px]">
+      <div className={juntar(superficie.painel, "hidden overflow-x-auto p-3 md:block lg:p-4")} data-agenda-mes="">
+        <div className="min-w-[800px]">
           <div
-            className="grid grid-cols-7 border-b border-border bg-secondary/25"
+            className="grid grid-cols-7"
             role="row"
           >
             {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map(
@@ -1513,7 +1596,7 @@ function MonthView({
                 <div
                   key={day}
                   role="columnheader"
-                  className="px-3 py-2.5 text-center text-[11px] font-medium capitalize text-muted-foreground"
+                  className="px-3 pb-3 pt-2 text-left text-[12px] font-medium capitalize text-muted-foreground"
                 >
                   {day}
                 </div>
@@ -1550,33 +1633,30 @@ function MonthView({
                   dateKey={key}
                   canDrop={canCreate || canEdit || canPublish}
                   className={cn(
-                    "group min-h-[148px] border-b border-r border-border p-2.5",
-                    !isSameMonth(day, anchorDate) && "bg-muted/20",
+                    // Passada estrutural: grade branca com um fio entre as semanas (sem ladrilho cinza por dia); hoje só tinge de leve.
+                    "group min-h-[132px] border-t border-border/70 px-1.5 pb-2 pt-1.5",
+                    key === todayKey && "bg-primary/[0.07]",
                   )}
                 >
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-1.5 flex items-center justify-between pl-1">
                     <span
                       className={cn(
-                        "inline-flex h-7 w-7 items-center justify-center rounded-full text-[12px] leading-4",
+                        "inline-flex h-8 min-w-[32px] items-center justify-center rounded-full text-[17px] font-medium leading-6 tracking-[-0.02em] tabular-nums",
                         key === todayKey
-                          ? "bg-primary font-semibold text-primary-foreground"
+                          ? "bg-primary px-3 font-semibold text-primary-foreground"
                           : !isSameMonth(day, anchorDate)
-                            ? "text-muted-foreground/45"
-                            : "text-muted-foreground",
+                            ? "font-normal text-muted-foreground/45"
+                            : "text-foreground",
                       )}
                     >
-                      {format(day, "d")}
+                      {key === todayKey && <span className="mr-1.5 text-[11px] font-semibold leading-4 tracking-normal" aria-hidden="true">Hoje</span>}
+                      <span>{format(day, "d")}</span>
                     </span>
                     <div className="flex items-center gap-1.5">
-                      {dayCount > 0 && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {dayCount}
-                        </span>
-                      )}
                       {canCreate && isSameMonth(day, anchorDate) && (
                         <button
                           type="button"
-                          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100 focus:opacity-100"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted text-foreground opacity-0 transition-opacity hover:bg-foreground hover:text-background group-hover:opacity-100 focus:opacity-100"
                           onClick={() => onCreateOnDate(key)}
                           aria-label={`Criar conteúdo em ${key}`}
                         >
@@ -1585,7 +1665,7 @@ function MonthView({
                       )}
                     </div>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {visibleItems.map((item) => (
                       <PublicationPill
                         key={item.publication.publication.id}
@@ -1622,7 +1702,7 @@ function MonthView({
                         <PopoverTrigger asChild>
                           <button
                             type="button"
-                            className="inline-flex min-h-7 w-full items-center rounded-md px-1 text-left text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                            className="inline-flex min-h-7 w-full items-center rounded-full px-2 text-left text-[11px] font-semibold text-foreground/80 transition-colors hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                             aria-label={`Ver mais ${dayCount - visibleCount} itens de ${format(day, "dd 'de' MMMM", { locale: ptBR })}`}
                           >
                             +{dayCount - visibleCount} neste dia
@@ -1742,8 +1822,8 @@ function WeekView({
 
   return (
     <>
-      <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
-        <div className="grid min-w-[920px] grid-cols-7">
+      <div className="hidden overflow-x-auto md:block" data-agenda-semana="">
+        <div className="grid min-w-[880px] grid-cols-7 gap-2">
           {days.map((day) => {
             const key = localDateKey(day);
             const dayItems = itemsByDate.get(key) || [];
@@ -1756,24 +1836,22 @@ function WeekView({
                 key={key}
                 dateKey={key}
                 canDrop={canCreate || canEdit || canPublish}
-                className="group min-h-[450px] border-r border-border last:border-r-0"
+                className="group min-h-[450px] rounded-[18px]"
               >
                 <header
                   className={cn(
-                    "border-b border-border px-3 py-3 text-center",
-                    key === todayKey && "bg-primary/5",
+                    // Como na referência de semana: cada dia é um ladrilho branco e HOJE é o bloco sólido na cor da marca; as colunas não têm fundo.
+                    "relative rounded-[18px] bg-card px-3 py-3 text-center shadow-card",
+                    key === todayKey && "ds-accent",
                   )}
                 >
-                  <p className="text-[11px] font-medium capitalize text-muted-foreground">
-                    {format(day, "EEE", { locale: ptBR })}
+                  <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                    {format(day, "EEE", { locale: ptBR }).replace(".", "")}
                   </p>
-                  <div className="mt-1 flex items-center justify-center gap-1">
+                  <div className="mt-0.5 flex items-center justify-center">
                     <p
                       className={cn(
-                        "text-[20px] font-semibold leading-7",
-                        key === todayKey
-                          ? "text-primary"
-                          : "text-foreground",
+                        "text-[24px] font-medium leading-8 tracking-[-0.03em] tabular-nums text-foreground",
                       )}
                     >
                       {format(day, "dd")}
@@ -1781,7 +1859,7 @@ function WeekView({
                     {canCreate && (
                       <button
                         type="button"
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary group-hover:opacity-100 focus:opacity-100"
+                        className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-foreground/10 text-foreground opacity-0 transition-opacity hover:bg-foreground hover:text-background group-hover:opacity-100 focus:opacity-100"
                         onClick={() => onCreateOnDate(key)}
                         aria-label={`Criar conteúdo em ${key}`}
                       >
@@ -1790,7 +1868,7 @@ function WeekView({
                     )}
                   </div>
                 </header>
-                <div className="space-y-2 p-2.5">
+                <div className="space-y-2 pb-2.5 pt-2">
                   {dayAnchored.map((bundle) => (
                     <AnchoredPostPill
                       key={bundle.post.id}
@@ -1819,10 +1897,21 @@ function WeekView({
                       onClick={() => onSelectPost(item.post)}
                     />
                   ))}
-                  {dayItems.length === 0 && dayTasks.length === 0 && (
-                    <p className="rounded-lg border border-dashed border-border/70 py-8 text-center text-[11px] text-muted-foreground/60">
-                      Solte aqui
-                    </p>
+                  {dayItems.length === 0 && dayTasks.length === 0 && dayAnchored.length === 0 && (
+                    <div className={cn("flex min-h-[132px] flex-col items-center justify-center rounded-[14px] px-2 text-center", HACHURA)}>
+                      {canCreate && (
+                        <button
+                          type="button"
+                          onClick={() => onCreateOnDate(key)}
+                          className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-card text-foreground shadow-card transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+                          aria-label={`Criar conteúdo em ${key} (dia vazio)`}
+                          title="Criar conteúdo neste dia"
+                        >
+                          <Plus className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                      <p className="text-[11px] font-medium text-muted-foreground">Solte aqui</p>
+                    </div>
                   )}
                 </div>
               </DroppableDay>
@@ -1858,6 +1947,7 @@ function BoardPostCard({
     (stage === "scheduled" || isEditorialPostPlanMutable(post));
   const Icon = contentTypeIcon(post.post.content_type);
   const approval = getEditorialApprovalStage(post);
+  const temArte = Boolean(post.primaryFile);
   const {
     attributes,
     listeners,
@@ -1888,48 +1978,49 @@ function BoardPostCard({
       // funcionando: o sensor só vira arrasto depois de mover alguns pixels.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        superficie.painel, "group p-3.5 transition-[border-color,box-shadow] duration-150 hover:border-primary/35 hover:shadow motion-reduce:transition-none",
+        "group relative rounded-lg border p-4 transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 motion-reduce:transition-none",
+        FUNDO_DO_CARTAO[stage] || FUNDO_DO_CARTAO.draft,
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
     >
-      <button
-        type="button"
-        onClick={onClick}
-        className="relative mb-3 block w-full overflow-hidden rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        style={{ paddingBottom: "56.25%" }}
-        aria-label={`Ver conteúdo completo de ${post.post.title}`}
-      >
-        {/* 16:9 por padding (Safari 11 não tem aspect-ratio). */}
-        <span className="absolute inset-0 block">
-          <EditorialFileThumbnail post={post} className="h-full w-full" showArtBadge />
-        </span>
-      </button>
+      {/* Polimento v4 (15/11/2026): a miniatura só ocupa espaço quando há arte; sem arte, o cartão
+          fica curto e o aviso vira um selo no rodapé (antes era uma caixa cinza vazia em cada cartão). */}
+      {temArte && (
+        <button
+          type="button"
+          onClick={onClick}
+          className="relative mb-3.5 block w-full overflow-hidden rounded-[16px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          style={{ paddingBottom: "56.25%" }}
+          aria-label={`Ver conteúdo completo de ${post.post.title}`}
+        >
+          {/* 16:9 por padding (Safari 11 não tem aspect-ratio). */}
+          <span className="absolute inset-0 block">
+            <EditorialFileThumbnail post={post} className="h-full w-full border-0" />
+          </span>
+        </button>
+      )}
       <div className="flex items-start gap-2.5">
         <button
           type="button"
           onClick={onClick}
           className="min-w-0 flex-1 text-left"
         >
-          <div className="mb-2 flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
-              <Icon className="h-3.5 w-3.5" />
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              {contentTypeLabel(post.post.content_type)}
-            </span>
-          </div>
-          <h3 className="line-clamp-2 text-[13px] font-medium leading-5 text-foreground">
+          <span className="mb-2.5 inline-flex h-[22px] max-w-full items-center rounded-full bg-foreground/[0.08] px-2 text-[11px] font-medium leading-none text-foreground">
+            <Icon className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">{contentTypeLabel(post.post.content_type)}</span>
+          </span>
+          <h3 className="line-clamp-2 text-[14px] font-medium leading-5 tracking-[-0.01em] text-foreground">
             {post.post.title}
           </h3>
-          <p className="mt-1 truncate text-[11px] text-muted-foreground">
+          <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground">
             {clientName} · {projectName}
           </p>
         </button>
         {draggable && !moving && (
           <button
             type="button"
-            className="inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-50 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
+            className="-mr-1.5 -mt-1.5 inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-full text-muted-foreground md:h-8 md:w-8 opacity-50 transition-opacity hover:bg-foreground/10 hover:text-foreground hover:opacity-100 active:cursor-grabbing md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-70"
             aria-label={`Mover ${post.post.title}`}
             {...listeners}
             {...attributes}
@@ -1938,23 +2029,27 @@ function BoardPostCard({
           </button>
         )}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      {/* Rodapé numa linha: a aprovação em texto com bolinha (sem caixa), o vínculo com o Kanban em ícone e o aviso de arte. */}
+      <div className="mt-3.5 flex min-w-0 items-center text-[11px] leading-4">
         <Badge
           variant="outline"
-          className="h-5 rounded-md px-1.5 text-[11px] font-normal"
+          className="h-auto min-w-0 rounded-none border-0 bg-transparent p-0 text-[11px] font-medium text-foreground/75 hover:bg-transparent"
         >
-          {approvalLabels[approval] || approval}
+          <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
+          <span className="truncate">{approvalLabels[approval] || approval}</span>
         </Badge>
         {post.internal?.task_id && (
-          <Badge
-            variant="secondary"
-            className="h-5 rounded-md px-1.5 text-[11px] font-normal"
-          >
-            <Link2 className="mr-1 h-2.5 w-2.5" />
-            Kanban
-          </Badge>
+          <span className="ml-2 inline-flex shrink-0 items-center text-foreground/60" title="Ligado a uma tarefa do Kanban">
+            <Link2 className="h-3 w-3" aria-hidden="true" />
+            <span className="sr-only">Kanban</span>
+          </span>
         )}
-        <span className="ml-auto inline-flex items-center">
+        {!temArte && (
+          <span className="ml-2 inline-flex h-5 shrink-0 items-center rounded-full bg-amber-400/30 px-2 text-[11px] font-medium text-amber-950 dark:bg-amber-400/15 dark:text-amber-200">
+            Sem arte
+          </span>
+        )}
+        <span className="ml-auto inline-flex shrink-0 items-center pl-2">
           {post.publications.slice(0, 4).map(({ publication }) => (
             <span
               key={publication.id}
@@ -2029,7 +2124,7 @@ function BoardTaskCard({
       // Arrasta pelo cartão inteiro; clique nos botões continua normal.
       {...(draggable ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group rounded-lg border border-primary/20 bg-primary/[0.035] p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow motion-reduce:transition-none",
+        "group rounded-lg border border-dashed border-primary/40 bg-card p-4 shadow-card transition-[border-color,box-shadow] duration-150 hover:border-primary/60 motion-reduce:transition-none",
         draggable && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -2041,18 +2136,14 @@ function BoardTaskCard({
           disabled={!canEdit || moving}
           className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
         >
-          <div className="mb-2 flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Palette className="h-3.5 w-3.5" />
-            </span>
-            <span className="text-[11px] font-medium text-primary">
-              {taskDeliveryTypeLabel(task)} · Kanban
-            </span>
-          </div>
-          <h3 className="line-clamp-2 text-[13px] font-medium leading-5 text-foreground">
+          <span className="mb-2.5 inline-flex h-[22px] max-w-full items-center rounded-full bg-accent-soft px-2 text-[11px] font-medium leading-none text-primary">
+            <Palette className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">{taskDeliveryTypeLabel(task)} · Kanban</span>
+          </span>
+          <h3 className="line-clamp-2 text-[14px] font-medium leading-5 tracking-[-0.01em] text-foreground">
             {task.title}
           </h3>
-          <p className="mt-1 truncate text-[11px] text-muted-foreground">
+          <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground">
             {projectScopeName}
           </p>
           {arte && (
@@ -2068,7 +2159,7 @@ function BoardTaskCard({
         {draggable && (
           <button
             type="button"
-            className="inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-60 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
+            className="-mr-1.5 -mt-1.5 inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-full text-muted-foreground md:h-8 md:w-8 opacity-60 transition-opacity hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-70"
             aria-label={`Mover tarefa ${task.title}`}
             {...listeners}
             {...attributes}
@@ -2081,31 +2172,34 @@ function BoardTaskCard({
         {task.status === "blocked" && (
           <Badge
             variant="outline"
-            className="h-5 shrink-0 border-warning/30 bg-warning/10 px-1.5 text-[11px] text-warning"
+            className="h-[22px] shrink-0 rounded-full border-transparent bg-warning-soft px-2 text-[11px] text-warning"
           >
             Bloqueada
           </Badge>
         )}
-        <span className="inline-flex min-w-0 items-center gap-1 truncate">
-          <UserRound className="h-3 w-3 shrink-0" />
-          <span className="truncate">{responsibleName}</span>
-        </span>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1">
+        {/* Sem responsável não repete "Sem responsável" em todo cartão: fica só para o leitor de tela. */}
+        {responsibleName === "Sem responsável" ? <span className="sr-only">{responsibleName}</span> : (
+          <span className="inline-flex min-w-0 items-center gap-1 truncate">
+            <UserRound className="h-3 w-3 shrink-0" />
+            <span className="truncate">{responsibleName}</span>
+          </span>
+        )}
+        <span className="ml-auto inline-flex h-6 shrink-0 items-center gap-1 rounded-full border border-foreground/15 px-2 font-medium tabular-nums text-foreground/80">
           <CalendarClock className="h-3 w-3" />
           {boardTaskDueDate(task.due_date)}
         </span>
+        {/* Polimento v4: a ação do cartão é uma só e pequena (antes, um botão largo repetido em cada cartão). */}
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-85 max-md:h-11 max-md:w-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40"
+          disabled={!canEdit || moving}
+          onClick={onCreate}
+          aria-label="Criar e vincular conteúdo"
+          title="Criar e vincular conteúdo"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
       </div>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="mt-3 h-8 w-full text-[11px]"
-        disabled={!canEdit || moving}
-        onClick={onCreate}
-      >
-        <Plus className="mr-1 h-3.5 w-3.5" />
-        Criar e vincular conteúdo
-      </Button>
     </article>
   );
 }
@@ -2148,8 +2242,8 @@ function AbaDaEtapa({
       onClick={onEscolher}
       aria-pressed={escolhida}
       className={cn(
-        "inline-flex h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-        escolhida ? "bg-muted text-foreground" : "text-muted-foreground active:bg-muted/60",
+        "inline-flex h-11 shrink-0 items-center whitespace-nowrap rounded-full px-4 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+        escolhida ? "bg-foreground text-background" : "bg-muted/70 text-muted-foreground active:bg-muted",
         isOver && acceptsActive && "ring-2 ring-primary/60",
       )}
     >
@@ -2209,7 +2303,8 @@ function BoardColumn({
         // 28/09: sem altura fixa. De 1280 px para cima a coluna ocupa a altura
         // da área (AreaDeTrabalho) e rola sozinha; abaixo disso a grade tem duas
         // colunas e quem rola é o quadro inteiro (uma rolagem por região).
-        "flex min-h-[160px] min-w-0 flex-col rounded-lg p-1.5 transition-colors xl:h-full xl:min-h-0",
+        // Polimento v4: a coluna não tem mais fundo cinza; quem aparece são o cabeçalho e os cartões.
+        "flex min-h-[160px] min-w-0 flex-col rounded-lg transition-colors xl:h-full xl:min-h-0",
         isOver &&
           acceptsActive &&
           "bg-primary/[0.06] ring-1 ring-primary/40",
@@ -2217,22 +2312,24 @@ function BoardColumn({
     >
       {/* 16/10/2026: no celular o nome e a contagem já estão na aba. */}
       {!celular && (
-      <header className="mb-2 px-1 pt-0.5" title={column.description}>
-        <div className="flex items-center gap-2">
-          <span className={cn("h-2 w-2 rounded-full", column.dot)} />
-          <h2 className="min-w-0 truncate text-[12px] font-semibold text-foreground">
+      // Passada estrutural (como nas referências de quadro): a coluna não tem cartão de cabeçalho;
+      // só o traço na cor da etapa, o nome e a contagem num círculo.
+      <header className="mb-3" title={column.description}>
+        <span className={cn("block h-1 w-full rounded-full", column.dot)} aria-hidden="true" />
+        <div className="mt-3 flex min-w-0 items-center px-1">
+          <h2 className="min-w-0 truncate text-[14px] font-medium leading-5 tracking-[-0.01em] text-foreground">
             {column.label}
           </h2>
           <Badge
             variant="secondary"
-            className="ml-auto h-5 rounded-md px-1.5 font-mono text-[11px]"
+            className="ml-2 h-[22px] min-w-[22px] shrink-0 justify-center rounded-full border-transparent bg-foreground px-1.5 text-[11px] font-semibold leading-none tabular-nums text-background hover:bg-foreground"
           >
             {posts.length + tasks.length}
           </Badge>
         </div>
       </header>
       )}
-      <div className="space-y-2.5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:pr-0.5 xl:[scrollbar-gutter:stable]">
+      <div className="space-y-2.5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:[scrollbar-gutter:stable]">
         {tasks.map((task) => (
           <BoardTaskCard
             key={task.id}
@@ -2265,8 +2362,8 @@ function BoardColumn({
           />
         ))}
         {posts.length === 0 && tasks.length === 0 && (
-          <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-border/80 px-4 text-center">
-            <p className="text-[11px] leading-4 text-muted-foreground/70">
+          <div className={cn("flex min-h-28 items-center justify-center rounded-[18px] px-4 text-center", HACHURA)}>
+            <p className="text-[11px] font-medium leading-4 text-muted-foreground">
               {celular
                 ? "Nada nesta etapa"
                 : isWritable
@@ -2560,7 +2657,8 @@ function ListView({
           titulo="Agenda cronológica"
           nivel={3}
           descricao={celular ? undefined : `${timelineItems.length} ${timelineItems.length === 1 ? "item" : "itens"}`}
-          corpoClassName={juntar(lista.aberta, lista.divisoria)}
+          // Passada estrutural: a lista mora num cartão branco (como nas referências), não solta no fundo.
+          corpoClassName={juntar(lista.aberta, lista.divisoria, "rounded-lg bg-card px-2 py-1 shadow-card sm:px-4 sm:py-2")}
         >
           {timelineItems.map((timelineItem) => {
             if (timelineItem.kind === "task") {
@@ -2591,10 +2689,10 @@ function ListView({
                   key={`task:${task.id}`}
                   type="button"
                   onClick={() => onCreateFromTask(task, dateKey)}
-                  className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-violet-500/[0.06] sm:flex-row sm:items-center"
+                  className="flex w-full flex-col gap-3 rounded-lg px-3 py-4 text-left transition-colors hover:bg-violet-500/[0.06] sm:flex-row sm:items-center sm:gap-4"
                 >
-                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-[13px] font-semibold text-foreground">
+                  <div className="flex min-w-[104px] items-center gap-2 sm:block">
+                    <p className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">
                       {new Intl.DateTimeFormat("pt-BR", {
                         day: "2-digit",
                         month: "short",
@@ -2628,7 +2726,7 @@ function ListView({
                   </div>
                   <Badge
                     variant="outline"
-                    className="w-fit border-violet-500/25 bg-violet-500/10 text-violet-500"
+                    className="h-6 w-fit border-transparent bg-violet-500/15 px-2.5 text-violet-500"
                   >
                     Abrir ou preparar
                   </Badge>
@@ -2662,11 +2760,11 @@ function ListView({
                   type="button"
                   onClick={() => onSelectPost(post)}
                   aria-label={`Abrir o conteúdo "${post.post.title}". Etapa: ${nomeEtapa}. Dia herdado do prazo da tarefa; ainda sem agendamento de publicação.`}
-                  className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40 sm:flex-row sm:items-center"
+                  className="flex w-full flex-col gap-3 rounded-lg px-3 py-4 text-left transition-colors hover:bg-muted/60 sm:flex-row sm:items-center sm:gap-4"
                 >
                   <EditorialFileThumbnail post={post} className="h-14 w-14" />
-                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-[13px] font-semibold text-foreground">{dia}</p>
+                  <div className="flex min-w-[104px] items-center gap-2 sm:block">
+                    <p className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">{dia}</p>
                     <p className="text-[12px] text-muted-foreground">Prazo da tarefa</p>
                   </div>
                   <span className={cn("h-9 w-1 shrink-0 rounded-full", corDaEtapa(etapa).ponto)} />
@@ -2683,7 +2781,7 @@ function ListView({
                   </div>
                   <Badge
                     variant="outline"
-                    className={cn("w-fit", stageClasses[etapa] || stageClasses.draft)}
+                    className={cn("h-6 w-fit px-2.5", stageClasses[etapa] || stageClasses.draft)}
                   >
                     {nomeEtapa}
                   </Badge>
@@ -2730,7 +2828,7 @@ function ListView({
             return (
               <article
                 key={`publication:${publication.id}`}
-                className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40 sm:flex-row sm:items-center"
+                className="flex w-full flex-col gap-3 rounded-lg px-3 py-4 text-left transition-colors hover:bg-muted/60 sm:flex-row sm:items-center sm:gap-4"
               >
                 <button
                   type="button"
@@ -2742,8 +2840,8 @@ function ListView({
                     publication={item.publication}
                     className="h-14 w-14"
                   />
-                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-[13px] font-semibold text-foreground">
+                  <div className="flex min-w-[104px] items-center gap-2 sm:block">
+                    <p className="text-[18px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-foreground">
                       {new Intl.DateTimeFormat("pt-BR", {
                         timeZone: "America/Sao_Paulo",
                         day: "2-digit",
@@ -2790,7 +2888,7 @@ function ListView({
                     return (
                       <Badge
                         variant="outline"
-                        className={cn("w-fit", stageClasses[listStage] || stageClasses.draft)}
+                        className={cn("h-6 w-fit px-2.5", stageClasses[listStage] || stageClasses.draft)}
                       >
                         {listStage === "published" && (
                           <CheckCircle2 className="mr-1 h-3 w-3" />
@@ -2803,7 +2901,7 @@ function ListView({
                 <div className="flex shrink-0 items-center gap-1">
                   {draggable && !moving && (
                     <span
-                      className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground"
+                      className="inline-flex h-8 items-center gap-1 rounded-full border border-border px-3 text-[11px] text-muted-foreground"
                       title="Use a visualização de calendário para arrastar"
                     >
                       <GripVertical className="h-3 w-3" />
@@ -2898,7 +2996,7 @@ function ListView({
               })}
             </div>
           ) : (
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {undatedTasks.map((task) => {
               const arte = artesDoEstudio[task.id] && artesDoEstudio[task.id].capa ? artesDoEstudio[task.id] : null;
               return (
@@ -2907,7 +3005,7 @@ function ListView({
                 type="button"
                 onClick={() => onCreateFromTask(task)}
                 aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. Contexto: ${taskContentContext(task) || "não informado"}. ${taskDeliveryTypeLabel(task)}.${descricaoDaArteDoEstudio(arte)}`}
-                className="flex items-start gap-2.5 rounded-lg border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
+                className="flex items-start gap-3 rounded-[18px] border border-violet-500/25 bg-violet-500/10 p-4 text-left transition-colors hover:border-violet-500/50 sm:p-5"
               >
                 {arte && (
                   <MiniaturaDaArteDoEstudio
@@ -2952,7 +3050,7 @@ function ListView({
                 type="button"
                 onClick={() => onSelectPost(post)}
                 className={cn(
-                  "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors hover:border-primary/45",
+                  "flex items-start gap-3 rounded-[18px] border p-4 text-left transition-colors hover:border-foreground/25 sm:p-5",
                   cor.borda,
                   cor.fundo,
                 )}

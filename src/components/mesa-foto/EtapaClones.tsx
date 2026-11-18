@@ -328,7 +328,7 @@ function DialogoDeFotosDaGeracao({
           <DialogTitle>{titulo}</DialogTitle>
           <DialogDescription>Escolha quais fotos de origem vão nesta geração. As outras ficam de fora só desta vez.</DialogDescription>
         </DialogHeader>
-        <ul className="grid min-w-0 grid-cols-4 gap-2" aria-label="Fotos de origem desta geração" data-fotos-da-geracao="">
+        <ul className="grid min-w-0 grid-cols-4 gap-2 sm:gap-3" aria-label="Fotos de origem desta geração" data-fotos-da-geracao="">
           {reais.map((r) => {
             const marcada = marcadas.indexOf(r.id) >= 0;
             return (
@@ -415,7 +415,7 @@ function FaixaDeClones({
   return (
     <section className="min-w-0" aria-label="Clones" data-faixa-de-clones="" data-recolhido={recolhido ? "sim" : "nao"}>
       <div className={juntar("flex min-w-0 items-center", recolhido ? "" : "mb-2")}>
-        <h2 className="min-w-0">
+        <h2 className="flex min-w-0">
           <TituloRecolhivel titulo="Clones" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={atual ? atual.nome : undefined} />
         </h2>
         <span className={juntar(texto.auxiliar, "ml-1.5 shrink-0 tabular-nums")}>{clones.length}</span>
@@ -445,7 +445,7 @@ function FaixaDeClones({
                   aria-label={`Abrir ${c.nome}`}
                   className={juntar("flex w-full min-w-0 items-center rounded-md px-1.5 py-1 text-left transition-colors", ativo ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-muted", foco)}
                 >
-                  <span className="relative mr-2 block h-10 w-10 shrink-0 overflow-hidden rounded-md bg-muted" data-clone={c.id}>
+                  <span className="relative mr-2 block h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted" data-clone={c.id}>
                     {c.capa_url ? (
                       <img src={c.capa_url} alt={c.nome} className="h-full w-full object-cover" loading="lazy" />
                     ) : (
@@ -960,7 +960,7 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
       <div className="mb-3 w-full sm:w-56">
         <SeletorDeQualidade valor={qualidade} onChange={setQualidade} disabled={bloqueado} />
       </div>
-      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Vistas da folha do clone">
+      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3" aria-label="Vistas da folha do clone">
         {VISTAS_DO_CLONE.map((v, k) => {
           const img = naTela[k];
           const a = andamentos[chaveDoAndamento(c.id, "clone-vista", v.valor)];
@@ -1054,7 +1054,7 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
       {aberto.arquivadas.length > 0 && (
         <details className="mt-4 min-w-0 border-t border-border pt-3" data-vistas-apagadas="">
           <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Apagadas ({aberto.arquivadas.length})</summary>
-          <ul className="mt-2 grid min-w-0 grid-cols-4 gap-2 pb-1 sm:grid-cols-6">
+          <ul className="mt-2 grid min-w-0 grid-cols-4 gap-2 sm:gap-3 pb-1 sm:grid-cols-6">
             {aberto.arquivadas.map((img) => {
               const rotulo = rotuloDaVista(img.vista);
               return (
@@ -1170,7 +1170,7 @@ function PeloContexto({ clone, marcadas, onMarcar, sugestoes, onSugestoes }: { c
                   className={`block w-full min-w-0 rounded-md border p-2 text-left transition-colors ${marcada ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
                 >
                   <span className="flex min-w-0 items-center text-[12px] font-semibold">
-                    <span className={`mr-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${marcada ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
+                    <span className={`mr-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border ${marcada ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
                       {marcada && <Check className="h-3 w-3" />}
                     </span>
                     <span className="truncate">{s.rotulo}</span>
@@ -1764,7 +1764,7 @@ function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneA
             {variacoes.length > 0 && (
               <button
                 type="button"
-                className={juntar("mr-2 rounded text-primary hover:underline", foco)}
+                className={juntar("mr-2 rounded-sm text-primary hover:underline", foco)}
                 onClick={() => setEscolhidas(escolhidas.length === variacoes.length ? [] : variacoes.map((v) => v.id))}
               >
                 {escolhidas.length === variacoes.length && escolhidas.length > 0 ? "Desmarcar todas" : "Marcar todas"}
@@ -1797,7 +1797,7 @@ function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneA
                     <button type="button" className="block w-full" onClick={() => onVer({ tipo: "variacao", id: f.id })} aria-label={`Abrir: ${f.nome}`} aria-pressed={grande} title={f.nome}>
                       <MiniaturaDaFoto foto={f} selo={false} />
                     </button>
-                    <label className="absolute right-1.5 top-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
+                    <label className="absolute right-1.5 top-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-card">
                       <input type="checkbox" checked={marcada} onChange={() => marcar(f.id)} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Marcar ${f.nome}`} />
                     </label>
                     {f.aprovada && (
@@ -1806,7 +1806,7 @@ function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneA
                         <span className="sr-only">aprovada</span>
                       </span>
                     )}
-                    <MenuDoItem rotulo={`Mais opções: ${f.nome}`} itens={menuDaVariacao(f)} className="absolute bottom-1 right-1 !h-6 !w-6 border border-border bg-card shadow-sm" />
+                    <MenuDoItem rotulo={`Mais opções: ${f.nome}`} itens={menuDaVariacao(f)} className="absolute bottom-1 right-1 !h-6 !w-6 border border-border bg-card shadow-card" />
                   </li>
                 );
               })}
@@ -2012,7 +2012,7 @@ function FaixaDeFotosDeOrigem({ aberto }: { aberto: CloneAberto }) {
   return (
     <section className="min-w-0" aria-label="Antes: fotos reais de origem" data-fotos-de-origem="" data-antes-compacto="" data-recolhido={recolhido ? "sim" : "nao"}>
       <div className={juntar("flex min-w-0 items-center", recolhido ? "" : "mb-1.5")}>
-        <h3 className="min-w-0">
+        <h3 className="flex min-w-0">
           <TituloRecolhivel titulo="Antes" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={`${r.ids.length} de ${MAX_FOTOS_DO_CLONE} fotos reais`} />
         </h3>
         {!recolhido && <span className={juntar(texto.auxiliar, "ml-1.5 shrink-0 tabular-nums")}>{r.ids.length} de {MAX_FOTOS_DO_CLONE}</span>}
@@ -2295,7 +2295,7 @@ function ClonesArquivados({ onRestaurado }: { onRestaurado: (c: Clone) => void }
   return (
     <section className="min-w-0" aria-label="Clones arquivados" data-clones-arquivados="">
       {/* Mesmo cabeçalho que recolhe dos outros blocos (seta que gira); fechado de início e a lista só é lida ao abrir. */}
-      <h3 className="min-w-0">
+      <h3 className="flex min-w-0">
         <TituloRecolhivel
           titulo={
             <span className="inline-flex min-w-0 items-center">
@@ -2416,7 +2416,7 @@ export default function EtapaClones() {
         ) : clonesQ.isLoading ? (
           <Carregando forma="aba" rotulo="Lendo os clones" />
         ) : (
-          <EstadoVazio
+          <EstadoVazio className="ds-hatch rounded-lg [&>div:first-child]:bg-card [&>div:first-child]:text-foreground"
             icone={<UserRound className="h-5 w-5" />}
             titulo="Crie o primeiro clone"
             descricao="De 1 a 4 fotos reais da pessoa e a autorização de uso de imagem."

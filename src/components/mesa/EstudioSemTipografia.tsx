@@ -188,7 +188,7 @@ export default function EstudioSemTipografia({ clientId }: { clientId: string })
         )}
         <a
           href={`/mesa?client=${encodeURIComponent(clientId)}&aba=contexto`}
-          className="my-0.5 ml-2 inline-flex h-8 shrink-0 items-center rounded-md px-2 text-[12px] font-medium text-primary underline-offset-2 hover:underline"
+          className="my-0.5 ml-2 inline-flex h-8 shrink-0 items-center rounded-full px-2 text-[12px] font-medium text-primary underline-offset-2 hover:underline"
         >
           Definir no Contexto
         </a>

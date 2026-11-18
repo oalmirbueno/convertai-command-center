@@ -314,7 +314,7 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
   const [verFontes, setVerFontes] = useState(false);
   if (carregando && !kit) {
     return (
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className={juntar(superficie.poco, "p-2.5")}>
             <Esqueleto linhas={2} />
@@ -330,7 +330,7 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
         <p className="text-[13px] text-muted-foreground">Ainda não há contexto montado.</p>
       ) : (
         // Sem rolagem própria (28/09): quem rola é a área de trabalho; cada campo já vem em duas linhas.
-        <div className="grid min-w-0 grid-cols-1 items-start gap-2 sm:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-2 sm:gap-3 sm:grid-cols-2">
           {cheios.map((campo) => (
             <CampoRecolhido key={campo.chave} campo={campo} onEditar={onEditar} />
           ))}
@@ -351,7 +351,7 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
       {verFontes && (
         <ul className="flex min-w-0 flex-wrap">
           {fontesLidas.map((f) => (
-            <li key={f} className="mb-1 mr-1 min-w-0 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground" title={f}>
+            <li key={f} className="mb-1 mr-1 min-w-0 max-w-full truncate rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground" title={f}>
               {f}
             </li>
           ))}
@@ -519,7 +519,7 @@ function BarraDeCompletude({ itens }: { itens: ItemDoChecklist[] }) {
   return (
     <div className="flex min-w-0 flex-1 items-center" title={`Completude do contexto: ${feitos} de ${itens.length} itens completos`}>
       <div
-        className="h-1.5 min-w-[32px] max-w-[160px] flex-1 overflow-hidden rounded-full bg-muted"
+        className="h-2 min-w-[32px] max-w-[160px] flex-1 overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -841,7 +841,8 @@ export default function ContextoAutomatico({
                   : "A montagem automática roda só na primeira vez. Aqui o agente lê de novo os documentos, o dossiê, as artes aprovadas e as referências sem leitura. O que a equipe já preencheu não é trocado: vira sugestão."
               }
               variant="ghost"
-              className="h-8 px-2 text-[12px]"
+              // relative: o nome só para leitor de tela (sr-only, absoluto) fica preso ao botão e não alarga a página no celular.
+              className="relative h-8 px-2 text-[12px]"
               disabled={!dados || montando}
               partes={() => [
                 { modeloId: modeloDoContexto?.id, tipo: "texto", tokensEntrada: TAMANHOS.montarContexto.entrada, tokensSaida: TAMANHOS.montarContexto.saida },
@@ -898,9 +899,10 @@ export default function ContextoAutomatico({
       )}
 
       {montando && (
-        <p className="flex items-center text-[12px] text-muted-foreground">
+        // v4: aviso passageiro flutua por cima (não empurra a paleta para baixo e de volta).
+        <p className="absolute z-10 flex max-w-[calc(100%-2rem)] items-center rounded-full bg-card px-3 py-1.5 text-[12px] text-muted-foreground shadow-card" role="status">
           <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
-          Montando o contexto a partir do que o cliente já tem...
+          <span className="min-w-0 truncate">Montando o contexto...</span>
         </p>
       )}
       {erroDoMontar && erroDoMontar.clientId === clientId && <AvisoDeErro erro={erroDoMontar.erro} />}
@@ -914,7 +916,7 @@ export default function ContextoAutomatico({
           </button>
         </div>
       )}
-      {dados && !temMaterial && !contextoMontado && (
+      {dados && !kitQuery.isLoading && !temMaterial && !contextoMontado && (
         <div className="flex min-w-0 items-center text-[12px] text-muted-foreground">
           <p className="min-w-0 truncate">Sem documentos, dossiê nem artes aprovadas no painel</p>
           <AjudaRecolhida className="ml-1" rotulo="Como começar o contexto">
@@ -934,10 +936,11 @@ export default function ContextoAutomatico({
       {/* A parte aberta. Cada uma mantém o id da antiga seção (âncora e testes). */}
       {aberta === "ctx-marca" && (
         <section id="ctx-marca" aria-label="Marca" className="min-w-0">
+          {/* v4: até o kit da tabela chegar fica o esqueleto (o kit provisório do "ler" trocava a paleta duas vezes e a tela pulava). */}
           <CartaoMarca
-            kit={kit}
+            kit={kitQuery.isLoading ? null : kit}
             candidatos={dados ? dados.candidatos_a_logo : []}
-            carregando={carregandoKit}
+            carregando={carregandoKit || kitQuery.isLoading}
             onEditar={onIrPara ? () => onIrPara("marca") : undefined}
           />
         </section>

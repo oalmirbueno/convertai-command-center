@@ -51,7 +51,7 @@ export default function AngulosGerados({ arquivos, irPara }: { arquivos: Arquivo
       }
       data-imagens-do-gerador=""
     >
-      <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6" aria-label="Imagens geradas">
+      <ul className="grid grid-cols-3 gap-3 sm:gap-4 sm:grid-cols-4 lg:grid-cols-6" aria-label="Imagens geradas">
         {visiveis.map((a) => (
           <li key={a.id} className="group min-w-0">
             <div className="relative w-full overflow-hidden rounded-md bg-muted" style={{ paddingBottom: "125%" }}>

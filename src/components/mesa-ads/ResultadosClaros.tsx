@@ -5,6 +5,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { juntar, superficie, texto } from "@/components/sistema/estilos";
+import { CartaoDeIndicador } from "@/components/mesa/ousado";
 import { brl, inteiro, porcento } from "./adsApi";
 import { Foto, SeloDoSinal } from "./Comuns";
 import {
@@ -41,28 +42,9 @@ import {
 
 export const ITENS_POR_PAGINA = 12;
 
-function Variacao({ valor, bomQuandoSobe }: { valor: number | null | undefined; bomQuandoSobe: boolean }) {
-  if (valor === null || valor === undefined || valor === 0) return null;
-  const sobe = valor > 0;
-  const bom = sobe === bomQuandoSobe;
-  return (
-    <span className={`ml-1.5 whitespace-nowrap text-[11px] font-medium tabular-nums ${bom ? "text-success" : "text-destructive"}`} title="Comparado ao período anterior do mesmo tamanho">
-      {sobe ? "+" : ""}
-      {Math.round(valor)}%
-    </span>
-  );
-}
-
-function NumeroGrande({ rotulo, valor, variacao, bomQuandoSobe = true, dica }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string }) {
-  return (
-    <div className={juntar(superficie.painel, "min-w-0 px-3 py-2.5")} title={dica}>
-      <dt className="truncate text-[11px] text-muted-foreground">{rotulo}</dt>
-      <dd className="mt-0.5 flex min-w-0 items-baseline">
-        <span className="truncate text-[20px] font-semibold tabular-nums">{valor}</span>
-        <Variacao valor={variacao} bomQuandoSobe={bomQuandoSobe} />
-      </dd>
-    </div>
-  );
+function NumeroGrande({ rotulo, valor, variacao, bomQuandoSobe = true, dica, variante }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string; variante?: "solido" | "tinta" }) {
+  // Rodada ousada (15/11/2026): número grande em cartão, variação em pílula com seta.
+  return <CartaoDeIndicador lista rotulo={rotulo} valor={valor} variacao={variacao} bomQuandoSobe={bomQuandoSobe} dica={dica} variante={variante} />;
 }
 
 /** Investimento, resultado principal, custo por resultado e tendência, do objetivo escolhido. */
@@ -71,10 +53,10 @@ export function ResumoDoTopo({ dados, grupo, onGrupo }: { dados: ResultadosDaCon
   const t = r.tendencia;
   const mix = dados.mix;
   return (
-    <section aria-label="Resumo" className="min-w-0 space-y-2">
-      <dl className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4">
-        <NumeroGrande rotulo="Investimento" valor={brl(r.investimento)} variacao={t ? t.gasto_pct : null} dica="Quanto a Meta cobrou no período." />
-        <NumeroGrande rotulo={r.misturado ? `${r.rotulo} (principal)` : r.rotulo} valor={inteiro(r.resultados)} variacao={t ? t.resultados_pct : null} dica="O resultado que o objetivo das campanhas busca." />
+    <section aria-label="Resumo" className="min-w-0 space-y-4">
+      <dl className="grid min-w-0 grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
+        <NumeroGrande variante="solido" rotulo="Investimento" valor={brl(r.investimento)} variacao={t ? t.gasto_pct : null} dica="Quanto a Meta cobrou no período." />
+        <NumeroGrande variante="tinta" rotulo={r.misturado ? `${r.rotulo} (principal)` : r.rotulo} valor={inteiro(r.resultados)} variacao={t ? t.resultados_pct : null} dica="O resultado que o objetivo das campanhas busca." />
         <NumeroGrande rotulo="Custo por resultado" valor={brl(r.custo_por_resultado)} variacao={t ? t.custo_por_resultado_pct : null} bomQuandoSobe={false} />
         <NumeroGrande rotulo="Ativos agora" valor={`${inteiro(r.ativos)} de ${inteiro(r.anuncios)}`} dica="Anúncios rodando agora, do total com entrega no período." />
       </dl>
@@ -84,17 +66,18 @@ export function ResumoDoTopo({ dados, grupo, onGrupo }: { dados: ResultadosDaCon
         </p>
       )}
       {!grupo && mix && mix.por_grupo.length > 0 && (
-        <div className="min-w-0 pt-1" aria-label="Onde está o investimento">
+        <div className={juntar(superficie.painel, "min-w-0 p-5 sm:p-6")} aria-label="Onde está o investimento">
           <p className={texto.rotulo}>Onde está o investimento</p>
-          <div className="mt-1.5 flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+          <div className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
             {mix.por_grupo.map((g, i) => (
-              <span key={g.grupo} className={i % 2 === 0 ? "bg-primary" : "bg-primary/50"} style={{ width: `${Math.max(1, g.pct)}%` }} />
+              <span key={g.grupo} className="border-r-2 border-card last:border-r-0" style={{ width: `${Math.max(1, g.pct)}%`, backgroundColor: `hsl(var(--chart-${(i % 5) + 1}))` }} />
             ))}
           </div>
-          <div className="mt-1.5 flex min-w-0 flex-wrap">
-            {mix.por_grupo.map((g) => (
-              <button key={g.grupo} type="button" onClick={() => onGrupo(g.grupo)} className="mb-1 mr-3 text-left text-[12px] hover:underline" title={`Ver só ${g.rotulo.toLowerCase()}`}>
-                <span className="font-medium">{g.rotulo}</span> <span className="tabular-nums text-muted-foreground">{inteiro(g.pct)}% · {brl(g.gasto)}{g.resultados ? ` · ${inteiro(g.resultados)} ${g.resultado_rotulo.toLowerCase()}` : ""}</span>
+          <div className="mt-3 flex min-w-0 flex-wrap">
+            {mix.por_grupo.map((g, i) => (
+              <button key={g.grupo} type="button" onClick={() => onGrupo(g.grupo)} className="mb-1.5 mr-4 inline-flex items-center text-left text-[12px] hover:underline" title={`Ver só ${g.rotulo.toLowerCase()}`}>
+                <span aria-hidden="true" className="mr-1.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: `hsl(var(--chart-${(i % 5) + 1}))` }} />
+                <span className="mr-1 font-medium">{g.rotulo}</span> <span className="tabular-nums text-muted-foreground">{inteiro(g.pct)}% · {brl(g.gasto)}{g.resultados ? ` · ${inteiro(g.resultados)} ${g.resultado_rotulo.toLowerCase()}` : ""}</span>
               </button>
             ))}
           </div>
@@ -137,8 +120,8 @@ const statusCurto = (s: string) => {
 export function CartaoCompacto({ a, acao }: { a: AnuncioDoResultado; acao?: ReactNode }) {
   const m = a.metricas;
   return (
-    <article className={juntar(superficie.painel, "grid min-w-0 grid-cols-[56px_minmax(0,1fr)] gap-3 p-2.5")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
-      <div className="relative w-14 overflow-hidden rounded-md bg-secondary/40" style={{ paddingTop: "125%" }}>
+    <article className={juntar(superficie.painel, "grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-4 p-4 transition-colors hover:border-foreground/20")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
+      <div className="relative w-14 overflow-hidden rounded-md bg-muted/40" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
           <Foto src={a.imagem_url} alt={a.nome} className="h-full w-full" />
         </div>
@@ -147,19 +130,19 @@ export function CartaoCompacto({ a, acao }: { a: AnuncioDoResultado; acao?: Reac
         <div className="flex min-w-0 items-start">
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-semibold" title={a.nome}>{a.nome}</p>
-            <p className="truncate text-[11px] text-muted-foreground">{[a.campanha, statusCurto(a.status), a.grupo ? grupoDe(a.grupo)!.rotulo : ""].filter(Boolean).join(" · ")}</p>
+            <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{[a.campanha, statusCurto(a.status), a.grupo ? grupoDe(a.grupo)!.rotulo : ""].filter(Boolean).join(" · ")}</p>
           </div>
           <SeloDoSinal sinal={a.sinal} className="ml-2" />
         </div>
-        <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] sm:grid-cols-4">
+        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] sm:grid-cols-4 [&_dd]:text-[13px] [&_dd]:font-semibold [&_dd]:leading-5">
           <div className="min-w-0"><dt className="truncate text-muted-foreground">Investido</dt><dd className="truncate font-medium tabular-nums">{brl(m.gasto)}</dd></div>
           <div className="min-w-0"><dt className="truncate text-muted-foreground" title={a.resultado_rotulo}>{a.resultado_rotulo}</dt><dd className="truncate font-medium tabular-nums">{inteiro(m.resultados)}</dd></div>
           <div className="min-w-0"><dt className="truncate text-muted-foreground">Custo cada</dt><dd className="truncate font-medium tabular-nums">{brl(m.custo_por_resultado)}</dd></div>
           <div className="min-w-0"><dt className="truncate text-muted-foreground">CTR</dt><dd className="truncate font-medium tabular-nums">{porcento(m.ctr_saida !== null ? m.ctr_saida : m.ctr)}</dd></div>
         </dl>
-        <div className="mt-1 flex min-w-0 flex-wrap items-center">
+        <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
           {a.criativo && (
-            <span className="mb-0.5 mr-2 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary" title={a.criativo.origem === "mesma_peca" ? "Mesma arte de um anúncio ligado" : "Ligado ao criativo da Mesa Ads"}>
+            <span className="mb-0.5 mr-2 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary" title={a.criativo.origem === "mesma_peca" ? "Mesma arte de um anúncio ligado" : "Ligado ao criativo da Mesa Ads"}>
               <Link2 className="mr-1 h-3 w-3 shrink-0" />
               <span className="truncate">{a.criativo.nome}</span>
             </span>
@@ -181,8 +164,8 @@ function textoDoIndice(indice: number | null): string {
 /** Uma peça (a mesma arte em vários anúncios), somada. */
 export function CartaoDaPeca({ p }: { p: PecaAgrupada }) {
   return (
-    <article className={juntar(superficie.painel, "grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 p-2.5")} aria-label={`Criativo ${p.nome}`}>
-      <div className="relative w-[72px] overflow-hidden rounded-md bg-secondary/40" style={{ paddingTop: "125%" }}>
+    <article className={juntar(superficie.painel, "grid min-w-0 grid-cols-[80px_minmax(0,1fr)] gap-4 p-4 transition-colors hover:border-foreground/20")} aria-label={`Criativo ${p.nome}`}>
+      <div className="relative w-[80px] overflow-hidden rounded-md bg-muted/40" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
           <Foto src={p.imagem_url} alt={p.nome} className="h-full w-full" />
         </div>
@@ -193,14 +176,14 @@ export function CartaoDaPeca({ p }: { p: PecaAgrupada }) {
           {p.anuncios.length} anúncio{p.anuncios.length === 1 ? "" : "s"}
           {p.ativos ? ` (${p.ativos} ativo${p.ativos === 1 ? "" : "s"})` : ""} · {p.grupo ? grupoDe(p.grupo)!.rotulo : "Sem objetivo"}
         </p>
-        <dl className="mt-1.5 grid grid-cols-3 gap-x-3 text-[11px]">
+        <dl className="mt-3 grid grid-cols-3 gap-x-4 text-[11px] [&_dd]:text-[13px] [&_dd]:font-semibold [&_dd]:leading-5">
           <div className="min-w-0"><dt className="truncate text-muted-foreground">Investido</dt><dd className="truncate font-medium tabular-nums">{brl(p.metricas.gasto)}</dd></div>
           <div className="min-w-0"><dt className="truncate text-muted-foreground" title={p.resultado_rotulo}>{p.resultado_rotulo}</dt><dd className="truncate font-medium tabular-nums">{inteiro(p.metricas.resultados)}</dd></div>
           <div className="min-w-0"><dt className="truncate text-muted-foreground">Custo cada</dt><dd className="truncate font-medium tabular-nums">{brl(p.metricas.custo_por_resultado)}</dd></div>
         </dl>
         <p className={`mt-1 text-[11px] ${p.indice !== null && p.indice < 1 ? "text-success" : p.indice !== null && p.indice > 1.2 ? "text-destructive" : "text-muted-foreground"}`}>{textoDoIndice(p.indice)}</p>
         {p.criativo && (
-          <span className="mt-1 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+          <span className="mt-1 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">
             <Link2 className="mr-1 h-3 w-3 shrink-0" />
             <span className="truncate">Criativo da Mesa Ads</span>
           </span>

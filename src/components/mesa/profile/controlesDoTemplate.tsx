@@ -28,7 +28,7 @@ export function Segmentado<T extends string>({ rotulo, opcoes, valor, onEscolher
             onClick={() => onEscolher(o.valor)}
             className={juntar(
               "toque-compacto mb-1.5 mr-1.5 inline-flex h-8 items-center rounded-full border px-3 text-[12px] font-medium transition-colors disabled:opacity-50",
-              valor === o.valor ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
+              valor === o.valor ? "border-accent-solid bg-accent-solid text-on-accent" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
             )}
           >
             {o.icone && <span className="mr-1.5 inline-flex shrink-0" aria-hidden="true">{o.icone}</span>}

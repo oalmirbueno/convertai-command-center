@@ -158,14 +158,49 @@ function semFechoDoPainel(linha: string): string {
   return i > 0 ? linha.slice(0, i).trim() : "";
 }
 
+// ------------------------------------------------------------------ formato (10/11/2026)
+
+const TRAVESSAO = `${String.fromCharCode(0x2014)}${String.fromCharCode(0x2013)}`;
+
+/** Nenhum travessão: entre números vira "a" (04 a 10/11); no resto, vírgula. */
+export function semTravessaoNaMensagem(texto: string): string {
+  return String(texto ?? "")
+    .replace(new RegExp(`(\\d)[ \\t]*[${TRAVESSAO}][ \\t]*(\\d)`, "g"), "$1 a $2")
+    .replace(new RegExp(`[ \\t]*[${TRAVESSAO}][ \\t]*`, "g"), ", ")
+    .replace(/,[ \t]*,/g, ",")
+    .replace(/^, /gm, "");
+}
+
+/** Linha que é só um título em negrito de WhatsApp (*Anúncios* ou *Anúncios*:). */
+const RE_TITULO = /^\*[^*\n]{2,60}\*:?$/;
+const RE_ITEM = /^[-•]\s+/;
+const RE_NEGRITO = /\*[^*\s][^*\n]*\*/;
+
 /**
- * Aplica as regras fixas: https, saudação pelo horário, momento da semana e a linha do painel no fim.
+ * Espaçamento: cada bloco separado por UMA linha em branco. O título em negrito fica colado no texto dele e
+ * os itens de uma lista ficam juntos. Não muda nenhuma palavra.
+ */
+export function blocosComEspaco(linhas: readonly string[]): string {
+  const cheias = linhas.map((l) => l.trim()).filter(Boolean);
+  let texto = "";
+  for (let i = 0; i < cheias.length; i++) {
+    if (i === 0) { texto = cheias[0]; continue; }
+    const anterior = cheias[i - 1];
+    const colada = RE_TITULO.test(anterior) || (RE_ITEM.test(cheias[i]) && !RE_TITULO.test(cheias[i]));
+    texto += (colada ? "\n" : "\n\n") + cheias[i];
+  }
+  return texto;
+}
+
+/**
+ * Aplica as regras fixas: https, saudação pelo horário, momento da semana, a linha do painel no fim e o
+ * formato (blocos com linha em branco, negrito de WhatsApp, nenhum travessão).
  * Não inventa conteúdo: só a saudação, uma frase curta do momento (quando faltou) e o link.
  */
 export function acabamentoDoRitual(body: string, op: OpcoesDoAcabamento = {}): Acabamento {
   const agora = op.agora ?? new Date();
   const acertos: string[] = [];
-  const original = String(body ?? "").replace(/\r\n?/g, "\n").trim();
+  const original = semTravessaoNaMensagem(String(body ?? "").replace(/\r\n?/g, "\n")).replace(/\*\*([^*\n]+)\*\*/g, "*$1*").trim();
   if (!original) return { texto: original, acertos };
 
   // 1) Tira a linha do painel que a IA escreveu (volta no fim, padronizada).
@@ -233,8 +268,12 @@ export function acabamentoDoRitual(body: string, op: OpcoesDoAcabamento = {}): A
     acertos.push(`"${NOME_DO_MOMENTO[momento]}" acrescentado.`);
   }
 
-  // 4) https em todo link e a linha do painel no fim.
-  let texto = linksComHttps(linhas.join("\n").trim());
+  // 4) Formato: blocos com linha em branco; na mensagem da semana, pelo menos um título em negrito.
+  const corpo = blocosComEspaco(linhas);
+  if (momento && !RE_NEGRITO.test(corpo)) acertos.push("A mensagem saiu sem título em negrito nos blocos. Vale dar um título curto a cada bloco antes de enviar.");
+
+  // 5) https em todo link e a linha do painel no fim.
+  let texto = linksComHttps(corpo);
   texto = `${texto}\n\n${LINHA_DO_PAINEL}`;
   return { texto, acertos };
 }
