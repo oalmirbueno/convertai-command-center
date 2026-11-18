@@ -135,6 +135,30 @@ const atividadeDaIntegracao = {
   ],
 };
 
+// E-mail numa rota só (18/11/2026): entradas da casa e o e-mail como o cliente vê.
+const integracaoDoDominio = {
+  cloudflare_zona_id: "0123456789abcdef0123456789abcdef", zoho_org_id: "60012345678", zoho_dc: "com", zoho_admin: "admin@imobiliariaexemplo.com.br", zoho_plano: "gratuito", zoho_conectado: true, integracao_conferida_em: dia(0),
+  integracao: {
+    cloudflare: { ok: false, status: "active", name_servers: ["ada.ns.cloudflare.com", "bob.ns.cloudflare.com"], proxied_email: 0, conferido_em: dia(0), itens: [
+      { chave: "zona", situacao: "ok", texto: "Zona ativa na Cloudflare (ada.ns.cloudflare.com, bob.ns.cloudflare.com)." },
+      { chave: "proxy", situacao: "ok", texto: "Nenhum registro de e-mail passa pelo proxy." },
+      { chave: "mx", situacao: "ok", texto: "MX no provedor novo (mx.zoho.com, mx2.zoho.com, mx3.zoho.com)." },
+      { chave: "spf", situacao: "ok", texto: "Um SPF só, com o provedor novo." },
+      { chave: "dkim", situacao: "falta", texto: "Sem DKIM em zmail._domainkey.imobiliariaexemplo.com.br." },
+      { chave: "dmarc", situacao: "ok", texto: "DMARC com p=none." },
+    ] },
+    zoho: { ok: true, org_id: "60012345678", plano: "free", usuarios: 5, caixas: caixas.slice(0, 5).map((c, i) => ({ endereco: c.endereco, nome: c.pessoa, apelidos: i === 0 ? ["locacao@imobiliariaexemplo.com.br"] : [], ativa: true, admin: i === 2 })), dominio: { verificado: true, mx: "enabled", spf: true, dkim: false, seletor: "zmail" }, avisos: ["O DKIM ainda não foi verificado no Zoho.", "Plano gratuito: sem IMAP, POP, ActiveSync nem encaminhamento. Webmail e aplicativo do Zoho."], conferido_em: dia(0) },
+  },
+};
+Object.assign(dominio, integracaoDoDominio);
+const pedidoDeEmail = (parte) => ({ id: "p0", conta_id: CONTA, extra_id: null, dominio_id: null, tipo: "migracao", dominio: "clinicavida.com.br", caixas: 3, provedor_atual: "Locaweb", observacao: null, origem: "pagina", estado: "novo", valor_migracao: 597, valor_mensal: 39.9, pago_em: null, forma_pagamento: null, valor_pago: null, nota: null, criado_em: dia(0), empresa: "Clínica Vida", email_contato: "financeiro1@exemplo.com.br", telefone: "41999990000", client_id: null, extra_nome: null, etapas_feitas: 0, etapas_total: 0, extras_de_email: [], ...parte });
+const pedidosDaCasa = [
+  pedidoDeEmail({}),
+  pedidoDeEmail({ id: "p1", dominio: "imobteste.com.br", empresa: "Imobiliária Teste", caixas: 7, origem: "casa", estado: "aguardando_pagamento", extra_id: "x1", extra_nome: "Migração de e-mail", client_id: "cl1", criado_em: dia(-2) }),
+  pedidoDeEmail({ id: "p2", dominio: "imobiliariaexemplo.com.br", empresa: "Imobiliária Exemplo", caixas: 6, origem: "app", estado: "em_andamento", dominio_id: "d1", pago_em: dia(-8), forma_pagamento: "pix", valor_pago: 597, etapas_feitas: 5, etapas_total: 8, criado_em: dia(-9) }),
+];
+const emailDoCliente = (parte = {}) => ({ liberado: true, pedido: { id: "p2", tipo: "migracao", dominio: "imobiliariaexemplo.com.br", caixas: 6, estado: "em_andamento", valor_migracao: 597, valor_mensal: 54.8, pago_em: dia(-8), criado_em: dia(-9) }, dominios: [dominio], caixas, etapas, ...parte });
+
 const tabelas = {
   crm_campos: camposDaEmpresa, crm_automacoes: automacoes, crm_avisos: avisos, crm_paginas: [], crm_formularios: [], crm_conversoes: [], crm_automacao_execucoes: [],
   crm_leads: leads, crm_organizations: organizacoes, crm_contacts: [], crm_activities: atividades, crm_lead_events: eventos, crm_campaigns: campanhas, crm_goals: metas, crm_lead_messages: [],
@@ -177,6 +201,8 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
     const rpc = /\/rest\/v1\/rpc\/([a-z_]+)/.exec(url.pathname);
     if (rpc) {
       if (rpc[1] === "produto_estado") return json(estado);
+      if (rpc[1] === "produto_email_da_conta") return json(estado.__email || emailDoCliente());
+      if (rpc[1] === "produto_email_pedidos_da_casa") return json(pedidosDaCasa);
       if (rpc[1] === "produto_admin_contas") return json(contasDaCasa);
       if (rpc[1] === "produto_faturamento") return json(faturamento);
       if (rpc[1] === "crm_ranking") return json(ranking);
@@ -200,6 +226,7 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
       return json(um ? linhas[0] || null : linhas);
     }
     if (/\/functions\/v1\/comercial-leads/.test(url.pathname)) return json({ buscas, candidatos: [], busca: buscas[0] });
+    if (/\/functions\/v1\/produto-email/.test(url.pathname)) return json({ estado: { ligada: false, motivo: "A caixa está desligada. Ligar é decisão do dono: veja o custo abaixo.", plano_necessario: "Zoho Mail Lite (ou superior) na conta da Aceleriq", custo: { por_usuario_mes: "R$ 6,25 por usuário por mês (Mail Lite, cobrança anual)", cobranca: "Só anual, sem plano mensal", fonte: "zoho.com/mail/zohomail-pricing.html" } }, dominio: null });
     if (/\/functions\/v1\//.test(url.pathname)) return json({ ok: true });
     if (/\/auth\/v1\/user/.test(url.pathname)) return json({ id: EU, email: "priscila@imobiliariaexemplo.com.br" });
     return rota.abort();
@@ -248,6 +275,8 @@ const telas = [
   { nome: "07-conta-plano", caminho: "/app/conta?parte=plano", espera: "[data-escolha-de-plano]" },
   { nome: "08-conta-faturas", caminho: "/app/conta?parte=faturas", espera: "[data-faturas]" },
   { nome: "09-oferta-de-email", caminho: "/app/email", espera: "[data-oferta-de-email]", estado: estadoDoProduto({ conta: { email_ativo: false, plano_id: "starter" }, raiz: { email: false, plano: { id: "starter", nome: "Starter", preco_usuario: 49.9, limites: planos[0].limites, email_caixas_incluidas: 0 } } }) },
+  { nome: "09b-pedido-recebido", caminho: "/app/email", espera: "[data-andamento-do-pedido]", estado: { ...estadoDoProduto({ conta: { email_ativo: false, plano_id: "starter" }, raiz: { email: false, plano: { id: "starter", nome: "Starter", preco_usuario: 49.9, limites: planos[0].limites, email_caixas_incluidas: 0 } } }), __email: emailDoCliente({ liberado: false, pedido: { id: "p0", tipo: "migracao", dominio: "imobiliariaexemplo.com.br", caixas: 3, estado: "novo", valor_migracao: 597, valor_mensal: 39.9, pago_em: null, criado_em: dia(0) }, dominios: [], caixas: [], etapas: [] }) } },
+  { nome: "09c-so-email-cai-no-email", caminho: "/app", espera: "[data-email-contratado]", estado: estadoDoProduto({ conta: { teste_ate: dia(-1) }, raiz: { liberada: false, crm: false, email: false } }) },
   { nome: "10-abrir-empresa", caminho: "/app", espera: "[data-onboarding-do-produto]", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 } },
   { nome: "10b-onboarding-funil", caminho: "/app", espera: "[data-onboarding-do-produto]", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 }, depois: async (p) => { await p.click('[data-opcao="saude"]'); await p.click('[data-opcao="organizar"]'); await p.fill('input[autocomplete="organization"]', "Clínica Vida"); await p.click("[data-avancar]"); await p.waitForSelector("[data-funil-do-onboarding]"); await p.waitForTimeout(400); } },
   { nome: "10c-onboarding-claro", caminho: "/app", espera: "[data-onboarding-do-produto]", tema: "light", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 } },
@@ -265,6 +294,10 @@ const telas = [
   { nome: "20-casa-empresas", caminho: "/produto", papel: "admin", espera: "[data-lista-de-contas]" },
   { nome: "21-casa-ficha", caminho: "/produto", papel: "admin", espera: "[data-lista-de-contas]", depois: async (p) => { await p.click(`[data-conta="${CONTA}"]`); await p.waitForSelector("[data-salvar-conta]", { timeout: 10000 }); await p.waitForTimeout(500); } },
   { nome: "22-casa-email", caminho: "/produto?area=email", papel: "admin", espera: "[data-passo-a-passo]" },
+  { nome: "22b-casa-entradas", caminho: "/produto?area=email", papel: "admin", espera: "[data-entradas-de-email]" },
+  { nome: "22c-casa-marcar-pago", caminho: "/produto?area=email", papel: "admin", espera: "[data-marcar-pago]", depois: async (p) => { await p.locator("[data-marcar-pago]").first().click(); await p.waitForSelector("[data-confirmar-pago]"); await p.waitForTimeout(400); } },
+  { nome: "22d-casa-integracao", caminho: "/produto?area=email", papel: "admin", espera: "[data-conferencia-zoho]", depois: async (p) => { await p.locator("[data-conferencia-cloudflare]").scrollIntoViewIfNeeded(); await p.waitForTimeout(300); } },
+  { nome: "22e-casa-caixa", caminho: "/produto?area=caixa", papel: "admin", espera: "[data-caixa-desligada]" },
   { nome: "23-casa-precos", caminho: "/produto?area=precos", papel: "admin", espera: "[data-planos-do-produto]" },
   { nome: "24-casa-faturamento", caminho: "/produto?area=faturamento", papel: "admin", espera: "[data-faturamento-por-conta]" },
   { nome: "25-financeiro", caminho: "/financeiro", papel: "admin", espera: "body", depois: async (p) => { await p.getByRole("button", { name: /Visão geral/ }).first().click(); await p.getByText("CRM e E-mail", { exact: true }).last().click(); await p.waitForSelector("[data-faturamento-do-produto]", { timeout: 15000 }); await p.waitForTimeout(500); } },

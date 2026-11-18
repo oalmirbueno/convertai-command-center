@@ -62,8 +62,10 @@ import { navegadorDoPcTool } from '../mcp-server/modulos/mcp-navegador-do-pc.ts'
 import { FERRAMENTAS_DO_PAINEL_INTEIRO, ligarCatalogo } from '../mcp-server/modulos/painel-inteiro.ts';
 import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro.ts';
 import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspace-e-perfis.ts';
+import { FERRAMENTAS_DA_CENTRAL } from '../mcp-server/modulos/central-de-skills.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
+import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
 import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
 import {
@@ -206,6 +208,7 @@ export type ToolScope =
   | 'contracts:write'
   | 'memory:read'
   | 'memory:propose'
+  | 'memory:write'
   | 'mesas:write'
   | 'admin';
 
@@ -235,6 +238,7 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'contracts:write',
   'memory:read',
   'memory:propose',
+  'memory:write',
   'mesas:write',
   'admin',
 ] as const;
@@ -266,6 +270,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'contracts:write': { title: 'Contratos — rascunhos', description: 'Criar, atualizar e cancelar somente rascunhos completamente não assinados e nunca enviados. Não permite assinar, aprovar, enviar ou publicar contratos.', sensitive: true },
   'memory:read': { title: 'Segundo Cérebro — leitura', description: 'Consultar contexto, arquivos e commits do repositório de memória.' },
   'memory:propose': { title: 'Segundo Cérebro — propor', description: 'Criar propostas .md no inbox do OpenClaw (nunca sobrescreve arquivos).', sensitive: true },
+  'memory:write': { title: 'Central e Segundo Cérebro — escrever', description: 'Publicar skills e conectores na Central de Skills e criar ou editar notas do segundo cérebro (cada gravação vira commit; memória consolidada continua só pela revisão diária).', sensitive: true },
   'mesas:write': { title: 'Mesas: agir', description: 'Agir nas mesas com a sessão da pessoa conectada (OAuth): pedir conteúdo e gravar na agenda, criar e editar campanha, briefing e imagens, salvar oferta da Mesa Ads e mandar peça para aprovação. Cada mesa confere acesso e regra como na tela. Não publica, não agenda post e não gasta verba de anúncio.', sensitive: true },
   'admin': { title: 'Administrador', description: 'Bypass total de escopo. Concede acesso a todas as ferramentas.', sensitive: true },
 };
@@ -379,6 +384,12 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_reagendar_publicacao: 'editorial:write',
   // MCP 2.30 (18/11/2026): publicação planejada de post já aprovado, para depois o reagendar.
   aceleriq_criar_publicacao_de_aprovado: 'editorial:write',
+  // MCP 2.33 (18/11/2026): e-mail profissional (entradas, migração, avanço, pagamento e conferência).
+  aceleriq_email_entradas: 'clients:read',
+  aceleriq_email_migracao: 'clients:read',
+  aceleriq_email_conferir: 'clients:read',
+  aceleriq_email_registrar: 'clients:write',
+  aceleriq_email_marcar_pago: 'clients:write',
   aceleriq_editar_legenda_publicacao: 'editorial:write',
   aceleriq_ajustar_formato_publicacao: 'editorial:write',
   // MCP 2.28 (14/11/2026): revisão interna, caixa Precisa de você e pedido ao dono.
@@ -5110,9 +5121,12 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DE_WORKSPACE_E_PERFIS,
   ...FERRAMENTA_DE_REAGENDAR,
   ...FERRAMENTA_DE_CRIAR_PUBLICACAO,
+  ...FERRAMENTAS_DO_EMAIL,
   ...FERRAMENTA_DE_EDITAR_LEGENDA,
   ...FERRAMENTA_DE_AJUSTAR_FORMATO,
   ...FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO,
+  // MCP 2.32: Central de Skills e segundo cérebro em tempo real (modulos/central-de-skills.ts).
+  ...FERRAMENTAS_DA_CENTRAL,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

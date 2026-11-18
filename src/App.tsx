@@ -108,6 +108,8 @@ const ReportDetail = rotas.lazy(() => import("@/pages/ReportDetail"));
 const ProfilePage = rotas.lazy(() => import("@/pages/ProfilePage"));
 const SettingsPage = rotas.lazy(() => import("@/pages/SettingsPage"));
 const BaseDosAgentes = rotas.lazy(() => import("@/pages/BaseDosAgentes"));
+const CentralDeSkills = rotas.lazy(() => import("@/pages/CentralDeSkills"));
+const GruposAoVivo = rotas.lazy(() => import("@/pages/GruposAoVivo"));
 const AdminViewAsClient = rotas.lazy(() => import("@/pages/AdminViewAsClient"));
 const ApiDocs = rotas.lazy(() => import("@/pages/ApiDocs"));
 const AdminQuizSubmissions = rotas.lazy(() => import("@/pages/AdminQuizSubmissions"));
@@ -423,6 +425,9 @@ export function AppRoutes() {
         <Route path="/kanban" element={<StaffRoute><Kanban /></StaffRoute>} />
         <Route path="/execucao" element={<StaffRoute><AdminExecucao /></StaffRoute>} />
         <Route path="/base-dos-agentes" element={<StaffRoute><BaseDosAgentes /></StaffRoute>} />
+        {/* 18/11/2026: Central de Skills e segundo cérebro (todas as skills de todos os agentes). */}
+        <Route path="/skills" element={<StaffRoute><CentralDeSkills /></StaffRoute>} />
+        <Route path="/grupos" element={<StaffRoute><GruposAoVivo /></StaffRoute>} />
         <Route path="/metricas" element={<StaffRoute><AdminMetricas /></StaffRoute>} />
         <Route path="/anuncios" element={<StaffRoute><AdminAds /></StaffRoute>} />
         {/* 26/10: boletim do Hermes, mudanças nas contas e o que precisa do dono, numa página só. */}

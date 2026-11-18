@@ -126,6 +126,8 @@ export const OAUTH_STAFF_SCOPES = [
   'contracts:write',
   'memory:read',
   'memory:propose',
+  // MCP 2.32: publicar na Central de Skills e editar nota do segundo cérebro.
+  'memory:write',
   // MCP 2.3: agir nas mesas. Concedível a staff, mas a ação só roda com a
   // sessão da própria pessoa (OAuth) e a mesa confere o acesso ao cliente de
   // novo; principal restrito a cliente ainda cai no portão de dataScope.

@@ -50,6 +50,7 @@ const SCOPES: { id: string; label: string; hint: string; danger?: boolean }[] = 
   { id: "editorial:write", label: "editorial:write", hint: "Adicionar pautas com cliente, projeto, formato e data. Nunca aprova, agenda ou publica.", danger: true },
   { id: "memory:read", label: "memory:read", hint: "Consultar o Segundo Cérebro (somente leitura)." },
   { id: "memory:propose", label: "memory:propose", hint: "Propor arquivos para o Segundo Cérebro (nunca sobrescreve).", danger: true },
+  { id: "memory:write", label: "memory:write", hint: "Publicar skills na Central de Skills e editar notas do Segundo Cérebro (cada gravação vira commit).", danger: true },
 ];
 
 const EXPIRY_PRESETS: { label: string; days: number | null }[] = [

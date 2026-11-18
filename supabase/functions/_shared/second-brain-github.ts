@@ -631,3 +631,108 @@ export async function proposeUpdate(input: ProposalInput): Promise<ProposalResul
   const sha: string = put.body?.content?.sha ?? '';
   return { path, sha, commit_sha: commitSha, commit_url: commitUrl, bytes, branch };
 }
+
+// ─── Central (18/11/2026): árvore e edição direta de notas ───────
+// Agentes leem e editam o segundo cérebro em tempo real pelo painel. A memória
+// consolidada (MEMORY.md, now, decisions, projects/, context/...) continua só
+// da revisão diária: para agente, a escrita direta ali é recusada e o caminho
+// é memory_propose_update. Quem é admin no painel edita tudo, menos código
+// e dados de sincronização.
+
+const NOTE_MAX_BYTES = 256 * 1024;
+const NOTE_EXT = /\.(md|txt|json|ya?ml|csv)$/i;
+/** Nem admin edita por aqui: código, automação e dados de sincronização. */
+const NOTE_HARD_BLOCK_PREFIXES = ['scripts/', '.github/', 'claude-code/', '.git/', '.obsidian/'];
+
+export interface TreeEntry { path: string; type: 'file' | 'dir'; size: number; sha: string }
+
+export async function listTree(prefix = ''): Promise<{ entries: TreeEntry[]; truncated: boolean; branch: string }> {
+  const cfg = await loadConfig();
+  const branch = await resolveBranch(cfg);
+  const res = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/git/trees/${encodeURIComponent(branch)}`, {
+    query: { recursive: '1' },
+    timeoutMs: 15000,
+  });
+  if (res.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: res.status, detail: String(res.body?.message ?? '') });
+  const limpo = String(prefix ?? '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  const pref = limpo ? normalizePath(limpo) + '/' : '';
+  const entries: TreeEntry[] = [];
+  for (const t of (res.body?.tree ?? []) as Array<Record<string, unknown>>) {
+    const path = String(t.path ?? '');
+    if (pref && !path.startsWith(pref)) continue;
+    if (NOTE_HARD_BLOCK_PREFIXES.some((p) => path.startsWith(p) || path + '/' === p)) continue;
+    entries.push({
+      path,
+      type: t.type === 'tree' ? 'dir' : 'file',
+      size: Number(t.size ?? 0),
+      sha: String(t.sha ?? ''),
+    });
+  }
+  return { entries, truncated: Boolean(res.body?.truncated), branch };
+}
+
+export function assertWritableNote(path: string, opts: { admin: boolean }): string {
+  const p = normalizePath(path);
+  if (NOTE_HARD_BLOCK_PREFIXES.some((pref) => p.startsWith(pref))) {
+    throw new SecondBrainError({ kind: 'forbidden', detail: `edição bloqueada em ${p} (código ou sincronização)` });
+  }
+  if (!NOTE_EXT.test(p)) throw new SecondBrainError({ kind: 'validation', detail: 'só .md, .txt, .json, .yaml ou .csv' });
+  if (!opts.admin) {
+    if (WRITE_BLOCKLIST_EXACT.has(p) || p === 'AGENTS.md' || p === 'CLAUDE.md') {
+      throw new SecondBrainError({ kind: 'forbidden', detail: `${p} é memória consolidada: use memory_propose_update` });
+    }
+    for (const pref of ['memory/projects/', 'memory/context/']) {
+      if (p.startsWith(pref)) throw new SecondBrainError({ kind: 'forbidden', detail: `${pref} é memória consolidada: use memory_propose_update` });
+    }
+  }
+  return p;
+}
+
+export interface NoteWriteInput {
+  path: string;
+  content: string;
+  /** sha que o agente leu; sem ele, só cria arquivo novo (não sobrescreve às cegas). */
+  sha?: string | null;
+  message?: string;
+  author: string;
+  admin: boolean;
+}
+
+export async function writeNote(input: NoteWriteInput): Promise<ProposalResult & { created: boolean }> {
+  const cfg = await loadConfig();
+  const path = assertWritableNote(input.path, { admin: input.admin });
+  const content = String(input.content ?? '');
+  const bytes = new TextEncoder().encode(content).length;
+  if (bytes > NOTE_MAX_BYTES) throw new SecondBrainError({ kind: 'too_large', bytes });
+  const branch = await resolveBranch(cfg);
+  const probe = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(path)}`, { query: { ref: branch } });
+  const exists = probe.status === 200 && !Array.isArray(probe.body);
+  if (exists && !input.sha) {
+    throw new SecondBrainError({ kind: 'conflict', detail: `${path} já existe: leia com memory_fetch e mande o sha para editar` });
+  }
+  if (exists && input.sha && probe.body?.sha !== input.sha) {
+    throw new SecondBrainError({ kind: 'conflict', detail: `${path} mudou desde a sua leitura (sha atual ${String(probe.body?.sha).slice(0, 10)}): leia de novo` });
+  }
+  const author = String(input.author || 'agente').replace(/[^\w .:@-]/g, '').slice(0, 60);
+  const put = await gh(cfg, 'PUT', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(path)}`, {
+    body: {
+      message: `central: ${input.message?.slice(0, 120) || (exists ? 'edita' : 'cria')} ${path} [${author}]`,
+      content: b64encode(content),
+      branch,
+      ...(exists ? { sha: input.sha } : {}),
+    },
+    timeoutMs: 15000,
+  });
+  if (put.status === 409 || put.status === 422) throw new SecondBrainError({ kind: 'conflict', detail: String(put.body?.message ?? 'conflict') });
+  if (put.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: put.status, detail: String(put.body?.message ?? '') });
+  invalidatePulse();
+  return {
+    path,
+    sha: put.body?.content?.sha ?? '',
+    commit_sha: put.body?.commit?.sha ?? '',
+    commit_url: put.body?.commit?.html_url ?? '',
+    bytes,
+    branch,
+    created: !exists,
+  };
+}
