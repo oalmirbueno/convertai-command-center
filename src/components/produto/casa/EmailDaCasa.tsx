@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, Copy, Pencil, Plus } from "lucide-react";
+import { Check, Copy, Pencil } from "lucide-react";
 import {
   carregarEmail,
   casa,
@@ -36,6 +36,9 @@ import {
 } from "@/components/sistema";
 import ChecagemDoDominio from "../ChecagemDoDominio";
 import { chaveDasContas } from "./ContasDaCasa";
+import EntradasDeEmail from "./EntradasDeEmail";
+import IntegracaoDoDominio from "./IntegracaoDoDominio";
+import type { DominioComIntegracao } from "@/lib/produto/email-pedidos";
 
 const ESTADOS: EstadoDoDominio[] = ["levantamento", "preparando", "virada", "concluido", "pausado"];
 const PROVEDORES: ProvedorDeEmail[] = ["zoho", "google", "microsoft", "outro"];
@@ -61,9 +64,9 @@ export function registrosParaPublicar(d: Pick<DominioDeEmail, "dominio" | "prove
 }
 
 /**
- * A migração e a operação do e-mail profissional de cada empresa: o domínio,
- * o passo a passo, as caixas e a conferência do DNS. O passo a passo nasce
- * pronto com o domínio; aqui a casa marca o que fez e anota.
+ * O e-mail profissional numa rota só: as entradas (pedidos) no topo e, embaixo, a migração de cada
+ * empresa (domínio, passo a passo, caixas, integração e conferência do DNS). O domínio nasce quando a
+ * entrada é marcada como paga, já com o passo a passo; aqui a casa marca o que fez e anota.
  */
 export default function EmailDaCasa() {
   const qc = useQueryClient();
@@ -80,22 +83,27 @@ export default function EmailDaCasa() {
   const nomeDaConta = (id: string) => ((contas.data || []).filter((c) => c.id === id)[0] || { nome: "Empresa" }).nome;
   const pedidas = caixas.filter((c) => c.estado === "pedida").length;
   const dominio = dominios.filter((d) => d.id === escolhido)[0] || dominios[0] || null;
-  const novoDominio = (
-    <button type="button" className={botao.icone} onClick={() => setEditando("novo")} aria-label="Novo domínio" title="Novo domínio" data-novo-dominio="">
-      <Plus className="h-4 w-4 text-primary" aria-hidden="true" />
-    </button>
-  );
+  const abrirDominio = (id: string) => {
+    setEscolhido(id);
+    window.setTimeout(() => {
+      try {
+        document.querySelector("[data-migracao-aberta]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch {
+        /* sem rolagem programada */
+      }
+    }, 300);
+  };
 
   return (
     <div className="min-w-0 space-y-6" data-email-da-casa="">
+      <EntradasDeEmail aoAbrirDominio={abrirDominio} />
       <Secao
-        titulo="Domínios"
+        titulo="Migrações"
         descricao={`${dominios.length}${pedidas ? ` · ${pedidas} ${pedidas === 1 ? "caixa pedida" : "caixas pedidas"}` : ""}`}
-        ajuda="Um domínio por empresa. Ao criar, o passo a passo da migração já vem pronto. A empresa precisa estar com o E-mail profissional marcado em Empresas para ver esta área no produto."
-        acao={novoDominio}
+        ajuda="Um domínio por empresa. O domínio nasce quando a entrada é marcada como paga, já com o passo a passo. Domínio que já existia antes das entradas continua aqui para editar."
       >
         {dominios.length === 0 ? (
-          <EstadoVazio compacto titulo="Nenhum domínio cadastrado." descricao="Comece pelo domínio da empresa que vai migrar." acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setEditando("novo")}>Novo domínio</button>} />
+          <EstadoVazio compacto titulo="Nenhuma migração ainda." descricao="Marque uma entrada como paga e a migração aparece aqui." />
         ) : (
           <ul className={juntar(lista.aberta, lista.divisoria)} data-lista-de-dominios="">
             {dominios.map((d) => {
@@ -121,6 +129,7 @@ export default function EmailDaCasa() {
 
       {dominio && (
         <>
+          <div data-migracao-aberta="" className="min-w-0 scroll-mt-4" />
           <Secao
             titulo={dominio.dominio}
             descricao={`${nomeDaConta(dominio.conta_id)} · ${ROTULO_DO_ESTADO_DO_DOMINIO[dominio.estado]}`}
@@ -137,6 +146,7 @@ export default function EmailDaCasa() {
           </Secao>
           <PassoAPasso etapas={etapas.filter((e) => e.dominio_id === dominio.id)} aoMudar={reler} />
           <CaixasDaCasa dominio={dominio} caixas={caixas.filter((c) => c.dominio_id === dominio.id)} aoMudar={reler} />
+          <IntegracaoDoDominio key={`integracao-${dominio.id}`} dominio={dominio as DominioComIntegracao} aoMudar={reler} />
           <Registros dominio={dominio} />
           <ChecagemDoDominio dominio={dominio} detalhado aoConferir={() => void reler()} />
         </>

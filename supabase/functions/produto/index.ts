@@ -8,7 +8,7 @@
  *   reenviar_convite { membro_id }                    -> { enviado }
  *   assinar { plano_id, usuarios, so_guardar? }       -> { link } (checkout do Asaas) ou { atualizado: true }
  *   cancelar {}                                       -> { cancelada: true, acesso_ate }
- *   pedir_email { dominio?, caixas?, observacao? }    -> { ok: true }
+ *   pedir_email { dominio?, caixas?, tipo?, observacao?, origem? } -> { ok, pedido_id, novo }
  *   dns { dominio_id }                                -> { checagem }   (qualquer pessoa da empresa, ou a casa)
  *
  * A casa (admin do painel):
@@ -363,17 +363,33 @@ async function cancelar(ch: Chamador) {
   return json({ cancelada: true, acesso_ate: ate });
 }
 
-/** O cliente pede o e-mail profissional: vira aviso no sino e oportunidade no Comercial da casa. */
+/**
+ * O cliente pede o e-mail profissional (página /email/pedir ou o /app): vira UMA entrada em
+ * produto_email_pedidos (pedir de novo completa a mesma), com aviso no sino. O negócio no Comercial
+ * só nasce junto com a entrada nova, para o mesmo pedido não abrir vários negócios.
+ */
 async function pedirEmail(ch: Chamador, corpo: Record<string, unknown>) {
   const contaId = exigirAdminDaConta(ch);
   const conta = await lerConta(contaId);
   const dominio = texto(corpo.dominio, 120).toLowerCase();
   const caixas = Math.max(0, Math.min(500, Math.floor(Number(corpo.caixas) || 0)));
   const observacao = texto(corpo.observacao, 600);
-  const { count } = await servico().from("produto_historico").select("id", { count: "exact", head: true }).eq("conta_id", contaId).eq("acao", "email_pedido").gte("criado_em", new Date(Date.now() - 24 * 3600 * 1000).toISOString());
-  if ((count || 0) >= 3) throw new ErroHttp(429, "muitos_pedidos", "O pedido já chegou. A Aceleriq vai falar com você.");
-  await registrar(contaId, ch.userId, "email_pedido", { dominio, caixas, observacao });
-  await servico().rpc("produto_avisar_casa", { _mensagem: `E-mail profissional: ${conta.nome} pediu${dominio ? ` para ${dominio}` : ""}${caixas ? `, ${caixas} caixas` : ""}.`, _link: "/produto?area=email" });
+  const tipo = corpo.tipo === "novo" || corpo.tipo === "migracao" ? corpo.tipo : null;
+  const { count } = await servico().from("produto_historico").select("id", { count: "exact", head: true }).eq("conta_id", contaId).in("acao", ["email_pedido", "email_pedido_atualizado"]).gte("criado_em", new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+  if ((count || 0) >= 5) throw new ErroHttp(429, "muitos_pedidos", "O pedido já chegou. A Aceleriq vai falar com você.");
+  const { data: registro, error: erroDoPedido } = await servico().rpc("produto_email_registrar_pedido", {
+    _conta: contaId,
+    _dominio: dominio || null,
+    _caixas: caixas || null,
+    _tipo: tipo,
+    _observacao: observacao || null,
+    _origem: corpo.origem === "app" ? "app" : "pagina",
+    _ator: ch.userId,
+    _provedor_atual: texto(corpo.provedor_atual, 120) || null,
+  });
+  if (erroDoPedido || !registro) throw erroDoBanco(erroDoPedido, "Não foi possível registrar o pedido agora.");
+  const r = registro as { pedido: { id: string }; novo: boolean };
+  if (!r.novo) return json({ ok: true, pedido_id: r.pedido.id, novo: false });
   const { error } = await servico().from("commercial_leads").insert({
     name: conta.nome,
     company: conta.nome,
@@ -384,10 +400,10 @@ async function pedirEmail(ch: Chamador, corpo: Record<string, unknown>) {
     classe: "upsell",
     next_action: "Responder o pedido de e-mail profissional",
     notes: [`Pedido feito dentro do CRM (${conta.nome}).`, dominio ? `Domínio: ${dominio}` : "", caixas ? `Caixas: ${caixas}` : "", observacao].filter(Boolean).join("\n"),
-    qualificacao: { fonte: "produto_crm", produto_conta_id: contaId, oferta: "E-mail profissional" },
+    qualificacao: { fonte: "produto_crm", produto_conta_id: contaId, oferta: "E-mail profissional", email_pedido_id: r.pedido.id },
   });
   if (error) console.error("[produto] lead do pedido não criado", error.message.slice(0, 160));
-  return json({ ok: true });
+  return json({ ok: true, pedido_id: r.pedido.id, novo: true });
 }
 
 // ------------------------------------------------------------------ e-mail

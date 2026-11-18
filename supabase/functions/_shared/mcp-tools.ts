@@ -64,6 +64,7 @@ import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro
 import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspace-e-perfis.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
+import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
 import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
 import {
@@ -379,6 +380,12 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_reagendar_publicacao: 'editorial:write',
   // MCP 2.30 (18/11/2026): publicação planejada de post já aprovado, para depois o reagendar.
   aceleriq_criar_publicacao_de_aprovado: 'editorial:write',
+  // MCP 2.31 (18/11/2026): e-mail profissional (entradas, migração, avanço, pagamento e conferência).
+  aceleriq_email_entradas: 'clients:read',
+  aceleriq_email_migracao: 'clients:read',
+  aceleriq_email_conferir: 'clients:read',
+  aceleriq_email_registrar: 'clients:write',
+  aceleriq_email_marcar_pago: 'clients:write',
   aceleriq_editar_legenda_publicacao: 'editorial:write',
   aceleriq_ajustar_formato_publicacao: 'editorial:write',
   // MCP 2.28 (14/11/2026): revisão interna, caixa Precisa de você e pedido ao dono.
@@ -5110,6 +5117,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DE_WORKSPACE_E_PERFIS,
   ...FERRAMENTA_DE_REAGENDAR,
   ...FERRAMENTA_DE_CRIAR_PUBLICACAO,
+  ...FERRAMENTAS_DO_EMAIL,
   ...FERRAMENTA_DE_EDITAR_LEGENDA,
   ...FERRAMENTA_DE_AJUSTAR_FORMATO,
   ...FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO,

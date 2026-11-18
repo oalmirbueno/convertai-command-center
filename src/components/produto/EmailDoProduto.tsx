@@ -2,12 +2,12 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, ExternalLink, Mail, Plus } from "lucide-react";
+import { Link } from "react-router-dom";
+import { carregarEmailDoCliente, fraseDoPedido } from "@/lib/produto/email-pedidos";
 import {
-  carregarEmailDaEmpresa,
   fraseDoErro,
   lerPrecos,
   pedirCaixa,
-  pedirEmail,
   reais,
   ROTULO_DO_ESTADO_DO_DOMINIO,
   ROTULO_DO_PROVEDOR,
@@ -63,32 +63,21 @@ const VANTAGENS = [
 export default function EmailDoProduto({ estado }: { estado: EstadoDoProduto }) {
   const conta = estado.conta!;
   if (!conta.email_ativo) return <OfertaDeEmail estado={estado} />;
-  if (!estado.email) return <SemAcesso estado={estado} produto="email" />;
   return <EmailContratado estado={estado} />;
 }
 
+/**
+ * Quem ainda não tem o e-mail: a oferta e um caminho só para pedir, o mesmo da página /email
+ * (o pedido em /email/pedir já sabe quem está logado e qual é a empresa). Antes havia um segundo
+ * formulário aqui, com outra regra; ficou um botão. Pedido já feito aparece com o andamento.
+ */
 function OfertaDeEmail({ estado }: { estado: EstadoDoProduto }) {
   const admin = !!estado.eu && estado.eu.papel === "admin";
   const config = useQuery({ queryKey: ["produto", "precos"], queryFn: lerPrecos, staleTime: 300_000 });
-  const [dominio, setDominio] = useState("");
-  const [caixas, setCaixas] = useState("");
-  const [observacao, setObservacao] = useState("");
-  const [enviando, setEnviando] = useState(false);
-  const [pedido, setPedido] = useState(false);
+  const meu = useQuery({ queryKey: ["produto", "email", "pedido", estado.conta!.id], queryFn: carregarEmailDoCliente, retry: 1 });
   const c = config.data;
   const inclusoNoPlano = !!estado.plano && estado.plano.email_caixas_incluidas > 0;
-
-  const pedir = async () => {
-    setEnviando(true);
-    try {
-      await pedirEmail({ dominio: dominio.trim(), caixas: Math.floor(Number(caixas) || 0), observacao: observacao.trim() });
-      setPedido(true);
-    } catch (e) {
-      toast.error(fraseDoErro(e, "Não foi possível enviar o pedido."));
-    } finally {
-      setEnviando(false);
-    }
-  };
+  const andamento = fraseDoPedido(meu.data ? meu.data.pedido : null);
 
   return (
     <div className="produto-entra-em-ordem mx-auto w-full min-w-0 max-w-[1080px] space-y-6" data-oferta-de-email="">
@@ -129,27 +118,13 @@ function OfertaDeEmail({ estado }: { estado: EstadoDoProduto }) {
           )}
         </div>
 
-        <Painel titulo={pedido ? "Pedido recebido" : "Quero o e-mail profissional"}>
-          {pedido ? (
-            <p className={texto.corpo}>A Aceleriq vai falar com você para combinar a migração.</p>
+        <Painel titulo={andamento ? andamento.titulo : "Quero o e-mail profissional"}>
+          {andamento ? (
+            <p className={texto.corpo} data-andamento-do-pedido="">{andamento.texto}</p>
           ) : admin ? (
             <>
-              <GrupoDeCampos colunas={1}>
-                <CampoDeFormulario rotulo="Domínio da empresa" apoio="Se já tem, como suaempresa.com.br">
-                  <input value={dominio} onChange={(e) => setDominio(e.target.value)} className={campo} placeholder="suaempresa.com.br" maxLength={120} autoCapitalize="none" />
-                </CampoDeFormulario>
-                <CampoDeFormulario rotulo="Quantas caixas">
-                  <input value={caixas} onChange={(e) => setCaixas(e.target.value)} className={campo} inputMode="numeric" maxLength={3} />
-                </CampoDeFormulario>
-                <CampoDeFormulario rotulo="Onde o e-mail está hoje">
-                  <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} className={campoTexto} maxLength={600} placeholder="Provedor atual e o que mais ajudar" />
-                </CampoDeFormulario>
-              </GrupoDeCampos>
-              <div className="mt-4 flex justify-end">
-                <button type="button" className={botao.primario} onClick={() => void pedir()} disabled={enviando} data-pedir-email="">
-                  {enviando ? "Enviando..." : "Pedir"}
-                </button>
-              </div>
+              <p className={juntar(texto.corpo, "mb-4")}>Diga o domínio e quantas caixas. Em menos de um minuto o pedido chega à Aceleriq.</p>
+              <Link to="/email/pedir" className={botao.primario} data-pedir-email="">Pedir o e-mail profissional</Link>
             </>
           ) : (
             <p className={texto.corpo}>Quem administra a empresa pode pedir por aqui.</p>
@@ -165,7 +140,7 @@ function EmailContratado({ estado }: { estado: EstadoDoProduto }) {
   const admin = !!estado.eu && estado.eu.papel === "admin";
   const qc = useQueryClient();
   const chave = ["produto", "email", conta.id];
-  const email = useQuery({ queryKey: chave, queryFn: carregarEmailDaEmpresa });
+  const email = useQuery({ queryKey: chave, queryFn: carregarEmailDoCliente });
   const [escolhido, setEscolhido] = useState<string | null>(null);
 
   if (email.isLoading) return <Carregando forma="aba" rotulo="Abrindo o e-mail" />;
@@ -173,11 +148,14 @@ function EmailContratado({ estado }: { estado: EstadoDoProduto }) {
     return <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void email.refetch()}>Tentar de novo</button>} />;
   }
   const { dominios, caixas, etapas } = email.data;
+  // O e-mail tem a liberação dele: pedido pago libera mesmo com o teste do CRM vencido.
+  if (!email.data.liberado) return <SemAcesso estado={estado} produto="email" />;
   if (!dominios.length) {
+    const andamento = fraseDoPedido(email.data.pedido);
     return (
       <div className="min-w-0 space-y-5">
         <CabecalhoDePagina titulo="E-mail profissional" />
-        <EstadoVazio icone={<Mail className="h-5 w-5" aria-hidden="true" />} titulo="A migração está sendo preparada" descricao="Assim que a Aceleriq cadastrar o domínio, ele aparece aqui com as caixas e o andamento." />
+        <EstadoVazio icone={<Mail className="h-5 w-5" aria-hidden="true" />} titulo={andamento ? andamento.titulo : "A migração está sendo preparada"} descricao={andamento ? andamento.texto : "Assim que a Aceleriq cadastrar o domínio, ele aparece aqui com as caixas e o andamento."} />
       </div>
     );
   }

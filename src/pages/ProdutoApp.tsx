@@ -15,6 +15,7 @@ import { Foto } from "@/components/produto/pecas";
 import InicioDoProduto from "@/components/produto/InicioDoProduto";
 import PrimeirosPassos from "@/components/produto/PrimeirosPassos";
 import SemAcesso from "@/components/produto/SemAcesso";
+import { destinoDoInicio } from "@/lib/produto/email-pedidos";
 import CriarSenha from "@/components/produto/CriarSenha";
 
 const AdminComercial = lazy(() => import("@/pages/AdminComercial"));
@@ -252,6 +253,8 @@ export default function ProdutoApp() {
   else if (secao === "captacao") corpo = <Suspense fallback={espera}><CaptacaoDaConta estado={estado} /></Suspense>;
   else if (secao === "integracoes") corpo = <Suspense fallback={espera}><IntegracoesDaConta estado={estado} /></Suspense>;
   else if (secao === "espaco") corpo = <Suspense fallback={espera}><EspacoDaConta estado={estado} /></Suspense>;
+  // Quem só tem o e-mail (CRM fora do teste ou não contratado) cai direto no E-mail.
+  else if (secao === "inicio" && !secaoDaUrl && destinoDoInicio(estado)) corpo = <Navigate to={destinoDoInicio(estado)!} replace />;
   else corpo = <InicioDoProduto estado={estado} />;
 
   const aviso = estado ? avisoDaConta(estado) : null;
