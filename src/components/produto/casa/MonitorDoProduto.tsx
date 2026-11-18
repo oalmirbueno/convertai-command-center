@@ -83,13 +83,13 @@ export default function MonitorDoProduto() {
 
   return (
     <div className="min-w-0 space-y-5" data-monitor-do-produto="">
-      <div className={juntar(superficie.painel, "flex min-w-0 flex-wrap items-center px-4 py-3")} data-saude-geral={geral}>
+      <div className={juntar(superficie.painel, "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3")} data-saude-geral={geral}>
         <StatusDot tone={TOM[geral]} pulse={geral !== "ok"} />
-        <span className={juntar(texto.corpo, "ml-3 min-w-0 flex-1 font-medium")}>{frase}</span>
-        <span className={juntar(texto.apoio, "ml-3 tabular-nums")} aria-live="off">
+        <span className={juntar(texto.corpo, "min-w-0 flex-1 font-medium")}>{frase}</span>
+        <span className={juntar(texto.apoio, "tabular-nums")} aria-live="off">
           ao vivo · lido {haQuanto(new Date(monitor.dataUpdatedAt).toISOString(), agora)}
         </span>
-        <button type="button" className={juntar(botao.icone, "ml-2")} onClick={() => void monitor.refetch()} aria-label="Reler agora" title="Reler agora">
+        <button type="button" className={botao.icone} onClick={() => void monitor.refetch()} aria-label="Reler agora" title="Reler agora">
           <RefreshCw className={juntar("h-4 w-4", monitor.isFetching ? "animate-spin" : "")} aria-hidden="true" />
         </button>
       </div>
@@ -107,14 +107,14 @@ export default function MonitorDoProduto() {
       <Secao titulo="Está tudo em ordem?" descricao={`${saude.length - problemas - atencoes} de ${saude.length} em ordem`}>
         <ul className={juntar(superficie.painel, lista.divisoria, "px-2 py-1.5 sm:px-3")} data-lista-da-saude="">
           {pontos.map((s) => (
-            <li key={s.chave} className={juntar(lista.linha, "items-start hover:bg-transparent")} data-saude={s.chave} data-nivel={s.nivel}>
+            <li key={s.chave} className={juntar(lista.linha, "items-start gap-3 hover:bg-transparent")} data-saude={s.chave} data-nivel={s.nivel}>
               <StatusDot tone={TOM[s.nivel]} className="mt-1.5" />
-              <span className="ml-3 min-w-0 flex-1">
+              <span className="min-w-0 flex-1">
                 <span className={juntar(texto.corpo, "block font-medium")}>{s.titulo}</span>
                 <span className={juntar(texto.apoio, "block")}>{s.resumo}</span>
                 {s.detalhe && <span className={juntar(texto.apoio, "mt-0.5 block break-words", s.nivel === "problema" ? "text-destructive" : "")}>{s.detalhe}</span>}
               </span>
-              {s.quando && <span className={juntar(texto.apoio, "ml-3 shrink-0 text-right tabular-nums")}>{s.rotulo_quando} {haQuanto(s.quando, agora)}</span>}
+              {s.quando && <span className={juntar(texto.apoio, "shrink-0 text-right tabular-nums")}>{s.rotulo_quando} {haQuanto(s.quando, agora)}</span>}
             </li>
           ))}
         </ul>
@@ -127,20 +127,20 @@ export default function MonitorDoProduto() {
           <ul className={juntar(superficie.painel, lista.divisoria, "px-2 py-1.5 sm:px-3")} data-lista-do-monitor="">
             {empresas.map((e) => (
               <li key={e.id}>
-                <button type="button" className={juntar(lista.linha, "w-full text-left")} onClick={() => setAberta(e.id)} data-empresa-no-monitor={e.id}>
+                <button type="button" className={juntar(lista.linha, "w-full gap-3 text-left")} onClick={() => setAberta(e.id)} data-empresa-no-monitor={e.id}>
                   <StatusDot tone={emUsoAgora(e, agora) ? "success" : "neutral"} pulse={emUsoAgora(e, agora)} />
-                  <span className="ml-3 min-w-0 flex-1">
-                    <span className="flex min-w-0 items-center">
+                  <span className="min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center gap-2">
                       <span className={juntar(texto.corpo, "truncate font-medium")}>{e.nome}</span>
-                      {!e.liberada && <span className={juntar(etiqueta, "ml-2 bg-danger-soft text-destructive")}>sem acesso</span>}
-                      {e.tarefas_atrasadas > 0 && <span className={juntar(etiqueta, "ml-2 bg-warning-soft text-warning")}>{e.tarefas_atrasadas} {e.tarefas_atrasadas === 1 ? "tarefa atrasada" : "tarefas atrasadas"}</span>}
+                      {!e.liberada && <span className={juntar(etiqueta, "bg-danger-soft text-destructive")}>sem acesso</span>}
+                      {e.tarefas_atrasadas > 0 && <span className={juntar(etiqueta, "bg-warning-soft text-warning")}>{e.tarefas_atrasadas} {e.tarefas_atrasadas === 1 ? "tarefa atrasada" : "tarefas atrasadas"}</span>}
                     </span>
                     <span className={juntar(texto.apoio, "block truncate")}>
                       {ROTULO_DO_ESTADO[e.estado].toLowerCase()} · {e.usuarios_ativos} {e.usuarios_ativos === 1 ? "usuário" : "usuários"}
                       {e.convites ? ` · ${e.convites} sem entrar` : ""} · mexeram {haQuanto(e.ultima_atividade, agora)} · entraram {haQuanto(e.ultimo_acesso, agora)}
                     </span>
                   </span>
-                  <span className="ml-3 hidden shrink-0 text-right sm:block">
+                  <span className="hidden shrink-0 text-right sm:block">
                     <span className={juntar(texto.corpo, "block tabular-nums")}>{e.novos_hoje} hoje · {e.novos_7d} em 7 dias</span>
                     <span className={juntar(texto.apoio, "block tabular-nums")}>{e.abertos} em aberto · {reais(e.valor_aberto)}</span>
                   </span>
@@ -202,12 +202,12 @@ function EmpresaAoVivo({ empresa, agora, onFechar }: { empresa: EmpresaNoMonitor
             ) : (
               <ul className="min-w-0 space-y-2" data-funil-ao-vivo="">
                 {funil.map((f) => (
-                  <li key={f.etapa} className="flex min-w-0 items-center">
+                  <li key={f.etapa} className="flex min-w-0 items-center gap-3">
                     <span className={juntar(texto.apoio, "w-32 shrink-0 truncate")}>{etapa(f.etapa)}</span>
-                    <span className="ml-3 h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                    <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                       <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(4, Math.round((f.negocios / maior) * 100))}%` }} />
                     </span>
-                    <span className={juntar(texto.corpo, "ml-3 w-36 shrink-0 text-right tabular-nums")}>{f.negocios} · {reais(f.valor)}</span>
+                    <span className={juntar(texto.corpo, "w-36 shrink-0 text-right tabular-nums")}>{f.negocios} · {reais(f.valor)}</span>
                   </li>
                 ))}
               </ul>
@@ -217,14 +217,14 @@ function EmpresaAoVivo({ empresa, agora, onFechar }: { empresa: EmpresaNoMonitor
           <Secao titulo="Pessoas" descricao={`${d.data.pessoas.length}`}>
             <ul className={juntar(lista.aberta, lista.divisoria)} data-pessoas-ao-vivo="">
               {d.data.pessoas.map((p) => (
-                <li key={p.id} className={juntar(lista.linha, "hover:bg-transparent")}>
+                <li key={p.id} className={juntar(lista.linha, "gap-3 hover:bg-transparent")}>
                   <span className="min-w-0 flex-1">
                     <span className={juntar(texto.corpo, "block truncate font-medium")}>{p.nome}</span>
                     <span className={juntar(texto.apoio, "block truncate")}>
                       {p.estado === "convidado" ? "convidado, ainda não entrou" : `${p.cargo || PAPEL[p.papel] || p.papel} · entrou ${haQuanto(p.ultimo_acesso, agora)} · mexeu ${haQuanto(p.ultimo_movimento, agora)}`}
                     </span>
                   </span>
-                  <span className="ml-3 shrink-0 text-right">
+                  <span className="shrink-0 text-right">
                     <span className={juntar(texto.corpo, "block tabular-nums")}>{p.abertos} em aberto · {p.ganhos_mes} ganhos</span>
                     <span className={juntar(texto.apoio, "block tabular-nums", p.tarefas_atrasadas ? "text-warning" : "")}>
                       {p.movimentos_7d} movimentos em 7 dias{p.tarefas_atrasadas ? ` · ${p.tarefas_atrasadas} atrasadas` : ""}
@@ -241,12 +241,12 @@ function EmpresaAoVivo({ empresa, agora, onFechar }: { empresa: EmpresaNoMonitor
             ) : (
               <ul className={juntar(lista.aberta, lista.divisoria)} data-movimentos-ao-vivo="">
                 {d.data.movimentos.map((m) => (
-                  <li key={m.id} className={juntar(lista.linha, "py-2 hover:bg-transparent")}>
+                  <li key={m.id} className={juntar(lista.linha, "gap-3 py-2 hover:bg-transparent")}>
                     <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>
                       <span className="font-medium">{m.quem || "Automático"}</span>{" "}
                       {m.de && m.para ? `moveu um negócio de ${etapa(m.de)} para ${etapa(m.para)}` : m.para ? `colocou um negócio em ${etapa(m.para)}` : `registrou ${m.tipo.replace(/_/g, " ")}`}
                     </span>
-                    <span className={juntar(texto.apoio, "ml-3 shrink-0 tabular-nums")}>{haQuanto(m.quando, agora)}</span>
+                    <span className={juntar(texto.apoio, "shrink-0 tabular-nums")}>{haQuanto(m.quando, agora)}</span>
                   </li>
                 ))}
               </ul>
