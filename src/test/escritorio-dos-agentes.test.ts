@@ -216,7 +216,7 @@ describe("a área nova está registrada onde uma área precisa estar", () => {
     const agentes = menu.slice(menu.indexOf('label: "Agentes"'), menu.indexOf('label: "Operação da semana"'));
     expect(agentes).toContain('{ title: "Escritório", url: "/escritorio", icon: Building2 }');
     expect(agentes.indexOf('url: "/execucao"')).toBeLessThan(agentes.indexOf('url: "/escritorio"'));
-    expect(agentes.indexOf('url: "/escritorio"')).toBeLessThan(agentes.indexOf('url: "/anuncios/hoje"'));
+    expect(agentes.indexOf('url: "/escritorio"')).toBeLessThan(agentes.indexOf('url: "/skills"'));
     expect(ler("lib/preCargaDoBoot.ts")).toContain('"/escritorio": { equipe: () => import("@/pages/AdminEscritorio") }');
     expect(areaDaRota("/escritorio")).toBe("escritorio");
     expect(ROTULOS_DAS_AREAS.escritorio).toBe("Escritório");
