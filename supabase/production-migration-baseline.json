@@ -3161,6 +3161,14 @@
       "remote_name": "central_de_skills",
       "remote_statements_sha256": "4c27954bb8aa96a9584598de4e8b7402db208f627e5afa33046229350d35cd9d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118170000",
+      "path": "supabase/migrations/20261118170000_produto_email_rota_unica.sql",
+      "local_sha256": "3022d85d619df6af07a858602addd636e273079787da843dd6526a840520fc9f",
+      "remote_name": "produto_email_rota_unica",
+      "remote_statements_sha256": "fe34478fe6192d8ce1f481a07f96ea59be4cdd3c405484bfb2e1b7bc38850f97",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
