@@ -91,11 +91,12 @@ function IconeDoTipo({ tipo }: { tipo: string }) {
 }
 
 function Conversa({ mensagens }: { mensagens: MensagemDoGrupo[] }) {
-  const visiveis = mensagens.filter((m) => m.papel !== "automatico");
+  // Da mais nova para a mais antiga: o que interessa é o agora, e a janela abre no topo.
+  const visiveis = mensagens.filter((m) => m.papel !== "automatico").reverse();
   if (visiveis.length === 0) return <EstadoVazio compacto titulo="Sem conversa nos últimos 3 dias." />;
   let diaAnterior = "";
   return (
-    <ol className="space-y-2.5" aria-label="Conversa dos últimos 3 dias">
+    <ol className="space-y-2.5" aria-label="Conversa dos últimos 3 dias" title="Da mensagem mais nova para a mais antiga">
       {visiveis.map((m) => {
         const dia = diaCurto(m.quando);
         const mudouODia = dia !== diaAnterior;
