@@ -46,7 +46,7 @@ describe("cada aba é uma área, com nome que diz o que é", () => {
 
   it("o menu leva à visão geral, ao CRM e à Agenda", () => {
     expect(layout).toContain('{ title: "Visão geral", url: "/comercial"');
-    expect(layout).toContain('{ title: "CRM", url: "/comercial/crm"');
+    expect(layout).toContain('{ title: "CRM de vendas", url: "/comercial/crm"');
     expect(layout).toContain('{ title: "Agenda", url: "/comercial/agenda"');
     // Sem o fim exato, "Visão geral" ficaria acesa em todas as áreas.
     expect(layout).toContain("fimExato: true");
