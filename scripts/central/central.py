@@ -429,7 +429,7 @@ def instalar_pacote(url: str, destino: Path) -> None:
     fd, nome = tempfile.mkstemp(prefix="aceleriq-central-", suffix=".zip")
     os.close(fd)
     zipado = Path(nome)
-    novo = destino.with_name(destino.name + ".central-novo")
+    novo = destino.with_name(f"{destino.name}.central-novo-{os.getpid()}")
     try:
         zipado.write_bytes(http("GET", url, tempo=300))
         if novo.exists():
