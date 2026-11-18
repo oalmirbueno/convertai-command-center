@@ -5,7 +5,7 @@ export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Max-Age': '7200',
   'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, mcp-protocol-version, Mcp-Protocol-Version, mcp-session-id, Mcp-Session-Id, accept',
+    'authorization, x-client-info, apikey, x-api-key, x-aceleriq-key, content-type, mcp-protocol-version, Mcp-Protocol-Version, mcp-session-id, Mcp-Session-Id, accept',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
 };
@@ -16,9 +16,16 @@ export const MCP_SUPPORTED_PROTOCOL_VERSIONS = new Set([
   '2025-03-26',
 ]);
 
+// 18/11/2026: o próprio painel (aceleriq.online) ficava de fora e a tela de API mostrava "Failed to fetch"
+// (servidor e Segundo Cérebro "Offline", Testar conexão sem resposta). Clientes nativos (Claude Code,
+// Codex, Hermes, n8n, mcp-remote) não mandam Origin e sempre passaram.
 export const DEFAULT_MCP_ALLOWED_ORIGINS = [
   'https://chatgpt.com',
   'https://chat.openai.com',
+  'https://aceleriq.online',
+  'https://www.aceleriq.online',
+  'https://crm.aceleriq.online',
+  'https://claude.ai',
 ] as const;
 
 export type JsonRpcId = string | number | null;

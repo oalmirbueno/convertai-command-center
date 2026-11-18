@@ -146,6 +146,31 @@ export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) 
 // ------------------------------------------------------------------ plano e assinatura
 
 function Plano({ estado }: { estado: EstadoDoProduto }) {
+  return estado.conta && estado.conta.cobranca_por === "plano" ? <PlanoPeloPainel estado={estado} /> : <PlanoNoCartao estado={estado} />;
+}
+
+/** CRM cobrado junto com o plano da Aceleriq: não tem checkout aqui; o número de usuários muda com a Aceleriq. */
+function PlanoPeloPainel({ estado }: { estado: EstadoDoProduto }) {
+  const conta = estado.conta!;
+  const ocupados = estado.equipe.length;
+  return (
+    <Secao titulo="Plano" descricao="Cobrado junto com o plano da Aceleriq" recolher={false}>
+      <div className="min-w-0 space-y-3" data-plano-pelo-painel="">
+        <p className={texto.corpo}>
+          {estado.plano ? estado.plano.nome : "CRM"}, {conta.usuarios_contratados} {conta.usuarios_contratados === 1 ? "usuário" : "usuários"} ({ocupados} em uso).
+        </p>
+        <p className={texto.corpo}>
+          {estado.liberada
+            ? conta.acesso_ate ? `Acesso liberado até ${diaLegivel(conta.acesso_ate)}. Renova sozinho quando o mês for pago no plano.` : "Acesso liberado."
+            : "O acesso libera assim que o pagamento do mês no plano da Aceleriq for confirmado."}
+        </p>
+        <p className={texto.auxiliar}>Para mudar o número de usuários ou o plano, fale com a Aceleriq. Não há cobrança no cartão por aqui, então nada é cobrado duas vezes.</p>
+      </div>
+    </Secao>
+  );
+}
+
+function PlanoNoCartao({ estado }: { estado: EstadoDoProduto }) {
   const conta = estado.conta!;
   const ass = estado.assinatura;
   const reler = useRelerProduto();

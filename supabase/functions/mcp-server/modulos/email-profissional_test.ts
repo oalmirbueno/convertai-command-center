@@ -1,4 +1,4 @@
-// MCP 2.31.0 (18/11/2026): e-mail profissional pelo agente, sem banco nem rede.
+// MCP 2.33.0 (18/11/2026): e-mail profissional pelo agente, sem banco nem rede.
 import { assert, assertEquals, assertRejects } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import {

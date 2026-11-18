@@ -153,7 +153,9 @@
   position: relative;
   transition: background-color 140ms ease, color 140ms ease;
 }
+/* 18/11: o item ativo virou a pílula verde do painel da Aceleriq; o traço lateral saiu. */
 .produto-item-do-menu[aria-current="page"]::before {
+  display: none;
   content: "";
   position: absolute;
   left: -12px;

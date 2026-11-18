@@ -5,6 +5,7 @@ import { aceitarConvite, fraseDoErro, recusarConvite, type EstadoDoProduto } fro
 import { useRelerProduto } from "@/hooks/useProduto";
 import { EstadoVazio, botao, juntar, texto } from "@/components/sistema";
 import OnboardingDoProduto from "./OnboardingDoProduto";
+import { useTrocaDeAcesso } from "./TrocaDeAcesso";
 
 /**
  * Quem entrou no produto e ainda não tem empresa passa pela chegada (ramo,
@@ -16,6 +17,21 @@ export default function PrimeirosPassos({ estado }: { estado: EstadoDoProduto })
   const reler = useRelerProduto();
   const navigate = useNavigate();
   const [decidindo, setDecidindo] = useState(false);
+  const troca = useTrocaDeAcesso();
+
+  // Entrou com o login geral do painel de uma empresa que já tem CRM: não abre outra empresa.
+  if (!estado.convite && estado.crm_da_empresa) {
+    return (
+      <div data-crm-da-empresa="">
+        <EstadoVazio
+          titulo={`A ${estado.crm_da_empresa.nome} já tem CRM`}
+          descricao="Este é o login geral do painel. No CRM cada pessoa entra com o próprio usuário: use o convite que chegou no seu e-mail ou peça um a quem administra o CRM."
+          acao={<button type="button" className={botao.primario} onClick={() => troca.abrir("crm")}>Entrar com o meu usuário do CRM</button>}
+        />
+        {troca.janela}
+      </div>
+    );
+  }
 
   // O convite só vale se a pessoa aceitar: ninguém entra numa empresa sem querer.
   if (estado.convite) {

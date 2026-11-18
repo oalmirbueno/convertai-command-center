@@ -22,6 +22,7 @@ export const MCP_SCOPE_DESCRIPTIONS: Record<string, MCPScopeInfo> = {
   'contracts:write': { title: 'Contratos · escrita', description: 'Criar, atualizar, enviar e cancelar contratos não assinados.', sensitive: true },
   'memory:read': { title: 'Segundo Cérebro · leitura', description: 'Consultar contexto, arquivos e commits do repositório de memória.' },
   'memory:propose': { title: 'Segundo Cérebro · propor', description: 'Criar propostas .md no inbox do OpenClaw.', sensitive: true },
+  'memory:write': { title: 'Central e Segundo Cérebro · escrever', description: 'Publicar skills na Central e criar ou editar notas do segundo cérebro (memória consolidada segue a revisão diária).', sensitive: true },
   'admin': { title: 'Administrador', description: 'Bypass total de escopo. Concede acesso a todas as ferramentas.', sensitive: true },
 };
 

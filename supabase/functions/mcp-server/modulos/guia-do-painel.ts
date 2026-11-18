@@ -54,7 +54,8 @@ export const FERRAMENTAS_POR_AREA: Record<string, string[]> = {
   financeiro: FIN,
   financeiro_cfo: FIN,
   cofre: ['aceleriq_vault_overview', 'aceleriq_acesso_usar', 'aceleriq_acesso_pedir', 'aceleriq_acesso_estado'],
-  memoria: ['memory_get_context', 'memory_search', 'memory_fetch', 'memory_list_pending_proposals', 'memory_get_pulse', 'memory_recent_commits', 'memory_propose_update', 'aceleriq_base_dos_agentes'],
+  memoria: ['memory_get_context', 'memory_search', 'memory_fetch', 'memory_list_pending_proposals', 'memory_get_pulse', 'memory_recent_commits', 'memory_propose_update', 'aceleriq_base_dos_agentes', 'aceleriq_cerebro_arvore', 'aceleriq_cerebro_salvar_nota'],
+  skills: ['aceleriq_central_skills', 'aceleriq_central_skill', 'aceleriq_central_instalar', 'aceleriq_central_publicar_skill'],
   mcp: ['aceleriq_guia', 'aceleriq_health', 'aceleriq_capabilities', 'aceleriq_mcp_saude', 'aceleriq_audit_integrity'],
 };
 
@@ -80,7 +81,7 @@ export const REGRAS_DE_ACAO = [
   'Agência que se resolve (2.28): a equipe revisa a peça entre si com aceleriq_revisar_trabalho_interno (aprovado ou ajuste com nota); isso não é a aprovação do cliente e não agenda nem publica. Só sobe ao dono o que é dele: dinheiro e verba, cliente novo ou plano, peça rejeitada mais de uma vez e mudança de rumo. Leia aceleriq_listar_precisa_de_voce antes de pedir; se a decisão é mesmo do dono e não há vínculo de execução, abra com aceleriq_marcar_precisa_de_voce (o_que e por_que claros). O pedido só pergunta: espere a resposta.',
   'Perfis do Instagram (2.29): leia Referências e Concorrentes com aceleriq_perfis_instagram_listar (ativos, limite de 6 e vagas por aba) antes de gravar com aceleriq_perfis_instagram_gravar. Aba cheia: arquive um com aceleriq_perfis_instagram_arquivar (igual ao botão da tela, não apaga nada) e só então grave o novo.',
   'Peça aprovada sem publicação (2.30): se o post da Agenda está aprovado pelo cliente e não tem publication_id, crie a publicação planejada com aceleriq_criar_publicacao_de_aprovado (post_id e external_account_id da conta do Instagram ou Facebook do projeto; não agenda nem publica). Depois agende com aceleriq_reagendar_publicacao usando o publication_id devolvido e expected_version=version. Se voltar ja_existia, use a publicação devolvida; só cancelada é ação humana na Agenda.',
-  'E-mail profissional (2.31): para tocar uma migração, leia as entradas com aceleriq_email_entradas e a migração com aceleriq_email_migracao (devolve proximo_passo); siga a skill migracao-email-cliente e registre cada avanço com aceleriq_email_registrar (etapa, caixa, domínio e integração). Só marque pago com aceleriq_email_marcar_pago quando o dono disser que recebeu; parcela já lançada no Financeiro é forma ja_lancado. Confira com aceleriq_email_conferir (dns, cloudflare, zoho). Senha, token e código nunca entram no painel.',
+  'E-mail profissional (2.33): para tocar uma migração, leia as entradas com aceleriq_email_entradas e a migração com aceleriq_email_migracao (devolve proximo_passo); siga a skill migracao-email-cliente e registre cada avanço com aceleriq_email_registrar (etapa, caixa, domínio e integração). Só marque pago com aceleriq_email_marcar_pago quando o dono disser que recebeu; parcela já lançada no Financeiro é forma ja_lancado. Confira com aceleriq_email_conferir (dns, cloudflare, zoho). Senha, token e código nunca entram no painel.',
 ];
 
 /** Skills e jeitos da casa que o agente deve seguir ao produzir (nomes das skills do Claude Code). */

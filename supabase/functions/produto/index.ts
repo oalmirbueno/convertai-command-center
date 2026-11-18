@@ -140,21 +140,38 @@ async function registrar(contaId: string | null, ator: string | null, acao: stri
  * entra; para quem tem, o link entra direto. Nos dois casos a pessoa cai no
  * produto e o banco a coloca na empresa pelo e-mail confirmado.
  */
+/**
+ * O link que entra no CRM: para quem ainda não tem login, o convite (cria o acesso e pede a senha na
+ * primeira entrada); para quem já tem, um link de entrada que abre a troca de senha. Vale uma vez.
+ */
+async function gerarLinkDeAcesso(email: string): Promise<string | null> {
+  const convite = await servico().auth.admin.generateLink({ type: "invite", email, options: { redirectTo: `${app()}/app/bem-vindo` } });
+  if (convite.data && convite.data.properties && convite.data.properties.action_link) return convite.data.properties.action_link;
+  const entrada = await servico().auth.admin.generateLink({ type: "magiclink", email, options: { redirectTo: `${app()}/app?nova_senha=1` } });
+  if (entrada.data && entrada.data.properties && entrada.data.properties.action_link) return entrada.data.properties.action_link;
+  return null;
+}
+
+/** O link de acesso para copiar e mandar por WhatsApp: não depende do e-mail sair. */
+async function linkDeAcesso(ch: Chamador, corpo: Record<string, unknown>) {
+  const id = uuidDe(corpo.membro_id, "membro");
+  const { data: m } = await servico().from("produto_membros").select("conta_id, email, estado").eq("id", id).maybeSingle();
+  const membro = m as { conta_id?: string; email?: string; estado?: string } | null;
+  const contaDoMembro = (membro && membro.conta_id) || "";
+  if (!contaDoMembro || !(ch.dono || (ch.adminDaConta && ch.contaId === contaDoMembro))) throw new ErroHttp(403, "sem_permissao", "Só quem administra a empresa gera o link de acesso.");
+  if (!membro || !membro.email || membro.estado === "removido") throw new ErroHttp(404, "sem_pessoa", "Essa pessoa não está mais na empresa.");
+  const link = await gerarLinkDeAcesso(membro.email);
+  if (!link) throw new ErroHttp(502, "sem_link", "Não foi possível gerar o link agora. Tente de novo.");
+  await registrar(contaDoMembro, ch.userId, "link_de_acesso", { membro: id });
+  return json({ link, email: membro.email });
+}
+
 async function enviarConvite(membroId: string, quemConvidou: string | null): Promise<boolean> {
   const { data: m } = await servico().from("produto_membros").select("id, conta_id, email, nome, papel, estado").eq("id", membroId).maybeSingle();
   const membro = m as { id: string; conta_id: string; email: string; nome: string; papel: string; estado: string } | null;
   if (!membro || membro.estado !== "convidado") return false;
   const { data: conta } = await servico().from("produto_contas").select("nome").eq("id", membro.conta_id).maybeSingle();
-  const destino = `${app()}/app/bem-vindo`;
-  let link = `${app()}/app`;
-  const convite = await servico().auth.admin.generateLink({ type: "invite", email: membro.email, options: { redirectTo: destino } });
-  if (convite.data && convite.data.properties && convite.data.properties.action_link) {
-    link = convite.data.properties.action_link;
-  } else {
-    // Já tem login: um link de entrada, sem senha nova.
-    const entrada = await servico().auth.admin.generateLink({ type: "magiclink", email: membro.email, options: { redirectTo: `${app()}/app` } });
-    if (entrada.data && entrada.data.properties && entrada.data.properties.action_link) link = entrada.data.properties.action_link;
-  }
+  const link = (await gerarLinkDeAcesso(membro.email)) || `${app()}/app`;
   let nomeDeQuem = "";
   if (quemConvidou) {
     const { data: p } = await servico().from("profiles").select("full_name").eq("id", quemConvidou).maybeSingle();
@@ -214,10 +231,11 @@ interface Conta {
   plano_id: string;
   usuarios_contratados: number;
   estado: string;
+  cobranca_por?: string;
 }
 
 async function lerConta(id: string): Promise<Conta> {
-  const { data, error } = await servico().from("produto_contas").select("id, nome, documento, email_cobranca, telefone, plano_id, usuarios_contratados, estado").eq("id", id).maybeSingle();
+  const { data, error } = await servico().from("produto_contas").select("id, nome, documento, email_cobranca, telefone, plano_id, usuarios_contratados, estado, cobranca_por").eq("id", id).maybeSingle();
   if (error || !data) throw new ErroHttp(404, "conta_inexistente", "A empresa não foi encontrada.");
   return data as Conta;
 }
@@ -282,6 +300,12 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>, pelaCasa?: 
   const antes = { plano_id: conta.plano_id, usuarios_contratados: conta.usuarios_contratados };
   const gravar = (v: { plano_id: string; usuarios_contratados: number }) => servico().from("produto_contas").update({ ...v, atualizado_em: new Date().toISOString() }).eq("id", contaId);
 
+  // CRM cobrado no plano do cliente da Aceleriq: não abre checkout, senão a empresa pagaria duas vezes.
+  if (conta.cobranca_por === "plano") {
+    throw new ErroHttp(409, "pelo_plano", pelaCasa
+      ? "O CRM desta empresa é cobrado no plano do cliente. Mude usuários e valor no extra de CRM, na ficha do cliente."
+      : "O CRM da sua empresa é cobrado junto com o plano da Aceleriq. Para mudar o número de usuários, fale com a Aceleriq.");
+  }
   // Em cortesia quem paga é a casa: plano e usuários só mudam por ela.
   if (conta.estado === "cortesia") throw new ErroHttp(409, "cortesia", "A empresa está em cortesia. Para mudar o plano ou os usuários, fale com a Aceleriq.");
   const assinando = !!a.asaas_assinatura_id && (a.estado === "ativa" || a.estado === "atrasada");
@@ -553,6 +577,25 @@ async function adminTestarAsaas(ch: Chamador) {
 }
 
 /** O admin da casa gera o link do checkout da assinatura de uma empresa, com o plano e os usuários dela (ou os que vierem). */
+/**
+ * Liga o CRM ao plano do cliente da Aceleriq (extra "crm" da ficha): cria ou acha a empresa do cliente,
+ * convida quem vai administrar e devolve o estado. O acesso libera quando o dono marca a cobrança do
+ * extra como paga (o banco cuida disso). O login geral do painel não vira usuário do CRM.
+ */
+async function adminCrmPeloPlano(ch: Chamador, corpo: Record<string, unknown>) {
+  exigirDono(ch);
+  const { data, error } = await servico().rpc("produto_crm_pelo_plano", {
+    _extra: uuidDe(corpo.extra_id, "extra"),
+    _email: texto(corpo.email, 254).toLowerCase(),
+    _nome: texto(corpo.nome, 120),
+    _ator: ch.userId,
+  });
+  if (error || !data) throw erroDoBanco(error, "Não foi possível ligar o CRM agora.");
+  const r = data as { conta_id: string; membro_id: string | null; estado: string; acesso_ate: string | null; liberada: boolean };
+  const enviado = r.membro_id ? await enviarConvite(r.membro_id, ch.userId) : false;
+  return json({ ...r, convite_enviado: enviado });
+}
+
 async function adminGerarCheckout(ch: Chamador, corpo: Record<string, unknown>) {
   exigirDono(ch);
   return assinar(ch, corpo, uuidDe(corpo.conta_id, "conta"));
@@ -594,6 +637,7 @@ type Acao = (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>;
 const ACOES: Record<string, Acao> = {
   convidar,
   reenviar_convite: reenviarConvite,
+  link_de_acesso: linkDeAcesso,
   assinar,
   cancelar: (ch) => cancelar(ch),
   pedir_email: pedirEmail,
@@ -603,6 +647,7 @@ const ACOES: Record<string, Acao> = {
   admin_sincronizar: adminSincronizar,
   admin_cobrar_migracao: adminCobrarMigracao,
   admin_gerar_checkout: adminGerarCheckout,
+  admin_crm_pelo_plano: adminCrmPeloPlano,
   admin_testar_asaas: (ch) => adminTestarAsaas(ch),
 };
 

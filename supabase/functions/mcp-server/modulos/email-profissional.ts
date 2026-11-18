@@ -1,5 +1,5 @@
 /**
- * MCP 2.31.0 (18/11/2026): o e-mail profissional pelo agente, para tocar a migração sozinho quando o
+ * MCP 2.33.0 (18/11/2026): o e-mail profissional pelo agente, para tocar a migração sozinho quando o
  * dono pedir (roteiro na skill migracao-email-cliente). Mesmas regras da tela do dono: tudo passa
  * pelas funções do banco de 20261118140000_produto_email_rota_unica.sql, que deixam histórico.
  *

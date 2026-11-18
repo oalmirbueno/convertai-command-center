@@ -17,7 +17,7 @@ Nada disto está em produção. Para ligar, ver "Para publicar", no fim.
 | Ficha do cliente › Extras (`ExtrasDoCliente.tsx`) | Extra "E-mail profissional" com cobrança no `billing`, **sem ligação** com o produto | Fica, e a entrada pode apontar para o extra (o pagamento mora lá) |
 | Financeiro › "CRM e E-mail" | Soma `produto_cobrancas` pagas | Fica igual; o "marcar como pago" lança aqui uma vez |
 | Acesso ao `/app/email` | `email_ativo` **e** a empresa liberada pelo CRM | Quem comprou só o e-mail perdia a tela no fim do teste de 7 dias do CRM. Agora o e-mail tem liberação própria |
-| MCP | Nenhuma ferramenta de e-mail | 5 ferramentas novas (2.31.0) |
+| MCP | Nenhuma ferramenta de e-mail | 5 ferramentas novas (2.33.0) |
 | Funções Supabase | `produto` (pedido, DNS, cobrança da migração), `produto-asaas-webhook` | Mais a função nova `produto-email` (Cloudflare, Zoho, caixa oficial) |
 
 Duplicidades encontradas: dois formulários de pedido; dois cadastros do mesmo serviço (extra na ficha e produto); dois livros de dinheiro sem regra de quem vale (`billing` e `produto_cobrancas`); um negócio no Comercial por envio; domínio cadastrado à mão depois do pedido.
@@ -44,7 +44,7 @@ Caso real: a **Imobiliária Prix** está só como extra na ficha (migração R$ 
 - **Asaas:** quando o aviso do Asaas confirma a cobrança da migração, a entrada aberta anda sozinha, igual ao manual.
 - **Cliente:** `/app/email` segue `produto_email_liberado()` (pedido pago libera, mesmo com o CRM fora do teste). Empresa que só tem o e-mail cai direto em `/app/email` ao abrir o `/app`.
 
-## 3. Ferramentas MCP (2.31.0)
+## 3. Ferramentas MCP (2.33.0)
 
 Só para credencial da casa (sem restrição de cliente). Todas passam pelas funções do banco, que deixam histórico com o autor.
 
@@ -91,7 +91,7 @@ Para passar a Prix para a rota nova (quando o Almir quiser): criar a empresa da 
 ## 8. Para publicar (só com o ok do Almir)
 
 1. Aplicar `supabase/migrations/20261118140000_produto_email_rota_unica.sql`.
-2. Publicar as funções `produto` (pedido vira entrada), `produto-email` (nova) e `mcp-server` (2.31.0).
+2. Publicar as funções `produto` (pedido vira entrada), `produto-email` (nova) e `mcp-server` (2.33.0).
 3. Segredos da função `produto-email`, conforme for usar: `CLOUDFLARE_API_TOKEN` (Zone:Read e DNS:Read na conta da Aceleriq) e `CLOUDFLARE_ACCOUNT_ID`; `ZOHO_CLIENT_ID` e `ZOHO_CLIENT_SECRET` (app OAuth da Aceleriq no console da Zoho).
 4. Front: publicar pelo Lovable.
 

@@ -21,7 +21,9 @@ export default function CriarSenha() {
   const [mostrar, setMostrar] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [feito, setFeito] = useState(false);
-  if (feito || !precisaCriarSenha(user as never)) return null;
+  // Entrou pelo link de acesso de quem já tinha login: abre a troca de senha (18/11).
+  const pediuNovaSenha = typeof window !== "undefined" && /[?&]nova_senha=1/.test(window.location.search);
+  if (feito || !(pediuNovaSenha || precisaCriarSenha(user as never))) return null;
 
   const salvar = async () => {
     if (!senhaAceita(senha)) return void toast.error("Use 10 caracteres ou mais, com maiúscula, minúscula e número.");
@@ -37,7 +39,7 @@ export default function CriarSenha() {
     <JanelaCentral
       aberta
       largura="sm"
-      titulo="Crie a sua senha"
+      titulo={pediuNovaSenha ? "Escolha a sua senha" : "Crie a sua senha"}
       descricaoOculta="Primeira entrada: escolha a senha que você vai usar para entrar."
       fecharNoFundo={false}
       onFechar={() => setFeito(true)}

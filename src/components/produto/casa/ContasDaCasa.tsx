@@ -2,7 +2,7 @@ import NumerosOusados from "@/components/admin/NumerosOusados";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, RefreshCw, UserPlus } from "lucide-react";
+import { Link2, Plus, RefreshCw, UserPlus } from "lucide-react";
 import { useClients } from "@/hooks/useSupabaseData";
 import {
   casa,
@@ -16,6 +16,7 @@ import {
   mensalidadePrevista,
   reais,
   reenviarConvite,
+  copiarLinkDeAcesso,
   ROTULO_DO_ESTADO,
   type ContaNaCasa,
   type EstadoDaConta,
@@ -62,7 +63,7 @@ export function situacaoDaConta(c: ContaNaCasa, agora = Date.now()): string {
   }
   if (c.estado === "atrasada") return c.liberada ? "atrasada, ainda com acesso" : "atrasada, sem acesso";
   if (c.estado === "cancelada" && c.liberada) return `cancelada, acesso até ${diaLegivel(c.acesso_ate)}`;
-  return ROTULO_DO_ESTADO[c.estado].toLowerCase();
+  return ROTULO_DO_ESTADO[c.estado].toLowerCase() + (pelaPlano(c) ? ", pelo plano do cliente" : "");
 }
 
 /**
@@ -70,6 +71,10 @@ export function situacaoDaConta(c: ContaNaCasa, agora = Date.now()): string {
  * A casa cria a empresa, ajusta o que foi contratado e cuida da cobrança.
  * O conteúdo do CRM de cada empresa não aparece aqui: é dela.
  */
+
+/** O CRM desta empresa é cobrado no plano do cliente da Aceleriq (extra de CRM), e não no cartão. */
+const pelaPlano = (c: object): boolean => (c as { cobranca_por?: string }).cobranca_por === "plano";
+
 export default function ContasDaCasa() {
   const qc = useQueryClient();
   const contas = useQuery({ queryKey: chaveDasContas, queryFn: listarContasDaCasa });
@@ -375,6 +380,16 @@ function FichaDaConta({ conta, planos, onFechar, onMudou }: { conta: ContaNaCasa
                   <span className={juntar(texto.auxiliar, "block truncate")}>{m.email}{m.entrou_em ? ` · entrou em ${diaLegivel(m.entrou_em)}` : ""}</span>
                 </span>
                 <span className={juntar(etiqueta, "ml-2", m.papel === "admin" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{m.papel === "admin" ? "Administra" : "Usuário"}</span>
+                <button
+                  type="button"
+                  className={juntar(botao.icone, "ml-1")}
+                  aria-label={`Copiar o link de acesso de ${m.email}`}
+                  title="Copiar link de acesso (para mandar por WhatsApp)"
+                  onClick={() => void copiarLinkDeAcesso(m.id).then((e) => toast.success(`Link de acesso de ${e} copiado. Vale uma vez.`)).catch((e) => toast.error(fraseDoErro(e)))}
+                  data-copiar-link-de-acesso=""
+                >
+                  <Link2 className="h-4 w-4" aria-hidden="true" />
+                </button>
                 {m.estado === "convidado" && (
                   <button
                     type="button"
@@ -406,9 +421,10 @@ function FichaDaConta({ conta, planos, onFechar, onMudou }: { conta: ContaNaCasa
         <section aria-label="Cobranças da empresa">
           <div className="mb-1 flex min-w-0 items-center">
             <h3 className={juntar(texto.tituloSecao, "min-w-0 flex-1")}>Cobranças</h3>
-            <button type="button" className={juntar(botao.primario, "mr-2 h-8")} onClick={() => void gerarCheckout()} disabled={cobrando} title="Cria o checkout da assinatura no cartão com o plano e os usuários desta empresa e copia o link" data-gerar-checkout="">
+            {pelaPlano(conta) && <span className={juntar(texto.auxiliar, "mr-3")} data-cobrado-no-plano="">Cobrado no plano do cliente: o acesso segue o extra de CRM da ficha.</span>}
+            {!pelaPlano(conta) && <button type="button" className={juntar(botao.primario, "mr-2 h-8")} onClick={() => void gerarCheckout()} disabled={cobrando} title="Cria o checkout da assinatura no cartão com o plano e os usuários desta empresa e copia o link" data-gerar-checkout="">
               Link de pagamento
-            </button>
+            </button>}
             <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void cobrarMigracao()} disabled={cobrando} title="Cria a cobrança avulsa da migração do e-mail no Asaas" data-cobrar-migracao="">
               {cobrando ? "Criando..." : `Cobrar a migração${config.data ? ` (${reais(config.data.email_migracao)})` : ""}`}
             </button>

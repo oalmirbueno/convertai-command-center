@@ -215,12 +215,18 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_browser_session',
     'aceleriq_cancel_contract',
     'aceleriq_capabilities',
+    'aceleriq_central_instalar',
+    'aceleriq_central_publicar_skill',
     'aceleriq_central_review_decidir',
     'aceleriq_central_review_fila',
     'aceleriq_central_review_marcar_enviado',
     'aceleriq_central_review_preparar',
+    'aceleriq_central_skill',
+    'aceleriq_central_skills',
+    'aceleriq_cerebro_arvore',
     'aceleriq_cerebro_do_cliente',
     'aceleriq_cerebro_registrar',
+    'aceleriq_cerebro_salvar_nota',
     'aceleriq_client_instruction',
     'aceleriq_comercial_atribuir_agente',
     'aceleriq_comercial_avisar_caixa',
@@ -1791,9 +1797,8 @@ Deno.test('perfis gravar: idempotency_key opcional, mesmo schema fechado de ante
 
 // ─── MCP 2.30.0 (18/11/2026): publicação planejada de post já aprovado ───
 
-Deno.test('2.30: versão, criar publicação de aprovado no catálogo, no guia e contada na descoberta', async () => {
+Deno.test('2.30: criar publicação de aprovado no catálogo, no guia e contada na descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
   assert(TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado'), 'no catálogo');
@@ -1853,11 +1858,30 @@ Deno.test('criar publicação de aprovado: escrita editorial:write, schema fecha
   await assertRejects(() => Promise.resolve(tool.handler({ ...base, confirmar: false }, writeCtx)), Error, 'Invalid input');
 });
 
-// ─── MCP 2.31.0 (18/11/2026): e-mail profissional pelo agente ───
+Deno.test('2.32: Central de Skills e segundo cérebro em tempo real no catálogo e no guia', async () => {
+  const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
+  for (const n of ['aceleriq_central_skills', 'aceleriq_central_skill', 'aceleriq_central_instalar', 'aceleriq_central_publicar_skill']) {
+    assert(FERRAMENTAS_POR_AREA.skills.includes(n), `${n} no guia`);
+  }
+  assert(FERRAMENTAS_POR_AREA.memoria.includes('aceleriq_cerebro_salvar_nota'));
+  // Leitura abre para memory:read OU aceleriq:read; escrita só com memory:write.
+  for (const n of ['aceleriq_central_skills', 'aceleriq_central_skill', 'aceleriq_central_instalar', 'aceleriq_cerebro_arvore']) {
+    assert(canInvoke(readCtx, TOOL_MAP.get(n)!), `${n} lê com aceleriq:read`);
+  }
+  for (const n of ['aceleriq_central_publicar_skill', 'aceleriq_cerebro_salvar_nota']) {
+    const t = TOOL_MAP.get(n)!;
+    assertEquals([...t.scopes], ['memory:write']);
+    assert(!canInvoke(readCtx, t), `${n} recusa aceleriq:read`);
+  }
+  // Chave restrita a cliente não enxerga a Central.
+  assert(!canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('aceleriq_central_publicar_skill')!));
+});
 
-Deno.test('2.31: versão, as cinco ferramentas de e-mail no catálogo, no guia e contadas na descoberta', async () => {
+// ─── MCP 2.33.0 (18/11/2026): e-mail profissional pelo agente ───
+
+Deno.test('2.33: versão, as cinco ferramentas de e-mail no catálogo, no guia e contadas na descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.31.0');
+  assertEquals(MCP_VERSION, '2.33.0');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
@@ -1889,5 +1913,5 @@ Deno.test('2.31: versão, as cinco ferramentas de e-mail no catálogo, no guia e
     agora: new Date('2026-11-18T12:00:00Z'),
   });
   assertEquals(d.toolCount, TOOLS.length);
-  assertEquals(TOOLS.length, 204);
+  assertEquals(TOOLS.length, 210);
 });

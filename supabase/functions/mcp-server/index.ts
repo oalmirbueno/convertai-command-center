@@ -4,7 +4,7 @@
 // Bearer auth via public.api_keys. Audit via public.mcp_audit_log.
 // Does NOT modify api-gateway or any existing function.
 
-import { authenticate as conferirCredencial, DataScopeError, type AuthContext, type AuthResult } from "../_shared/mcp-auth.ts";
+import { authenticate as conferirCredencial, comecoDaChave, DataScopeError, type AuthContext, type AuthResult } from "../_shared/mcp-auth.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { MCP_RELEASE_SOURCE } from "../_shared/mcp-release-source.ts";
 import { shouldUseOAuthToolChallenge } from "../_shared/mcp-security.ts";
@@ -206,6 +206,7 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
         + "(o servidor nao empurra aviso de mudanca, entao a lista so atualiza quando voce pergunta). "
         + "Chame aceleriq_capabilities para ver os nomes exatos que a sua credencial pode invocar. "
         + "Para se orientar barato: aceleriq_guia (mapa do painel, regras e o manual completo de cada ferramenta, porque a lista traz a descricao curta). "
+        + "Central de Skills: as skills de todos os agentes (Claude, Codex, Hermes, plugins e as da casa) estao em aceleriq_central_skills. Com terminal, rode uma vez o comando de aceleriq_central_instalar: instala tudo nesta maquina e mantem sincronizado; sem terminal, leia o SKILL.md com aceleriq_central_skill e siga. Criou ou mudou skill, publique com aceleriq_central_publicar_skill. Segundo cerebro em tempo real: memory_fetch le, aceleriq_cerebro_salvar_nota edita. "
         + "Para ler rapido: aceleriq_panorama_do_cliente (um cliente inteiro numa chamada) e aceleriq_panorama_da_casa (o dia da agencia). "
         + "Leituras vem enxutas; detalhe=completo traz tudo e proximo_cursor pagina. Erro volta com codigo, dica e se vale repetir (transitorio). "
         + "Antes de propor ou subir trafego pago, estude o que a Mesa Ads gerou com aceleriq_mesa_ads_contexto "
@@ -362,6 +363,17 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
   return rpcError(id, RpcErrors.methodNotFound, `Method not found: ${method}`);
 }
 
+// 18/11/2026: chave mcp_live_ mandada e recusada diz o motivo e o começo da chave que chegou (para comparar com
+// a central). Continua sendo HTTP 401 com WWW-Authenticate: é isso que faz o cliente OAuth renovar o acesso.
+function motivoDaRecusa(req: Request, kind: string): string {
+  const comeco = comecoDaChave(req);
+  if (kind === "missing" || !comeco?.toLowerCase().startsWith("mcp_live_")) return "OAuth authorization required";
+  const motivo = kind === "expired_or_revoked"
+    ? `A chave ${comeco} foi revogada ou venceu.`
+    : `A chave ${comeco} não é reconhecida pelo servidor (não existe na central ou veio incompleta).`;
+  return `${motivo} Gere uma nova em Painel › API e integrações › MCP › Conectar uma IA e cole o valor inteiro no cabeçalho Authorization como "Bearer mcp_live_...".`;
+}
+
 Deno.serve(async (req) => {
   if (!isMcpOriginAllowed(req, MCP_ALLOWED_ORIGINS)) {
     return jsonResponse(rpcError(null, RpcErrors.forbidden, "Origin is not allowed"), 403);
@@ -466,7 +478,7 @@ Deno.serve(async (req) => {
       const payload =
         toolChallengeOnly && message.method === "tools/call"
           ? oauthToolChallenge(message.id ?? null)
-          : rpcError(message.id ?? null, RpcErrors.unauthorized, "OAuth authorization required");
+          : rpcError(message.id ?? null, RpcErrors.unauthorized, motivoDaRecusa(req, auth.error.kind));
       return new Response(JSON.stringify(payload), {
         // MCP tool errors are successful JSON-RPC transport responses so the
         // host reads result._meta and launches OAuth. Non-tool requests retain
