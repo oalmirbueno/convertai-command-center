@@ -261,6 +261,7 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Visão geral", url: "/produto", icon: Activity, soAdmin: true, fimExato: true },
       { title: "CRM", url: "/produto/crm", icon: Building2, soAdmin: true },
+      { title: "Central de e-mail", url: "/produto/central", icon: HeartPulse, soAdmin: true },
       { title: "E-mail", url: "/produto/email", icon: Mail, soAdmin: true },
       { title: "Caixa de e-mail", url: "/produto/caixa", icon: Inbox, soAdmin: true },
       { title: "Preços", url: "/produto/precos", icon: Tags, soAdmin: true },

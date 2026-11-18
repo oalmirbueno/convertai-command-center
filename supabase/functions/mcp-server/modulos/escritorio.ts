@@ -101,7 +101,7 @@ const COL_AUTOMACAO = 'id, plataforma, ref, nome, o_que_faz, dono_slug, ativo, u
 function falhou(onde: string, error: { code?: string; message?: string } | null): never {
   console.error('[mcp escritorio]', onde, { code: error?.code });
   if (error?.code === '42P01' || error?.code === 'PGRST205') {
-    throw new ErroDaFerramenta('escritorio_nao_instalado', 'O Escritório ainda não foi instalado neste banco.', 'Falta aplicar a migration 20261118200000_escritorio_dos_agentes.', false);
+    throw new ErroDaFerramenta('escritorio_nao_instalado', 'O Escritório ainda não foi instalado neste banco.', 'Falta aplicar a migration 20261118220000_escritorio_dos_agentes.', false);
   }
   throw new ErroDaFerramenta('falha_no_banco', `O Escritório não respondeu agora (${onde}).`, 'Tente de novo em instantes.', true);
 }

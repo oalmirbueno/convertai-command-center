@@ -159,6 +159,26 @@ const pedidosDaCasa = [
 ];
 const emailDoCliente = (parte = {}) => ({ liberado: true, pedido: { id: "p2", tipo: "migracao", dominio: "imobiliariaexemplo.com.br", caixas: 6, estado: "em_andamento", valor_migracao: 597, valor_mensal: 54.8, pago_em: dia(-8), criado_em: dia(-9) }, dominios: [dominio], caixas, etapas, ...parte });
 
+// Central de e-mail e correio (18/11/2026).
+const dominioDaCentral = (parte) => ({ id: "d1", dominio: "imobiliariaexemplo.com.br", provedor: "zoho", estado: "concluido", dns_pronto: true, dns_faltas: 0, checado_em: dia(-1), zoho_plano: "gratuito", zoho_conectado: true, cloudflare: true, dominio_vence_em: dia(200).slice(0, 10), provedor_vence_em: null, provedor_custo_mensal: null, correio_provedor: "nenhum", correio_ligado: false, etapas_feitas: 8, etapas_total: 8, ...parte });
+const clienteDaCentral = (parte) => ({ conta_id: CONTA, empresa: "Imobiliária Exemplo", estado_da_conta: "ativa", client_id: null, email_ativo: true, liberado: true, caixas_contratadas: 5, caixas: 5, apelidos: 2, caixas_pedidas: 0, caixas_sem_dono: 1, dominios: [dominioDaCentral({})], pedido: { id: "p2", estado: "concluido", tipo: "migracao", pago_em: dia(-20), criado_em: dia(-25), valor_mensal: 39.9, extra_id: null }, cobranca: { por: "extra", mensal: 39.9, proximo_vencimento: dia(12).slice(0, 10), em_atraso: 0 }, assinatura: null, ...parte });
+const central = [
+  clienteDaCentral({}),
+  clienteDaCentral({ conta_id: "c2", empresa: "Clínica Vida", caixas: 7, caixas_contratadas: 7, apelidos: 0, dominios: [dominioDaCentral({ id: "d2", dominio: "clinicavida.com.br", dominio_vence_em: dia(5).slice(0, 10), dns_pronto: false, dns_faltas: 1 })], cobranca: { por: "extra", mensal: 69.7, proximo_vencimento: dia(-4).slice(0, 10), em_atraso: 1 } }),
+  clienteDaCentral({ conta_id: "c3", empresa: "Auto Center Rota", caixas: 3, caixas_contratadas: 5, caixas_pedidas: 1, dominios: [dominioDaCentral({ id: "d3", dominio: "autocenterrota.com.br", provedor: "outro", zoho_plano: null, provedor_vence_em: dia(20).slice(0, 10), provedor_custo_mensal: 9.5, correio_provedor: "migadu", correio_ligado: true })] }),
+  clienteDaCentral({ conta_id: "c4", empresa: "Studio Pilates Leve", caixas: 2, caixas_contratadas: 2, apelidos: 0, dominios: [dominioDaCentral({ id: "d4", dominio: "pilatesleve.com.br", estado: "preparando", dns_pronto: false, dns_faltas: 3, etapas_feitas: 3, dominio_vence_em: null })], cobranca: null, pedido: { id: "p4", estado: "em_andamento", tipo: "migracao", pago_em: dia(-2), criado_em: dia(-3), valor_mensal: 39.9, extra_id: null } }),
+  clienteDaCentral({ conta_id: "c5", empresa: "Padaria Sol Nascente", email_ativo: false, liberado: false, caixas: 0, caixas_contratadas: 0, apelidos: 0, caixas_sem_dono: 0, dominios: [], cobranca: null, pedido: { id: "p5", estado: "novo", tipo: "novo", pago_em: null, criado_em: dia(0), valor_mensal: 39.9, extra_id: null } }),
+];
+const minhasCaixas = { conta: { id: CONTA, nome: "Imobiliária Exemplo" }, master: true, liberado: true, caixas: [
+  { id: "cx2", endereco: "priscila@imobiliariaexemplo.com.br", pessoa: "Priscila Souza", minha: true, dono: "Priscila Souza", dominio: "imobiliariaexemplo.com.br", provedor: "migadu", ligado: true },
+  { id: "cx0", endereco: "contato@imobiliariaexemplo.com.br", pessoa: "Recepção", minha: false, dono: null, dominio: "imobiliariaexemplo.com.br", provedor: "migadu", ligado: true },
+  { id: "cx3", endereco: "rafael@imobiliariaexemplo.com.br", pessoa: "Rafael Lima", minha: false, dono: "Rafael Lima", dominio: "imobiliariaexemplo.com.br", provedor: "nenhum", ligado: false },
+] };
+const mensagensDoCorreio = ["Proposta do apartamento 302", "Documentos da locação", "Visita confirmada para sábado", "Boleto do condomínio", "Dúvida sobre o contrato"].map((assunto, i) => ({ id: `m${i}`, de: ["cliente@exemplo.com.br", "cartorio@exemplo.com.br", "ana@exemplo.com.br", "sindico@exemplo.com.br", "joao@exemplo.com.br"][i], para: "priscila@imobiliariaexemplo.com.br", assunto, resumo: "Bom dia, segue o que combinamos por telefone. Qualquer dúvida me avise.", recebida_em: dia(-i), lida: i > 1, tem_anexo: i === 1, aguardando: [null, "voce", "outro", "outro", null][i], automatica: i === 4 }));
+const tarefasDoCorreio = [["Colher a assinatura do fiador", "Do e-mail de cartorio@exemplo.com.br", null], ["Rever a entrada do apartamento 302", "Do e-mail de cliente@exemplo.com.br", null], ["Enviar as fotos novas ao portal", "Criada por você", dia(0)]].map((t, i) => ({ id: `tf${i}`, titulo: t[0], origem: t[1], prazo: null, feita_em: t[2], criado_em: dia(-1) }));
+const hojeSP = new Date(agora - 3 * 3600000).toISOString().slice(0, 10);
+const compromissosDoCorreio = [["Visita ao apartamento 302", "Com Marcos Andrade", "13:30"], ["Alinhamento do time", "Sala de reunião", "17:00"]].map((c, i) => ({ id: `cp${i}`, titulo: c[0], detalhe: c[1], inicio: `${hojeSP}T${c[2]}:00Z`, fim: null }));
+
 const tabelas = {
   crm_campos: camposDaEmpresa, crm_automacoes: automacoes, crm_avisos: avisos, crm_paginas: [], crm_formularios: [], crm_conversoes: [], crm_automacao_execucoes: [],
   crm_leads: leads, crm_organizations: organizacoes, crm_contacts: [], crm_activities: atividades, crm_lead_events: eventos, crm_campaigns: campanhas, crm_goals: metas, crm_lead_messages: [],
@@ -166,7 +186,7 @@ const tabelas = {
     { id: "ch1", nome: "Claude", prefixo: "acq_3e1b0e92", criado_em: dia(-6), ultimo_uso_em: dia(0), revogada_em: null },
     { id: "ch2", nome: "Site", prefixo: "acq_a91f77c0", criado_em: dia(-3), ultimo_uso_em: null, revogada_em: null },
   ],
-  produto_planos: planos, produto_config: [config], produto_cobrancas: cobrancas, produto_email_dominios: [dominio], produto_email_caixas: caixas, produto_email_etapas: etapas, produto_custos: custos,
+  produto_planos: planos, produto_config: [config], produto_cobrancas: cobrancas, produto_email_dominios: [dominio], produto_email_caixas: caixas, produto_email_etapas: etapas, produto_custos: custos, produto_correio_tarefas: tarefasDoCorreio, produto_correio_compromissos: compromissosDoCorreio,
 };
 
 const auth = (papel) => `export function AuthProvider({children}){return children;}
@@ -203,6 +223,9 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
       if (rpc[1] === "produto_estado") return json(estado);
       if (rpc[1] === "produto_email_da_conta") return json(estado.__email || emailDoCliente());
       if (rpc[1] === "produto_email_pedidos_da_casa") return json(pedidosDaCasa);
+      if (rpc[1] === "produto_email_central") return json(central);
+      if (rpc[1] === "produto_correio_eu") return json({ membro_id: "m1", conta_id: CONTA, nome: "Priscila Souza" });
+      if (rpc[1] === "produto_email_minhas_caixas") return json(estado.__caixas || minhasCaixas);
       if (rpc[1] === "produto_admin_contas") return json(contasDaCasa);
       if (rpc[1] === "produto_faturamento") return json(faturamento);
       if (rpc[1] === "crm_ranking") return json(ranking);
@@ -226,6 +249,18 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
       return json(um ? linhas[0] || null : linhas);
     }
     if (/\/functions\/v1\/comercial-leads/.test(url.pathname)) return json({ buscas, candidatos: [], busca: buscas[0] });
+    if (/\/functions\/v1\/produto-correio/.test(url.pathname)) {
+      const corpo = pedido.postDataJSON() || {};
+      if (corpo.caixa_id === "cx3") return json({ error: "correio_desligado", mensagem: "O correio desta caixa ainda não foi ligado." }, 409);
+      if (corpo.acao === "ler") return json({ mensagem: { ...mensagensDoCorreio[0], texto: `Bom dia, Priscila.
+
+Segue a proposta do apartamento 302 como combinamos. O cliente pode fechar ainda esta semana.
+
+Abraço,
+Marcos`, anexos: [] } });
+      return json({ mensagens: mensagensDoCorreio });
+    }
+    if (/\/auth\/v1\/token/.test(url.pathname)) return json({ access_token: "sintetico", token_type: "bearer", expires_in: 3600, refresh_token: "sintetico", user: { id: EU, email: "priscila@imobiliariaexemplo.com.br" } });
     if (/\/functions\/v1\/produto-email/.test(url.pathname)) return json({ estado: { ligada: false, motivo: "A caixa está desligada. Ligar é decisão do dono: veja o custo abaixo.", plano_necessario: "Zoho Mail Lite (ou superior) na conta da Aceleriq", custo: { por_usuario_mes: "R$ 6,25 por usuário por mês (Mail Lite, cobrança anual)", cobranca: "Só anual, sem plano mensal", fonte: "zoho.com/mail/zohomail-pricing.html" } }, dominio: null });
     if (/\/functions\/v1\//.test(url.pathname)) return json({ ok: true });
     if (/\/auth\/v1\/user/.test(url.pathname)) return json({ id: EU, email: "priscila@imobiliariaexemplo.com.br" });
@@ -298,6 +333,16 @@ const telas = [
   { nome: "22c-casa-marcar-pago", caminho: "/produto?area=email", papel: "admin", espera: "[data-marcar-pago]", depois: async (p) => { await p.locator("[data-marcar-pago]").first().click(); await p.waitForSelector("[data-confirmar-pago]"); await p.waitForTimeout(400); } },
   { nome: "22d-casa-integracao", caminho: "/produto?area=email", papel: "admin", espera: "[data-conferencia-zoho]", depois: async (p) => { await p.locator("[data-conferencia-cloudflare]").scrollIntoViewIfNeeded(); await p.waitForTimeout(300); } },
   { nome: "22e-casa-caixa", caminho: "/produto?area=caixa", papel: "admin", espera: "[data-caixa-desligada]" },
+  { nome: "26-central", caminho: "/produto?area=central", papel: "admin", espera: "[data-clientes-da-central]" },
+  { nome: "26b-central-ficha", caminho: "/produto?area=central", papel: "admin", espera: "[data-clientes-da-central]", depois: async (p) => { await p.locator('[data-cliente="critico"]').first().click(); await p.waitForSelector("[data-ficha-do-email]"); await p.waitForTimeout(400); } },
+  { nome: "50-correio-porta", caminho: "/correio", espera: "[data-porta-do-correio]" },
+  { nome: "51-correio", caminho: "/correio", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },
+  { nome: "51b-correio-claro", caminho: "/correio", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },
+  { nome: "52-correio-em-preparo", caminho: "/correio", espera: "[data-porta-do-correio]", estado: { ...estadoDoProduto(), __caixas: { ...minhasCaixas, master: false, caixas: [minhasCaixas.caixas[2]] } }, depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-correio-em-preparo]"); await p.waitForTimeout(500); } },
+  { nome: "53-correio-quadro", caminho: "/correio?area=quadro", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-coluna]"); await p.waitForTimeout(500); } },
+  { nome: "54-correio-dia", caminho: "/correio?area=dia", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-meu-dia]"); await p.waitForTimeout(700); } },
+  { nome: "55-correio-campanhas", caminho: "/correio?area=campanhas", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-campanhas-do-correio]"); } },
+  { nome: "56-correio-ferramentas", caminho: "/correio?area=ferramentas", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-plano]"); } },
   { nome: "23-casa-precos", caminho: "/produto?area=precos", papel: "admin", espera: "[data-planos-do-produto]" },
   { nome: "24-casa-faturamento", caminho: "/produto?area=faturamento", papel: "admin", espera: "[data-faturamento-por-conta]" },
   { nome: "25-financeiro", caminho: "/financeiro", papel: "admin", espera: "body", depois: async (p) => { await p.getByRole("button", { name: /Visão geral/ }).first().click(); await p.getByText("CRM e E-mail", { exact: true }).last().click(); await p.waitForSelector("[data-faturamento-do-produto]", { timeout: 15000 }); await p.waitForTimeout(500); } },
