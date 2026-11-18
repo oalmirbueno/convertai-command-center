@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { haQuanto } from "@/components/produto/casa/MonitorDoProduto";
 
 const raiz = resolve(__dirname, "../..");
-const sql = readFileSync(resolve(raiz, "supabase/migrations/20261118150000_monitor_do_produto.sql"), "utf8");
+const sql = readFileSync(resolve(raiz, "supabase/migrations/20261118190000_monitor_do_produto.sql"), "utf8");
 const pagina = readFileSync(resolve(raiz, "src/pages/AdminProduto.tsx"), "utf8");
 
 describe("monitor do produto", () => {
