@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, BookOpen, Boxes, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -183,6 +183,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Execução da equipe", url: "/execucao", icon: Bot },
       // 26/10: o boletim do Hermes e as mudanças nas contas, com um aviso no sino por boletim.
       { title: "Anúncios hoje", url: "/anuncios/hoje", icon: Newspaper },
+      // 18/11: os grupos de WhatsApp dos clientes ao vivo (quem espera resposta, resumo do dia e a conversa).
+      { title: "Grupos dos clientes", url: "/grupos", icon: MessageCircle },
       // 26/10: as mensagens dos rituais da semana, de todos os clientes, numa tela só (com o contador).
       { title: "Mensagens da semana", url: "/central/mensagens", icon: MessagesSquare, soAdmin: true },
       // 18/11/2026: Central de Skills e segundo cérebro para todos os agentes.
