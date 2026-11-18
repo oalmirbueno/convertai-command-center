@@ -176,7 +176,7 @@ function FichaDoEmail({ cliente, saude, hoje, onFechar, aoSalvar }: { cliente: C
       largura="lg"
       titulo={cliente.empresa}
       descricao={`${ROTULO_DA_SAUDE[saude.estado]} · ${cliente.caixas} ${cliente.caixas === 1 ? "caixa" : "caixas"}${cliente.caixas_sem_dono ? ` · ${cliente.caixas_sem_dono} sem pessoa definida` : ""}`}
-      rodape={<Link to="/produto?area=email" className={botao.secundario}>Abrir entradas e migração</Link>}
+      rodape={<Link to="/produto/email/entradas" className={botao.secundario}>Abrir entradas e migração</Link>}
     >
       <div className="min-w-0 space-y-5" data-ficha-do-email="">
         {saude.avisos.length === 0 ? (
