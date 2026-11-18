@@ -378,6 +378,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_prepare_file_upload',
     'aceleriq_reagendar_publicacao',
     'aceleriq_register_dossier_progress',
+    'aceleriq_regras_permanentes',
     'aceleriq_reopen_task',
     'aceleriq_restore_file',
     'aceleriq_restore_project',
@@ -1948,5 +1949,8 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
   }
   // Mandar mensagem exige a chave que impede duplicar.
   assertEquals((TOOL_MAP.get('aceleriq_escritorio_enviar')!.inputSchema as { required: string[] }).required, ['texto', 'idempotency_key']);
-  assertEquals(TOOLS.length, 218);
+  // Regras permanentes do dono: uma ferramenta de leitura; a decisão mora no banco.
+  assert(TOOL_MAP.get('aceleriq_regras_permanentes') && FERRAMENTAS_POR_AREA.execucao.includes('aceleriq_regras_permanentes'));
+  assert(canInvoke(readCtx, TOOL_MAP.get('aceleriq_regras_permanentes')!));
+  assertEquals(TOOLS.length, 219);
 });
