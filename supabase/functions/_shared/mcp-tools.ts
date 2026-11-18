@@ -63,6 +63,8 @@ import { FERRAMENTAS_DO_PAINEL_INTEIRO, ligarCatalogo } from '../mcp-server/modu
 import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro.ts';
 import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspace-e-perfis.ts';
 import { FERRAMENTAS_DA_CENTRAL } from '../mcp-server/modulos/central-de-skills.ts';
+import { FERRAMENTAS_DO_ESCRITORIO } from '../mcp-server/modulos/escritorio.ts';
+import { FERRAMENTAS_DAS_REGRAS } from '../mcp-server/modulos/regras-permanentes.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
 import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
@@ -5127,6 +5129,10 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO,
   // MCP 2.32: Central de Skills e segundo cérebro em tempo real (modulos/central-de-skills.ts).
   ...FERRAMENTAS_DA_CENTRAL,
+  // MCP 2.34: Escritório (entrar, diretório, mensagens entre agentes, salas, presença, automações).
+  ...FERRAMENTAS_DO_ESCRITORIO,
+  // MCP 2.34: regras permanentes do dono (o que o agente faz sem esperar aprovação).
+  ...FERRAMENTAS_DAS_REGRAS,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

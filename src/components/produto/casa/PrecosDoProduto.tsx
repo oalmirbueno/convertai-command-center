@@ -30,7 +30,10 @@ const paraCampo = (n: number) => String(n).replace(".", ",");
  * para quem assinar daqui em diante; quem já assina só muda de valor quando a
  * ficha da empresa é salva (o valor novo vai para o Asaas naquele momento).
  */
-export default function PrecosDoProduto() {
+/** 18/11/2026: "crm" mostra cobrança, planos, prazos e custos; "email" só o preço do e-mail (cada produto na sua tela). */
+export default function PrecosDoProduto({ parte }: { parte?: "crm" | "email" } = {}) {
+  const doCrm = parte !== "email";
+  const doEmail = parte !== "crm";
   const qc = useQueryClient();
   const planos = useQuery({ queryKey: ["produto", "planos", "todos"], queryFn: () => listarPlanos(true) });
   const config = useQuery({ queryKey: ["produto", "config"], queryFn: lerConfig });
@@ -124,6 +127,7 @@ export default function PrecosDoProduto() {
 
   return (
     <div className="min-w-0 space-y-6" data-precos-do-produto="">
+      {doCrm && (
       <Secao
         titulo="Cobrança no cartão"
         descricao={c.pagamentos_ativos ? "Ligada" : "Desligada"}
@@ -149,7 +153,9 @@ export default function PrecosDoProduto() {
           </p>
         )}
       </Secao>
+      )}
 
+      {doCrm && (
       <Secao
         titulo="Planos"
         descricao={`${(planos.data || []).filter((p) => p.ativo).length} à venda`}
@@ -178,30 +184,40 @@ export default function PrecosDoProduto() {
           ))}
         </ul>
       </Secao>
+      )}
 
       <Secao
-        titulo="E-mail, prazos e custos"
-        ajuda="Os preços do e-mail valem para o plano que não inclui e-mail. Os custos servem para a margem no Financeiro: custo fixo do produto no mês, custo de cada caixa além do que o provedor dá de graça, custo de cada lugar buscado no Google Maps e o imposto sobre o que é recebido."
+        titulo={parte === "email" ? "Preço do e-mail profissional" : parte === "crm" ? "Prazos e custos" : "E-mail, prazos e custos"}
+        ajuda={parte === "email"
+          ? "Vale para quem contrata o e-mail sozinho ou num plano do CRM que não inclui e-mail. O custo por caixa extra entra na margem do Financeiro."
+          : "Os custos servem para a margem no Financeiro: custo fixo do produto no mês, custo de cada lugar buscado no Google Maps e o imposto sobre o que é recebido."}
         acao={<button type="button" className={botao.primario} onClick={() => void salvarConfig()} disabled={salvando} data-salvar-precos="">{salvando ? "Salvando..." : "Salvar"}</button>}
       >
         <div className="min-w-0 space-y-5">
-          <GrupoDeCampos titulo="E-mail profissional" colunas={3}>
-            {texto_("email_migracao", "Migração, uma vez (R$)")}
-            {texto_("email_mensal", "Mensalidade (R$)")}
-            {texto_("email_caixas_no_mensal", "Caixas na mensalidade")}
-            {texto_("email_caixa_extra", "Caixa adicional, por mês (R$)")}
-          </GrupoDeCampos>
-          <GrupoDeCampos titulo="Prazos" colunas={3}>
-            {texto_("teste_dias", "Dias de teste")}
-            {texto_("tolerancia_dias", "Dias de tolerância no atraso", "Depois disso o acesso pausa")}
-          </GrupoDeCampos>
-          <GrupoDeCampos titulo="Custos da casa" colunas={3}>
-            {texto_("custo_fixo_mensal", "Custo fixo do produto, por mês (R$)")}
-            {texto_("custo_email_caixa_extra", "Custo por caixa extra, por mês (R$)")}
-            {texto_("imposto_pct", "Imposto sobre o recebido (%)")}
-            {texto_("custo_lugar_google_usd", "Lugar no Google Maps (US$)")}
-            {texto_("dolar", "Dólar (R$)")}
-          </GrupoDeCampos>
+          {doEmail && (
+            <GrupoDeCampos titulo="E-mail profissional" colunas={3}>
+              {texto_("email_migracao", "Migração, uma vez (R$)")}
+              {texto_("email_mensal", "Mensalidade (R$)")}
+              {texto_("email_caixas_no_mensal", "Caixas na mensalidade")}
+              {texto_("email_caixa_extra", "Caixa adicional, por mês (R$)")}
+              {parte === "email" && texto_("custo_email_caixa_extra", "Custo por caixa extra, por mês (R$)")}
+            </GrupoDeCampos>
+          )}
+          {doCrm && (
+            <GrupoDeCampos titulo="Prazos" colunas={3}>
+              {texto_("teste_dias", "Dias de teste")}
+              {texto_("tolerancia_dias", "Dias de tolerância no atraso", "Depois disso o acesso pausa")}
+            </GrupoDeCampos>
+          )}
+          {doCrm && (
+            <GrupoDeCampos titulo="Custos da casa" colunas={3}>
+              {texto_("custo_fixo_mensal", "Custo fixo do produto, por mês (R$)")}
+              {parte !== "crm" && texto_("custo_email_caixa_extra", "Custo por caixa extra, por mês (R$)")}
+              {texto_("imposto_pct", "Imposto sobre o recebido (%)")}
+              {texto_("custo_lugar_google_usd", "Lugar no Google Maps (US$)")}
+              {texto_("dolar", "Dólar (R$)")}
+            </GrupoDeCampos>
+          )}
         </div>
       </Secao>
 

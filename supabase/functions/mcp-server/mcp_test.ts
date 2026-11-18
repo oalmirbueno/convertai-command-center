@@ -266,6 +266,14 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_email_marcar_pago',
     'aceleriq_email_migracao',
     'aceleriq_email_registrar',
+    'aceleriq_escritorio_automacao',
+    'aceleriq_escritorio_caixa',
+    'aceleriq_escritorio_diretorio',
+    'aceleriq_escritorio_entrar',
+    'aceleriq_escritorio_enviar',
+    'aceleriq_escritorio_grupos',
+    'aceleriq_escritorio_marcar_lida',
+    'aceleriq_escritorio_presenca',
     'aceleriq_estudio_erros',
     'aceleriq_estudio_trabalhos',
     'aceleriq_fetch',
@@ -370,6 +378,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_prepare_file_upload',
     'aceleriq_reagendar_publicacao',
     'aceleriq_register_dossier_progress',
+    'aceleriq_regras_permanentes',
     'aceleriq_reopen_task',
     'aceleriq_restore_file',
     'aceleriq_restore_project',
@@ -1881,7 +1890,6 @@ Deno.test('2.32: Central de Skills e segundo cérebro em tempo real no catálogo
 
 Deno.test('2.33: versão, as cinco ferramentas de e-mail no catálogo, no guia e contadas na descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.33.0');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
@@ -1913,5 +1921,36 @@ Deno.test('2.33: versão, as cinco ferramentas de e-mail no catálogo, no guia e
     agora: new Date('2026-11-18T12:00:00Z'),
   });
   assertEquals(d.toolCount, TOOLS.length);
-  assertEquals(TOOLS.length, 210);
+});
+
+// ─── MCP 2.34.0 (18/11/2026): Escritório da Aceleriq ───
+
+Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no guia, leitura e escrita separadas', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  assertEquals(MCP_VERSION, '2.34.0');
+  const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const leitura = ['aceleriq_escritorio_entrar', 'aceleriq_escritorio_diretorio', 'aceleriq_escritorio_caixa', 'aceleriq_escritorio_grupos'];
+  const escrita = ['aceleriq_escritorio_enviar', 'aceleriq_escritorio_marcar_lida', 'aceleriq_escritorio_presenca', 'aceleriq_escritorio_automacao'];
+  for (const nome of [...leitura, ...escrita]) {
+    const t = TOOL_MAP.get(nome);
+    assert(t, `${nome} no catálogo`);
+    assert(FERRAMENTAS_POR_AREA.execucao.includes(nome), `${nome} no guia`);
+    assert(!(CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes(nome), `${nome} fora da lista de cliente: só a casa`);
+    assert(!canUseToolWithDataScope(restrictedCtx, t!), `${nome}: chave restrita a cliente não entra no Escritório`);
+  }
+  for (const nome of leitura) {
+    assertEquals(TOOL_MAP.get(nome)!.annotations?.readOnlyHint, true);
+    assert(canInvoke(readCtx, TOOL_MAP.get(nome)!));
+  }
+  for (const nome of escrita) {
+    assertEquals(TOOL_MAP.get(nome)!.annotations?.readOnlyHint, false);
+    assert(!canInvoke(readCtx, TOOL_MAP.get(nome)!), `${nome} não roda só com leitura`);
+  }
+  // Mandar mensagem exige a chave que impede duplicar.
+  assertEquals((TOOL_MAP.get('aceleriq_escritorio_enviar')!.inputSchema as { required: string[] }).required, ['texto', 'idempotency_key']);
+  // Regras permanentes do dono: uma ferramenta de leitura; a decisão mora no banco.
+  assert(TOOL_MAP.get('aceleriq_regras_permanentes') && FERRAMENTAS_POR_AREA.execucao.includes('aceleriq_regras_permanentes'));
+  assert(canInvoke(readCtx, TOOL_MAP.get('aceleriq_regras_permanentes')!));
+  assertEquals(TOOLS.length, 219);
 });

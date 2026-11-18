@@ -3204,7 +3204,23 @@
     },
     {
       "version": "20261118220000",
-      "path": "supabase/migrations/20261118220000_alcada_automatica.sql",
+      "path": "supabase/migrations/20261118220000_escritorio_dos_agentes.sql",
+      "local_sha256": "8d27e1a6b43b56996fafb0a579168c87f3b6a608b803440299589b99fc32897b",
+      "remote_name": "escritorio_dos_agentes",
+      "remote_statements_sha256": "810a72822b04b1139c356379a687001c54d0b7e17e2b67538e40e163ce1a8ef5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118230000",
+      "path": "supabase/migrations/20261118230000_regras_permanentes.sql",
+      "local_sha256": "b1e1b5c1e156075be3046ee20c7e4dc2a3a4973051252a9340d65cd358d93664",
+      "remote_name": "regras_permanentes",
+      "remote_statements_sha256": "21cc6c4a31627cde270cd36375b2c2f4949cdc559de700be1abf27a81871c0a5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261119000000",
+      "path": "supabase/migrations/20261119000000_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",
