@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock, FileText, Image as ImageIcon, MessageCircle, Mic, RefreshCw, Video } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -92,6 +92,10 @@ function IconeDoTipo({ tipo }: { tipo: string }) {
 
 function Conversa({ mensagens }: { mensagens: MensagemDoGrupo[] }) {
   const visiveis = mensagens.filter((m) => m.papel !== "automatico");
+  // A conversa abre na última mensagem (o que interessa é o agora), como no WhatsApp.
+  const fim = useRef<HTMLLIElement | null>(null);
+  const ultimaId = visiveis.length ? visiveis[visiveis.length - 1].id : "";
+  useEffect(() => { fim.current?.scrollIntoView?.({ block: "end" }); }, [ultimaId]);
   if (visiveis.length === 0) return <EstadoVazio compacto titulo="Sem conversa nos últimos 3 dias." />;
   let diaAnterior = "";
   return (
@@ -102,7 +106,7 @@ function Conversa({ mensagens }: { mensagens: MensagemDoGrupo[] }) {
         diaAnterior = dia;
         const daAgencia = m.papel === "agencia";
         return (
-          <li key={m.id}>
+          <li key={m.id} ref={m.id === ultimaId ? fim : undefined}>
             {mudouODia && <p className={juntar(texto.auxiliar, "mb-2 mt-4 text-center first:mt-0")}>{dia}</p>}
             <div className={juntar("flex min-w-0", daAgencia ? "justify-end" : "justify-start")}>
               <div className={juntar("min-w-0 max-w-[86%] rounded-2xl px-3.5 py-2", daAgencia ? "bg-primary/10" : "bg-muted/70", m.ruido && "opacity-60")}>
