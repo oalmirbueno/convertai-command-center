@@ -23,6 +23,7 @@ export const MCP_SCOPE_DESCRIPTIONS: Record<string, MCPScopeInfo> = {
   'memory:read': { title: 'Segundo Cérebro · leitura', description: 'Consultar contexto, arquivos e commits do repositório de memória.' },
   'memory:propose': { title: 'Segundo Cérebro · propor', description: 'Criar propostas .md no inbox do OpenClaw.', sensitive: true },
   'memory:write': { title: 'Central e Segundo Cérebro · escrever', description: 'Publicar skills na Central e criar ou editar notas do segundo cérebro (memória consolidada segue a revisão diária).', sensitive: true },
+  'escritorio:write': { title: 'Escritório · falar como dono', description: 'Ler e escrever no Escritório dos agentes como o dono, fora do painel (app do Hermes).', sensitive: true },
   'admin': { title: 'Administrador', description: 'Bypass total de escopo. Concede acesso a todas as ferramentas.', sensitive: true },
 };
 
