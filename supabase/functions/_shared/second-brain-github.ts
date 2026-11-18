@@ -654,7 +654,8 @@ export async function listTree(prefix = ''): Promise<{ entries: TreeEntry[]; tru
     timeoutMs: 15000,
   });
   if (res.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: res.status, detail: String(res.body?.message ?? '') });
-  const pref = prefix ? normalizePath(prefix).replace(/\/?$/, '/') : '';
+  const limpo = String(prefix ?? '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  const pref = limpo ? normalizePath(limpo) + '/' : '';
   const entries: TreeEntry[] = [];
   for (const t of (res.body?.tree ?? []) as Array<Record<string, unknown>>) {
     const path = String(t.path ?? '');

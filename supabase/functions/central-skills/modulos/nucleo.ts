@@ -47,6 +47,16 @@ const PASTA_DO_HERMES: Record<string, string> = {
 /** Regras fixas por nome (a primeira que casa vence). */
 const REGRAS: Array<[RegExp, string]> = [
   [/^(aceleriq|vendedor-whatsapp|documento-entrega|migracao-email|gatum|thaina|almir)/, 'aceleriq'],
+  [/^(firecrawl|decodo|xurl|grounded-citations|llm-wiki|bioinformatics)/, 'pesquisa'],
+  [/^(github|python-debugpy|systematic-debugging|test-driven|requesting-code-review|simplify-code|spike|merge-reconciler|release|version-bump|build-and-release|sdlc|oh-my-issues|pathfinder|wayfinder)/, 'programacao'],
+  [/^(mkt-|pm-|ops-|chief-of-staff|owner-goals|weekly-review|meeting-action|document-to-action|teams-meeting|product-price|ai-local-business|whatsapp-antiban)/, 'negocios'],
+  [/^(comfyui|p5js|sketch|excalidraw|ascii-art|meme|baoyu|pretext)/, 'design'],
+  [/^(music|songsee|songwriting|sound-effects|text-to-speech|whisper|canal-noir|gif-search)/, 'video'],
+  [/^(claude-code|codex|opencode|blackbox|antigravity|orchestrate|hermes|mode-creator|make-plan|plan$|do$|caveman|one-three-one|full-output|typesafe|aisa|session-librarian|request-progress|teach|ask-matt|mattpocock|ccs-align|claude-automation)/, 'agentes'],
+  [/^(notion|airtable|google-workspace|microsoft-office|powerpoint|nano-pdf|ocr-and-documents|box$|apple-|himalaya|email-inbox|imessage|findmy|maps|openhue)/, 'documentos'],
+  [/^(llama-cpp|serving-llms|huggingface|weights-and-biases|evaluating-llms)/, 'programacao'],
+  [/^(gui-automation|blocked-page|inspecting-hermes|dogfood|screenpipe|hermes-desktop)/, 'navegador'],
+  [/^(backup-setup|childhood|retro|what-the|wait-what)/, 'memoria'],
   [/^(ads|ads-.*|claude-ads|ad-creative|google-ads.*|memoria-de-conta-ads|google-analytics.*|lead-magnets)$/, 'trafego'],
   [/^(ig-|instagram)/, 'instagram'],
   [/^(yt-|youtube)/, 'youtube'],
@@ -156,6 +166,8 @@ export type PedidoDePublicacao = {
   nome: string;
   descricao: string;
   categoria: string;
+  /** true quando quem publicou escolheu a categoria (senão a já gravada é mantida). */
+  categoria_explicita: boolean;
   tags: string[];
   runtimes: Runtime[];
   plugin: string | null;
@@ -197,6 +209,7 @@ export function montarPublicacao(corpo: Record<string, unknown>): { ok: true; pe
       nome: String(corpo.nome ?? fm.name ?? slug).slice(0, 120),
       descricao: String(corpo.descricao ?? fm.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 1500),
       categoria,
+      categoria_explicita: Boolean(CATEGORIAS[categoriaPedida]),
       tags,
       runtimes: runtimesValidos(corpo.runtimes),
       plugin: corpo.plugin ? String(corpo.plugin).slice(0, 120) : null,
@@ -272,7 +285,7 @@ export async function publicarSkill(
     if (pacotePath !== caminhoDoPacote(pedido.slug, pedido.hash)) throw new Error('pacote_path não confere com slug e hash.');
     if (!(await pacoteExiste(banco, pacotePath))) throw new Error('O pacote ainda não chegou ao Storage. Envie o zip pelo link de upload antes de publicar.');
   }
-  const atual = await banco.from('central_skills').select('id, hash, versao, origens, pacote_path, status').eq('slug', pedido.slug).maybeSingle();
+  const atual = await banco.from('central_skills').select('id, hash, versao, origens, pacote_path, status, categoria').eq('slug', pedido.slug).maybeSingle();
   if (atual.error) throw new Error(atual.error.message);
   const agora = new Date().toISOString();
   const origens = juntarOrigens(atual.data?.origens, pedido.origem);
@@ -288,7 +301,7 @@ export async function publicarSkill(
     slug: pedido.slug,
     nome: pedido.nome,
     descricao: pedido.descricao,
-    categoria: pedido.categoria,
+    categoria: atual.data && !pedido.categoria_explicita ? atual.data.categoria : pedido.categoria,
     tags: pedido.tags,
     runtimes: pedido.runtimes,
     plugin: pedido.plugin,

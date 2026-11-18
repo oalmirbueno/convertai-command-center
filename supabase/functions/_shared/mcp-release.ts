@@ -15,4 +15,5 @@
 // 2.29.0 (17/11/2026): aceleriq_perfis_instagram_listar (Referências e Concorrentes por aba, com ativos, limite e vagas, só leitura), aceleriq_perfis_instagram_arquivar (igual ao botão da tela, sem apagar nada, idempotente) e idempotency_key opcional em aceleriq_perfis_instagram_gravar.
 // 2.30.0 (18/11/2026): aceleriq_criar_publicacao_de_aprovado (publicação planejada, sem data, de post já aprovado pelo cliente e sem publicação; não agenda nem publica; depois agenda com aceleriq_reagendar_publicacao).
 // 2.32.0 (18/11/2026): Central de Skills (aceleriq_central_skills, _skill, _instalar, _publicar_skill) e segundo cérebro em tempo real (aceleriq_cerebro_arvore, aceleriq_cerebro_salvar_nota), escopo memory:write.
-export const MCP_VERSION = '2.32.0';
+// 2.33.0 (18/11/2026): e-mail profissional pelo agente: aceleriq_email_entradas, _migracao, _registrar (pedido, domínio e integração, caixa, etapa, andamento), _marcar_pago (um livro só) e _conferir (DNS público, Cloudflare, Zoho). Só credencial da casa.
+export const MCP_VERSION = '2.33.0';

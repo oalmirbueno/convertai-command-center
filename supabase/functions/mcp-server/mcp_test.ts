@@ -261,6 +261,11 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_dia_prioritario',
     'aceleriq_dia_prioritario_registrar',
     'aceleriq_editar_legenda_publicacao',
+    'aceleriq_email_conferir',
+    'aceleriq_email_entradas',
+    'aceleriq_email_marcar_pago',
+    'aceleriq_email_migracao',
+    'aceleriq_email_registrar',
     'aceleriq_estudio_erros',
     'aceleriq_estudio_trabalhos',
     'aceleriq_fetch',
@@ -1853,10 +1858,7 @@ Deno.test('criar publicação de aprovado: escrita editorial:write, schema fecha
   await assertRejects(() => Promise.resolve(tool.handler({ ...base, confirmar: false }, writeCtx)), Error, 'Invalid input');
 });
 
-Deno.test('2.32: versão, Central de Skills e segundo cérebro em tempo real no catálogo e no guia', async () => {
-  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.32.0');
-  assertEquals(TOOLS.length, 205);
+Deno.test('2.32: Central de Skills e segundo cérebro em tempo real no catálogo e no guia', async () => {
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   for (const n of ['aceleriq_central_skills', 'aceleriq_central_skill', 'aceleriq_central_instalar', 'aceleriq_central_publicar_skill']) {
     assert(FERRAMENTAS_POR_AREA.skills.includes(n), `${n} no guia`);
@@ -1873,4 +1875,43 @@ Deno.test('2.32: versão, Central de Skills e segundo cérebro em tempo real no 
   }
   // Chave restrita a cliente não enxerga a Central.
   assert(!canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('aceleriq_central_publicar_skill')!));
+});
+
+// ─── MCP 2.33.0 (18/11/2026): e-mail profissional pelo agente ───
+
+Deno.test('2.33: versão, as cinco ferramentas de e-mail no catálogo, no guia e contadas na descoberta', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  assertEquals(MCP_VERSION, '2.33.0');
+  const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
+  const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const leitura = ['aceleriq_email_entradas', 'aceleriq_email_migracao', 'aceleriq_email_conferir'];
+  const escrita = ['aceleriq_email_registrar', 'aceleriq_email_marcar_pago'];
+  for (const nome of [...leitura, ...escrita]) {
+    const t = TOOL_MAP.get(nome);
+    assert(t, `${nome} no catálogo`);
+    assert(FERRAMENTAS_POR_AREA.clientes.includes(nome), `${nome} no guia`);
+    assert(!(CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes(nome), `${nome} fora da lista de cliente: só a casa`);
+  }
+  for (const nome of leitura) {
+    assertEquals(GRANULAR_SCOPE_BY_TOOL[nome], 'clients:read');
+    assertEquals(TOOL_MAP.get(nome)!.annotations?.readOnlyHint, true);
+    assert(canInvoke(readCtx, TOOL_MAP.get(nome)!));
+  }
+  for (const nome of escrita) {
+    assertEquals(GRANULAR_SCOPE_BY_TOOL[nome], 'clients:write');
+    assertEquals(TOOL_MAP.get(nome)!.annotations?.readOnlyHint, false);
+    assert(!canInvoke(readCtx, TOOL_MAP.get(nome)!), `${nome} não roda só com leitura`);
+  }
+  const regra = REGRAS_DE_ACAO.find((r) => r.includes('aceleriq_email_marcar_pago')) || '';
+  assert(regra.includes('migracao-email-cliente') && regra.includes('ja_lancado') && /dono disser/.test(regra), 'guia ensina quando marcar pago');
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-11-18T12:00:00Z'),
+  });
+  assertEquals(d.toolCount, TOOLS.length);
+  assertEquals(TOOLS.length, 210);
 });

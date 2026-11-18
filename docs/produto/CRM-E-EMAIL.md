@@ -75,6 +75,8 @@ O serviço segue o piloto: contas do próprio cliente no provedor (Zoho) e no DN
 
 Para o cliente ver a área de E-mail, a empresa precisa estar com "E-mail profissional" marcado na ficha.
 
+Desde 18/11/2026 o e-mail tem uma rota só (pedido, entrada, marcar como pago, migração e integração com Cloudflare e Zoho): ver `docs/produto/EMAIL-ROTA-UNICA.md`.
+
 ## Testes
 
 - `src/test/produto-crm-email.test.tsx`: regras de escopo, mensalidade, Asaas, DNS e convenções.

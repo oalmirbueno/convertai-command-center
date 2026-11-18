@@ -3163,8 +3163,16 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261118160000",
-      "path": "supabase/migrations/20261118160000_alcada_automatica.sql",
+      "version": "20261118170000",
+      "path": "supabase/migrations/20261118170000_produto_email_rota_unica.sql",
+      "local_sha256": "3022d85d619df6af07a858602addd636e273079787da843dd6526a840520fc9f",
+      "remote_name": "produto_email_rota_unica",
+      "remote_statements_sha256": "fe34478fe6192d8ce1f481a07f96ea59be4cdd3c405484bfb2e1b7bc38850f97",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118180000",
+      "path": "supabase/migrations/20261118180000_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",
