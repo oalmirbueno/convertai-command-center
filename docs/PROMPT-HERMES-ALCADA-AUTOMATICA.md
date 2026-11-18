@@ -1,7 +1,7 @@
 # Prompt para o Hermes e o Paperclip — alçada automática
 
 Copie tudo abaixo da linha e envie aos agentes depois que a migration
-`20261118130000_alcada_automatica.sql` estiver aplicada.
+`20261118160000_alcada_automatica.sql` estiver aplicada.
 
 ---
 

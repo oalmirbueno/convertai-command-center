@@ -54,7 +54,8 @@ export const FERRAMENTAS_POR_AREA: Record<string, string[]> = {
   financeiro: FIN,
   financeiro_cfo: FIN,
   cofre: ['aceleriq_vault_overview', 'aceleriq_acesso_usar', 'aceleriq_acesso_pedir', 'aceleriq_acesso_estado'],
-  memoria: ['memory_get_context', 'memory_search', 'memory_fetch', 'memory_list_pending_proposals', 'memory_get_pulse', 'memory_recent_commits', 'memory_propose_update', 'aceleriq_base_dos_agentes'],
+  memoria: ['memory_get_context', 'memory_search', 'memory_fetch', 'memory_list_pending_proposals', 'memory_get_pulse', 'memory_recent_commits', 'memory_propose_update', 'aceleriq_base_dos_agentes', 'aceleriq_cerebro_arvore', 'aceleriq_cerebro_salvar_nota'],
+  skills: ['aceleriq_central_skills', 'aceleriq_central_skill', 'aceleriq_central_instalar', 'aceleriq_central_publicar_skill'],
   mcp: ['aceleriq_guia', 'aceleriq_health', 'aceleriq_capabilities', 'aceleriq_mcp_saude', 'aceleriq_audit_integrity'],
 };
 

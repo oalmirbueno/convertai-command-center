@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, BookOpen, Boxes, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -185,6 +185,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Anúncios hoje", url: "/anuncios/hoje", icon: Newspaper },
       // 26/10: as mensagens dos rituais da semana, de todos os clientes, numa tela só (com o contador).
       { title: "Mensagens da semana", url: "/central/mensagens", icon: MessagesSquare, soAdmin: true },
+      // 18/11/2026: Central de Skills e segundo cérebro para todos os agentes.
+      { title: "Skills e cérebro", url: "/skills", icon: Library },
     ],
   },
   {
