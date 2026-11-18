@@ -1,20 +1,31 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { ArrowLeft, Inbox, Lock, PenSquare, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Inbox, Lock, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { diaLegivel, fraseDoErro } from "@/lib/produto/api";
-import { abrirPorta, carregarMinhasCaixas, correio, correioDesligado, portaAberta, type CaixaDoCorreio, type ResumoDaMensagem } from "@/lib/produto/email-central";
+import { abrirPorta, carregarMinhasCaixas, portaAberta } from "@/lib/produto/email-central";
+import { quemSouNoCorreio } from "@/lib/produto/correio-dia";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
-import { CampoDeBusca, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, JanelaCentral, botao, campo, campoTexto, etiqueta, foco, juntar, lista, texto } from "@/components/sistema";
+import { Carregando, EstadoDeErro, EstadoVazio, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
+import CaixaPorPrioridade from "@/components/correio/CaixaPorPrioridade";
+import { CampanhasDoCorreio, FerramentasDoCorreio, MeuDia, QuadroDaCaixa } from "@/components/correio/AreasDoCorreio";
 
 /**
  * O correio do cliente (endereço /correio), separado do painel e do CRM: abre por um link próprio e
- * pede a senha de novo ao entrar. Cada pessoa vê a própria caixa; o master (quem administra a empresa
- * ou quem recebeu a marca) vê todas. Sem provedor contratado, a caixa aparece "em preparação".
+ * pede a senha de novo ao entrar. Cinco áreas: a caixa por prioridade, o quadro, o dia (agenda e
+ * tarefas), as campanhas e as ferramentas. Cada pessoa vê a própria caixa; o master vê todas.
  */
+
+type Area = "caixa" | "quadro" | "dia" | "campanhas" | "ferramentas";
+const AREAS: Array<{ id: Area; nome: string }> = [
+  { id: "caixa", nome: "Caixa" },
+  { id: "quadro", nome: "Quadro" },
+  { id: "dia", nome: "Meu dia" },
+  { id: "campanhas", nome: "Campanhas" },
+  { id: "ferramentas", nome: "Ferramentas" },
+];
+
 export default function Correio() {
   const { user } = useAuth();
   const [liberado, setLiberado] = useState(() => (user ? portaAberta(user.id) : false));
@@ -28,19 +39,9 @@ export default function Correio() {
   }, []);
 
   if (!user) return null;
-  return (
-    <div className="flex min-h-[100dvh] min-w-0 flex-col bg-background text-foreground" data-correio="">
-      <header className="flex h-14 shrink-0 items-center border-b border-border px-4">
-        <MarcaAceleriq altura={20} />
-        <span className={juntar(texto.corpo, "ml-3 font-medium")}>Correio</span>
-        <span className="flex-1" />
-        <Link to="/app/email" className={juntar(botao.icone, foco)} aria-label="Voltar ao painel" title="Voltar ao painel">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        </Link>
-      </header>
-      {liberado ? (
-        <CaixasDoCorreio />
-      ) : (
+  if (!liberado) {
+    return (
+      <div className="flex min-h-[100dvh] min-w-0 flex-col bg-muted/40 text-foreground" data-correio="">
         <Porta
           email={user.email || ""}
           aoAbrir={() => {
@@ -48,9 +49,10 @@ export default function Correio() {
             setLiberado(true);
           }}
         />
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
+  return <CorreioAberto />;
 }
 
 /** A senha de novo, mesmo já logado: o e-mail não abre só porque o painel ficou aberto no computador. */
@@ -75,16 +77,20 @@ function Porta({ email, aoAbrir }: { email: string; aoAbrir: () => void }) {
   return (
     <main className="flex min-w-0 flex-1 items-center justify-center px-4 py-10" data-porta-do-correio="">
       <form
-        className="w-full max-w-[380px]"
+        className="w-full max-w-[400px] rounded-3xl bg-card p-7"
         onSubmit={(e) => {
           e.preventDefault();
           void entrar();
         }}
       >
+        <div className="mb-5 flex items-center">
+          <MarcaAceleriq altura={20} />
+          <span className={juntar(texto.corpo, "ml-3 font-medium")}>Correio</span>
+        </div>
         <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
           <Lock className="h-5 w-5" />
         </span>
-        <h1 className={texto.tituloPagina}>Confirme a sua senha</h1>
+        <h1 className={texto.tituloSecao}>Confirme a sua senha</h1>
         <p className={juntar(texto.auxiliar, "mb-4 mt-1")}>O correio pede a senha de novo ao abrir. {email}</p>
         <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} className={campo} autoComplete="current-password" autoFocus aria-label="Senha" data-campo="senha-do-correio" />
         {erro && <p className="mt-2 text-[13px] text-destructive" role="alert">{erro}</p>}
@@ -94,175 +100,74 @@ function Porta({ email, aoAbrir }: { email: string; aoAbrir: () => void }) {
   );
 }
 
-function CaixasDoCorreio() {
+function CorreioAberto() {
+  const [busca, setBusca] = useSearchParams();
+  const pedida = busca.get("area") || "";
+  const area: Area = AREAS.some((a) => a.id === pedida) ? (pedida as Area) : "caixa";
   const minhas = useQuery({ queryKey: ["produto", "correio", "caixas"], queryFn: carregarMinhasCaixas, retry: 1 });
+  const eu = useQuery({ queryKey: ["produto", "correio", "eu"], queryFn: quemSouNoCorreio, retry: 1 });
   const [escolhida, setEscolhida] = useState<string | null>(null);
-  if (minhas.isLoading) return <div className="p-6"><Carregando linhas={5} rotulo="Abrindo o correio" /></div>;
-  if (minhas.isError || !minhas.data) return <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void minhas.refetch()}>Tentar de novo</button>} />;
-  const d = minhas.data;
-  if (!d.conta) return <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Você ainda não tem uma caixa" descricao="O correio é das empresas com e-mail profissional na Aceleriq." acao={<Link to="/email" className={botao.primario}>Conhecer o e-mail profissional</Link>} />;
-  if (!d.liberado) return <EstadoVazio icone={<Lock className="h-5 w-5" aria-hidden="true" />} titulo="O e-mail da empresa não está liberado" descricao="Fale com quem administra a empresa." />;
-  if (!d.caixas.length) return <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Nenhuma caixa ligada a você" descricao={d.master ? "As caixas aparecem aqui quando a migração criar as primeiras." : "Peça para quem administra a empresa ligar a sua caixa ao seu acesso."} />;
-  const caixa = d.caixas.filter((c) => c.id === escolhida)[0] || d.caixas[0];
-  const minhasCaixas = d.caixas.filter((c) => c.minha);
-  const outras = d.caixas.filter((c) => !c.minha);
-  const grupo = (titulo: string, itens: CaixaDoCorreio[]) =>
-    itens.length > 0 && (
-      <div className="mb-4 min-w-0">
-        <p className={juntar(texto.auxiliar, "mb-1 px-2")}>{titulo}</p>
-        <ul>
-          {itens.map((c) => (
-            <li key={c.id}>
-              <button type="button" onClick={() => setEscolhida(c.id)} aria-pressed={c.id === caixa.id} className={juntar("flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left", foco, c.id === caixa.id ? "bg-muted" : "hover:bg-muted/60")} data-caixa-do-correio={c.ligado ? "ligada" : "desligada"}>
-                <span className="min-w-0 flex-1">
-                  <span className={juntar(texto.corpo, "block truncate")}>{c.endereco}</span>
-                  {(c.dono || c.pessoa) && <span className={juntar(texto.auxiliar, "block truncate")}>{c.dono || c.pessoa}</span>}
-                </span>
-                {!c.ligado && <span className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground" title="Em preparação" />}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
-      <aside className="min-w-0 shrink-0 border-b border-border p-3 md:w-[280px] md:border-b-0 md:border-r" data-caixas-do-correio="">
-        <p className={juntar(texto.corpo, "mb-3 flex min-w-0 items-center px-2 font-medium")}>
-          <span className="truncate">{d.conta.nome}</span>
-          {d.master && (
-            <span className={juntar(etiqueta, "ml-2 bg-accent-soft text-primary")} title="Você vê todas as caixas da empresa">
-              <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />
-              Master
-            </span>
-          )}
-        </p>
-        {grupo(outras.length ? "Minhas caixas" : "Caixas", minhasCaixas)}
-        {grupo("Todas da empresa", outras)}
-      </aside>
-      <CaixaAberta key={caixa.id} caixa={caixa} />
-    </div>
-  );
-}
-
-function CaixaAberta({ caixa }: { caixa: CaixaDoCorreio }) {
-  const [busca, setBusca] = useState("");
-  const [aberta, setAberta] = useState<ResumoDaMensagem | null>(null);
-  const [escrevendo, setEscrevendo] = useState(false);
-  const mensagens = useQuery({ queryKey: ["produto", "correio", "mensagens", caixa.id, busca], queryFn: () => correio.listar(caixa.id, "INBOX", busca || undefined), enabled: caixa.ligado, retry: 0 });
-  const lida = useQuery({ queryKey: ["produto", "correio", "mensagem", caixa.id, aberta ? aberta.id : ""], queryFn: () => correio.ler(caixa.id, "INBOX", aberta!.id), enabled: caixa.ligado && !!aberta, retry: 0 });
-
-  const emPreparo = !caixa.ligado || (mensagens.isError && correioDesligado(mensagens.error));
-  if (emPreparo) {
-    return (
-      <main className="min-w-0 flex-1 p-4" data-correio-em-preparo="">
-        <EstadoVazio
-          icone={<Inbox className="h-5 w-5" aria-hidden="true" />}
-          titulo={`${caixa.endereco} está em preparação`}
-          descricao="A leitura e o envio por aqui entram em seguida. Enquanto isso, use o webmail do provedor com o mesmo endereço e senha."
-          acao={<a href="https://mail.zoho.com" target="_blank" rel="noreferrer" className={botao.primario}>Abrir o webmail</a>}
-        />
-      </main>
-    );
-  }
-  return (
-    <main className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row" data-caixa-aberta="">
-      <section className="min-w-0 border-b border-border lg:w-[420px] lg:shrink-0 lg:border-b-0 lg:border-r">
-        <div className="flex min-w-0 items-center border-b border-border p-3">
-          <span className="min-w-0 flex-1">
-            <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar" rotulo="Buscar nesta caixa" />
-          </span>
-          <button type="button" className={juntar(botao.icone, "ml-2")} onClick={() => void mensagens.refetch()} aria-label="Atualizar" title="Atualizar">
-            <RefreshCw className={juntar("h-4 w-4", mensagens.isFetching && "animate-spin")} aria-hidden="true" />
-          </button>
-          <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => setEscrevendo(true)} aria-label="Escrever" title="Escrever">
-            <PenSquare className="h-4 w-4 text-primary" aria-hidden="true" />
-          </button>
-        </div>
-        {mensagens.isLoading ? (
-          <div className="p-3"><Carregando linhas={6} rotulo="Lendo a caixa" /></div>
-        ) : mensagens.isError ? (
-          <EstadoDeErro titulo={fraseDoErro(mensagens.error, "Não foi possível ler a caixa agora.")} acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void mensagens.refetch()}>Tentar de novo</button>} />
-        ) : !(mensagens.data || []).length ? (
-          <EstadoVazio compacto className="m-3" titulo="Nada por aqui." />
-        ) : (
-          <ul className={juntar(lista.aberta, lista.divisoria)} data-mensagens-do-correio="">
-            {(mensagens.data || []).map((m) => (
-              <li key={m.id}>
-                <button type="button" onClick={() => setAberta(m)} aria-pressed={!!aberta && aberta.id === m.id} className={juntar(lista.linha, "w-full items-start text-left", aberta && aberta.id === m.id && lista.destaque)}>
-                  <span className="min-w-0 flex-1">
-                    <span className={juntar(texto.corpo, "block truncate", !m.lida && "font-medium")}>{m.de}</span>
-                    <span className={juntar(texto.corpo, "block truncate", !m.lida && "font-medium")}>{m.assunto}</span>
-                    <span className={juntar(texto.auxiliar, "block truncate")}>{m.resumo}</span>
-                  </span>
-                  {m.recebida_em && <span className={juntar(texto.auxiliar, "ml-2 shrink-0")}>{diaLegivel(m.recebida_em)}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section className="min-w-0 flex-1 p-4" data-leitura-do-correio="">
-        {!aberta ? (
-          <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Escolha uma mensagem" />
-        ) : lida.isLoading ? (
-          <Carregando linhas={8} rotulo="Abrindo a mensagem" />
-        ) : lida.isError || !lida.data ? (
-          <EstadoDeErro titulo={fraseDoErro(lida.error, "Não foi possível abrir a mensagem.")} />
-        ) : (
-          <article className="min-w-0">
-            <h2 className="text-[18px] font-semibold leading-6">{lida.data.assunto}</h2>
-            <p className={juntar(texto.auxiliar, "mt-1")}>{lida.data.de} para {lida.data.para}{lida.data.recebida_em ? ` · ${diaLegivel(lida.data.recebida_em, true)}` : ""}</p>
-            <div className={juntar(texto.corpo, "mt-4 whitespace-pre-wrap break-words leading-6")}>{lida.data.texto}</div>
-            {lida.data.anexos.length > 0 && <p className={juntar(texto.auxiliar, "mt-4")}>Anexos: {lida.data.anexos.map((a) => a.nome).join(", ")}. Para baixar, abra no webmail.</p>}
-          </article>
-        )}
-      </section>
-      {escrevendo && <Escrever caixa={caixa} onFechar={() => setEscrevendo(false)} />}
-    </main>
-  );
-}
-
-function Escrever({ caixa, onFechar }: { caixa: CaixaDoCorreio; onFechar: () => void }) {
-  const [f, setF] = useState({ para: "", assunto: "", texto: "" });
-  const [enviando, setEnviando] = useState(false);
-  const enviar = async () => {
-    setEnviando(true);
-    try {
-      await correio.enviar(caixa.id, f);
-      toast.success("Enviado.");
-      onFechar();
-    } catch (e) {
-      toast.error(fraseDoErro(e, "Não foi possível enviar."));
-    } finally {
-      setEnviando(false);
-    }
+  const irPara = (a: Area) => {
+    const nova = new URLSearchParams(busca);
+    if (a === "caixa") nova.delete("area");
+    else nova.set("area", a);
+    setBusca(nova, { replace: true });
   };
+
+  const d = minhas.data;
+  const caixa = d ? d.caixas.filter((c) => c.id === escolhida)[0] || d.caixas[0] || null : null;
+  const euNoCorreio = d && d.liberado ? eu.data || null : null;
+
+  let corpo;
+  if (minhas.isLoading || eu.isLoading) corpo = <div className="rounded-3xl bg-card p-5"><Carregando linhas={5} rotulo="Abrindo o correio" /></div>;
+  else if (minhas.isError || !d) corpo = <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void minhas.refetch()}>Tentar de novo</button>} />;
+  else if (!d.conta) corpo = <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Você ainda não tem uma caixa" descricao="O correio é das empresas com e-mail profissional na Aceleriq." acao={<Link to="/email" className={botao.primario}>Conhecer o e-mail profissional</Link>} />;
+  else if (!d.liberado) corpo = <EstadoVazio icone={<Lock className="h-5 w-5" aria-hidden="true" />} titulo="O e-mail da empresa não está liberado" descricao="Fale com quem administra a empresa." />;
+  else if (area === "campanhas") corpo = <CampanhasDoCorreio />;
+  else if (area === "ferramentas") corpo = <FerramentasDoCorreio />;
+  else if (area === "dia") corpo = euNoCorreio ? <MeuDia caixa={caixa} eu={euNoCorreio} nome={euNoCorreio.nome} /> : <EstadoVazio titulo="Seu acesso ainda não está ligado a esta empresa." />;
+  else if (!caixa) corpo = <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Nenhuma caixa ligada a você" descricao={d.master ? "As caixas aparecem aqui quando a migração criar as primeiras." : "Peça para quem administra a empresa ligar a sua caixa ao seu acesso."} />;
+  else if (area === "quadro") corpo = <QuadroDaCaixa key={caixa.id} caixa={caixa} />;
+  else corpo = <CaixaPorPrioridade key={caixa.id} caixa={caixa} eu={euNoCorreio} />;
+
   return (
-    <JanelaCentral
-      aberta
-      onFechar={onFechar}
-      largura="md"
-      titulo="Nova mensagem"
-      descricao={`De ${caixa.endereco}`}
-      rodape={
-        <button type="button" className={botao.primario} onClick={() => void enviar()} disabled={enviando || !f.para.trim()}>
-          <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {enviando ? "Enviando..." : "Enviar"}
-        </button>
-      }
-    >
-      <GrupoDeCampos colunas={1}>
-        <CampoDeFormulario rotulo="Para" apoio="Separe com vírgula">
-          <input value={f.para} onChange={(e) => setF({ ...f, para: e.target.value })} className={campo} inputMode="email" autoCapitalize="none" />
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Assunto">
-          <input value={f.assunto} onChange={(e) => setF({ ...f, assunto: e.target.value })} className={campo} maxLength={200} />
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Mensagem">
-          <textarea value={f.texto} onChange={(e) => setF({ ...f, texto: e.target.value })} className={juntar(campoTexto, "min-h-[220px]")} />
-        </CampoDeFormulario>
-      </GrupoDeCampos>
-    </JanelaCentral>
+    <div className="min-h-[100dvh] min-w-0 bg-muted/40 text-foreground" data-correio={area}>
+      <div className="mx-auto min-w-0 max-w-[1600px] space-y-4 p-4 sm:p-5">
+        <header className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-3">
+          <div className="flex h-12 items-center rounded-full bg-card pl-4 pr-5">
+            <MarcaAceleriq altura={18} />
+            <span className={juntar(texto.corpo, "ml-2.5 font-semibold")}>Correio</span>
+          </div>
+          <nav className="flex min-w-0 flex-wrap rounded-full bg-card p-1" aria-label="Áreas do correio">
+            {AREAS.map((a) => (
+              <button key={a.id} type="button" onClick={() => irPara(a.id)} aria-current={a.id === area ? "page" : undefined} className={juntar("h-10 rounded-full px-4 text-[14px] font-medium", foco, a.id === area ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")} data-area-do-correio={a.id}>
+                {a.nome}
+              </button>
+            ))}
+          </nav>
+          {d && d.caixas.length > 0 && (
+            <label className="flex h-12 min-w-0 flex-1 basis-[220px] items-center rounded-full bg-card px-4">
+              <Inbox className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="sr-only">Caixa</span>
+              <select value={caixa ? caixa.id : ""} onChange={(e) => setEscolhida(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" data-caixas-do-correio="">
+                {d.caixas.map((c) => (
+                  <option key={c.id} value={c.id}>{c.endereco}{c.minha ? "" : c.dono ? ` (${c.dono})` : ""}{c.ligado ? "" : " · em preparação"}</option>
+                ))}
+              </select>
+              {d.master && (
+                <span className={juntar(etiqueta, "ml-2 shrink-0 bg-accent-soft text-primary")} title="Você vê todas as caixas da empresa">
+                  <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />
+                  Master
+                </span>
+              )}
+            </label>
+          )}
+          <Link to="/app/email" className={juntar("flex h-12 w-12 items-center justify-center rounded-full bg-card hover:bg-muted", foco)} aria-label="Voltar ao painel" title="Voltar ao painel">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </header>
+        {corpo}
+      </div>
+    </div>
   );
 }

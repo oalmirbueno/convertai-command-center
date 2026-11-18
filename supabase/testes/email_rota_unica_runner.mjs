@@ -284,6 +284,27 @@ conferir('central: uma linha por empresa com e-mail', r.length >= 4 && linhaA &&
 conferir('central: caixas, apelidos, sem dono e vencimentos', linhaA.caixas === 2 && linhaA.apelidos === 1 && linhaA.caixas_sem_dono === 2 && linhaA.dominios[0].dominio_vence_em === '2027-03-10' && linhaA.dominios[0].provedor_vence_em === '2026-12-01' && Number(linhaA.dominios[0].provedor_custo_mensal) === 9.5 && linhaA.dominios[0].etapas_total === 8, JSON.stringify(linhaA).slice(0, 400));
 conferir('central: cliente da Aceleriq mostra a cobrança do extra', linhaB.cobranca && linhaB.cobranca.por === 'extra', JSON.stringify(linhaB.cobranca));
 
+// 13. Meu dia (20261118210000): tarefas e compromissos são de cada pessoa, com RLS de verdade.
+await como('service_role', null);
+const DIA = 'supabase/migrations/20261118210000_produto_correio_meu_dia.sql';
+for (const vez of [1, 2]) {
+  try { await db.exec(readFileSync(DIA, 'utf8')); } catch (e) { console.error('Erro na migration do dia', e.message, e.where); process.exit(1); }
+}
+await db.exec(`GRANT USAGE ON SCHEMA public, auth TO authenticated; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO authenticated; GRANT SELECT ON public.produto_membros TO authenticated;`);
+const membroAdminA = await um(`SELECT id FROM public.produto_membros WHERE user_id = $1`, [ADMIN_A]);
+const comoPessoa = async (uid, fn) => { await como('authenticated', uid); await db.exec('SET ROLE authenticated'); try { return await fn(); } finally { await db.exec('RESET ROLE'); } };
+const eu = await comoPessoa(VEND, () => um(`SELECT public.produto_correio_eu()`));
+conferir('correio sabe quem é a pessoa', eu && eu.membro_id === membroVend && eu.conta_id === A);
+const tarefa = await comoPessoa(VEND, () => um(`INSERT INTO public.produto_correio_tarefas (conta_id, membro_id, titulo, origem) VALUES ($1, $2, 'Colher a assinatura', 'Do e-mail do cartório') RETURNING id`, [A, membroVend]));
+conferir('a pessoa cria a própria tarefa', !!tarefa);
+conferir('não cria tarefa em nome de outra pessoa', !!(await comoPessoa(VEND, () => recusa(`INSERT INTO public.produto_correio_tarefas (conta_id, membro_id, titulo) VALUES ($1, $2, 'x')`, [A, membroAdminA]))));
+conferir('quem administra não lê a tarefa dos outros', (await comoPessoa(ADMIN_A, () => um(`SELECT count(*)::int FROM public.produto_correio_tarefas`))) === 0);
+conferir('outra empresa não lê', (await comoPessoa(ADMIN_B, () => um(`SELECT count(*)::int FROM public.produto_correio_tarefas`))) === 0);
+conferir('a pessoa marca a tarefa como feita', (await comoPessoa(VEND, () => um(`UPDATE public.produto_correio_tarefas SET feita_em = now() WHERE id = $1 RETURNING (feita_em IS NOT NULL)`, [tarefa]))) === true);
+conferir('compromisso com fim antes do início recusa', !!(await comoPessoa(VEND, () => recusa(`INSERT INTO public.produto_correio_compromissos (conta_id, membro_id, titulo, inicio, fim) VALUES ($1, $2, 'Visita', now(), now() - interval '1 hour')`, [A, membroVend]))));
+conferir('a pessoa cria e lê o próprio compromisso', (await comoPessoa(VEND, async () => { await db.query(`INSERT INTO public.produto_correio_compromissos (conta_id, membro_id, titulo, inicio) VALUES ($1, $2, 'Visita ao 302', now() + interval '2 hours')`, [A, membroVend]); return um(`SELECT count(*)::int FROM public.produto_correio_compromissos`); })) === 1);
+await como('service_role', null);
+
 for (const [i, x] of resultados.entries()) console.log(x.ok ? 'OK  ' : 'FAIL', i + 1, x.teste, x.ok ? '' : x.detalhe);
 console.log(`${resultados.filter((x) => x.ok).length}/${resultados.length} passaram`);
 if (resultados.some((x) => !x.ok)) process.exitCode = 1;

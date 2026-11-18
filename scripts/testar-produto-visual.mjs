@@ -174,7 +174,10 @@ const minhasCaixas = { conta: { id: CONTA, nome: "Imobiliária Exemplo" }, maste
   { id: "cx0", endereco: "contato@imobiliariaexemplo.com.br", pessoa: "Recepção", minha: false, dono: null, dominio: "imobiliariaexemplo.com.br", provedor: "migadu", ligado: true },
   { id: "cx3", endereco: "rafael@imobiliariaexemplo.com.br", pessoa: "Rafael Lima", minha: false, dono: "Rafael Lima", dominio: "imobiliariaexemplo.com.br", provedor: "nenhum", ligado: false },
 ] };
-const mensagensDoCorreio = ["Proposta do apartamento 302", "Documentos da locação", "Visita confirmada para sábado", "Boleto do condomínio", "Dúvida sobre o contrato"].map((assunto, i) => ({ id: `m${i}`, de: ["cliente@exemplo.com.br", "cartorio@exemplo.com.br", "ana@exemplo.com.br", "sindico@exemplo.com.br", "joao@exemplo.com.br"][i], para: "priscila@imobiliariaexemplo.com.br", assunto, resumo: "Bom dia, segue o que combinamos por telefone. Qualquer dúvida me avise.", recebida_em: dia(-i), lida: i > 1, tem_anexo: i === 1 }));
+const mensagensDoCorreio = ["Proposta do apartamento 302", "Documentos da locação", "Visita confirmada para sábado", "Boleto do condomínio", "Dúvida sobre o contrato"].map((assunto, i) => ({ id: `m${i}`, de: ["cliente@exemplo.com.br", "cartorio@exemplo.com.br", "ana@exemplo.com.br", "sindico@exemplo.com.br", "joao@exemplo.com.br"][i], para: "priscila@imobiliariaexemplo.com.br", assunto, resumo: "Bom dia, segue o que combinamos por telefone. Qualquer dúvida me avise.", recebida_em: dia(-i), lida: i > 1, tem_anexo: i === 1, aguardando: [null, "voce", "outro", "outro", null][i], automatica: i === 4 }));
+const tarefasDoCorreio = [["Colher a assinatura do fiador", "Do e-mail de cartorio@exemplo.com.br", null], ["Rever a entrada do apartamento 302", "Do e-mail de cliente@exemplo.com.br", null], ["Enviar as fotos novas ao portal", "Criada por você", dia(0)]].map((t, i) => ({ id: `tf${i}`, titulo: t[0], origem: t[1], prazo: null, feita_em: t[2], criado_em: dia(-1) }));
+const hojeSP = new Date(agora - 3 * 3600000).toISOString().slice(0, 10);
+const compromissosDoCorreio = [["Visita ao apartamento 302", "Com Marcos Andrade", "13:30"], ["Alinhamento do time", "Sala de reunião", "17:00"]].map((c, i) => ({ id: `cp${i}`, titulo: c[0], detalhe: c[1], inicio: `${hojeSP}T${c[2]}:00Z`, fim: null }));
 
 const tabelas = {
   crm_campos: camposDaEmpresa, crm_automacoes: automacoes, crm_avisos: avisos, crm_paginas: [], crm_formularios: [], crm_conversoes: [], crm_automacao_execucoes: [],
@@ -183,7 +186,7 @@ const tabelas = {
     { id: "ch1", nome: "Claude", prefixo: "acq_3e1b0e92", criado_em: dia(-6), ultimo_uso_em: dia(0), revogada_em: null },
     { id: "ch2", nome: "Site", prefixo: "acq_a91f77c0", criado_em: dia(-3), ultimo_uso_em: null, revogada_em: null },
   ],
-  produto_planos: planos, produto_config: [config], produto_cobrancas: cobrancas, produto_email_dominios: [dominio], produto_email_caixas: caixas, produto_email_etapas: etapas, produto_custos: custos,
+  produto_planos: planos, produto_config: [config], produto_cobrancas: cobrancas, produto_email_dominios: [dominio], produto_email_caixas: caixas, produto_email_etapas: etapas, produto_custos: custos, produto_correio_tarefas: tarefasDoCorreio, produto_correio_compromissos: compromissosDoCorreio,
 };
 
 const auth = (papel) => `export function AuthProvider({children}){return children;}
@@ -221,6 +224,7 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
       if (rpc[1] === "produto_email_da_conta") return json(estado.__email || emailDoCliente());
       if (rpc[1] === "produto_email_pedidos_da_casa") return json(pedidosDaCasa);
       if (rpc[1] === "produto_email_central") return json(central);
+      if (rpc[1] === "produto_correio_eu") return json({ membro_id: "m1", conta_id: CONTA, nome: "Priscila Souza" });
       if (rpc[1] === "produto_email_minhas_caixas") return json(estado.__caixas || minhasCaixas);
       if (rpc[1] === "produto_admin_contas") return json(contasDaCasa);
       if (rpc[1] === "produto_faturamento") return json(faturamento);
@@ -332,8 +336,13 @@ const telas = [
   { nome: "26-central", caminho: "/produto?area=central", papel: "admin", espera: "[data-clientes-da-central]" },
   { nome: "26b-central-ficha", caminho: "/produto?area=central", papel: "admin", espera: "[data-clientes-da-central]", depois: async (p) => { await p.locator('[data-cliente="critico"]').first().click(); await p.waitForSelector("[data-ficha-do-email]"); await p.waitForTimeout(400); } },
   { nome: "50-correio-porta", caminho: "/correio", espera: "[data-porta-do-correio]" },
-  { nome: "51-correio", caminho: "/correio", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-mensagens-do-correio]"); await p.locator("[data-mensagens-do-correio] button").first().click(); await p.waitForTimeout(600); } },
-  { nome: "52-correio-em-preparo", caminho: "/correio", espera: "[data-porta-do-correio]", estado: { ...estadoDoProduto(), __caixas: { ...minhasCaixas, master: false, caixas: [minhasCaixas.caixas[2]] } }, depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-correio-em-preparo]"); } },
+  { nome: "51-correio", caminho: "/correio", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },
+  { nome: "51b-correio-claro", caminho: "/correio", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },
+  { nome: "52-correio-em-preparo", caminho: "/correio", espera: "[data-porta-do-correio]", estado: { ...estadoDoProduto(), __caixas: { ...minhasCaixas, master: false, caixas: [minhasCaixas.caixas[2]] } }, depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-correio-em-preparo]"); await p.waitForTimeout(500); } },
+  { nome: "53-correio-quadro", caminho: "/correio?area=quadro", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-coluna]"); await p.waitForTimeout(500); } },
+  { nome: "54-correio-dia", caminho: "/correio?area=dia", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-meu-dia]"); await p.waitForTimeout(700); } },
+  { nome: "55-correio-campanhas", caminho: "/correio?area=campanhas", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-campanhas-do-correio]"); } },
+  { nome: "56-correio-ferramentas", caminho: "/correio?area=ferramentas", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-plano]"); } },
   { nome: "23-casa-precos", caminho: "/produto?area=precos", papel: "admin", espera: "[data-planos-do-produto]" },
   { nome: "24-casa-faturamento", caminho: "/produto?area=faturamento", papel: "admin", espera: "[data-faturamento-por-conta]" },
   { nome: "25-financeiro", caminho: "/financeiro", papel: "admin", espera: "body", depois: async (p) => { await p.getByRole("button", { name: /Visão geral/ }).first().click(); await p.getByText("CRM e E-mail", { exact: true }).last().click(); await p.waitForSelector("[data-faturamento-do-produto]", { timeout: 15000 }); await p.waitForTimeout(500); } },

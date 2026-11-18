@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { diasAteODia, lerCliente, proximoVencimento, resumoDaCentral, saudeDoCliente, type ClienteNaCentral } from "@/lib/produto/email-central";
+import { agruparCaixa, colunaDaMensagem, fraseDoDia, grupoDaMensagem, horaDoCompromisso, iniciais, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
 import { ADAPTADORES, adaptadorPara, CorreioDesligado, envioValido } from "../../supabase/functions/produto-correio/modulos/adaptador";
 
 /**
@@ -141,13 +142,14 @@ describe("convenções", () => {
     const tela = ler("src/pages/Correio.tsx");
     expect(tela).toContain("signInWithPassword");
     expect(tela).toContain("portaAberta");
+    for (const area of ["caixa", "quadro", "dia", "campanhas", "ferramentas"]) expect(tela).toContain(`id: "${area}"`);
   });
 
   it("nenhum segredo em coluna e as telas novas sem travessão nem gap em flex", () => {
     const sql = ler("supabase/migrations/20261118190000_produto_email_central_e_correio.sql");
     expect(sql).toContain("vault.create_secret");
     expect(sql).not.toMatch(/add column if not exists \w*(senha|token|secret)\w* (text|varchar)/i);
-    for (const p of ["src/components/produto/casa/CentralDeEmail.tsx", "src/pages/Correio.tsx", "src/lib/produto/email-central.ts"]) {
+    for (const p of ["src/components/produto/casa/CentralDeEmail.tsx", "src/pages/Correio.tsx", "src/lib/produto/email-central.ts", "src/lib/produto/correio-dia.ts", "src/components/correio/CaixaPorPrioridade.tsx", "src/components/correio/AreasDoCorreio.tsx", "src/components/correio/PainelDoDia.tsx"]) {
       const t = ler(p);
       expect(t).not.toMatch(/[—–]/);
       for (const classe of t.match(/"[^"\n]*\bflex\b[^"\n]*"/g) || []) {
@@ -155,5 +157,46 @@ describe("convenções", () => {
         expect(/(^|[\s"])gap-/.test(classe), `${p}: ${classe}`).toBe(false);
       }
     }
+  });
+});
+
+describe("caixa por prioridade e quadro", () => {
+  const m = (x: Partial<MensagemDaCaixa>): MensagemDaCaixa => ({ id: "m", de: "marcos@exemplo.com.br", para: "eu@x.com", assunto: "Oi", resumo: "", recebida_em: "2026-11-18T12:00:00Z", lida: false, tem_anexo: false, ...x });
+
+  it("separa por quem espera quem, sem ler o texto", () => {
+    expect(grupoDaMensagem(m({}))).toBe("responder");
+    expect(grupoDaMensagem(m({ lida: true, aguardando: "voce" }))).toBe("responder");
+    expect(grupoDaMensagem(m({ lida: true, aguardando: "outro" }))).toBe("acompanhar");
+    expect(grupoDaMensagem(m({ automatica: true }))).toBe("esperar");
+    expect(grupoDaMensagem(m({ lida: true }))).toBe("esperar");
+  });
+
+  it("em Responder, quem espera há mais tempo vem primeiro; arquivada sai da caixa", () => {
+    const g = agruparCaixa([m({ id: "novo", recebida_em: "2026-11-18T12:00:00Z" }), m({ id: "velho", recebida_em: "2026-11-16T12:00:00Z" }), m({ id: "fora", arquivada: true })]);
+    expect(g.responder.map((x) => x.id)).toEqual(["velho", "novo"]);
+    expect(g.esperar).toEqual([]);
+  });
+
+  it("o cartão do quadro anda sozinho com o estado da conversa", () => {
+    expect(colunaDaMensagem(m({}))).toBe("chegou");
+    expect(colunaDaMensagem(m({ aguardando: "voce" }))).toBe("responder");
+    expect(colunaDaMensagem(m({ aguardando: "outro" }))).toBe("aguardando");
+    expect(colunaDaMensagem(m({ lida: true }))).toBe("concluido");
+    expect(colunaDaMensagem(m({ arquivada: true }))).toBe("concluido");
+  });
+
+  it("iniciais, hora de Brasília e a frase do dia", () => {
+    expect(iniciais("Marcos Andrade <m@x.com>")).toBe("MA");
+    expect(iniciais("financeiro@empresa.com.br")).toBe("FI");
+    expect(horaDoCompromisso("2026-11-18T13:30:00Z")).toBe("10:30");
+    expect(fraseDoDia({ responder: 3, compromissos: 1, tarefasAbertas: 2 })).toBe("3 e-mails pedem resposta, 1 compromisso e 2 tarefas abertas.");
+    expect(fraseDoDia({ responder: 0, compromissos: 0, tarefasAbertas: 0 })).toBe("Dia livre: nada pendente por aqui.");
+  });
+
+  it("tarefas e compromissos são só da própria pessoa (RLS), e a tela não inventa mensagem", () => {
+    const sql = ler("supabase/migrations/20261118210000_produto_correio_meu_dia.sql");
+    expect(sql).toContain('"correio da propria pessoa"');
+    expect(sql).toContain("produto_correio_sou(membro_id, conta_id)");
+    for (const p of ["src/components/correio/CaixaPorPrioridade.tsx", "src/components/correio/AreasDoCorreio.tsx"]) expect(ler(p)).not.toMatch(/exemplo\.com/);
   });
 });

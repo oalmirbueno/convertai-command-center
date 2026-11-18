@@ -36,6 +36,11 @@ export interface ResumoDaMensagem {
   recebida_em: string | null;
   lida: boolean;
   tem_anexo: boolean;
+  /** Quem deve o próximo passo na conversa: é o que separa a caixa por prioridade e move o quadro. */
+  aguardando?: "voce" | "outro" | null;
+  /** Boletim, aviso de sistema ou lista: ninguém espera resposta. */
+  automatica?: boolean;
+  arquivada?: boolean;
 }
 
 export interface Mensagem extends ResumoDaMensagem {
