@@ -87,6 +87,7 @@ const AdminComercial = rotas.lazy(() => import("@/pages/AdminComercial"));
 const AdminFreela = rotas.lazy(() => import("@/pages/AdminFreela"));
 const AdminProjection = rotas.lazy(() => import("@/pages/AdminProjection"));
 const AdminExecucao = rotas.lazy(() => import("@/pages/AdminExecucao"));
+const AdminEscritorio = rotas.lazy(() => import("@/pages/AdminEscritorio"));
 const AdminMetricas = rotas.lazy(() => import("@/pages/AdminMetricas"));
 const AdminAds = rotas.lazy(() => import("@/pages/AdminAds"));
 const AnunciosHoje = rotas.lazy(() => import("@/pages/AnunciosHoje"));
@@ -424,6 +425,8 @@ export function AppRoutes() {
         <Route path="/briefings" element={<StaffRoute><AdminBriefings /></StaffRoute>} />
         <Route path="/kanban" element={<StaffRoute><Kanban /></StaffRoute>} />
         <Route path="/execucao" element={<StaffRoute><AdminExecucao /></StaffRoute>} />
+        {/* 18/11/2026: Escritório dos agentes (organograma, conversas, salas, automações e acessos). */}
+        <Route path="/escritorio" element={<StaffRoute><AdminEscritorio /></StaffRoute>} />
         <Route path="/base-dos-agentes" element={<StaffRoute><BaseDosAgentes /></StaffRoute>} />
         {/* 18/11/2026: Central de Skills e segundo cérebro (todas as skills de todos os agentes). */}
         <Route path="/skills" element={<StaffRoute><CentralDeSkills /></StaffRoute>} />

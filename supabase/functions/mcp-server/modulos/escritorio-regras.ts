@@ -61,7 +61,7 @@ export interface Grupo {
 }
 
 export const sem_acento = (t: unknown) =>
-  String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 export const grauDe = (o: Pick<Operador, 'grau' | 'is_coordinator'>): Grau =>
   (GRAUS as readonly string[]).includes(String(o.grau)) ? (o.grau as Grau) : o.is_coordinator ? 'coordenador' : 'executor';

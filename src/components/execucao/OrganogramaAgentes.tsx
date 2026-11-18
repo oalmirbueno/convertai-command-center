@@ -4,6 +4,7 @@ import { Secao, juntar, superficie, useEstadoDaTela } from "@/components/sistema
 import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
 import { cn } from "@/lib/utils";
 import { ORIGENS, SEM_AREA, classeDaOrigem, colocarNoGrupo, nomeDaOrigem, ordemParaGravar, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
+import { nomeDoGrau } from "@/lib/escritorio/tipos";
 
 /**
  * A pirâmide da casa: quem manda, quem coordena, quem executa.
@@ -63,6 +64,8 @@ export interface NoDoOrganograma {
   funcao?: string | null;
   /** Onde o agente roda. */
   origem?: "hermes" | "grok" | "paperclip" | string | null;
+  /** Grau no Escritório (orquestrador, coordenador, executor ou leitor). Só aparece quando a tela manda. */
+  grau?: string | null;
   /** Aposentado ou excluído: fora da hierarquia até o filtro mostrar. */
   aposentado?: boolean;
   /** Excluído pelo admin (tinha histórico, então o registro ficou guardado). */
@@ -368,7 +371,7 @@ export default function OrganogramaAgentes({
               </p>
             </div>
             {/* As etiquetas ficam na linha de baixo: ao lado do nome elas espremiam o nome do coordenador até uma letra. */}
-            {!destaque && (no.nivel === "coordenador" || no.origem) && (
+            {!destaque && (no.nivel === "coordenador" || no.origem || no.grau) && (
               <div className="mt-1 flex flex-wrap items-center [&>*]:mr-1.5" data-etiquetas="">
               {no.nivel === "coordenador" && (
                 <span className="shrink-0 rounded bg-primary/20 px-1.5 py-px text-[11px] font-medium text-primary">
@@ -378,6 +381,11 @@ export default function OrganogramaAgentes({
               {!destaque && no.origem && (
                 <span className={cn("shrink-0 rounded px-1.5 py-px text-[11px] font-medium", classeDaOrigem(no.origem))} data-origem={no.origem}>
                   {nomeDaOrigem(no.origem)}
+                </span>
+              )}
+              {no.grau && (
+                <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[11px] font-medium text-foreground" data-grau={no.grau}>
+                  {nomeDoGrau(no.grau)}
                 </span>
               )}
               </div>

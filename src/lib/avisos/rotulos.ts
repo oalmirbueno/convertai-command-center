@@ -79,6 +79,7 @@ const ROTULOS_DAS_ROTAS: Array<[string, string]> = [
   ["/calendario", "Abrir na Agenda"],
   ["/mesa", "Abrir na Mesa"],
   ["/execucao", "Abrir na Execução"],
+  ["/escritorio", "Abrir no Escritório"],
   ["/clientes", "Ver cliente"],
   ["/documentos", "Ver entregas"],
   ["/onde-estamos", "Ver atualização"],

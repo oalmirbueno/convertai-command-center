@@ -167,6 +167,7 @@ const AREAS: Record<string, string> = {
   "/contratos": "contratos",
   "/timeline": "timeline",
   "/execucao": "execucao",
+  "/escritorio": "escritorio",
 };
 
 export const ROTULOS_DAS_AREAS: Record<string, string> = {
@@ -200,6 +201,7 @@ export const ROTULOS_DAS_AREAS: Record<string, string> = {
   contratos: "Contratos",
   timeline: "Timeline",
   execucao: "Execução",
+  escritorio: "Escritório",
 };
 
 export function areaDaRota(pathname: string): string | null {

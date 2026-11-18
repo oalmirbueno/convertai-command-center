@@ -51,6 +51,8 @@ export const ORIGENS: { valor: string; rotulo: string; classe: string }[] = [
   { valor: "claude_code", rotulo: "Claude Code", classe: "bg-success/15 text-success" },
   { valor: "codex", rotulo: "Codex", classe: "bg-secondary text-foreground" },
   { valor: "chatgpt", rotulo: "ChatGPT", classe: "bg-secondary text-foreground" },
+  // 18/11/2026: o Fred e os agentes do OpenBot entram no cadastro (Escritório).
+  { valor: "openbot", rotulo: "OpenBot", classe: "bg-muted text-foreground" },
 ];
 export const nomeDaOrigem = (o?: string | null) => ORIGENS.find((x) => x.valor === o)?.rotulo ?? (o || "Hermes");
 export const classeDaOrigem = (o?: string | null) => ORIGENS.find((x) => x.valor === o)?.classe ?? "bg-secondary text-muted-foreground";

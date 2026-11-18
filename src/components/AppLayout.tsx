@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, BookOpen, Boxes, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle, Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -181,6 +181,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Hoje", url: "/hoje", icon: Sunrise },
       { title: "Execução da equipe", url: "/execucao", icon: Bot },
+      // 18/11/2026: Escritório dos agentes (organograma, conversas entre agentes, salas, automações e acessos).
+      { title: "Escritório", url: "/escritorio", icon: Building2 },
       // 26/10: o boletim do Hermes e as mudanças nas contas, com um aviso no sino por boletim.
       { title: "Anúncios hoje", url: "/anuncios/hoje", icon: Newspaper },
       // 18/11: os grupos de WhatsApp dos clientes ao vivo (quem espera resposta, resumo do dia e a conversa).

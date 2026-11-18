@@ -231,7 +231,7 @@ export default function EditarAgente({
             {superiores.map((s) => <option key={s.slug} value={s.slug}>{s.display_name}</option>)}
           </select>
         </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Origem" ajuda="Onde o agente roda: Hermes, bot do Grok, time do Paperclip, automação do n8n, Claude Code, Codex ou ChatGPT.">
+        <CampoDeFormulario rotulo="Origem" ajuda="Onde o agente roda: Hermes, bot do Grok, time do Paperclip, automação do n8n, Claude Code, Codex, ChatGPT ou OpenBot.">
           <select className={campo} value={f.origem ?? "hermes"} onChange={(e) => setF({ ...f, origem: e.target.value })}>
             {ORIGENS.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
           </select>
