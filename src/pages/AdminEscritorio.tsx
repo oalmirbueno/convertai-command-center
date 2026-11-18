@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { DoorOpen, KeyRound, MessagesSquare, Network, Workflow } from "lucide-react";
+import { DoorOpen, KeyRound, MessagesSquare, Network, ShieldCheck, Workflow } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { CabecalhoDePagina, Carregando, EstadoDeErro, botao, espaco, juntar, larguraDaMesa, useEstadoDaTela } from "@/components/sistema";
 import AbaAcessos from "@/components/escritorio/AbaAcessos";
 import AbaAutomacoes from "@/components/escritorio/AbaAutomacoes";
 import AbaConversas from "@/components/escritorio/AbaConversas";
 import AbaOrganograma from "@/components/escritorio/AbaOrganograma";
+import AbaRegras from "@/components/escritorio/AbaRegras";
 import AbaSalas from "@/components/escritorio/AbaSalas";
 import { useAgentes, useAgora, useEscritorioAoVivo, usePresenca } from "@/components/escritorio/escritorioApi";
 import { presenteAgora } from "@/lib/escritorio/presenca";
@@ -19,16 +20,18 @@ import { presenteAgora } from "@/lib/escritorio/presenca";
  * - Salas: quem está em cada sala e com qual papel.
  * - Automações: os fluxos, o dono de cada um, a última execução e o último erro.
  * - Acessos: grau, credenciais, última atividade, bloquear e ligar credencial.
+ * - Regras: o que o agente faz sozinho, os limites de cada regra e o que sempre sobe para o dono.
  * A equipe lê tudo. Só o dono (admin) escreve.
  */
 
-type Aba = "organograma" | "conversas" | "salas" | "automacoes" | "acessos";
+type Aba = "organograma" | "conversas" | "salas" | "automacoes" | "acessos" | "regras";
 const ABAS: Array<{ id: Aba; rotulo: string; icone: typeof Network }> = [
   { id: "organograma", rotulo: "Organograma", icone: Network },
   { id: "conversas", rotulo: "Conversas", icone: MessagesSquare },
   { id: "salas", rotulo: "Salas", icone: DoorOpen },
   { id: "automacoes", rotulo: "Automações", icone: Workflow },
   { id: "acessos", rotulo: "Acessos", icone: KeyRound },
+  { id: "regras", rotulo: "Regras", icone: ShieldCheck },
 ];
 
 export default function AdminEscritorio() {
@@ -70,6 +73,7 @@ export default function AdminEscritorio() {
             {aba === "salas" && <AbaSalas agentes={lista} presencas={presencas} agora={agora} admin={admin} />}
             {aba === "automacoes" && <AbaAutomacoes agentes={lista} admin={admin} agora={agora} />}
             {aba === "acessos" && <AbaAcessos agentes={lista} presencas={presencas} agora={agora} admin={admin} />}
+            {aba === "regras" && <AbaRegras agentes={lista} admin={admin} agora={agora} />}
           </>
         )}
     </div>

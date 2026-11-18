@@ -137,3 +137,45 @@ export interface ChaveMcp {
   audience?: string | null;
   is_active: boolean;
 }
+
+/** Regra permanente: dentro dela o agente faz sozinho e fica registrado; fora dela, sobe para o dono. */
+export interface RegraPermanente {
+  chave: string;
+  nome: string;
+  area: string | null;
+  descricao: string | null;
+  ligada: boolean;
+  acoes: string[];
+  /** Quem pode usar a regra. Vazio = qualquer agente. */
+  operadores: string[];
+  limites: Record<string, unknown>;
+  atualizado_em: string;
+}
+
+/** Uma vez em que um agente agiu sozinho dentro de uma regra. */
+export interface UsoDeRegra {
+  id: string;
+  regra: string;
+  operator_slug: string | null;
+  client_id: string | null;
+  action_kind: string | null;
+  valor: number | null;
+  assunto: string | null;
+  usado_em: string;
+}
+
+/** Um pedido antigo da caixa que já cabe nas regras de hoje. */
+export interface ItemDaFilaDasRegras {
+  approval_id: string;
+  regra: string;
+  operador: string | null;
+  acao: string | null;
+  o_que: string | null;
+  criado_em: string;
+}
+
+export interface FilaDasRegras {
+  total: number;
+  aplicado: boolean;
+  itens: ItemDaFilaDasRegras[];
+}

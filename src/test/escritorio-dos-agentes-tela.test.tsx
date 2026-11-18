@@ -149,7 +149,7 @@ describe("Escritório (tela)", () => {
     expect(document.querySelector('[data-agente="2"] [data-agora]')?.textContent).toContain("Montando o calendário da Acerbi");
     expect(document.body.textContent).not.toContain("Recado velho");
     expect(screen.getByText("3 agentes ativos · 1 aqui agora")).toBeTruthy();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Organograma", "Conversas", "Salas", "Automações", "Acessos"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Organograma", "Conversas", "Salas", "Automações", "Acessos", "Regras"]);
   });
 
   it("conversas: a mais recente primeiro, ponto na não lida, abrir marca como lida e o dono escreve pelo RPC", async () => {

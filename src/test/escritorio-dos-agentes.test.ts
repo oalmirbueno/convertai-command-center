@@ -230,6 +230,7 @@ describe("a área nova está registrada onde uma área precisa estar", () => {
       "pages/AdminEscritorio.tsx", "components/escritorio/AbaOrganograma.tsx", "components/escritorio/AbaConversas.tsx", "components/escritorio/AbaSalas.tsx",
       "components/escritorio/AbaAutomacoes.tsx", "components/escritorio/AbaAcessos.tsx", "components/escritorio/LinhaDoAgente.tsx", "components/escritorio/escritorioApi.ts",
       "lib/escritorio/tipos.ts", "lib/escritorio/acessos.ts", "lib/escritorio/conversas.ts",
+      "components/escritorio/AbaRegras.tsx", "lib/escritorio/regras.ts",
     ];
     for (const arquivo of arquivos) expect(/[\u2013\u2014]/.test(ler(arquivo)), arquivo).toBe(false);
   });

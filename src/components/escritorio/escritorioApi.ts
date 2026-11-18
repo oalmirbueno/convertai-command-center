@@ -13,15 +13,19 @@ import type {
   Bloqueio,
   ChaveMcp,
   Conversa,
+  FilaDasRegras,
   Leitura,
   MembroDaSala,
   Mensagem,
   PapelNaSala,
   Presenca,
+  RegraPermanente,
   Sala,
+  UsoDeRegra,
   VinculoDeCredencial,
 } from "@/lib/escritorio/tipos";
 import { DONO } from "@/lib/escritorio/tipos";
+import { inicioDaSemana } from "@/lib/escritorio/regras";
 
 // As tabelas do Escritório ainda não estão nos tipos gerados do Supabase.
 const banco = supabase as any;
@@ -34,6 +38,7 @@ export const CHAVES = {
   conversa: (id: string | null) => ["escritorio", "conversa", id],
   automacoes: ["escritorio", "automacoes"],
   acessos: ["escritorio", "acessos"],
+  regras: ["escritorio", "regras"],
 } as const;
 
 const COLUNAS_DA_MENSAGEM = "id, conversa_id, de_slug, de_tipo, para_slug, grupo_id, corpo, responde_a, created_at";
@@ -164,6 +169,35 @@ export function useAcessos() {
   });
 }
 
+const COLUNAS_DO_USO = "id, regra, operator_slug, client_id, action_kind, valor, assunto, usado_em";
+
+/**
+ * As regras permanentes, os usos desde segunda-feira (para a conta da semana)
+ * e os 10 últimos usos de cada regra (que podem ser de semanas atrás).
+ */
+export function useRegras() {
+  return useQuery({
+    queryKey: CHAVES.regras,
+    refetchInterval: 60_000,
+    queryFn: async (): Promise<{ regras: RegraPermanente[]; daSemana: UsoDeRegra[]; ultimos: Record<string, UsoDeRegra[]> }> => {
+      const [regras, daSemana] = await Promise.all([
+        banco.from("regras_permanentes").select("chave, nome, area, descricao, ligada, acoes, operadores, limites, atualizado_em").order("nome", { ascending: true }),
+        banco.from("regras_permanentes_usos").select(COLUNAS_DO_USO).gte("usado_em", new Date(inicioDaSemana(Date.now())).toISOString()).order("usado_em", { ascending: false }).limit(1000),
+      ]);
+      if (regras.error) throw new Error(regras.error.message);
+      if (daSemana.error) throw new Error(daSemana.error.message);
+      const lista = (regras.data || []) as RegraPermanente[];
+      const ultimos: Record<string, UsoDeRegra[]> = {};
+      await Promise.all(lista.map(async (r) => {
+        const { data, error } = await banco.from("regras_permanentes_usos").select(COLUNAS_DO_USO).eq("regra", r.chave).order("usado_em", { ascending: false }).limit(10);
+        if (error) throw new Error(error.message);
+        ultimos[r.chave] = (data || []) as UsoDeRegra[];
+      }));
+      return { regras: lista, daSemana: (daSemana.data || []) as UsoDeRegra[], ultimos };
+    },
+  });
+}
+
 /** Mensagem nova e batimento chegam ao vivo: a tela relê sem ninguém apertar nada. */
 export function useEscritorioAoVivo() {
   const qc = useQueryClient();
@@ -261,3 +295,10 @@ export async function mudarDonoDaAutomacao(id: string, donoSlug: string | null) 
   const { error } = await banco.from("escritorio_automacoes").update({ dono_slug: donoSlug }).eq("id", id);
   if (error) throw error;
 }
+
+/** Liga, desliga ou troca os limites de uma regra. `null` no que não muda; os limites vão inteiros. */
+export const ajustarRegra = (chave: string, ligada: boolean | null, limites: Record<string, unknown> | null) =>
+  rpc<unknown>("regra_permanente_ajustar", { _chave: chave, _ligada: ligada, _limites: limites });
+
+/** Pedidos antigos da caixa que já cabem nas regras de hoje. Com `aplicar` falso só mostra; com verdadeiro, tira da caixa. */
+export const limparFilaDasRegras = (aplicar: boolean) => rpc<FilaDasRegras>("regras_permanentes_limpar_fila", { _aplicar: aplicar });
