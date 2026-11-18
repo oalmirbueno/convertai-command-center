@@ -3169,6 +3169,14 @@
       "remote_name": "produto_email_rota_unica",
       "remote_statements_sha256": "fe34478fe6192d8ce1f481a07f96ea59be4cdd3c405484bfb2e1b7bc38850f97",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118180000",
+      "path": "supabase/migrations/20261118180000_grupos_ao_vivo.sql",
+      "local_sha256": "4f22bd67b214338d156f3ebc81a78bd8bde788cf5e213977b0bcafc87edcfd36",
+      "remote_name": "grupos_ao_vivo",
+      "remote_statements_sha256": "89f5089045b03006a8ddd512f10c33f7103491ba24edd8ba824959884e0456f8",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
