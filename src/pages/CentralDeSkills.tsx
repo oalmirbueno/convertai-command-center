@@ -140,6 +140,7 @@ function AbaSkills({ podeEscrever }: { podeEscrever: boolean }) {
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useEstadoDaTela<string>("central-skills:categoria", "", { validar: (v) => typeof v === "string" });
   const [aberta, setAberta] = useState<string | null>(null);
+  const [mostrar, setMostrar] = useState(120);
 
   const contagem = useMemo(() => {
     const c: Record<string, number> = {};
@@ -163,7 +164,7 @@ function AbaSkills({ podeEscrever }: { podeEscrever: boolean }) {
       <div className="min-w-0 space-y-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <input className={juntar(campo, "pl-9")} placeholder={`Buscar entre ${q.data!.skills.length} skills`} value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar skill" />
+          <input className={juntar(campo, "pl-9")} placeholder={`Buscar entre ${q.data!.skills.length} skills`} value={busca} onChange={(e) => { setBusca(e.target.value); setMostrar(120); }} aria-label="Buscar skill" />
         </div>
         <div className="flex flex-wrap gap-1.5">
           <button type="button" onClick={() => setCategoria("")} className={juntar(etiqueta, "h-7 px-3", !categoria ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>Todas · {q.data!.skills.length}</button>
@@ -178,7 +179,7 @@ function AbaSkills({ podeEscrever }: { podeEscrever: boolean }) {
           <EstadoVazio titulo="Nenhuma skill aqui" descricao="A Central enche quando a primeira máquina sincroniza (aba Instalar)." />
         ) : (
           <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
-            {lista.map((s) => (
+            {lista.slice(0, mostrar).map((s) => (
               <li key={s.slug}>
                 <button
                   type="button"
@@ -196,6 +197,11 @@ function AbaSkills({ podeEscrever }: { podeEscrever: boolean }) {
               </li>
             ))}
           </ul>
+        )}
+        {lista.length > mostrar && (
+          <button type="button" className={juntar(botao.secundario, "w-full")} onClick={() => setMostrar((m) => m + 120)}>
+            Mostrar mais ({lista.length - mostrar})
+          </button>
         )}
       </div>
       <div className={juntar(superficie.painel, "min-w-0 p-4 lg:sticky lg:top-4 lg:self-start")}>
@@ -296,7 +302,7 @@ function AbaCerebro({ podeEscrever }: { podeEscrever: boolean }) {
 
   const arquivos = useMemo(() => {
     const f = filtro.trim().toLowerCase();
-    return (arvore.data?.entries ?? []).filter((e) => e.type === "file" && (!f || e.path.toLowerCase().includes(f))).slice(0, 400);
+    return (arvore.data?.entries ?? []).filter((e) => e.type === "file" && (!f || e.path.toLowerCase().includes(f))).slice(0, 150);
   }, [arvore.data, filtro]);
 
   const abrir = (p: string) => { setAberto(p); setRascunho(null); };
