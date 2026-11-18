@@ -1,6 +1,6 @@
 /**
  * O correio do cliente dentro do painel (18/11/2026): cada pessoa abre a própria caixa e o master
- * abre todas as da empresa. Contrato do banco: 20261118190000_produto_email_central_e_correio.sql.
+ * abre todas as da empresa. Contrato do banco: 20261118200000_produto_email_central_e_correio.sql.
  *
  *   pastas   { caixa_id }                        -> { pastas }
  *   listar   { caixa_id, pasta?, pagina?, busca? } -> { mensagens }

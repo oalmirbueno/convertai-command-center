@@ -58,7 +58,7 @@ for (const vez of ['Aplicada', 'Reaplicada (idempotente)']) {
   }
 }
 
-const CENTRAL = 'supabase/migrations/20261118190000_produto_email_central_e_correio.sql';
+const CENTRAL = 'supabase/migrations/20261118200000_produto_email_central_e_correio.sql';
 for (const vez of ['Aplicada', 'Reaplicada (idempotente)']) {
   try {
     await db.exec(readFileSync(CENTRAL, 'utf8'));
@@ -232,7 +232,7 @@ conferir('Asaas pago anda o pedido', (await um(`SELECT estado || ':' || forma_pa
 conferir('conclusão leva o domínio a concluído', !!(await um(`SELECT public.produto_email_pedido_mudar($1, 'concluido')`, [r.pedido.id]))
   && (await um(`SELECT estado FROM public.produto_email_dominios WHERE conta_id = $1`, [D])) === 'concluido');
 
-// 12. Central e correio (20261118190000): caixa por usuário, master, vencimentos e a leitura da casa.
+// 12. Central e correio (20261118200000): caixa por usuário, master, vencimentos e a leitura da casa.
 await como('service_role', null);
 const VEND = '00000000-0000-4000-8000-0000000000a2';
 await db.query(`INSERT INTO auth.users (id, email) VALUES ($1, 'vendas@empresa-a.com.br')`, [VEND]);

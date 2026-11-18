@@ -148,4 +148,4 @@ Leitura: para revenda o Migadu custa uma fração e cabe no modelo (uma conta da
 
 ### Para publicar esta rodada
 
-Aplicar `20261118190000_produto_email_central_e_correio.sql`, publicar a função nova `produto-correio` e o front. Nada disso liga o correio: ele continua desligado até existir provedor e adaptador.
+Aplicar `20261118200000_produto_email_central_e_correio.sql`, publicar a função nova `produto-correio` e o front. Nada disso liga o correio: ele continua desligado até existir provedor e adaptador.

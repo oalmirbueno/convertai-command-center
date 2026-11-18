@@ -4,7 +4,7 @@ import { ErroDoProduto } from "./api";
 /**
  * Central de e-mail (18/11/2026): a saúde do e-mail de cada cliente numa leitura só, e o correio
  * (cada pessoa com a própria caixa, o master com todas). Contrato do banco:
- * supabase/migrations/20261118190000_produto_email_central_e_correio.sql. A nota de saúde é calculada
+ * supabase/migrations/20261118200000_produto_email_central_e_correio.sql. A nota de saúde é calculada
  * aqui, em regra pura, para ter teste e para a tela e o agente lerem a mesma coisa.
  */
 

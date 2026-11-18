@@ -146,7 +146,7 @@ describe("convenções", () => {
   });
 
   it("nenhum segredo em coluna e as telas novas sem travessão nem gap em flex", () => {
-    const sql = ler("supabase/migrations/20261118190000_produto_email_central_e_correio.sql");
+    const sql = ler("supabase/migrations/20261118200000_produto_email_central_e_correio.sql");
     expect(sql).toContain("vault.create_secret");
     expect(sql).not.toMatch(/add column if not exists \w*(senha|token|secret)\w* (text|varchar)/i);
     for (const p of ["src/components/produto/casa/CentralDeEmail.tsx", "src/pages/Correio.tsx", "src/lib/produto/email-central.ts", "src/lib/produto/correio-dia.ts", "src/components/correio/CaixaPorPrioridade.tsx", "src/components/correio/AreasDoCorreio.tsx", "src/components/correio/PainelDoDia.tsx"]) {
