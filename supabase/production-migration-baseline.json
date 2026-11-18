@@ -3153,6 +3153,14 @@
       "remote_name": "vigia_dos_emails",
       "remote_statements_sha256": "0205d983beba29412a84f1859846b430254fcce39d874a6406bc60a6991cf238",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118150000",
+      "path": "supabase/migrations/20261118150000_monitor_do_produto.sql",
+      "local_sha256": "022def1e0a9356e6287214c89b065c25a7a72f5f44a20ad44767f9bfc54b0d46",
+      "remote_name": "monitor_do_produto",
+      "remote_statements_sha256": "2032ce4e35c55602fd0e3ba2d5955ac76b85124a4380aa95e354d2f30d6fe938",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
