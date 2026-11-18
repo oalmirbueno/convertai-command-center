@@ -206,6 +206,7 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
         + "(o servidor nao empurra aviso de mudanca, entao a lista so atualiza quando voce pergunta). "
         + "Chame aceleriq_capabilities para ver os nomes exatos que a sua credencial pode invocar. "
         + "Para se orientar barato: aceleriq_guia (mapa do painel, regras e o manual completo de cada ferramenta, porque a lista traz a descricao curta). "
+        + "Central de Skills: as skills de todos os agentes (Claude, Codex, Hermes, plugins e as da casa) estao em aceleriq_central_skills. Com terminal, rode uma vez o comando de aceleriq_central_instalar: instala tudo nesta maquina e mantem sincronizado; sem terminal, leia o SKILL.md com aceleriq_central_skill e siga. Criou ou mudou skill, publique com aceleriq_central_publicar_skill. Segundo cerebro em tempo real: memory_fetch le, aceleriq_cerebro_salvar_nota edita. "
         + "Para ler rapido: aceleriq_panorama_do_cliente (um cliente inteiro numa chamada) e aceleriq_panorama_da_casa (o dia da agencia). "
         + "Leituras vem enxutas; detalhe=completo traz tudo e proximo_cursor pagina. Erro volta com codigo, dica e se vale repetir (transitorio). "
         + "Antes de propor ou subir trafego pago, estude o que a Mesa Ads gerou com aceleriq_mesa_ads_contexto "
