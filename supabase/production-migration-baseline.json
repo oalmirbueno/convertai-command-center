@@ -3145,6 +3145,14 @@
       "remote_name": "crm_pelo_plano_do_cliente",
       "remote_statements_sha256": "5d7e2cbb4c10a7c9bbd560576cee30f89b1ea4b800ad980b43f858f84f21c8da",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118120000",
+      "path": "supabase/migrations/20261118120000_vigia_dos_emails.sql",
+      "local_sha256": "42644a6568732263370889f11c50c054ade1ace9fdc44ce6ae6b8af1f17a3c0e",
+      "remote_name": "vigia_dos_emails",
+      "remote_statements_sha256": "0205d983beba29412a84f1859846b430254fcce39d874a6406bc60a6991cf238",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
