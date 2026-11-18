@@ -173,7 +173,7 @@ function EmpresaAoVivo({ empresa, agora, onFechar }: { empresa: EmpresaNoMonitor
       descricao={`mexeram ${haQuanto(empresa.ultima_atividade, agora)} · relido a cada 15 segundos`}
       ajuda="Aqui a casa acompanha o movimento: quantos negócios em cada etapa, quem está trabalhando e o que mudou. O nome e o contato dos leads são da empresa e não aparecem."
       rodape={
-        <Link to="/produto?area=empresas" className={botao.secundario} onClick={onFechar}>
+        <Link to="/produto/crm" className={botao.secundario} onClick={onFechar}>
           Ajustar plano e pessoas
         </Link>
       }

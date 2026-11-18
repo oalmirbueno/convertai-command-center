@@ -31,7 +31,7 @@ describe("monitor do produto", () => {
   });
 
   it("o monitor é a primeira aba da administração do produto", () => {
-    expect(pagina).toMatch(/\(pedida as Area\) : "monitor"/);
+    expect(pagina).toMatch(/\(consulta as Area\) : "monitor"/);
     expect(pagina).toMatch(/area === "monitor" && <MonitorDoProduto \/>/);
   });
 });

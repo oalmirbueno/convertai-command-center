@@ -3188,7 +3188,23 @@
     },
     {
       "version": "20261118200000",
-      "path": "supabase/migrations/20261118200000_alcada_automatica.sql",
+      "path": "supabase/migrations/20261118200000_produto_email_central_e_correio.sql",
+      "local_sha256": "7c2c9c6407322a4f98f1debe9b2ef90ab28da04457259df936d145fa32cab31e",
+      "remote_name": "produto_email_central_e_correio",
+      "remote_statements_sha256": "b5d50477326c8d84c1184041f106d08a72a98f8ebff342eff06067c38faa6379",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118210000",
+      "path": "supabase/migrations/20261118210000_produto_correio_meu_dia.sql",
+      "local_sha256": "90789b2fdc1689645375087ffcc3aebba9ba9e820a1a95a12a777a716121d8c6",
+      "remote_name": "produto_correio_meu_dia",
+      "remote_statements_sha256": "ff035bb388abf79a8d633c1ebc2ce8b57d459bbf7caddb10cd973e09bc17664e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261118220000",
+      "path": "supabase/migrations/20261118220000_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",

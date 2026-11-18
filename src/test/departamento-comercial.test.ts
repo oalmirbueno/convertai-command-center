@@ -351,7 +351,7 @@ describe("Comercial é área própria, não item de Gestão", () => {
     // a quantidade: NENHUMA entrada do grupo pode ficar sem a trava.
     const grupo = layout.slice(
       layout.indexOf('label: "Comercial"'),
-      layout.indexOf('label: "Gestão"'),
+      layout.indexOf('label: "Freela"'),
     );
     const entradas = grupo.split("{ title:").length - 1;
     expect(entradas).toBeGreaterThanOrEqual(4);

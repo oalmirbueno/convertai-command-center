@@ -62,6 +62,7 @@ if (NO_SUBDOMINIO_DE_VENDA && window.location.pathname !== "/") {
 const ProdutoComecar = rotas.lazy(() => import("@/pages/ProdutoComecar"));
 const EmailLanding = rotas.lazy(() => import("@/pages/EmailLanding"));
 const EmailPedir = rotas.lazy(() => import("@/pages/EmailPedir"));
+const Correio = rotas.lazy(() => import("@/pages/Correio"));
 const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
@@ -398,6 +399,7 @@ export function AppRoutes() {
       {/* A venda do E-mail profissional (produto à parte do CRM) e o pedido curto que sai dela. */}
       <Route path="/email" element={<EmailLanding />} />
       <Route path="/email/pedir" element={<EmailPedir />} />
+      <Route path="/correio" element={<ProtectedRoute><Correio /></ProtectedRoute>} />
       <Route path="/app" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao/:aba" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
@@ -451,6 +453,7 @@ export function AppRoutes() {
         <Route path="/ver-como-cliente" element={<StaffRoute><AdminViewAsClient /></StaffRoute>} />
         <Route path="/financeiro" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</>} />
         <Route path="/produto" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
+        <Route path="/produto/:area" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/comercial" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
         {/* Cada area do departamento tem endereco proprio: o menu aponta
             direto para ela, o voltar do navegador funciona e o link pode

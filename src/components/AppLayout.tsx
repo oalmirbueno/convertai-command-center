@@ -20,6 +20,7 @@ import {
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
   HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle,
+  Activity, Building2, Mail, Inbox, Tags, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -181,14 +182,21 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Hoje", url: "/hoje", icon: Sunrise },
       { title: "Execução da equipe", url: "/execucao", icon: Bot },
-      // 26/10: o boletim do Hermes e as mudanças nas contas, com um aviso no sino por boletim.
-      { title: "Anúncios hoje", url: "/anuncios/hoje", icon: Newspaper },
+      // 18/11/2026: Central de Skills e segundo cérebro para todos os agentes.
+      { title: "Skills e cérebro", url: "/skills", icon: Library },
+    ],
+  },
+  {
+    // 18/11/2026 (dono: "está tudo misturado"): a conversa com os clientes ganhou área própria,
+    // separada da produção da semana.
+    label: "Clientes",
+    items: [
       // 18/11: os grupos de WhatsApp dos clientes ao vivo (quem espera resposta, resumo do dia e a conversa).
       { title: "Grupos dos clientes", url: "/grupos", icon: MessageCircle },
       // 26/10: as mensagens dos rituais da semana, de todos os clientes, numa tela só (com o contador).
       { title: "Mensagens da semana", url: "/central/mensagens", icon: MessagesSquare, soAdmin: true },
-      // 18/11/2026: Central de Skills e segundo cérebro para todos os agentes.
-      { title: "Skills e cérebro", url: "/skills", icon: Library },
+      { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
+      { title: "Briefings", url: "/briefings", icon: FileText },
     ],
   },
   {
@@ -204,14 +212,14 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       // 14/11/2026: linha do tempo das peças por cliente e por dia (só leitura).
       { title: "Esteira", url: "/esteira", icon: CalendarRange },
       { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
-      { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
-      { title: "Briefings", url: "/briefings", icon: FileText },
     ],
   },
   {
     label: "Resultados",
     items: [
       { title: "Métricas", url: "/metricas", icon: BarChart3 },
+      // 26/10: o boletim do Hermes e as mudanças nas contas, com um aviso no sino por boletim.
+      { title: "Anúncios hoje", url: "/anuncios/hoje", icon: Newspaper },
       { title: "Anúncios", url: "/anuncios", icon: Megaphone, fimExato: true },
       { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
       { title: "Timeline", url: "/timeline", icon: GitBranch },
@@ -225,7 +233,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     label: "Comercial",
     items: [
       { title: "Visão geral", url: "/comercial", icon: Briefcase, soGestao: true, fimExato: true },
-      { title: "CRM", url: "/comercial/crm", icon: KanbanSquare, soGestao: true },
+      // 18/11: "CRM de vendas" (o funil da Aceleriq), para não confundir com o CRM vendido em Produtos.
+      { title: "CRM de vendas", url: "/comercial/crm", icon: KanbanSquare, soGestao: true },
       { title: "Agenda", url: "/comercial/agenda", icon: CalendarClock, soGestao: true },
       { title: "Metas", url: "/comercial/metas", icon: Target, soGestao: true },
       { title: "Campanhas", url: "/comercial/campanhas", icon: Megaphone, soGestao: true },
@@ -244,12 +253,24 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
   {
+    // 18/11/2026 (dono): os produtos vendidos (CRM e E-mail) saíram de Gestão para uma área própria,
+    // cada um com a sua entrada. As telas são as áreas de /produto (AdminProduto), uma rota por área.
+    label: "Produtos",
+    items: [
+      { title: "Visão geral", url: "/produto", icon: Activity, soAdmin: true, fimExato: true },
+      { title: "CRM", url: "/produto/crm", icon: Building2, soAdmin: true },
+      { title: "Central de e-mail", url: "/produto/central", icon: HeartPulse, soAdmin: true },
+      { title: "E-mail", url: "/produto/email", icon: Mail, soAdmin: true },
+      { title: "Caixa de e-mail", url: "/produto/caixa", icon: Inbox, soAdmin: true },
+      { title: "Preços", url: "/produto/precos", icon: Tags, soAdmin: true },
+      { title: "Faturamento", url: "/produto/faturamento", icon: Wallet, soAdmin: true },
+    ],
+  },
+  {
     label: "Gestão",
     items: [
       { title: "Equipe", url: "/equipe", icon: UsersRound },
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-      // 13/11/2026: a administração do produto CRM e E-mail (empresas, migração, preços e faturamento).
-      { title: "CRM e E-mail", url: "/produto", icon: Boxes, soAdmin: true },
       // Horas e custos (frente CR): tempo por cliente, custo de IA e capacidade. Só admin e gestor.
       { title: "Horas e custos", url: "/horas", icon: Timer, soGestao: true },
       { title: "Arquivos", url: "/arquivos", icon: FileArchive },
