@@ -49,7 +49,7 @@ const ROTULO_DA_CAIXA: Record<CaixaDeEmail["estado"], string> = { pedida: "Pedid
 export function registrosParaPublicar(d: Pick<DominioDeEmail, "dominio" | "provedor" | "dkim_seletor">): string {
   const linhas: string[] = [];
   if (d.provedor === "zoho") {
-    linhas.push(`${d.dominio}.  MX  10  mx.zoho.com.`, `${d.dominio}.  MX  20  mx2.zoho.com.`, `${d.dominio}.  MX  50  mx3.zoho.com.`, `${d.dominio}.  TXT  "v=spf1 include:zoho.com ~all"`);
+    linhas.push(`${d.dominio}.  MX  10  mx.zoho.com.`, `${d.dominio}.  MX  20  mx2.zoho.com.`, `${d.dominio}.  MX  50  mx3.zoho.com.`, `${d.dominio}.  TXT  "v=spf1 include:zohomail.com ~all"`);
   } else if (d.provedor === "google") {
     linhas.push(`${d.dominio}.  MX  1  smtp.google.com.`, `${d.dominio}.  TXT  "v=spf1 include:_spf.google.com ~all"`);
   } else if (d.provedor === "microsoft") {

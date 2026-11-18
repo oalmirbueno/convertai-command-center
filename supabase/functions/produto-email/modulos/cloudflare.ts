@@ -46,10 +46,10 @@ const MX_DO_PROVEDOR: Record<string, string[]> = {
   google: ["smtp.google.com"],
   microsoft: ["mail.protection.outlook.com"],
 };
-const SPF_DO_PROVEDOR: Record<string, string> = {
-  zoho: "include:zoho.com",
-  google: "include:_spf.google.com",
-  microsoft: "include:spf.protection.outlook.com",
+const SPF_DO_PROVEDOR: Record<string, string[]> = {
+  zoho: ["include:zohomail.com", "include:zoho.com"],
+  google: ["include:_spf.google.com"],
+  microsoft: ["include:spf.protection.outlook.com"],
 };
 
 const semAspas = (t: string) => String(t || "").replace(/^"+|"+$/g, "").replace(/"\s+"/g, "");
@@ -95,8 +95,8 @@ export function resumirZona(
     ? { chave: "spf", situacao: "falta", texto: "Sem SPF." }
     : spfs.length > 1
       ? { chave: "spf", situacao: "falta", texto: `${spfs.length} registros SPF: tem que ser um só.` }
-      : inc && spfs[0].toLowerCase().indexOf(inc) < 0
-        ? { chave: "spf", situacao: "alerta", texto: `O SPF não inclui ${inc}.` }
+      : inc && !inc.some((i) => spfs[0].toLowerCase().indexOf(i) >= 0)
+        ? { chave: "spf", situacao: "alerta", texto: `O SPF não inclui ${inc[0]}.` }
         : { chave: "spf", situacao: "ok", texto: "Um SPF só, com o provedor novo." });
 
   const nomeDkim = `${seletor}._domainkey.${dominio}`;
