@@ -192,7 +192,7 @@ function LinhaDoCrm({ extra, crm, carregando, aoLigar }: { extra: Extra; crm: Cr
         <span className={juntar(etiqueta, "h-6 px-2.5", cor)} data-crm-situacao="">{s.rotulo}</span>
         {s.usuarios && <span className={juntar(texto.auxiliar, "tabular-nums")}>{s.usuarios}</span>}
         {!s.ligado && extra.status !== "encerrado" && !s.cartao && <button type="button" className={juntar(botao.secundario, "h-8")} onClick={aoLigar} data-ligar-crm="">Ligar o CRM</button>}
-        <Link to="/produto/crm" className={juntar(botao.discreto, "h-8 px-2 text-[13px]")} data-abrir-admin-do-produto="">Abrir no admin do produto</Link>
+        <Link to="/produto/crm/empresas" className={juntar(botao.discreto, "h-8 px-2 text-[13px]")} data-abrir-admin-do-produto="">Abrir no admin do produto</Link>
       </div>
       {s.cartao && extra.status !== "encerrado" && (
         <p className={juntar(texto.auxiliar, "mt-1 text-warning")}>Esta empresa já paga o CRM no cartão. Encerre este extra para não cobrar duas vezes.</p>

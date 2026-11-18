@@ -255,17 +255,24 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
   {
-    // 18/11/2026 (dono): os produtos vendidos (CRM e E-mail) saíram de Gestão para uma área própria,
-    // cada um com a sua entrada. As telas são as áreas de /produto (AdminProduto), uma rota por área.
-    label: "Produtos",
+    // 18/11/2026 (dono: "separar a gestão de cada um"): o CRM vendido tem a sua área, cada aba
+    // da tela /produto/crm com a sua entrada.
+    label: "Produto CRM",
     items: [
-      { title: "Visão geral", url: "/produto", icon: Activity, soAdmin: true, fimExato: true },
-      { title: "CRM", url: "/produto/crm", icon: Building2, soAdmin: true },
-      { title: "Central de e-mail", url: "/produto/central", icon: HeartPulse, soAdmin: true },
-      { title: "E-mail", url: "/produto/email", icon: Mail, soAdmin: true },
-      { title: "Caixa de e-mail", url: "/produto/caixa", icon: Inbox, soAdmin: true },
-      { title: "Preços", url: "/produto/precos", icon: Tags, soAdmin: true },
-      { title: "Faturamento", url: "/produto/faturamento", icon: Wallet, soAdmin: true },
+      { title: "Visão geral", url: "/produto/crm", icon: Activity, soAdmin: true, fimExato: true },
+      { title: "Empresas", url: "/produto/crm/empresas", icon: Building2, soAdmin: true },
+      { title: "Planos e preços", url: "/produto/crm/precos", icon: Tags, soAdmin: true },
+      { title: "Faturamento", url: "/produto/crm/faturamento", icon: Wallet, soAdmin: true },
+    ],
+  },
+  {
+    // 18/11/2026: o e-mail profissional à parte do CRM (tela /produto/email).
+    label: "Produto E-mail",
+    items: [
+      { title: "Central", url: "/produto/email", icon: HeartPulse, soAdmin: true, fimExato: true },
+      { title: "Entradas e migrações", url: "/produto/email/entradas", icon: Mail, soAdmin: true },
+      { title: "Caixa da Aceleriq", url: "/produto/email/caixa", icon: Inbox, soAdmin: true },
+      { title: "Preços", url: "/produto/email/precos", icon: Tags, soAdmin: true },
     ],
   },
   {

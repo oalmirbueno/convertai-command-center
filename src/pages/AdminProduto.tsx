@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Activity, Building2, ExternalLink, HeartPulse, Inbox, Mail, Tags, Wallet } from "lucide-react";
 import { CabecalhoDePagina, Carregando, Etapas, botao, juntar } from "@/components/sistema";
 import ContasDaCasa from "@/components/produto/casa/ContasDaCasa";
@@ -12,74 +12,91 @@ const CentralDeEmail = lazy(() => import("@/components/produto/casa/CentralDeEma
 const CaixaDaAceleriq = lazy(() => import("@/components/produto/casa/CaixaDaAceleriq"));
 
 /**
- * A administração do produto CRM e E-mail, dentro do painel da casa (só admin).
- * O monitor (se está tudo em ordem e o CRM de cada empresa ao vivo), empresas e cobrança, a migração de e-mail de cada uma, os preços e o
- * faturamento com os custos. O produto em si abre em /app.
+ * A gestão dos produtos vendidos, dentro do painel da casa (só admin).
+ * 18/11/2026 (dono: "separar a gestão de cada um, para não dar confusão"): o CRM e o E-mail viraram
+ * duas telas, cada uma com as suas abas e a sua rota:
+ *   /produto/crm[/empresas|/precos|/faturamento]       visão geral, empresas, planos e faturamento
+ *   /produto/email[/entradas|/caixa|/precos]           central, entradas e migrações, caixa e preços
+ * Os endereços antigos (/produto, ?area=, /produto/central...) caem na tela certa.
  */
 
-type Area = "monitor" | "empresas" | "central" | "email" | "caixa" | "precos" | "faturamento";
+export type Produto = "crm" | "email";
+type Aba = { valor: string; rotulo: string; icone: ReactNode; ajuda: string };
 
-const AREAS: Array<{ valor: Area; rotulo: string; icone: ReactNode }> = [
-  { valor: "monitor", rotulo: "Monitor", icone: <Activity className="h-4 w-4" /> },
-  { valor: "empresas", rotulo: "Empresas", icone: <Building2 className="h-4 w-4" /> },
-  { valor: "central", rotulo: "Central de e-mail", icone: <HeartPulse className="h-4 w-4" /> },
-  { valor: "email", rotulo: "Entradas e migrações", icone: <Mail className="h-4 w-4" /> },
-  { valor: "caixa", rotulo: "Caixa da Aceleriq", icone: <Inbox className="h-4 w-4" /> },
-  { valor: "precos", rotulo: "Preços", icone: <Tags className="h-4 w-4" /> },
-  { valor: "faturamento", rotulo: "Faturamento", icone: <Wallet className="h-4 w-4" /> },
-];
-
-const AJUDA: Record<Area, string> = {
-  monitor: "Se está tudo em ordem (e-mails, cobrança, rotinas, integrações, convites) e o CRM de cada empresa ao vivo. A tela se relê sozinha a cada 15 segundos.",
-  empresas: "Quem usa o produto: situação, plano, usuários e mensalidade. Abra uma empresa para ajustar o que foi contratado, convidar pessoas e cobrar.",
-  email: "O e-mail profissional numa rota só: as entradas (pedidos) com o marcar como pago e, embaixo, a migração de cada empresa (domínio, passo a passo, caixas, integração com Cloudflare e Zoho e a conferência do DNS).",
-  central: "A saúde do e-mail de cada cliente: pagamento, vencimento do domínio e do plano, DNS, limite de caixas e pedidos parados. Do mais urgente para o mais tranquilo.",
-  caixa: "A caixa de e-mail oficial da Aceleriq dentro do painel, com o Zoho por trás. Desligada até o dono decidir: ligar pede o plano pago do Zoho.",
-  precos: "Planos, preços do e-mail, prazos de teste e de atraso, os custos da casa e a chave que liga a cobrança no cartão.",
-  faturamento: "Quanto o produto fatura por mês, o que está em atraso e quanto custa entregar. A mesma leitura aparece no Financeiro.",
+const ABAS: Record<Produto, Aba[]> = {
+  crm: [
+    { valor: "inicio", rotulo: "Visão geral", icone: <Activity className="h-4 w-4" />, ajuda: "Se está tudo em ordem (cobrança, rotinas, integrações, convites) e o CRM de cada empresa ao vivo. A tela se relê sozinha a cada 15 segundos." },
+    { valor: "empresas", rotulo: "Empresas", icone: <Building2 className="h-4 w-4" />, ajuda: "Quem usa o CRM: situação, plano, usuários e mensalidade. Abra uma empresa para ajustar o que foi contratado, convidar pessoas e cobrar." },
+    { valor: "precos", rotulo: "Planos e preços", icone: <Tags className="h-4 w-4" />, ajuda: "Os planos do CRM (preço por usuário), prazos de teste e de atraso, os custos da casa e a chave que liga a cobrança no cartão." },
+    { valor: "faturamento", rotulo: "Faturamento", icone: <Wallet className="h-4 w-4" />, ajuda: "Quanto as empresas pagam por mês (o CRM e o e-mail que vai junto na mesma cobrança), o que está em atraso e quanto custa entregar. A mesma leitura aparece no Financeiro." },
+  ],
+  email: [
+    { valor: "inicio", rotulo: "Central", icone: <HeartPulse className="h-4 w-4" />, ajuda: "A saúde do e-mail de cada cliente: pagamento, vencimento do domínio e do plano, DNS, limite de caixas e pedidos parados. Do mais urgente para o mais tranquilo." },
+    { valor: "entradas", rotulo: "Entradas e migrações", icone: <Mail className="h-4 w-4" />, ajuda: "As entradas (pedidos) com o marcar como pago e, embaixo, a migração de cada empresa: domínio, passo a passo, caixas, integração com Cloudflare e Zoho e a conferência do DNS." },
+    { valor: "caixa", rotulo: "Caixa da Aceleriq", icone: <Inbox className="h-4 w-4" />, ajuda: "A caixa de e-mail oficial da Aceleriq dentro do painel, com o Zoho por trás. Desligada até o dono decidir: ligar pede o plano pago do Zoho." },
+    { valor: "precos", rotulo: "Preços", icone: <Tags className="h-4 w-4" />, ajuda: "Quanto custa o e-mail profissional: migração, mensalidade, caixas incluídas e caixa adicional, e quanto cada caixa extra custa para a casa." },
+  ],
 };
 
-/**
- * 18/11/2026: cada área tem a sua rota (/produto/crm, /produto/email...), para o menu Produtos
- * apontar direto e acender o item certo. O antigo ?area= continua aceito (links já espalhados).
- */
-const ROTA_DA_AREA: Record<Area, string> = { monitor: "", empresas: "crm", central: "central", email: "email", caixa: "caixa", precos: "precos", faturamento: "faturamento" };
+const TITULO: Record<Produto, string> = { crm: "CRM", email: "E-mail" };
 
-export function areaDaRota(segmento: string | undefined, consulta: string | null): Area {
-  const pelaRota = (Object.keys(ROTA_DA_AREA) as Area[]).find((a) => ROTA_DA_AREA[a] !== "" && ROTA_DA_AREA[a] === segmento);
-  if (pelaRota) return pelaRota;
-  return AREAS.some((a) => a.valor === consulta) ? (consulta as Area) : "monitor";
+/** Endereço antigo (antes da separação) para o novo. Devolve null quando o endereço já é o novo. */
+export function enderecoNovo(segmento: string | undefined, consulta: string | null): string | null {
+  if (segmento === "crm" || segmento === "email") return null;
+  const antigo = segmento || consulta || "";
+  const mapa: Record<string, string> = {
+    "": "/produto/crm",
+    monitor: "/produto/crm",
+    empresas: "/produto/crm/empresas",
+    faturamento: "/produto/crm/faturamento",
+    precos: "/produto/crm/precos",
+    central: "/produto/email",
+    caixa: "/produto/email/caixa",
+  };
+  if (antigo === "email") return "/produto/email/entradas";
+  return mapa[antigo] || "/produto/crm";
+}
+
+/** A aba pedida na rota, ou a primeira quando não existe. */
+export function abaDaRota(produto: Produto, aba: string | undefined): string {
+  return aba && aba !== "inicio" && ABAS[produto].some((a) => a.valor === aba) ? aba : "inicio";
 }
 
 export default function AdminProduto() {
+  const { produto: p, aba: a } = useParams();
   const [busca] = useSearchParams();
-  const { area: segmento } = useParams();
+  const local = useLocation();
   const navegar = useNavigate();
-  const area = areaDaRota(segmento, busca.get("area"));
-  const irPara = (a: string) => {
-    const rota = ROTA_DA_AREA[a as Area];
-    navegar(rota ? `/produto/${rota}` : "/produto", { replace: true });
-  };
+  const novo = enderecoNovo(p, busca.get("area"));
+  if (novo && novo !== local.pathname) return <Navigate to={novo} replace />;
+  const produto: Produto = p === "email" ? "email" : "crm";
+  const aba = abaDaRota(produto, a);
+  const abas = ABAS[produto];
+  const atual = abas.find((x) => x.valor === aba) || abas[0];
+  const irPara = (v: string) => navegar(v !== "inicio" ? `/produto/${produto}/${v}` : `/produto/${produto}`, { replace: true });
   return (
-    <div className="min-w-0 space-y-5" data-admin-produto="">
+    <div className="min-w-0 space-y-5" data-admin-produto={produto}>
       <CabecalhoDePagina
-        titulo="CRM e E-mail"
-        ajuda={AJUDA[area]}
-        aoLado={<Etapas soIcone rotulo="Áreas do produto" itens={AREAS} valor={area} onEscolher={irPara} className="min-w-0 flex-1" />}
+        titulo={TITULO[produto]}
+        ajuda={atual.ajuda}
+        aoLado={<Etapas soIcone rotulo={`Áreas do ${TITULO[produto]}`} itens={abas} valor={aba} onEscolher={irPara} className="min-w-0 flex-1" />}
         acoes={
-          <Link to="/app" className={juntar(botao.icone)} aria-label="Abrir o produto" title="Abrir o produto">
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-          </Link>
+          produto === "crm" ? (
+            <Link to="/app" className={juntar(botao.icone)} aria-label="Abrir o CRM" title="Abrir o CRM">
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          ) : undefined
         }
       />
-      {area === "empresas" && <ContasDaCasa />}
+      {produto === "crm" && aba === "empresas" && <ContasDaCasa />}
       <Suspense fallback={<Carregando linhas={5} />}>
-        {area === "monitor" && <MonitorDoProduto />}
-        {area === "central" && <CentralDeEmail />}
-        {area === "email" && <EmailDaCasa />}
-        {area === "caixa" && <CaixaDaAceleriq />}
-        {area === "precos" && <PrecosDoProduto />}
-        {area === "faturamento" && <FaturamentoDoProduto />}
+        {produto === "crm" && aba === "inicio" && <MonitorDoProduto />}
+        {produto === "crm" && aba === "precos" && <PrecosDoProduto parte="crm" />}
+        {produto === "crm" && aba === "faturamento" && <FaturamentoDoProduto />}
+        {produto === "email" && aba === "inicio" && <CentralDeEmail />}
+        {produto === "email" && aba === "entradas" && <EmailDaCasa />}
+        {produto === "email" && aba === "caixa" && <CaixaDaAceleriq />}
+        {produto === "email" && aba === "precos" && <PrecosDoProduto parte="email" />}
       </Suspense>
     </div>
   );
