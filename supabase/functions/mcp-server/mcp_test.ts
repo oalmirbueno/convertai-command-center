@@ -1806,7 +1806,7 @@ Deno.test('2.30: versão, criar publicação de aprovado no catálogo, no guia e
   assertEquals(TOOLS.length, 199);
 });
 
-Deno.test('criar publicação de aprovado: escrita editorial:write, schema fechado, ponte e fora da lista de cliente', async () => {
+Deno.test('criar publicação de aprovado: escrita editorial:write, schema fechado, ponte e mesma lista de cliente do reagendar', async () => {
   const { criarPublicacaoSchema } = await import('./modulos/criar-publicacao-de-aprovado.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
   const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
@@ -1820,9 +1820,9 @@ Deno.test('criar publicação de aprovado: escrita editorial:write, schema fecha
   assert(canInvoke({ ...readCtx, scopes: ['editorial:write'] }, tool));
   assert(tool.description.includes('aceleriq_reagendar_publicacao'));
   assert(tool.description.includes('Não aprova, não agenda e não publica'));
-  // Como a 2.29: credencial de cliente não usa.
-  assert(!(CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_criar_publicacao_de_aprovado'));
-  assert(!canUseToolWithDataScope(restrictedCtx, tool));
+  // Como o reagendar: credencial restrita a clientes pode chamar; o handler confere o cliente do post.
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_criar_publicacao_de_aprovado'));
+  assert(canUseToolWithDataScope(restrictedCtx, tool));
   assert((RPCS_DA_PONTE as readonly string[]).includes('save_editorial_post'));
   const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
   assertEquals(schema.additionalProperties, false);

@@ -161,6 +161,8 @@ export const CLIENT_SCOPED_LEGACY_TOOLS = [
   'aceleriq_workspace_link_arquivo',
   'aceleriq_workspace_retirar_aprovacao',
   'aceleriq_reagendar_publicacao',
+  // MCP 2.30: confere o cliente do post no próprio handler, antes de qualquer escrita (igual ao reagendar).
+  'aceleriq_criar_publicacao_de_aprovado',
   'aceleriq_editar_legenda_publicacao',
   'aceleriq_ajustar_formato_publicacao',
   // MCP 2.28: cada uma confere o cliente no próprio handler (a leitura filtra a lista).
