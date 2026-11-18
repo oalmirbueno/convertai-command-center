@@ -362,6 +362,17 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
   return rpcError(id, RpcErrors.methodNotFound, `Method not found: ${method}`);
 }
 
+// 18/11/2026: chave mcp_live_ mandada e recusada diz o motivo e o começo da chave que chegou (para comparar com
+// a central). Continua sendo HTTP 401 com WWW-Authenticate: é isso que faz o cliente OAuth renovar o acesso.
+function motivoDaRecusa(req: Request, kind: string): string {
+  const comeco = comecoDaChave(req);
+  if (kind === "missing" || !comeco?.toLowerCase().startsWith("mcp_live_")) return "OAuth authorization required";
+  const motivo = kind === "expired_or_revoked"
+    ? `A chave ${comeco} foi revogada ou venceu.`
+    : `A chave ${comeco} não é reconhecida pelo servidor (não existe na central ou veio incompleta).`;
+  return `${motivo} Gere uma nova em Painel › API e integrações › MCP › Conectar uma IA e cole o valor inteiro no cabeçalho Authorization como "Bearer mcp_live_...".`;
+}
+
 Deno.serve(async (req) => {
   if (!isMcpOriginAllowed(req, MCP_ALLOWED_ORIGINS)) {
     return jsonResponse(rpcError(null, RpcErrors.forbidden, "Origin is not allowed"), 403);
@@ -457,20 +468,6 @@ Deno.serve(async (req) => {
   }
   const auth = await authenticate(req);
 
-  // 18/11/2026: chave mandada e não reconhecida não vira "visitante" calado. Quem chama uma ferramenta
-  // recebe o motivo e o começo da chave que chegou, para comparar com a central (Painel › API › MCP).
-  if (!auth.ok && auth.error.kind !== "missing" && message.method === "tools/call") {
-    const comeco = comecoDaChave(req) ?? "a chave";
-    const motivo = auth.error.kind === "expired_or_revoked"
-      ? `A chave ${comeco} foi revogada ou venceu.`
-      : `A chave ${comeco} não é reconhecida pelo servidor (não existe na central ou veio incompleta).`;
-    return jsonResponse(rpcError(
-      message.id ?? null,
-      RpcErrors.unauthorized,
-      `${motivo} Gere uma nova em Painel › API e integrações › MCP › Conectar uma IA e cole o valor inteiro no cabeçalho Authorization como "Bearer mcp_live_...".`,
-    ));
-  }
-
   // Discovery methods are public. A missing bearer on tools/call returns the
   // MCP result-level challenge ChatGPT needs to open OAuth. Invalid, expired
   // or revoked credentials remain real HTTP 401 responses.
@@ -480,7 +477,7 @@ Deno.serve(async (req) => {
       const payload =
         toolChallengeOnly && message.method === "tools/call"
           ? oauthToolChallenge(message.id ?? null)
-          : rpcError(message.id ?? null, RpcErrors.unauthorized, "OAuth authorization required");
+          : rpcError(message.id ?? null, RpcErrors.unauthorized, motivoDaRecusa(req, auth.error.kind));
       return new Response(JSON.stringify(payload), {
         // MCP tool errors are successful JSON-RPC transport responses so the
         // host reads result._meta and launches OAuth. Non-tool requests retain
