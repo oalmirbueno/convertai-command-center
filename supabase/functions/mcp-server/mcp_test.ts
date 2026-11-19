@@ -206,6 +206,11 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_archive_opportunity',
     'aceleriq_archive_project',
     'aceleriq_audit_integrity',
+    'aceleriq_automacoes_execucoes',
+    'aceleriq_automacoes_guia',
+    'aceleriq_automacoes_ligar_desligar',
+    'aceleriq_automacoes_listar',
+    'aceleriq_automacoes_saude',
     'aceleriq_aviso_publicacao_decidir',
     'aceleriq_aviso_publicacao_fila',
     'aceleriq_aviso_publicacao_marcar_enviado',
@@ -1958,7 +1963,7 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
 
 Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nenhum outro escopo concede', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.35.0');
+  assertEquals(MCP_VERSION, '2.36.0');
   const t = TOOL_MAP.get('aceleriq_escritorio_dono')!;
   assertEquals([...t.scopes], ['escritorio:write']);
   assert(ALL_SCOPES.includes('escritorio:write') && SCOPE_DESCRIPTIONS['escritorio:write'].sensitive);
@@ -1970,5 +1975,27 @@ Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nen
   assert(!canUseToolWithDataScope(restrictedCtx, t), 'chave restrita a cliente não fala como dono');
   const { STAFF_OAUTH_SCOPES } = await import('../_shared/mcp-security.ts').then((m) => ({ STAFF_OAUTH_SCOPES: JSON.stringify(m) }));
   assert(!STAFF_OAUTH_SCOPES.includes('escritorio:write'), 'o OAuth da equipe não recebe este escopo');
-  assertEquals(TOOLS.length, 220);
+  assertEquals(TOOLS.length, 225);
+});
+
+// ─── MCP 2.36.0 (19/11/2026): Central de Automações ───
+
+Deno.test('2.36: automações lê com aceleriq:read; ligar e desligar só com automacoes:write, que nenhum outro escopo concede', async () => {
+  for (const n of ['aceleriq_automacoes_listar', 'aceleriq_automacoes_saude', 'aceleriq_automacoes_execucoes', 'aceleriq_automacoes_guia']) {
+    const t = TOOL_MAP.get(n)!;
+    assertEquals([...t.scopes], ['aceleriq:read'], n);
+    assertEquals(t.annotations?.readOnlyHint, true, n);
+  }
+  const botao = TOOL_MAP.get('aceleriq_automacoes_ligar_desligar')!;
+  assertEquals([...botao.scopes], ['automacoes:write']);
+  assert(ALL_SCOPES.includes('automacoes:write') && SCOPE_DESCRIPTIONS['automacoes:write'].sensitive);
+  for (const escopos of [['aceleriq:read'], ['aceleriq:write'], ['aceleriq:read', 'aceleriq:write', 'aceleriq:finance', 'memory:write', 'mesas:write', 'escritorio:write']]) {
+    assert(!canInvoke({ ...readCtx, scopes: escopos }, botao), `${escopos.join(',')} não liga fluxo`);
+    assert(!expandScopes(escopos).has('automacoes:write'));
+  }
+  assert(canInvoke({ ...readCtx, scopes: ['automacoes:write'] }, botao));
+  const { STAFF_OAUTH_SCOPES } = await import('../_shared/mcp-security.ts').then((m) => ({ STAFF_OAUTH_SCOPES: JSON.stringify(m) }));
+  assert(!STAFF_OAUTH_SCOPES.includes('automacoes:write'), 'o OAuth da equipe não recebe este escopo');
+  const guia = await TOOL_MAP.get('aceleriq_automacoes_guia')!.handler({}, readCtx) as Record<string, unknown>;
+  assert(!/n8n_api_[a-z0-9]{10,}|eyJ[A-Za-z0-9_-]{20,}/.test(JSON.stringify(guia)), 'o guia não traz segredo');
 });

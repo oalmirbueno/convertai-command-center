@@ -89,7 +89,7 @@ function bancoFalso(tabelas: Tabelas) {
   };
 }
 
-function montar(tabelas: Tabelas = tabelasBase(), opcoes: { rpcFalha?: string } = {}) {
+function montar(tabelas: Tabelas = tabelasBase(), opcoes: { rpcFalha?: string; rpcErro?: Error } = {}) {
   const chamadas: Array<{ nome: string; args: Record<string, unknown> }> = [];
   const chaves = new Set<string>();
   let n = 0;
@@ -97,6 +97,7 @@ function montar(tabelas: Tabelas = tabelasBase(), opcoes: { rpcFalha?: string } 
     banco: bancoFalso(tabelas),
     rpc: (nome, args) => {
       chamadas.push({ nome, args: structuredClone(args) });
+      if (opcoes.rpcErro) return Promise.reject(opcoes.rpcErro);
       if (opcoes.rpcFalha) return Promise.reject(new Error(`mesa:rpc_recusada ${nome}: ${opcoes.rpcFalha}`));
       const payload = args.p_payload as { publications: Linha[] };
       for (const p of payload.publications) {
@@ -277,6 +278,17 @@ Deno.test('recusa do banco volta traduzida (fingerprint que não bate, conta can
   assertEquals(chamadas.length, 1);
   assert(traduzirErroDaCriacao(new Error('cancelled publication stays cancelled until an admin or manager reopens it')).includes('cancelada de propósito'));
   assert(traduzirErroDaCriacao('qualquer coisa').startsWith('A Agenda recusou'));
+});
+
+Deno.test('2.35.1: falha da sessão do dono sobe como mesa:dono_da_chave, não como rpc_recusada', async () => {
+  const sessao = 'mesa:dono_da_chave Não foi possível abrir a sessão do dono da chave agora. Tente de novo.';
+  const { deps } = montar(tabelasBase(), { rpcErro: new Error(sessao) });
+  const erro = await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, deps), Error);
+  assertEquals(erro.message, sessao);
+  const recusa = montar(tabelasBase(), { rpcFalha: 'cancelled publication stays cancelled until an admin or manager reopens it' });
+  const real = await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, recusa.deps), Error);
+  assert(real.message.startsWith('mesa:rpc_recusada '), real.message);
+  assert(real.message.includes('cancelada de propósito'));
 });
 
 Deno.test('aprovadoPeloCliente: a regra do painel mais a decisão do cliente', () => {

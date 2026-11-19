@@ -166,14 +166,19 @@ export function explicarErro(e: unknown, ferramenta: string): ErroExplicado {
   const mesa = /^mesa:([a-z_0-9]+)\s/.exec(texto);
   if (mesa) {
     const codigo = mesa[1];
-    const dicaDaMesa = codigo === 'exige_oauth' || codigo === 'dono_da_chave'
+    // 2.35.1: falha ao abrir/conferir a sessão do dono da chave é passageira (o MCP já repetiu esse passo).
+    const sessaoPassageira = (codigo === 'dono_da_chave' || codigo === 'rpc_recusada') &&
+      /Não foi possível (abrir a sessão do dono|conferir o dono) da chave agora/i.test(texto);
+    const dicaDaMesa = sessaoPassageira
+      ? 'A sessão do dono da chave não abriu agora (oscilação). Espere alguns segundos e tente de novo uma vez.'
+      : codigo === 'exige_oauth' || codigo === 'dono_da_chave'
       ? 'Conecte pelo OAuth com a conta de uma pessoa da equipe ou faça a ação no painel.'
       : codigo === 'tempo_esgotado'
         ? 'A ação pode ter terminado do outro lado: confira pela leitura da mesa antes de repetir.'
         : codigo === 'confirmar_custo'
           ? 'A ação tem custo: repita com confirmar_custo=true depois de avisar o dono do valor.'
           : null;
-    return { codigo: `mesa_${codigo}`, mensagem: texto.replace(/^mesa:[a-z_0-9]+\s/, ''), dica: dicaDaMesa, transitorio: codigo === 'rede' };
+    return { codigo: `mesa_${codigo}`, mensagem: texto.replace(/^mesa:[a-z_0-9]+\s/, ''), dica: dicaDaMesa, transitorio: codigo === 'rede' || sessaoPassageira };
   }
   if (/UUID|must be a real calendar date|must be/i.test(texto)) {
     return { codigo: 'entrada_invalida', mensagem: texto, dica: 'Ids são UUID (copie de uma leitura) e datas são AAAA-MM-DD.', transitorio: false };

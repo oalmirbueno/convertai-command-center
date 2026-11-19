@@ -6,6 +6,7 @@ import { canInvoke, canUseToolWithDataScope, describeTool, TOOL_MAP, TOOLS } fro
 import type { AuthContext } from '../_shared/mcp-auth.ts';
 import { acaoPermitida, ACOES_LONGAS_DA_PONTE } from '../_shared/mcp-mesas-ponte.ts';
 import { MCP_VERSION } from '../_shared/mcp-release.ts';
+import { recuoDaSessaoDoDono, sessaoDoDonoDaChave } from '../_shared/mcp-mesas-acoes.ts';
 import {
   comNovaTentativa,
   comPrazo,
@@ -143,6 +144,56 @@ Deno.test('erro explicado: código, dica e se vale repetir', () => {
   const rede = explicarErro(new TypeError('fetch failed'), 't');
   assertEquals(rede.codigo, 'indisponivel');
   assert(rede.transitorio);
+});
+
+Deno.test('2.35.1: falha passageira da sessão do dono é transitória; recusa do dono não', () => {
+  const sessao = explicarErro(new Error('mesa:dono_da_chave Não foi possível abrir a sessão do dono da chave agora. Tente de novo.'), 't');
+  assertEquals(sessao.codigo, 'mesa_dono_da_chave');
+  assert(sessao.transitorio);
+  assertStringIncludes(sessao.dica ?? '', 'tente de novo uma vez');
+  assert(explicarErro(new Error('mesa:dono_da_chave Não foi possível conferir o dono da chave agora. Tente de novo.'), 't').transitorio);
+  // Rede de segurança: tool que reembrulhou como rpc_recusada.
+  assert(explicarErro(new Error('mesa:rpc_recusada A Agenda recusou: mesa:dono_da_chave Não foi possível abrir a sessão do dono da chave agora. Tente de novo.'), 't').transitorio);
+  const naoAdmin = explicarErro(new Error('mesa:dono_da_chave O dono desta chave não é admin nem gestor da equipe: ela lê as mesas, mas não age nelas.'), 't');
+  assert(!naoAdmin.transitorio);
+  assertStringIncludes(naoAdmin.dica ?? '', 'OAuth');
+  assert(!explicarErro(new Error('mesa:dono_da_chave O dono desta chave não tem e-mail para abrir a sessão.'), 't').transitorio);
+  assert(explicarErro(new Error('mesa:rede Não foi possível falar com a mesa agora.'), 't').transitorio);
+  assert(!explicarErro(new Error('mesa:exige_oauth Agir nas mesas...'), 't').transitorio);
+  assert(!explicarErro(new Error('mesa:rpc_recusada A Agenda recusou: cancelled publication stays cancelled'), 't').transitorio);
+  // A ação inteira da mesa continua fora do comNovaTentativa.
+  assert(!ehTransitorio(new Error('mesa:dono_da_chave Não foi possível abrir a sessão do dono da chave agora. Tente de novo.')));
+});
+
+Deno.test('2.35.1: sessão do dono repete só a falha passageira', async () => {
+  const antes = recuoDaSessaoDoDono.ms;
+  recuoDaSessaoDoDono.ms = [0, 0];
+  try {
+    let chamadas = 0;
+    const token = await sessaoDoDonoDaChave('dono-teste-1', () => {
+      chamadas++;
+      if (chamadas < 3) return Promise.reject(new Error('mesa:dono_da_chave Não foi possível abrir a sessão do dono da chave agora. Tente de novo.'));
+      return Promise.resolve('jwt');
+    });
+    assertEquals(token, 'jwt');
+    assertEquals(chamadas, 3);
+
+    let recusas = 0;
+    await assertRejects(() => sessaoDoDonoDaChave('dono-teste-2', () => {
+      recusas++;
+      return Promise.reject(new Error('mesa:dono_da_chave O dono desta chave não é admin nem gestor da equipe: ela lê as mesas, mas não age nelas.'));
+    }), Error, 'não é admin');
+    assertEquals(recusas, 1);
+
+    let sempre = 0;
+    await assertRejects(() => sessaoDoDonoDaChave('dono-teste-3', () => {
+      sempre++;
+      return Promise.reject(new Error('mesa:dono_da_chave Não foi possível abrir a sessão do dono da chave agora. Tente de novo.'));
+    }), Error, 'abrir a sessão');
+    assertEquals(sempre, 3);
+  } finally {
+    recuoDaSessaoDoDono.ms = antes;
+  }
 });
 
 Deno.test('validação leve: objeto, obrigatórios, tipo, UUID e lista fechada; número em texto passa', () => {
