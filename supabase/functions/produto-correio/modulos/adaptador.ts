@@ -29,6 +29,8 @@ export interface Pasta {
 
 export interface ResumoDaMensagem {
   id: string;
+  /** O Message-ID do cabeçalho: é ele que a resposta cita (In-Reply-To) para a conversa ficar junta. */
+  mensagem_id?: string | null;
   de: string;
   para: string;
   assunto: string;

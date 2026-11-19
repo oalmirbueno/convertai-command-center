@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Check, FolderClosed, Megaphone } from "lucide-react";
+import { Check, Clock, FolderClosed, Megaphone } from "lucide-react";
 import { correio, correioDesligado, type CaixaDoCorreio } from "@/lib/produto/email-central";
 import { COLUNAS, agruparCaixa, colunaDaMensagem, fraseDoDia, hojeEmBrasilia, iniciais, listarCompromissos, listarTarefas, type EuNoCorreio, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
 import { diaLegivel } from "@/lib/produto/api";
@@ -100,7 +100,7 @@ export function CampanhasDoCorreio() {
       <Titulo titulo="Campanhas" frase="E-mail marketing no mesmo lugar da sua caixa. As respostas voltam para a caixa de quem enviou." />
       <div className="flex min-w-0 flex-wrap items-start [&>*]:mb-4 [&>*]:mr-4">
         <div className={juntar(cartao, "flex-[2] basis-[420px]")}>
-          <EstadoVazio icone={<Megaphone className="h-5 w-5" aria-hidden="true" />} titulo="Campanhas entram com o plano Pro" descricao="Assim que estiver ligado para a sua empresa, as campanhas aparecem aqui com a lista, a situação e os resultados de cada envio." />
+          <EstadoVazio icone={<Megaphone className="h-5 w-5" aria-hidden="true" />} titulo="Campanhas em breve" descricao="Quando ficarem prontas, aparecem aqui com a lista, a situação e o resultado de cada envio." />
         </div>
         <div className={juntar(cartao, "flex-1 basis-[300px]")}>
           <h2 className={juntar(texto.corpo, "mb-3 font-semibold")}>Em três passos</h2>
@@ -132,50 +132,33 @@ export const FERRAMENTAS: Array<{ nome: string; plano: "Essencial" | "Pro" | "Eq
   { nome: "Visão do gestor", plano: "Equipe", texto: "Quem administra vê todas as caixas da empresa.", pronta: true },
 ];
 
-const COR_DO_PLANO = { Essencial: "bg-muted text-muted-foreground", Pro: "bg-accent-soft text-primary", Equipe: "bg-info-soft text-info" } as const;
-
-const PLANOS: Array<{ nome: "Essencial" | "Pro" | "Equipe"; para: string; destaque: boolean }> = [
-  { nome: "Essencial", para: "Para quem quer a caixa organizada.", destaque: false },
-  { nome: "Pro", para: "Para quem vive no e-mail todos os dias.", destaque: true },
-  { nome: "Equipe", para: "Para a empresa inteira trabalhar junta.", destaque: false },
-];
-
-/** Ferramentas e planos: o que o correio tem, o que já funciona e o que entra em cada plano. */
+/** Ferramentas: o que o correio já faz e o que vem em seguida. Sem plano inventado nem preço de mentira. */
 export function FerramentasDoCorreio() {
+  const prontas = FERRAMENTAS.filter((f) => f.pronta);
+  const breve = FERRAMENTAS.filter((f) => !f.pronta);
+  const bloco = (titulo: string, itens: typeof FERRAMENTAS, pronta: boolean) => (
+    <section className="min-w-0 space-y-3" aria-label={titulo}>
+      <h2 className={juntar(texto.tituloSecao, "px-1")}>{titulo}</h2>
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {itens.map((f) => (
+          <article key={f.nome} className="flex min-w-0 items-start rounded-3xl bg-card p-4" data-ferramenta={f.nome}>
+            <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl", pronta ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")} aria-hidden="true">
+              {pronta ? <Check className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+            </span>
+            <span className="min-w-0">
+              <span className={juntar(texto.corpo, "block font-semibold")}>{f.nome}</span>
+              <span className={juntar(texto.auxiliar, "mt-1 block leading-5")}>{f.texto}</span>
+            </span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
   return (
-    <div className="min-w-0 space-y-4" data-ferramentas-do-correio="">
-      <Titulo titulo="Ferramentas" frase="Tudo o que o e-mail da empresa precisa, num lugar só." />
-      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {FERRAMENTAS.map((f) => (
-          <article key={f.nome} className="min-w-0 rounded-3xl bg-card p-4">
-            <div className="flex min-w-0 items-center">
-              <h2 className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-semibold")}>{f.nome}</h2>
-              <span className={juntar(etiqueta, "ml-2", COR_DO_PLANO[f.plano])}>{f.plano}</span>
-            </div>
-            <p className={juntar(texto.auxiliar, "mt-1.5 leading-5")}>{f.texto}</p>
-            <p className={juntar(texto.auxiliar, "mt-2")}>{f.pronta ? "No ar" : "Em breve"}</p>
-          </article>
-        ))}
-      </div>
-      <h2 className={juntar(texto.tituloSecao, "px-1 pt-3")}>Planos</h2>
-      <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-3">
-        {PLANOS.map((p) => (
-          <article key={p.nome} className={juntar("flex min-w-0 flex-col rounded-3xl p-5", p.destaque ? "bg-foreground text-background" : "bg-card")} data-plano={p.nome}>
-            <h3 className="text-[20px] font-semibold leading-7">{p.nome}</h3>
-            <p className={juntar("mt-1 text-[13px] leading-5", p.destaque ? "opacity-80" : "text-muted-foreground")}>{p.para}</p>
-            <ul className="mt-4 space-y-2">
-              {FERRAMENTAS.filter((f) => f.plano === p.nome).map((f) => (
-                <li key={f.nome} className="flex min-w-0 items-start text-[13px] leading-5">
-                  <Check className={juntar("mr-2 mt-0.5 h-4 w-4 shrink-0", p.destaque ? "" : "text-primary")} aria-hidden="true" />
-                  <span>{f.nome}</span>
-                </li>
-              ))}
-              {p.nome !== "Essencial" && <li className="text-[13px] leading-5 opacity-80">Mais tudo do {p.nome === "Pro" ? "Essencial" : "Pro"}</li>}
-            </ul>
-            <p className={juntar("mt-4 text-[13px] leading-5", p.destaque ? "opacity-80" : "text-muted-foreground")}>Valor com a Aceleriq.</p>
-          </article>
-        ))}
-      </div>
+    <div className="min-w-0 space-y-6" data-ferramentas-do-correio="">
+      <Titulo titulo="Ferramentas" frase="Tudo o que o e-mail da empresa precisa, num lugar só. O que está em breve aparece aqui sozinho quando ficar pronto." />
+      {bloco("Já funciona", prontas, true)}
+      {bloco("Em breve", breve, false)}
     </div>
   );
 }

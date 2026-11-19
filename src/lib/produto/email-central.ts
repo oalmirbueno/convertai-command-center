@@ -218,6 +218,7 @@ export async function carregarMinhasCaixas(): Promise<MinhasCaixas> {
 
 export interface ResumoDaMensagem {
   id: string;
+  mensagem_id?: string | null;
   de: string;
   para: string;
   assunto: string;
@@ -249,7 +250,7 @@ async function chamarCorreio<T>(corpo: Record<string, unknown>): Promise<T> {
 
 export const correio = {
   pastas: (caixaId: string) => chamarCorreio<{ pastas: Array<{ id: string; nome: string; nao_lidas: number }> }>({ acao: "pastas", caixa_id: caixaId }).then((r) => r.pastas),
-  listar: (caixaId: string, pasta: string, busca?: string) => chamarCorreio<{ mensagens: ResumoDaMensagem[] }>({ acao: "listar", caixa_id: caixaId, pasta, busca }).then((r) => r.mensagens),
+  listar: (caixaId: string, pasta: string, busca?: string, pagina = 1) => chamarCorreio<{ mensagens: ResumoDaMensagem[] }>({ acao: "listar", caixa_id: caixaId, pasta, busca, pagina }).then((r) => r.mensagens),
   ler: (caixaId: string, pasta: string, id: string) => chamarCorreio<{ mensagem: MensagemAberta }>({ acao: "ler", caixa_id: caixaId, pasta, id }).then((r) => r.mensagem),
   enviar: (caixaId: string, envio: { para: string; assunto: string; texto: string; em_resposta_a?: string | null }) => chamarCorreio<{ id: string }>({ acao: "enviar", caixa_id: caixaId, ...envio }),
   guardarSegredo: (caixaId: string, segredo: string) => chamarCorreio<{ guardado: boolean }>({ acao: "guardar_segredo", caixa_id: caixaId, segredo }).then((r) => r.guardado),

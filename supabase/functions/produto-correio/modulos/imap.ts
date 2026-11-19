@@ -150,8 +150,10 @@ export class Imap {
     for (;;) {
       const l = await this.leitor.linha();
       if (l.startsWith(`${tag} `)) {
-        if (!/^OK/i.test(l.slice(tag.length + 1))) throw new ErroDoCorreio(`O servidor recusou: ${l.slice(tag.length + 1, 200)}`);
-        return itens;
+        const resto = l.slice(tag.length + 1);
+        if (/^OK/i.test(resto)) return itens;
+        if (/UNAVAILABLE|INUSE|TRYLATER/i.test(resto)) throw new ErroDoCorreio("Esta mensagem ainda está chegando na caixa. Tente de novo em instantes.");
+        throw new ErroDoCorreio(`O servidor recusou: ${resto.slice(0, 200)}`);
       }
       itens.push(await this.item(l));
     }
@@ -231,6 +233,7 @@ export function resumoDoFetch(f: FetchLido, pasta: string, enviados: boolean): R
   const tipo = String(c["content-type"] || "").toLowerCase();
   return {
     id: f.uid,
+    mensagem_id: /^<[^<>\s]{3,250}>$/.test(String(c["message-id"] || "").trim()) ? String(c["message-id"]).trim() : null,
     de: remetenteLegivel(c["from"] || ""),
     para: cabecalhoLegivel(c["to"] || "").slice(0, 300),
     assunto: cabecalhoLegivel(c["subject"] || "(sem assunto)").slice(0, 300),
@@ -309,7 +312,22 @@ export function adaptadorImap(servidores: ServidoresDoCorreio, conectar: Conecta
           .sort((a, b) => b - a);
         const pagina = uids.slice((p.pagina - 1) * POR_PAGINA, p.pagina * POR_PAGINA);
         if (!pagina.length) return [];
-        const itens = await imap.comando(`UID FETCH ${pagina.join(",")} (UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE LIST-ID LIST-UNSUBSCRIBE AUTO-SUBMITTED PRECEDENCE)])`);
+        const campos = "(UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID CONTENT-TYPE LIST-ID LIST-UNSUBSCRIBE AUTO-SUBMITTED PRECEDENCE)])";
+        let itens: Item[];
+        try {
+          itens = await imap.comando(`UID FETCH ${pagina.join(",")} ${campos}`);
+        } catch {
+          // Uma mensagem que o servidor não entrega agora (chegando, sendo copiada) derruba o lote todo:
+          // pede uma por uma e mostra as que vierem.
+          itens = [];
+          for (const uid of pagina) {
+            try {
+              itens.push(...(await imap.comando(`UID FETCH ${uid} ${campos}`)));
+            } catch {
+              /* esta fica para a próxima vez */
+            }
+          }
+        }
         const enviados = /sent|enviad/i.test(p.pasta);
         return lerFetch(itens)
           .map((f) => resumoDoFetch(f, p.pasta, enviados))
