@@ -1,6 +1,6 @@
 /**
  * Migração do e-mail feita pelo próprio cliente (19/11/2026). Contrato do banco:
- * 20261119180000_produto_email_migracao_pelo_cliente.sql.
+ * 20261119200000_produto_email_migracao_pelo_cliente.sql.
  *
  *   provedores {}                                        -> { provedores }  a lista de onde o e-mail pode estar
  *   estado { caixa_id }                                  -> { migracao }    o andamento da cópia desta caixa
