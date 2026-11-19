@@ -138,7 +138,7 @@ export default function AbaSalas({ agentes, presencas, agora, admin }: { agentes
   };
 
   if (q.isLoading) return <Carregando rotulo="Lendo as salas" forma="grade" />;
-  if (q.error) return <EstadoDeErro titulo="Não foi possível ler as salas." descricao={(q.error as Error).message} />;
+  if (q.error) return <EstadoDeErro titulo="Não foi possível ler as salas." descricao={(q.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />;
   const salas = q.data?.salas ?? [];
   if (salas.length === 0) return <EstadoVazio icone={<DoorOpen className="h-5 w-5" />} titulo="Nenhuma sala criada ainda." />;
 

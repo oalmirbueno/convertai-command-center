@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, Plus } from "lucide-react";
+import { Check, Inbox, Plus } from "lucide-react";
 import { cobrarEntradaEmail, diaLegivel, fraseDoErro, listarContasDaCasa, reais } from "@/lib/produto/api";
 import {
   extrasDeEmailDoCliente,
@@ -20,35 +20,31 @@ import {
   type PedidoDeEmail,
   type TipoDoPedido,
 } from "@/lib/produto/email-pedidos";
+import { Avatar, Card, List, ListRow, StatusPill, type OverflowItem, type Tone } from "@/components/ds";
 import {
   CampoDeFormulario,
-  Carregando,
-  EstadoDeErro,
   EstadoVazio,
   GrupoDeCampos,
   JanelaCentral,
-  MenuMais,
-  Secao,
   SeletorCompacto,
   botao,
   campo,
   campoTexto,
-  etiqueta,
   juntar,
-  lista,
   texto,
 } from "@/components/sistema";
 import { chaveDasContas } from "./ContasDaCasa";
+import { ErroDaTela, FichaDeDados } from "./pecasDaCasa";
 
 export const chaveDasEntradas = ["produto", "casa", "email", "pedidos"] as const;
 
-const COR: Record<PedidoDeEmail["estado"], string> = {
-  novo: "bg-warning-soft text-warning",
-  aguardando_pagamento: "bg-warning-soft text-warning",
-  pago: "bg-accent-soft text-primary",
-  em_andamento: "bg-accent-soft text-primary",
-  concluido: "bg-muted text-muted-foreground",
-  cancelado: "bg-muted text-muted-foreground",
+export const TOM_DO_PEDIDO: Record<PedidoDeEmail["estado"], Tone> = {
+  novo: "warning",
+  aguardando_pagamento: "warning",
+  pago: "accent",
+  em_andamento: "info",
+  concluido: "success",
+  cancelado: "neutral",
 };
 
 const hoje = () => {
@@ -56,16 +52,22 @@ const hoje = () => {
   return d.toISOString().slice(0, 10);
 };
 
+type Mostrar = "abertas" | "todas";
+
 /**
  * As entradas do e-mail profissional: cada pedido (da página, do painel do cliente, da casa ou do
  * agente) numa lista só. O dono escolhe a entrada, marca como pago e a migração começa: o e-mail da
  * empresa liga, o domínio nasce com o passo a passo e o cliente cai na área de E-mail do /app.
+ * 19/11/2026 (redesenho): lista em cartão com o estado em pílula, uma ação por linha (pagar ou abrir
+ * a migração), o resto no "..." e o detalhe da entrada na janela do centro.
  */
 export default function EntradasDeEmail({ aoAbrirDominio }: { aoAbrirDominio: (dominioId: string) => void }) {
   const qc = useQueryClient();
-  const [verTodos, setVerTodos] = useState(false);
+  const [mostrar, setMostrar] = useState<Mostrar>("abertas");
+  const verTodos = mostrar === "todas";
   const pedidos = useQuery({ queryKey: [...chaveDasEntradas, verTodos ? "todos" : "abertos"], queryFn: () => listarPedidos(verTodos ? null : "abertos") });
   const [pagando, setPagando] = useState<PedidoDeEmail | null>(null);
+  const [detalhe, setDetalhe] = useState<string | null>(null);
   const [nova, setNova] = useState(false);
   const reler = () => qc.invalidateQueries({ queryKey: ["produto", "casa", "email"] });
 
@@ -90,75 +92,130 @@ export default function EntradasDeEmail({ aoAbrirDominio }: { aoAbrirDominio: (d
     }
   };
 
+  const maisAcoes = (p: PedidoDeEmail): Array<OverflowItem | false | null | undefined | ""> => [
+    esperaPagamento(p) && !p.extra_id && { label: p.cobranca_link ? "Copiar o link de pagamento" : "Gerar o link de pagamento", onSelect: () => void gerarLink(p) },
+    p.estado === "novo" && { label: "Aguardando pagamento", onSelect: () => void mudar(p, "aguardando_pagamento") },
+    (p.estado === "em_andamento" || p.estado === "pago") && { label: "Concluir", onSelect: () => void mudar(p, "concluido") },
+    p.email_contato && { label: `Copiar ${p.email_contato}`, onSelect: () => void navigator.clipboard.writeText(String(p.email_contato)).then(() => toast.success("E-mail copiado.")) },
+    (p.estado === "cancelado" || p.estado === "concluido") && { label: "Reabrir", onSelect: () => void mudar(p, "reabrir") },
+    p.estado !== "cancelado" && p.estado !== "concluido" && { label: "Cancelar a entrada", danger: true, separatorBefore: true, onSelect: () => void mudar(p, "cancelado") },
+  ];
+
+  const acaoPrincipal = (p: PedidoDeEmail, grande = false) =>
+    esperaPagamento(p) ? (
+      <button type="button" className={juntar(botao.primario, grande ? "" : "h-8")} onClick={() => setPagando(p)} aria-label="Marcar como pago" data-marcar-pago="">
+        <Check className={juntar("h-4 w-4", grande ? "mr-1.5" : "sm:mr-1.5")} aria-hidden="true" />
+        <span className={grande ? "" : "hidden sm:inline"}>Marcar como pago</span>
+      </button>
+    ) : p.dominio_id && p.estado !== "cancelado" ? (
+      <button type="button" className={juntar(botao.secundario, grande ? "" : "h-8")} onClick={() => { setDetalhe(null); aoAbrirDominio(p.dominio_id as string); }}>
+        {grande ? "Abrir a migração" : "Migração"}
+      </button>
+    ) : null;
+
   const lista_ = pedidos.data || [];
   const esperando = lista_.filter(esperaPagamento).length;
+  const aberto = lista_.filter((p) => p.id === detalhe)[0] || null;
+  const principalDoAberto = aberto ? acaoPrincipal(aberto, true) : null;
   return (
-    <Secao
-      titulo="Entradas"
-      descricao={pedidos.data ? `${lista_.length}${esperando ? ` · ${esperando} esperando pagamento` : ""}` : undefined}
-      ajuda="Cada pedido de e-mail profissional chega aqui, venha da página /email, do painel do cliente ou da Aceleriq. Uma entrada aberta por empresa: pedir de novo completa a mesma. Marcar como pago lança o dinheiro num lugar só (no extra do cliente, quando o pedido está ligado a um, ou no faturamento do produto), liga o e-mail da empresa e cria o domínio com o passo a passo."
-      acao={
-        <span className="flex items-center">
-          <button type="button" className={botao.icone} onClick={() => setNova(true)} aria-label="Nova entrada" title="Nova entrada" data-nova-entrada="">
-            <Plus className="h-4 w-4 text-primary" aria-hidden="true" />
-          </button>
-          <MenuMais rotulo="Mais" itens={[{ rotulo: verTodos ? "Só as abertas" : "Ver também concluídas e canceladas", aoEscolher: () => setVerTodos((v) => !v) }]} />
-        </span>
+    <Card
+      title="Entradas"
+      subtitle={pedidos.data ? `${lista_.length}${esperando ? ` · ${esperando} esperando pagamento` : ""}` : undefined}
+      help="Cada pedido de e-mail profissional chega aqui, venha da página /email, do painel do cliente ou da Aceleriq. Uma entrada aberta por empresa: pedir de novo completa a mesma. Marcar como pago lança o dinheiro num lugar só (no extra do cliente, quando o pedido está ligado a um, ou no faturamento do produto), liga o e-mail da empresa e cria o domínio com o passo a passo."
+      action={
+        <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setNova(true)} aria-label="Nova entrada" data-nova-entrada="">
+          <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+          <span className="hidden sm:inline">Nova entrada</span>
+        </button>
       }
+      data-entradas=""
     >
+      <div className="mb-3 min-w-0">
+        <SeletorCompacto
+          rotulo="Mostrar"
+          opcoes={[{ valor: "abertas", rotulo: "Abertas" }, { valor: "todas", rotulo: "Todas" }]}
+          valor={mostrar}
+          onEscolher={(v) => setMostrar(v as Mostrar)}
+        />
+      </div>
       {pedidos.isLoading ? (
-        <Carregando linhas={3} rotulo="Carregando as entradas" />
+        <div className="min-w-0 space-y-2" aria-busy="true" aria-label="Carregando as entradas">
+          {[0, 1, 2].map((i) => <div key={i} className="h-14 animate-pulse rounded-md bg-muted" style={{ opacity: 1 - i * 0.2 }} />)}
+        </div>
       ) : pedidos.isError ? (
-        <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void pedidos.refetch()}>Tentar de novo</button>} />
+        <ErroDaTela titulo="Não foi possível carregar as entradas." aoTentar={() => void pedidos.refetch()} />
       ) : lista_.length === 0 ? (
-        <EstadoVazio compacto titulo="Nenhuma entrada aberta." descricao="Os pedidos da página /email aparecem aqui." />
+        <EstadoVazio
+          icone={<Inbox className="h-5 w-5" aria-hidden="true" />}
+          titulo={verTodos ? "Nenhuma entrada ainda" : "Nenhuma entrada aberta"}
+          descricao="Os pedidos da página /email aparecem aqui."
+          acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setNova(true)}>Criar uma entrada</button>}
+        />
       ) : (
-        <ul className={juntar(lista.aberta, lista.divisoria)} data-entradas-de-email="">
+        <List label="Entradas de e-mail">
           {lista_.map((p) => (
-            <li key={p.id} className={juntar(lista.linha, "flex-wrap items-start")} data-entrada={p.estado}>
-              <span className="min-w-0 flex-1 basis-full sm:basis-0">
-                <span className={juntar(texto.corpo, "block truncate font-medium")}>
-                  {p.empresa || "Empresa"}
-                  {p.dominio ? <span className="font-normal text-muted-foreground"> · {p.dominio}</span> : null}
-                </span>
-                <span className={juntar(texto.auxiliar, "block truncate")}>
-                  {[p.tipo === "migracao" ? "Migração" : "E-mail novo", `${p.caixas} ${p.caixas === 1 ? "caixa" : "caixas"}`, ROTULO_DA_ORIGEM[p.origem], diaLegivel(p.criado_em), p.extra_nome ? `extra: ${p.extra_nome}` : ""].filter(Boolean).join(" · ")}
-                </span>
-                {p.ofertas && p.ofertas.length > 0 && (
-                  <span className={juntar(texto.auxiliar, "block truncate")} data-ofertas-da-entrada="">
-                    Ofertas: {p.ofertas.map((o) => `${o.nome} (${reais(o.valor)}${o.cobranca === "mensal" ? "/mês" : ""})`).join(", ")}
-                  </span>
-                )}
-                <span className={juntar(texto.auxiliar, "block")}>{proximoPasso(p)}</span>
-              </span>
-              <span className={juntar(etiqueta, "mt-1.5 sm:ml-2 sm:mt-0", COR[p.estado])}>{ROTULO_DO_PEDIDO[p.estado]}</span>
-              <span className="ml-2 mt-1.5 flex shrink-0 items-center sm:mt-0">
-                {esperaPagamento(p) && (
-                  <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setPagando(p)} data-marcar-pago="">
-                    <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                    Marcar como pago
-                  </button>
-                )}
-                {!esperaPagamento(p) && p.dominio_id && p.estado !== "cancelado" && (
-                  <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => aoAbrirDominio(p.dominio_id!)}>
-                    Abrir a migração
-                  </button>
-                )}
-                <MenuMais
-                  rotulo={`Mais ações de ${p.empresa || "entrada"}`}
-                  itens={[
-                    esperaPagamento(p) && !p.extra_id && { rotulo: p.cobranca_link ? "Copiar o link de pagamento" : "Gerar o link de pagamento", aoEscolher: () => void gerarLink(p) },
-                    p.estado === "novo" && { rotulo: "Aguardando pagamento", aoEscolher: () => void mudar(p, "aguardando_pagamento") },
-                    (p.estado === "em_andamento" || p.estado === "pago") && { rotulo: "Concluir", aoEscolher: () => void mudar(p, "concluido") },
-                    p.email_contato && { rotulo: `Copiar ${p.email_contato}`, aoEscolher: () => void navigator.clipboard.writeText(String(p.email_contato)).then(() => toast.success("E-mail copiado.")) },
-                    (p.estado === "cancelado" || p.estado === "concluido") && { rotulo: "Reabrir", aoEscolher: () => void mudar(p, "reabrir") },
-                    p.estado !== "cancelado" && p.estado !== "concluido" && { rotulo: "Cancelar a entrada", perigo: true, separadorAntes: true, aoEscolher: () => void mudar(p, "cancelado") },
-                  ]}
-                />
-              </span>
-            </li>
+            <ListRow
+              key={p.id}
+              leading={<Avatar name={p.empresa || "Empresa"} tone={esperaPagamento(p) ? "accent" : "neutral"} />}
+              title={`${p.empresa || "Empresa"}${p.dominio ? ` · ${p.dominio}` : ""}`}
+              subtitle={[p.tipo === "migracao" ? "Migração" : "E-mail novo", `${p.caixas} ${p.caixas === 1 ? "caixa" : "caixas"}`, diaLegivel(p.criado_em)].filter(Boolean).join(" · ")}
+              status={<StatusPill tone={TOM_DO_PEDIDO[p.estado]}>{ROTULO_DO_PEDIDO[p.estado]}</StatusPill>}
+              action={acaoPrincipal(p)}
+              menu={maisAcoes(p).map((x) => x || null)}
+              menuLabel={`Mais ações de ${p.empresa || "entrada"}`}
+              onClick={() => setDetalhe(p.id)}
+            />
           ))}
-        </ul>
+        </List>
+      )}
+      {aberto && (
+        <JanelaCentral
+          aberta
+          onFechar={() => setDetalhe(null)}
+          largura="md"
+          titulo={aberto.empresa || "Entrada"}
+          descricao={proximoPasso(aberto)}
+          acoes={<StatusPill tone={TOM_DO_PEDIDO[aberto.estado]}>{ROTULO_DO_PEDIDO[aberto.estado]}</StatusPill>}
+          rodape={principalDoAberto || undefined}
+          data-detalhe-da-entrada=""
+        >
+          <div className="min-w-0 space-y-5">
+            <FichaDeDados
+              itens={[
+                ["O que é", aberto.tipo === "migracao" ? "Migração" : "E-mail novo"],
+                ["Domínio", aberto.dominio || "ainda sem domínio"],
+                ["Caixas", String(aberto.caixas)],
+                ["Origem", ROTULO_DA_ORIGEM[aberto.origem]],
+                ["Pediu em", diaLegivel(aberto.criado_em, true)],
+                ["Migração", aberto.valor_migracao ? reais(aberto.valor_migracao) : ""],
+                ["Mensalidade", aberto.valor_mensal ? `${reais(aberto.valor_mensal)} por mês` : ""],
+                ["Pago", aberto.pago_em ? `${diaLegivel(aberto.pago_em, true)}${aberto.valor_pago ? ` · ${reais(aberto.valor_pago)}` : ""}${aberto.forma_pagamento ? ` · ${aberto.forma_pagamento}` : ""}` : ""],
+                ["Cobrança", aberto.extra_nome ? `No extra: ${aberto.extra_nome}` : aberto.cobranca_link ? `Link de ${reais(aberto.cobranca_valor || 0)} gerado` : ""],
+                ["Contato", [aberto.email_contato, aberto.telefone].filter(Boolean).join(" · ")],
+                ["Provedor de hoje", aberto.provedor_atual || ""],
+              ]}
+            />
+            {aberto.ofertas && aberto.ofertas.length > 0 && (
+              <div className="min-w-0" data-ofertas-da-entrada="">
+                <p className={juntar(texto.rotulo, "mb-1.5")}>Ofertas marcadas</p>
+                <ul className="min-w-0 divide-y divide-border/50">
+                  {aberto.ofertas.map((o) => (
+                    <li key={o.id} className="flex min-w-0 items-center py-2">
+                      <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{o.nome}</span>
+                      <span className={juntar(texto.corpo, "ml-3 shrink-0 tabular-nums")}>{reais(o.valor)}{o.cobranca === "mensal" ? " por mês" : ""}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {aberto.observacao && (
+              <div className="min-w-0">
+                <p className={juntar(texto.rotulo, "mb-1")}>Anotações</p>
+                <p className={juntar(texto.corpo, "whitespace-pre-wrap")}>{aberto.observacao}</p>
+              </div>
+            )}
+          </div>
+        </JanelaCentral>
       )}
       {pagando && (
         <JanelaDoPagamento
@@ -166,13 +223,14 @@ export default function EntradasDeEmail({ aoAbrirDominio }: { aoAbrirDominio: (d
           onFechar={() => setPagando(null)}
           onPago={(dominioId) => {
             setPagando(null);
+            setDetalhe(null);
             void reler();
             if (dominioId) aoAbrirDominio(dominioId);
           }}
         />
       )}
       {nova && <NovaEntrada onFechar={() => setNova(false)} onCriada={() => { setNova(false); void reler(); }} />}
-    </Secao>
+    </Card>
   );
 }
 

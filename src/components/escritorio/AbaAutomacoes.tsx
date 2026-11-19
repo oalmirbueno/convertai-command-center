@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Workflow } from "lucide-react";
+import { AlertTriangle, Workflow } from "lucide-react";
 import { toast } from "sonner";
-import { tabela } from "@/components/finance/pecasDoFinanceiro";
-import { Carregando, EstadoDeErro, EstadoVazio, botao, campo, etiqueta, juntar, texto, useEstadoDaTela } from "@/components/sistema";
+import { Carregando, EstadoDeErro, EstadoVazio, botao, campo, juntar, lista, texto, useEstadoDaTela } from "@/components/sistema";
+import { Card, Chip, PillTabs, type Tone } from "@/components/ds";
 import { haQuanto } from "@/lib/gruposAoVivo";
 import { mensagemDoErroDoEscritorio } from "@/lib/escritorio/acessos";
 import { filtrarAutomacoes, type FiltroDeAutomacao } from "@/lib/escritorio/automacoes";
@@ -11,21 +11,16 @@ import type { AgenteDoEscritorio, Automacao } from "@/lib/escritorio/tipos";
 import { CHAVES, mudarDonoDaAutomacao, useAutomacoes } from "./escritorioApi";
 
 /**
- * Automações do Escritório: os fluxos (n8n e outros) com o que fazem, quem é
- * o dono, se estão ligados, a última execução e o último erro. O dono troca o
- * responsável aqui. Ligar e desligar ainda não é por esta tela: depende da
- * ponte com o n8n, que não existe nesta versão.
+ * Automações do Escritório: os fluxos (n8n e outros) com quem é o dono, se
+ * estão ligados, a última execução e o último erro (19/11: lista num cartão,
+ * estado em Chip, o que faz no title). O dono troca o responsável aqui. Ligar
+ * e desligar ainda não é por esta tela: depende da ponte com o n8n.
  */
 
-const FILTROS: { valor: Exclude<FiltroDeAutomacao, "todas">; rotulo: string }[] = [
-  { valor: "erro", rotulo: "Só com erro" },
-  { valor: "nunca", rotulo: "Nunca rodou" },
-];
-
-const STATUS: Record<NonNullable<Automacao["ultimo_status"]>, { rotulo: string; classe: string }> = {
-  ok: { rotulo: "Deu certo", classe: "bg-success-soft text-success" },
-  erro: { rotulo: "Erro", classe: "bg-danger-soft text-destructive" },
-  rodando: { rotulo: "Rodando", classe: "bg-info-soft text-info" },
+const STATUS: Record<NonNullable<Automacao["ultimo_status"]>, { rotulo: string; tom: Tone }> = {
+  ok: { rotulo: "Deu certo", tom: "success" },
+  erro: { rotulo: "Erro", tom: "danger" },
+  rodando: { rotulo: "Rodando", tom: "info" },
 };
 
 export default function AbaAutomacoes({ agentes, admin, agora }: { agentes: AgenteDoEscritorio[]; admin: boolean; agora: number }) {
@@ -49,7 +44,7 @@ export default function AbaAutomacoes({ agentes, admin, agora }: { agentes: Agen
   };
 
   if (q.isLoading) return <Carregando rotulo="Lendo as automações" linhas={6} />;
-  if (q.error) return <EstadoDeErro titulo="Não foi possível ler as automações." descricao={(q.error as Error).message} />;
+  if (q.error) return <EstadoDeErro titulo="Não foi possível ler as automações." descricao={(q.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />;
   const todas = q.data ?? [];
   if (todas.length === 0) {
     return <EstadoVazio icone={<Workflow className="h-5 w-5" />} titulo="Nenhuma automação registrada ainda." descricao="Elas aparecem aqui quando o n8n começar a avisar o Escritório." />;
@@ -59,74 +54,61 @@ export default function AbaAutomacoes({ agentes, admin, agora }: { agentes: Agen
 
   return (
     <div className="min-w-0 space-y-4" data-automacoes-do-escritorio="">
-      <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Filtrar automações">
-        {FILTROS.map((f) => (
-          <button key={f.valor} type="button" aria-pressed={filtro === f.valor} onClick={() => setFiltro(filtro === f.valor ? "todas" : f.valor)} className={juntar(filtro === f.valor ? botao.primario : botao.secundario, "mr-1.5 h-8")}>
-            {f.rotulo}
-          </button>
-        ))}
-        <span className={juntar(texto.auxiliar, "ml-1 tabular-nums")}>{visiveis.length} de {todas.length}</span>
-      </div>
+      <PillTabs<FiltroDeAutomacao>
+        label="Filtrar automações"
+        variant="soft"
+        value={filtro}
+        onChange={setFiltro}
+        tabs={[
+          { value: "todas", label: "Todas", count: todas.length },
+          { value: "erro", label: "Com erro", count: filtrarAutomacoes(todas, "erro").length },
+          { value: "nunca", label: "Nunca rodou", count: filtrarAutomacoes(todas, "nunca").length },
+        ]}
+      />
 
       {visiveis.length === 0 ? (
         <EstadoVazio compacto titulo="Nenhuma automação neste filtro." />
       ) : (
-        <div className={tabela.moldura}>
-          <table className={juntar(tabela.tabela, "min-w-[980px]")} aria-label="Automações">
-            <thead className={tabela.cabeca}>
-              <tr>
-                <th>Automação</th>
-                <th>O que faz</th>
-                <th>Dono</th>
-                <th>Estado</th>
-                <th>Última execução</th>
-                <th>Último status</th>
-                <th>Último erro</th>
-              </tr>
-            </thead>
-            <tbody className={tabela.corpo}>
-              {visiveis.map((a) => {
-                const status = a.ultimo_status ? STATUS[a.ultimo_status] : null;
-                const dono = agentes.find((x) => x.slug === a.dono_slug);
-                return (
-                  <tr key={a.id} data-automacao={a.ref}>
-                    <td className="align-top">
-                      <span className="block font-medium text-foreground">{a.nome}</span>
-                      <span className={texto.auxiliar}>{a.plataforma}</span>
-                    </td>
-                    <td className="max-w-[280px] align-top text-muted-foreground">{a.o_que_faz || "Sem descrição"}</td>
-                    <td className="align-top">
-                      {admin ? (
-                        <select className={juntar(campo, "h-8 w-auto max-w-[180px]")} value={a.dono_slug ?? ""} disabled={ocupado} aria-label={`Dono de ${a.nome}`} onChange={(e) => void trocarDono(a, e.target.value)}>
-                          <option value="">Sem dono</option>
-                          {a.dono_slug && !donos.some((x) => x.slug === a.dono_slug) && <option value={a.dono_slug}>{dono?.display_name ?? a.dono_slug}</option>}
-                          {donos.map((x) => <option key={x.slug} value={x.slug}>{x.display_name}</option>)}
-                        </select>
-                      ) : (
-                        dono?.display_name ?? a.dono_slug ?? "Sem dono"
-                      )}
-                    </td>
-                    <td className="align-top">
-                      <span className={juntar(etiqueta, a.ativo ? "bg-success-soft text-success" : "bg-muted text-muted-foreground")}>{a.ativo ? "Ligada" : "Desligada"}</span>
-                    </td>
-                    <td className="whitespace-nowrap align-top tabular-nums">{a.ultima_execucao_em ? haQuanto(a.ultima_execucao_em, agora) : "nunca rodou"}</td>
-                    <td className="align-top">{status ? <span className={juntar(etiqueta, status.classe)}>{status.rotulo}</span> : <span className="text-muted-foreground">Sem registro</span>}</td>
-                    <td className="max-w-[280px] align-top">
-                      {a.ultimo_erro ? (
-                        <>
-                          <span className="block text-foreground">{a.ultimo_erro}</span>
-                          {a.ultimo_erro_em && <span className={texto.auxiliar}>{haQuanto(a.ultimo_erro_em, agora)}</span>}
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">Nenhum</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Card>
+          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Automações">
+            {visiveis.map((a) => {
+              const status = a.ultimo_status ? STATUS[a.ultimo_status] : null;
+              const dono = agentes.find((x) => x.slug === a.dono_slug);
+              return (
+                <li key={a.id} data-automacao={a.ref} className={juntar(lista.linha, "flex-wrap items-start sm:flex-nowrap sm:items-center")}>
+                  <span aria-hidden="true" className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Workflow className="h-4 w-4" /></span>
+                  <span className="min-w-0 flex-1" title={a.o_que_faz || undefined}>
+                    <span className="flex min-w-0 flex-wrap items-center [&>*]:mb-0.5">
+                      <span className={juntar(texto.corpo, "mr-2 min-w-0 max-w-full truncate font-medium")}>{a.nome}</span>
+                      <Chip tone={a.ativo ? "success" : "neutral"} dot>{a.ativo ? "Ligada" : "Desligada"}</Chip>
+                      {status && <Chip className="ml-1.5" tone={status.tom}>{status.rotulo}</Chip>}
+                    </span>
+                    {a.ultimo_erro ? (
+                      <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center text-destructive")}>
+                        <AlertTriangle className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 truncate">{a.ultimo_erro}</span>
+                        {a.ultimo_erro_em && <span className="ml-1.5 shrink-0 tabular-nums text-muted-foreground">{haQuanto(a.ultimo_erro_em, agora)}</span>}
+                      </span>
+                    ) : (
+                      <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>{a.plataforma} · {a.ultima_execucao_em ? `rodou ${haQuanto(a.ultima_execucao_em, agora)}` : "nunca rodou"}</span>
+                    )}
+                  </span>
+                  <span className="mt-2 flex w-full shrink-0 items-center pl-12 sm:ml-3 sm:mt-0 sm:w-auto sm:pl-0">
+                    {admin ? (
+                      <select className={juntar(campo, "h-8 w-auto max-w-[180px]")} value={a.dono_slug ?? ""} disabled={ocupado} aria-label={`Dono de ${a.nome}`} onChange={(e) => void trocarDono(a, e.target.value)}>
+                        <option value="">Sem dono</option>
+                        {a.dono_slug && !donos.some((x) => x.slug === a.dono_slug) && <option value={a.dono_slug}>{dono?.display_name ?? a.dono_slug}</option>}
+                        {donos.map((x) => <option key={x.slug} value={x.slug}>{x.display_name}</option>)}
+                      </select>
+                    ) : (
+                      <Chip outline>{dono?.display_name ?? a.dono_slug ?? "Sem dono"}</Chip>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       )}
     </div>
   );

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUp, Loader2, MessageSquarePlus, MessagesSquare, Users } from "lucide-react";
 import { toast } from "sonner";
-import { CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, JanelaCentral, botao, campo, campoTexto, etiqueta, juntar, lista, rolagem, texto } from "@/components/sistema";
+import { CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, JanelaCentral, botao, campo, campoTexto, juntar, lista, rolagem, texto } from "@/components/sistema";
+import { Card, Chip } from "@/components/ds";
+import { AvatarComPresenca } from "@/components/execucao/Visuais";
 import { haQuanto } from "@/lib/gruposAoVivo";
 import { mensagemDoErroDoEscritorio } from "@/lib/escritorio/acessos";
 import { linhasDasConversas, trecho } from "@/lib/escritorio/conversas";
@@ -14,6 +16,8 @@ import { CHAVES, donoEnviar, donoMarcarLidas, useConversa, useConversas, useSala
  * o último recado e o ponto do que o dono ainda não leu; à direita, a conversa.
  * O dono escreve para um agente ou para uma sala. O resto da equipe só lê.
  * Os balões e o campo de escrever seguem o desenho da conversa do Gestor.
+ * 19/11: a conversa aberta mora na página (a caixa do "Agora" abre aqui) e a
+ * "Nova conversa" é o botão principal do cabeçalho da página.
  */
 
 const hora = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -48,14 +52,17 @@ function Recados({ mensagens, nomeDe }: { mensagens: Mensagem[]; nomeDe: (slug: 
   );
 }
 
-function NovaConversa({
+export function NovaConversa({
   aberta,
   agentes,
   salas,
+  destinoInicial = "",
   aoFechar,
   aoCriar,
 }: {
   aberta: boolean;
+  /** "agente:<slug>" ou "sala:<slug>" já escolhido (vindo da ficha do agente). */
+  destinoInicial?: string;
   agentes: AgenteDoEscritorio[];
   salas: Sala[];
   aoFechar: () => void;
@@ -65,7 +72,7 @@ function NovaConversa({
   const [assunto, setAssunto] = useState("");
   const [corpo, setCorpo] = useState("");
   const [ocupado, setOcupado] = useState(false);
-  useEffect(() => { if (aberta) { setDestino(""); setAssunto(""); setCorpo(""); } }, [aberta]);
+  useEffect(() => { if (aberta) { setDestino(destinoInicial); setAssunto(""); setCorpo(""); } }, [aberta, destinoInicial]);
 
   const ativos = agentes.filter((a) => a.status === "active").sort((a, b) => a.display_name.localeCompare(b.display_name, "pt-BR"));
   const salasAtivas = salas.filter((s) => s.ativo);
@@ -93,10 +100,10 @@ function NovaConversa({
       ajuda="Você escreve como dono. Para um agente, a conversa é só com ele; para uma sala, todos os membros recebem."
       largura="md"
       rodape={
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-end">
+        <>
           <button type="button" className={botao.secundario} onClick={aoFechar}>Cancelar</button>
-          <button type="button" className={juntar(botao.primario, "ml-2")} disabled={ocupado || !destino || !corpo.trim()} onClick={() => void enviar()}>{ocupado ? "Enviando…" : "Enviar"}</button>
-        </div>
+          <button type="button" className={botao.primario} disabled={ocupado || !destino || !corpo.trim()} onClick={() => void enviar()}>{ocupado ? "Enviando…" : "Enviar"}</button>
+        </>
       }
     >
       <GrupoDeCampos colunas={1}>
@@ -122,12 +129,26 @@ function NovaConversa({
   );
 }
 
-export default function AbaConversas({ agentes, admin, agora }: { agentes: AgenteDoEscritorio[]; admin: boolean; agora: number }) {
+export default function AbaConversas({
+  agentes,
+  admin,
+  agora,
+  abertaId: abertaDeFora,
+  aoAbrir,
+}: {
+  agentes: AgenteDoEscritorio[];
+  admin: boolean;
+  agora: number;
+  /** A conversa aberta, quando a página cuida dela. */
+  abertaId?: string | null;
+  aoAbrir?: (id: string | null) => void;
+}) {
   const qc = useQueryClient();
   const q = useConversas();
   const salas = useSalas();
-  const [abertaId, setAbertaId] = useState<string | null>(null);
-  const [novaAberta, setNovaAberta] = useState(false);
+  const [abertaInterna, setAbertaInterna] = useState<string | null>(null);
+  const abertaId = abertaDeFora !== undefined ? abertaDeFora : abertaInterna;
+  const setAbertaId = aoAbrir ?? setAbertaInterna;
   const [rascunho, setRascunho] = useState("");
   const [enviando, setEnviando] = useState(false);
   const conversa = useConversa(abertaId);
@@ -176,19 +197,11 @@ export default function AbaConversas({ agentes, admin, agora }: { agentes: Agent
   };
 
   if (q.isLoading) return <Carregando rotulo="Lendo as conversas" linhas={6} />;
-  if (q.error) return <EstadoDeErro titulo="Não foi possível ler as conversas." descricao={(q.error as Error).message} />;
+  if (q.error) return <EstadoDeErro titulo="Não foi possível ler as conversas." descricao={(q.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />;
 
   return (
     <div className="grid min-w-0 items-start gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]" data-conversas-do-escritorio="">
-      <div className={juntar("min-w-0", abertaId && "hidden lg:block")}>
-        <div className="mb-2 flex min-w-0 items-center">
-          <h2 className={juntar(texto.tituloSecao, "mr-auto truncate")}>Conversas</h2>
-          {admin && (
-            <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setNovaAberta(true)}>
-              <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Nova conversa
-            </button>
-          )}
-        </div>
+      <Card className={juntar("min-w-0", abertaId && "hidden lg:block")} data-lista-de-conversas="">
         {linhas.length === 0 ? (
           <EstadoVazio compacto titulo="Nenhuma conversa ainda." descricao={admin ? "Comece uma com um agente ou com uma sala." : undefined} />
         ) : (
@@ -219,9 +232,9 @@ export default function AbaConversas({ agentes, admin, agora }: { agentes: Agent
             ))}
           </ul>
         )}
-      </div>
+      </Card>
 
-      <section className={juntar("min-w-0", !abertaId && "hidden lg:block")} aria-label={aberta ? `Conversa com ${aberta.titulo}` : "Conversa"}>
+      <Card as="section" className={juntar("min-w-0", !abertaId && "hidden lg:block")} aria-label={aberta ? `Conversa com ${aberta.titulo}` : "Conversa"}>
         {!abertaId ? (
           <EstadoVazio icone={<MessagesSquare className="h-5 w-5" />} titulo="Escolha uma conversa." />
         ) : (
@@ -230,16 +243,21 @@ export default function AbaConversas({ agentes, admin, agora }: { agentes: Agent
               <button type="button" className={juntar(botao.icone, "mr-1 lg:hidden")} onClick={() => abrir(null)} aria-label="Voltar para as conversas" title="Voltar para as conversas">
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               </button>
+              {aberta?.tipo === "grupo" ? (
+                <span aria-hidden="true" className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Users className="h-4 w-4" /></span>
+              ) : (
+                <AvatarComPresenca nome={aberta?.titulo ?? "Conversa"} tamanho={36} className="mr-3" />
+              )}
               <div className="min-w-0 flex-1">
                 <h2 className={juntar(texto.tituloSecao, "truncate")}>{aberta?.titulo ?? "Conversa"}</h2>
                 {aberta?.assunto && <p className={juntar(texto.auxiliar, "truncate")}>{aberta.assunto}</p>}
               </div>
-              {aberta?.tipo === "grupo" && <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")}>Sala</span>}
+              {aberta?.tipo === "grupo" && <Chip className="ml-2">Sala</Chip>}
             </div>
 
             <div className={juntar(rolagem.longa, "min-w-0")}>
               {conversa.isLoading ? <Carregando rotulo="Carregando a conversa" linhas={3} />
-                : conversa.error ? <EstadoDeErro titulo="Não foi possível ler a conversa." descricao={(conversa.error as Error).message} />
+                : conversa.error ? <EstadoDeErro titulo="Não foi possível ler a conversa." descricao={(conversa.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void conversa.refetch()}>Tentar de novo</button>} />
                 : recados.length === 0 ? <EstadoVazio compacto titulo="Sem recados nesta conversa." />
                 : <Recados mensagens={recados} nomeDe={nomeDe} />}
               <div ref={fim} />
@@ -268,17 +286,8 @@ export default function AbaConversas({ agentes, admin, agora }: { agentes: Agent
             )}
           </>
         )}
-      </section>
+      </Card>
 
-      {admin && (
-        <NovaConversa
-          aberta={novaAberta}
-          agentes={agentes}
-          salas={salas.data?.salas ?? []}
-          aoFechar={() => setNovaAberta(false)}
-          aoCriar={async (id) => { await relerTudo(id); abrir(id); }}
-        />
-      )}
     </div>
   );
 }
