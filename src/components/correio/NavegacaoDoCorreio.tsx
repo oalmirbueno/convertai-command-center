@@ -29,11 +29,15 @@ export function SaidaDoCorreio() {
   const adminDoEmail = !!(estado && estado.eu && estado.eu.papel === "admin");
 
   const irAoPainel = () => (temPainel ? navigate("/dashboard") : troca.abrir("painel"));
-  const voltar = () => (origem === "painel" ? irAoPainel() : navigate(VOLTAR_PARA.crm.para));
+  const voltar = () => (origem === "painel" ? irAoPainel() : navigate(VOLTAR_PARA[origem || "crm"].para));
+  // A equipe da Aceleriq trabalha no CRM de vendas da casa (/vendas); o CRM do produto é o dos clientes.
+  const daCasa = !!profile && (profile.role === "admin" || profile.role === "manager");
 
   const destinos = [
     (temPainel || painelDaEmpresa) && { id: "painel", rotulo: profile && profile.role === "client" ? "Painel do cliente" : "Painel", ajuda: "Projetos, aprovações e financeiro", icone: LayoutGrid, ir: irAoPainel },
-    temCrm && { id: "crm", rotulo: "CRM", ajuda: "Funil, agenda e equipe", icone: KanbanSquare, ir: () => navigate("/app") },
+    daCasa
+      ? { id: "crm", rotulo: "CRM de vendas", ajuda: "O funil da Aceleriq", icone: KanbanSquare, ir: () => navigate("/vendas/crm") }
+      : temCrm && { id: "crm", rotulo: "CRM", ajuda: "Funil, agenda e equipe", icone: KanbanSquare, ir: () => navigate("/app") },
     adminDoEmail && { id: "email", rotulo: "Configurar o e-mail", ajuda: "Domínio, caixas e senhas", icone: Settings2, ir: () => navigate("/app/email") },
   ].filter(Boolean) as Array<{ id: string; rotulo: string; ajuda: string; icone: typeof Mail; ir: () => void }>;
 

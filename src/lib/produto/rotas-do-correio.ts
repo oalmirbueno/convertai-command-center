@@ -10,13 +10,15 @@
  * instalado), não há "voltar": o topo mostra "Ir para" com os outros lugares.
  */
 
-export type OrigemDoCorreio = "painel" | "crm";
+/** vendas = o CRM de vendas da Aceleriq (/vendas), só da equipe da casa. */
+export type OrigemDoCorreio = "painel" | "crm" | "vendas";
 
 const CHAVE = "aceleriq:correio:origem";
 
 export const VOLTAR_PARA: Record<OrigemDoCorreio, { para: string; rotulo: string }> = {
   painel: { para: "/dashboard", rotulo: "Painel" },
   crm: { para: "/app", rotulo: "CRM" },
+  vendas: { para: "/vendas/crm", rotulo: "CRM" },
 };
 
 /** O link do Correio a partir de um lugar (é ele que faz o voltar funcionar). */
@@ -25,7 +27,7 @@ export const linkDoCorreio = (de?: OrigemDoCorreio) => (de ? `/correio?de=${de}`
 /** A origem pedida no endereço, se for uma das conhecidas. */
 export function origemDoEndereco(busca: string): OrigemDoCorreio | null {
   const de = new URLSearchParams(busca).get("de");
-  return de === "painel" || de === "crm" ? de : null;
+  return de === "painel" || de === "crm" || de === "vendas" ? de : null;
 }
 
 /**
@@ -38,7 +40,7 @@ export function lembrarOrigem(busca: string, guarda: Pick<Storage, "getItem" | "
     if (pedida && guarda) guarda.setItem(CHAVE, pedida);
     if (pedida) return pedida;
     const guardada = guarda ? guarda.getItem(CHAVE) : null;
-    return guardada === "painel" || guardada === "crm" ? guardada : null;
+    return guardada === "painel" || guardada === "crm" || guardada === "vendas" ? guardada : null;
   } catch {
     return pedida;
   }

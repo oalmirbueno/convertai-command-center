@@ -40,7 +40,7 @@ export default function CrmDaCasa() {
   }, []);
 
   const destinos = [
-    { id: "correio", rotulo: "Correio", ajuda: "A caixa de e-mail", icone: Mail, ir: () => navigate(linkDoCorreio("painel")) },
+    { id: "correio", rotulo: "Correio", ajuda: "A caixa de e-mail", icone: Mail, ir: () => navigate(linkDoCorreio("vendas")) },
     { id: "painel", rotulo: "Painel", ajuda: "Clientes, ciclo e financeiro", icone: LayoutGrid, ir: () => navigate("/dashboard") },
     { id: "produto", rotulo: "CRMs dos clientes", ajuda: "Administrar o produto", icone: Shield, ir: () => navigate("/produto") },
   ];
@@ -53,14 +53,13 @@ export default function CrmDaCasa() {
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Painel
           </Link>
-          <span className="flex h-11 min-w-0 flex-1 items-center pl-1"><LogoDoCrm tamanho={34} rotulo="CRM de vendas" /></span>
           <Popover open={aberto} onOpenChange={setAberto}>
             <PopoverTrigger asChild>
               <button type="button" className={juntar("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl hover:bg-muted", foco)} aria-label="Ir para outro lugar" title="Ir para" data-ir-para="">
                 <LayoutGrid className="h-[18px] w-[18px]" aria-hidden="true" />
               </button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-[280px] rounded-3xl p-2">
+            <PopoverContent align="start" className="w-[280px] rounded-3xl p-2">
               <p className="px-3 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Ir para</p>
               <ul>
                 {destinos.map((d) => {
@@ -80,6 +79,7 @@ export default function CrmDaCasa() {
               </ul>
             </PopoverContent>
           </Popover>
+          <span className="flex h-11 min-w-0 flex-1 items-center pl-1" aria-label="CRM de vendas da Aceleriq"><LogoDoCrm tamanho={34} rotulo="CRM" /></span>
           <BotaoDoTema tema={tema.tema} aoAlternar={tema.alternar} />
         </header>
         <main className="min-w-0" data-crm-corpo="">

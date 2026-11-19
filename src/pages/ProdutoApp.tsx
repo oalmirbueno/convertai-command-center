@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from "react-route
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, MessagesSquare, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CHAVE_DO_TEMA_DO_CRM, useTemaDoCorreio } from "@/components/correio/TemaDoCorreio";
 import { useProduto, useRelerProduto } from "@/hooks/useProduto";
 import { variaveisDaCor } from "@/lib/produto/aparencia";
@@ -197,6 +198,7 @@ export default function ProdutoApp() {
   const produto = useProduto();
   const estado = produto.data;
   const [gaveta, setGaveta] = useState(false);
+  const [irParaAberto, setIrParaAberto] = useState(false);
   const trocaDeAcesso = useTrocaDeAcesso();
   // O menu lateral recolhe para uma faixa só de ícones; a escolha fica guardada no aparelho.
   const [recolhida, setRecolhida] = useState(() => {
@@ -336,22 +338,43 @@ export default function ProdutoApp() {
     </>
   );
 
-  const troca = comMenu && (
-    <div className="mr-2 flex h-8 shrink-0 items-center rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Produtos" data-troca-de-produto="">
-      {[
-        { rotulo: "CRM", para: "/app", ativo: !noEmail, icone: <KanbanSquare className="h-3.5 w-3.5" aria-hidden="true" /> },
-        // 19/11/2026: com o e-mail ligado, o outro lado é o Correio (a caixa), com voltar para cá; a configuração
-        // do e-mail fica no menu da pessoa. Sem e-mail, segue a página que apresenta e vende o e-mail.
-        comCorreio
-          ? { rotulo: "Correio", para: linkDoCorreio("crm"), ativo: false, icone: <Mail className="h-3.5 w-3.5" aria-hidden="true" /> }
-          : { rotulo: "E-mail", para: "/app/email", ativo: noEmail, icone: <Mail className="h-3.5 w-3.5" aria-hidden="true" /> },
-      ].map((p) => (
-        <Link key={p.rotulo} to={p.para} role="tab" aria-selected={p.ativo} className={juntar("inline-flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium transition-colors", foco, p.ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-          <span className="mr-1.5">{p.icone}</span>
-          {p.rotulo}
-        </Link>
-      ))}
-    </div>
+  // 19/11/2026: o mesmo topo do Correio e do CRM de vendas: "Ir para" e a marca. Nada de abas misturadas.
+  const daCasa = papelNoPainel === "admin" || papelNoPainel === "manager";
+  const destinos = [
+    comCorreio && { id: "correio", rotulo: "Correio", ajuda: "A caixa de e-mail", icone: Mail, ir: () => navigate(linkDoCorreio("crm")) },
+    comCorreio && admin && { id: "email", rotulo: "Configurar o e-mail", ajuda: "Domínio, caixas e senhas", icone: Settings2, ir: () => navigate("/app/email") },
+    !comCorreio && comMenu && { id: "email", rotulo: "E-mail profissional", ajuda: "Conhecer e pedir", icone: Mail, ir: () => navigate("/app/email") },
+    daCasa && { id: "vendas", rotulo: "CRM de vendas", ajuda: "O funil da Aceleriq", icone: KanbanSquare, ir: () => navigate("/vendas/crm") },
+    temPainel && { id: "painel", rotulo: papelNoPainel === "client" ? "Painel do cliente" : "Painel", ajuda: "Projetos, aprovações e financeiro", icone: LayoutGrid, ir: () => navigate("/dashboard") },
+    !temPainel && estado && estado.conta && estado.conta.tem_painel && { id: "painel", rotulo: "Painel da empresa", ajuda: "Entrar com o login geral", icone: LayoutGrid, ir: () => trocaDeAcesso.abrir("painel") },
+  ].filter(Boolean) as Array<{ id: string; rotulo: string; ajuda: string; icone: typeof Mail; ir: () => void }>;
+  const irPara = destinos.length > 0 && (
+    <Popover open={irParaAberto} onOpenChange={setIrParaAberto}>
+      <PopoverTrigger asChild>
+        <button type="button" className={juntar("mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl hover:bg-muted", foco)} aria-label="Ir para outro lugar" title="Ir para" data-ir-para="">
+          <LayoutGrid className="h-[18px] w-[18px]" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[280px] rounded-3xl p-2">
+        <p className="px-3 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Ir para</p>
+        <ul>
+          {destinos.map((d) => {
+            const Icone = d.icone;
+            return (
+              <li key={d.id}>
+                <button type="button" onClick={() => { setIrParaAberto(false); d.ir(); }} className={juntar("flex w-full min-w-0 items-center rounded-2xl p-2.5 text-left hover:bg-muted", foco)} data-destino={d.id}>
+                  <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted" aria-hidden="true"><Icone className="h-4 w-4" /></span>
+                  <span className="min-w-0">
+                    <span className="block text-[14px] font-medium">{d.rotulo}</span>
+                    <span className="block truncate text-[12px] text-muted-foreground">{d.ajuda}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 
   const barraDeBaixo: ItemDoMenu[] = grupos.length ? [grupos[0].itens[0], grupos[0].itens[1], grupos[0].itens[2], grupos[1].itens[0]] : [];
@@ -361,14 +384,14 @@ export default function ProdutoApp() {
       {/* Não é <header>: o tema claro do painel pinta de branco os links de "header nav", e aqui o topo é claro. */}
       <div role="banner" className="produto-vidro fixed inset-x-0 top-0 z-30 border-b border-border pt-[env(safe-area-inset-top)]" data-produto-topo="">
         <div className="flex h-[52px] w-full min-w-0 items-center px-4 md:px-5">
+          {irPara}
           <Link to="/app" className={juntar("mr-4 flex min-w-0 shrink-0 items-center rounded-md", comLateral && !recolhida && "md:w-[204px]", foco)} aria-label="Início do CRM">
             {aparencia.logo ? (
               <img src={aparencia.logo} alt={nomeNoTopo} className="h-7 w-auto max-w-[140px] object-contain" data-logo-da-empresa="" />
             ) : (
-              <LogoDoCrm tamanho={28} rotulo="" />
+              <LogoDoCrm tamanho={30} rotulo="CRM" />
             )}
           </Link>
-          {troca}
           <span className="min-w-0 flex-1" />
           {nomeNoTopo && !aparencia.logo && (
             <span className={juntar(texto.auxiliar, "mr-2 hidden min-w-0 max-w-[220px] truncate lg:block")} title={nomeNoTopo}>{nomeNoTopo}</span>
