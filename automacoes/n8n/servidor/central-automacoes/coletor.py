@@ -276,8 +276,131 @@ def grupo_do_nome(nome):
     return 'Outros'
 
 
-def desenho(nos, ligacoes):
-    """Só o que a tela precisa para desenhar: nome, tipo curto, posição, desligado e as ligações."""
+def _expr(v):
+    return isinstance(v, str) and v.strip().startswith('=')
+
+
+def trecho_do_codigo(n):
+    """O código próprio de um nó Code (a parte depois de "// ---- principal" nos gerados), curto e mascarado."""
+    p = n.get('parameters') or {}
+    codigo = str(p.get('jsCode') or p.get('pythonCode') or p.get('functionCode') or '')
+    if not codigo:
+        return None
+    if '// ---- principal' in codigo:
+        codigo = codigo.split('// ---- principal', 1)[1]
+    linhas = [l.rstrip() for l in codigo.strip().splitlines()][:40]
+    t = chr(10).join(linhas)
+    for padrao, troca in SEGREDOS:
+        t = padrao.sub(troca, t)
+    return t[:1500]
+
+
+def resumo_do_no(n, nomes_dos_fluxos):
+    """O que o nó faz, em poucas linhas e sem segredo: nunca cabeçalho, corpo, chave, credencial ou dado."""
+    tipo = n.get('type', '').split('.')[-1]
+    p = n.get('parameters') or {}
+    det = []
+    try:
+        if tipo == 'scheduleTrigger':
+            g, _ = gatilhos_do_fluxo([n], datetime.now(FUSO))
+            det += [x['descricao'] for x in g]
+        elif tipo == 'webhook':
+            det.append(f"recebe {p.get('httpMethod', 'GET')} em /webhook/{p.get('path', '')}")
+        elif tipo == 'httpRequest':
+            url = p.get('url', '')
+            if _expr(url):
+                dominio = re.search(r'https?://([A-Za-z0-9.-]+)', str(url))
+                det.append(f"{p.get('method', 'GET')} " + (f"em {dominio.group(1)}" if dominio else 'num endereço montado no fluxo'))
+            else:
+                m = re.match(r'https?://([^/?#]+)([^?#]*)', str(url))
+                det.append(f"{p.get('method', 'GET')} {m.group(1)}{m.group(2)[:60]}" if m else f"{p.get('method', 'GET')} (endereço)")
+        elif tipo in ('code', 'function', 'functionItem'):
+            codigo = p.get('jsCode') or p.get('pythonCode') or p.get('functionCode') or ''
+            codigo = str(codigo)
+            linhas = [l.strip() for l in codigo.splitlines() if l.strip()]
+            gerado = 'build/gerar.mjs' in codigo[:400]
+            explicou = False
+            if gerado:
+                # O gerador embute a lib inteira e põe o código do nó depois de "// ---- principal".
+                principal = codigo.split('// ---- principal', 1)[1] if '// ---- principal' in codigo else ''
+                chamadas = re.findall(r'\b(acq[A-Za-z0-9_]+)\s*\(', principal)
+                proprias = [c for c in chamadas if re.match(r'acq\d', c)]
+                chamadas = proprias or [c for c in chamadas if c not in ('acqConfigEfetiva',)]
+                linhas_principal = [l for l in principal.splitlines() if l.strip()]
+                if linhas_principal:
+                    det.append(f"{len(linhas_principal)} linhas próprias")
+                for nome in chamadas[:1]:
+                    i = codigo.find(f'function {nome}(')
+                    if i < 0:
+                        continue
+                    antes = codigo[max(0, i - 900):i]
+                    doc = re.findall(r'/\*\*?([\s\S]*?)\*/\s*(?:export\s+)?(?:async\s+)?$', antes)
+                    linha = ''
+                    if doc:
+                        linha = next((l.strip(' *\t') for l in doc[-1].splitlines() if l.strip(' *\t')), '')
+                    else:
+                        com = re.findall(r'//\s*(.+)\n\s*(?:export\s+)?(?:async\s+)?$', antes)
+                        linha = com[-1].strip() if com else ''
+                    det.append(f"roda {nome}()")
+                    if linha:
+                        det.append(mascarar(linha, 200))
+                        explicou = True
+                    break
+                det.append('código gerado pelo repositório lf-N8N (lib/*.js)')
+            else:
+                comentario = next((l.lstrip('/*# ').strip() for l in linhas if l.startswith(('//', '/*', '*', '#'))), '')
+                det.append(f"código com {len(linhas)} linhas" + (f" ({p.get('language')})" if p.get('language') else ''))
+                if comentario:
+                    det.append(mascarar(comentario, 160))
+                    explicou = True
+        elif tipo in ('if', 'filter'):
+            conds = (p.get('conditions') or {}).get('conditions') or []
+            det.append(f"decide entre dois caminhos ({len(conds) or 1} condição{'ões' if len(conds) > 1 else ''})")
+        elif tipo == 'switch':
+            regras = ((p.get('rules') or {}).get('values') or (p.get('rules') or {}).get('rules') or [])
+            det.append(f"escolhe entre {len(regras) or 'vários'} caminhos")
+        elif tipo == 'postgres':
+            op = p.get('operation', 'executeQuery')
+            if op == 'executeQuery':
+                q = str(p.get('query', ''))
+                acao = (re.match(r'\s*(\w+)', q) or [None, 'consulta'])[1].lower()
+                tab = re.search(r'(?:from|into|update|join)\s+([\w."]+)', q, re.I)
+                det.append(f"banco: {acao}" + (f" em {tab.group(1)}" if tab else ''))
+            else:
+                tab = p.get('table')
+                tab = tab.get('value') if isinstance(tab, dict) else tab
+                det.append(f"banco: {op}" + (f" em {tab}" if tab else ''))
+        elif tipo == 'executeWorkflow':
+            wid = p.get('workflowId')
+            wid = wid.get('value') if isinstance(wid, dict) else wid
+            det.append(f"chama o fluxo \"{nomes_dos_fluxos.get(str(wid), wid or 'outro fluxo')}\"")
+        elif tipo == 'respondToWebhook':
+            det.append('responde a quem chamou o webhook')
+        elif tipo == 'set':
+            campos = [a.get('name') for a in ((p.get('assignments') or {}).get('assignments') or []) if a.get('name')]
+            det.append('monta os campos ' + ', '.join(campos[:6]) if campos else 'monta os dados')
+        elif tipo == 'wait':
+            det.append(f"espera {p.get('amount', '')} {p.get('unit', '')}".strip())
+        elif tipo == 'noOp':
+            det.append('não faz nada (ponto de passagem)')
+        elif tipo == 'errorTrigger':
+            det.append('dispara quando outro fluxo falha')
+        elif tipo == 'executeWorkflowTrigger':
+            det.append('início quando outro fluxo chama este')
+        elif tipo == 'manualTrigger':
+            det.append('início à mão (botão no editor)')
+    except Exception:
+        pass
+    creds = sorted((n.get('credentials') or {}).keys())
+    if creds:
+        det.append('usa credencial: ' + ', '.join(creds))
+    if n.get('notes'):
+        det.append(mascarar(n.get('notes'), 200))
+    return [d for d in det if d][:6]
+
+
+def desenho(nos, ligacoes, nomes_dos_fluxos=None):
+    """Só o que a tela precisa para desenhar: nome, tipo, posição, desligado, o que faz e as ligações."""
     nos_curtos = []
     for n in nos:
         tipo = n.get('type', '').split('.')[-1]
@@ -287,6 +410,8 @@ def desenho(nos, ligacoes):
             'x': (n.get('position') or [0, 0])[0],
             'y': (n.get('position') or [0, 0])[1],
             'desligado': bool(n.get('disabled')),
+            'resumo': resumo_do_no(n, nomes_dos_fluxos or {}),
+            'codigo': trecho_do_codigo(n) if tipo in ('code', 'function', 'functionItem') else None,
         })
     arestas = []
     for origem, saidas in (ligacoes or {}).items():
@@ -431,6 +556,7 @@ def coletar(estado, tudo=False):
            join (select workflowId, max(id) m from execution_entity group by 1) u on u.m = e.id""")}
     pastas = {r[0]: r[1] for r in c.execute('select id, name from folder')}
     versoes = estado.setdefault('versoes', {})
+    nomes_dos_fluxos = {r[0]: r[1] for r in c.execute('select id, name from workflow_entity')}
     fluxos = []
     for wid, nome, ativo, nos, lig, versao, pasta_id, atualizado, arquivado in c.execute(
             'select id, name, active, nodes, connections, versionId, parentFolderId, updatedAt, isArchived from workflow_entity'):
@@ -447,7 +573,7 @@ def coletar(estado, tudo=False):
             'qtd_nos': len(nos),
         }
         if tudo or versoes.get(wid) != versao:
-            item['desenho'] = desenho(nos, json.loads(lig or '{}'))
+            item['desenho'] = desenho(nos, json.loads(lig or '{}'), nomes_dos_fluxos)
             versoes[wid] = versao
         fluxos.append(item)
     # Execuções: as novas desde a última rodada e as que estavam rodando
