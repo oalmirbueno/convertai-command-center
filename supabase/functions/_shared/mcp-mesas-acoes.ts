@@ -73,6 +73,14 @@ async function abrirSessaoDoDono(userId: string): Promise<string> {
       throw falha('dono_da_chave', 'O dono desta chave não é admin nem gestor da equipe: ela lê as mesas, mas não age nelas.');
     }
     const usuario = await db().auth.admin.getUserById(userId);
+    // Erro de infra do Auth não é "sem e-mail": senão a flag transitorio fica errada e não há retry.
+    if (
+      usuario.error &&
+      (usuario.error.name === 'AuthRetryableFetchError' ||
+        [429, 502, 503, 504].includes(usuario.error.status ?? 0))
+    ) {
+      throw falha('dono_da_chave', CONFERIR_INDISPONIVEL);
+    }
     const email = usuario.data?.user?.email;
     if (usuario.error || !email) throw falha('dono_da_chave', 'O dono desta chave não tem e-mail para abrir a sessão.');
     const link = await db().auth.admin.generateLink({ type: 'magiclink', email });
