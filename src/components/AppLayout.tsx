@@ -20,7 +20,7 @@ import {
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
   HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle,
-  Activity, Building2, Mail, Inbox, Tags, Wallet,
+  Activity, Building2, Mail, Inbox, Tags, Wallet, Globe, MonitorSmartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -273,6 +273,14 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Entradas e migrações", url: "/produto/email/entradas", icon: Mail, soAdmin: true },
       { title: "Caixa da Aceleriq", url: "/produto/email/caixa", icon: Inbox, soAdmin: true },
       { title: "Preços", url: "/produto/email/precos", icon: Tags, soAdmin: true },
+    ],
+  },
+  {
+    // 19/11/2026: domínios e sites dos clientes num lugar só (tela /produto/dominios).
+    label: "Domínios e sites",
+    items: [
+      { title: "Domínios", url: "/produto/dominios", icon: Globe, soAdmin: true, fimExato: true },
+      { title: "Sites", url: "/produto/dominios/sites", icon: MonitorSmartphone, soAdmin: true },
     ],
   },
   {
