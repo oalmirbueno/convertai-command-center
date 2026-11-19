@@ -53,6 +53,61 @@ dos primitivos de `src/components/sistema` (que continuam valendo: `Secao`, `Pai
 A seção 1 (raio de 12 px, "painel não tem sombra") e a 2 (título de 20 px) foram atualizadas por esta seção.
 A regra "Dashboard intocado" (4.0) foi revogada pelo dono em 14/11/2026.
 
+### 0.1 Cor: 60-30-10 e contraste (19/11/2026)
+
+Lógica de cor do @jorgedaweb (Combina, Sacana!) aplicada ao v4, só pelos tokens (`src/index.css`,
+`tailwind.config.ts`) e pela lib de aparência (`src/lib/produto/aparencia.ts`). Nada de ajuste tela a tela.
+
+**Regra.**
+
+1. **60-30-10**: 60% base, 30% superfícies, 10% destaque. Texto neutro não conta como cor de marca.
+2. **Um destaque saturado só**: o verde no painel; no produto CRM e E-mail, a cor que a empresa escolheu
+   (`/app/conta?parte=aparencia`). O destaque é **preenchimento de botão/CTA**. Texto só fica no tom do
+   destaque se passar 4,5:1; senão usa o tom de texto (`--primary-text`, mais fundo no claro).
+3. **WCAG 2.2 AA**: texto normal 4,5:1; texto grande 3:1; botão, ícone e anel 3:1 contra o fundo **e** contra
+   o cartão; texto dentro do botão 4,5:1.
+
+| Papel | Tokens |
+|---|---|
+| 60% base | `--background`, `--sidebar-background` |
+| 30% superfícies | `--card`, `--popover`, `--secondary`, `--muted` (e `--border`, `--input`) |
+| 10% destaque | `--primary`, `--accent`, `--accent-solid` (cartão `.ds-accent`), `--ring`, `--chart-1`, `--sidebar-primary` |
+| Texto no destaque | `--primary-foreground`, `--accent-foreground`, `--on-accent`, `--on-accent-muted` |
+| Destaque como texto | `--primary-text` (classe `text-primary`) |
+| Neutros de texto | `--foreground`, `--muted-foreground`, `--secondary-foreground` |
+
+**O que mudou (antes, depois).** Painel escuro: nada (já passava em tudo; verde 14,53:1 no fundo).
+
+| Token ou cor | Par | Antes | Depois |
+|---|---|---|---|
+| Claro: `--primary`, `--accent`, `--ring`, `--sidebar-primary`, `--sidebar-ring`, `--chart-1` (`145 80% 38%` para `145 80% 34%`) | botão / fundo | 2,59 reprova | 3,17 |
+| | botão / cartão | 2,91 reprova | 3,57 |
+| | texto quase preto no botão | 6,73 | 5,49 |
+| Empresa, escuro: azul, roxo, rosa (texto no botão branco para `0 0% 5%`) | texto no botão | 2,94 / 3,50 / 3,22 | 6,60 / 5,56 / 6,03 |
+| Empresa, claro: laranja, ciano (texto no botão branco para `0 0% 5%`) | texto no botão | 3,73 / 4,00 | 5,21 / 4,85 |
+| Empresa, claro: verde (igual ao painel) | botão / cartão | 2,91 | 3,57 |
+| Empresa, claro: rosa (tom de texto `336 78% 40%`) | texto / fundo | 4,31 | 5,76 |
+| Empresa, claro: laranja, ciano (tom de texto próprio) | texto / fundo | 3,31 / 3,56 | 5,04 / 4,95 |
+| Empresa, claro: azul (tom de texto `216 88% 44%`, para ler também na etiqueta suave) | texto / accent-soft | novo par | 4,86 |
+
+O `--accent-solid` do claro (`145 78% 46%`, cartão `.ds-accent`) é superfície, não botão, e ficou igual
+(texto em cima 9,66:1); o poço dele (`--accent-solid-deep`, `145 80% 38%`) também (6,73:1).
+
+**Cor da empresa.** `variaveisDaCor` agora troca o destaque inteiro, porque ele é um só: `--primary`, `--accent`,
+`--ring`, `--chart-1`, `--primary-text`, `--success`, `--accent-soft`, `--success-soft` e o cartão `.ds-accent`
+(`--accent-solid`, `--accent-solid-deep`, `--on-accent`, `--on-accent-muted`). Verde ou nada escolhido continua
+`{}`. `contrasteDaCor(cor, tema)` devolve as razões e a nota; a prévia da Aparência mostra ao vivo "Texto no botão"
+e "Botão no fundo" com a nota. Ids, nomes e ordem não mudaram (o banco valida os ids).
+
+**Como conferir.** `npm run design:contraste` imprime a tabela inteira (152 pares, os dois temas e as seis
+cores) e sai com código 1 se algo reprovar. A CI barra regressão em `src/test/contraste-tokens.test.ts`, que usa
+as mesmas verificações (`src/lib/design/verificacoes.ts`). A conta fica em `src/lib/design/contraste.ts`.
+
+**Fica para depois (registrado, não corrigido).** O destaque ainda aparece fora do CTA em muitos lugares:
+cerca de 1.300 `text-primary`, 460 `border-primary`, 190 `bg-accent-soft` e 370 `bg-primary/N` em `src/`
+(contagem de 19/11). Isso passa do 10% em várias telas. Reduzir é o próximo passo, **por área** (um lote por
+tela), trocando o que não é ação por neutro (`text-foreground`, `border-border`, `bg-muted`).
+
 ## 1. Tokens
 
 | Token | Valor | Uso |
