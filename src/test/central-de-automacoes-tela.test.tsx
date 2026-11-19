@@ -29,6 +29,7 @@ const detalhe = {
 
 const rpc = vi.fn(async (nome: string) => ({ data: nome === "automacoes_painel" ? painel : detalhe, error: null }));
 const invoke = vi.fn(async () => ({ data: { ok: true, ativo: false }, error: null }));
+vi.mock("@/hooks/useSupabaseData", () => ({ useClients: () => ({ data: [{ id: "c-dk", company_name: "Vip DK" }] }) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc: (...a: unknown[]) => rpc(...(a as [string])), functions: { invoke: (...a: unknown[]) => invoke(...(a as [])) } } }));
 
 import CentralDeAutomacoes from "@/pages/CentralDeAutomacoes";
@@ -41,25 +42,34 @@ function montar() {
 afterEach(() => { cleanup(); rpc.mockClear(); invoke.mockClear(); });
 
 describe("Central de Automações (tela)", () => {
-  it("abre, agrupa e mostra o estado", async () => {
+  async function abrirPasta(titulo: string) {
+    const pastas = await screen.findByRole("list", { name: "Pastas" }, { timeout: 5000 });
+    fireEvent.click(within(pastas).getByTitle(`Abrir a pasta ${titulo}`));
+    return screen.findByRole("list", { name: titulo }, { timeout: 5000 });
+  }
+
+  it("abre em pastas da Aceleriq; a pasta abre os fluxos no centro", async () => {
     montar();
-    const lista = await screen.findByRole("list", { name: "Clientes" }, { timeout: 5000 });
+    const pastas = await screen.findByRole("list", { name: "Pastas" }, { timeout: 5000 });
+    expect(within(pastas).getByTitle("Abrir a pasta Clientes")).toBeTruthy();
+    expect(within(pastas).getByTitle("Abrir a pasta Apoio (não desligar)")).toBeTruthy();
+    const lista = await abrirPasta("Clientes");
     expect(lista.textContent).toContain("Mensagem da semana no grupo");
     expect(lista.textContent).toContain("fala com cliente");
-    expect(screen.getByRole("list", { name: "Apoio (não desligar)" })).toBeTruthy();
   });
 
-  it("abre o fluxo com desenho e execuções", async () => {
+  it("abre o fluxo com desenho, execuções e o dono escolhe de quem é", async () => {
     montar();
-    const lista = await screen.findByRole("list", { name: "Clientes" }, { timeout: 5000 });
+    const lista = await abrirPasta("Clientes");
     fireEvent.click(within(lista).getByTitle(/Abrir Clientes: mensagem/));
     expect(await screen.findByRole("img", { name: /Desenho do fluxo/ }, { timeout: 5000 })).toBeTruthy();
     expect(screen.getByText(/Parou em "Escrever"/)).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "De quem é este fluxo" })).toBeTruthy();
   });
 
   it("desligar pede confirmação com o aviso do cliente e só então chama a função", async () => {
     montar();
-    const lista = await screen.findByRole("list", { name: "Clientes" }, { timeout: 5000 });
+    const lista = await abrirPasta("Clientes");
     fireEvent.click(within(lista).getByRole("switch"));
     expect(await screen.findByText(/fala com cliente ou lead/)).toBeTruthy();
     expect(invoke).not.toHaveBeenCalled();

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Bot, CircleAlert, Copy, Power, RefreshCw, Workflow } from "lucide-react";
+import { Activity, AlertTriangle, Bot, Building2, CircleAlert, Copy, Folder, Power, RefreshCw, Users, Workflow } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Collapsible, EmptyState, PageHeader, PillTabs, SearchField, StatCard, StatGrid, StatusDot, StatusPill, Chip, type Tone } from "@/components/ds";
-import { Carregando, EstadoDeErro, JanelaCentral, botao, espaco, juntar, larguraDaMesa, lista, texto } from "@/components/sistema";
+import { Card, Collapsible, EmptyState, PillTabs, SearchField, StatCard, StatGrid, StatusDot, StatusPill, Chip, type Tone } from "@/components/ds";
+import { CabecalhoDePagina, Carregando, EstadoDeErro, JanelaCentral, botao, campo, espaco, foco, juntar, larguraDaMesa, lista, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { useClients } from "@/hooks/useSupabaseData";
 import { GUIA_DO_N8N } from "../../supabase/functions/_shared/automacoes-guia";
 import {
   NO_ALTURA,
@@ -13,6 +15,9 @@ import {
   ROTULO_DO_MODO,
   ROTULO_DO_STATUS,
   agruparFluxos,
+  pastasDaAceleriq,
+  pastasDeClientes,
+  type Pasta,
   caminhoPorNo,
   desenharFluxo,
   emQuanto,
@@ -39,7 +44,8 @@ import {
  * O retrato vem do coletor do servidor a cada minuto; a tela relê sozinha.
  */
 
-type Aba = "fluxos" | "saude" | "ias";
+type Aba = "aceleriq" | "clientes" | "saude" | "ias";
+const ABAS: Aba[] = ["aceleriq", "clientes", "saude", "ias"];
 
 const TOM_DA_SAUDE: Record<string, Tone> = { ok: "success", atencao: "warning", falha: "danger" };
 const ROTULO_DA_SAUDE: Record<string, string> = { ok: "ok", atencao: "atenção", falha: "falha" };
@@ -177,7 +183,7 @@ function JanelaDoFluxo({ id, agora, podeLigar, aoFechar, aoAlternar }: { id: str
       onMudar={(v) => { if (!v) aoFechar(); }}
       titulo={d ? nomeCurto(d) : "Fluxo"}
       icone={<Workflow className="h-4 w-4" />}
-      descricao={d ? `${d.grupo} · ${d.ativo ? "ligado" : "desligado"} · ${d.total24h} rodadas em 24 h` : undefined}
+      descricao={d ? `${d.cliente ?? "Aceleriq"} · ${d.ativo ? "ligado" : "desligado"} · ${d.total24h} rodadas em 24 h` : undefined}
       largura="xl"
       acoes={d && podeLigar ? <Switch checked={d.ativo} onCheckedChange={() => aoAlternar(d)} aria-label={d.ativo ? "Desligar este fluxo" : "Ligar este fluxo"} title={d.ativo ? "Desligar" : "Ligar"} /> : undefined}
     >
@@ -186,6 +192,7 @@ function JanelaDoFluxo({ id, agora, podeLigar, aoFechar, aoAlternar }: { id: str
         : !d ? <EmptyState title="Esse fluxo saiu do n8n." />
         : (
           <div className="space-y-6">
+            {podeLigar && <DonoDoFluxo fluxo={d} />}
             <Desenho detalhe={d} execucao={execucao} />
             <section aria-label="Últimas execuções">
               <h3 className={juntar(texto.rotulo, "mb-1")}>Últimas execuções</h3>
@@ -221,6 +228,95 @@ function JanelaDoFluxo({ id, agora, podeLigar, aoFechar, aoAlternar }: { id: str
             )}
           </div>
         )}
+    </JanelaCentral>
+  );
+}
+
+/** Só o dono: de quem é o fluxo (Aceleriq ou um cliente). Muda a pasta onde ele aparece. */
+function DonoDoFluxo({ fluxo }: { fluxo: DetalheDoFluxo }) {
+  const qc = useQueryClient();
+  const { data: clientes } = useClients();
+  const [salvando, setSalvando] = useState(false);
+  const opcoes = useMemo(() => ((clientes ?? []) as Array<{ id: string; company_name?: string | null; full_name?: string | null }>)
+    .map((c) => ({ id: String(c.id), nome: String(c.company_name || c.full_name || "Cliente") }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")), [clientes]);
+  const mudar = async (valor: string) => {
+    setSalvando(true);
+    const { error } = await (supabase as any).rpc("automacoes_definir_cliente", { _fluxo_id: fluxo.id, _client_id: valor || null });
+    setSalvando(false);
+    if (error) { toast.error(`Não deu para mudar: ${error.message}`); return; }
+    toast.success(valor ? `Agora está na pasta de ${opcoes.find((o) => o.id === valor)?.nome ?? "cliente"}` : "Voltou para as automações da Aceleriq");
+    await Promise.all([qc.invalidateQueries({ queryKey: ["automacoes-painel"] }), qc.invalidateQueries({ queryKey: ["automacoes-fluxo"] })]);
+  };
+  return (
+    <label className="flex min-w-0 flex-wrap items-center gap-2">
+      <span className={texto.rotulo}>De quem é</span>
+      <select className={juntar(campo, "w-auto min-w-[200px] max-w-full")} value={fluxo.clientId ?? ""} disabled={salvando} onChange={(e) => void mudar(e.target.value)} aria-label="De quem é este fluxo">
+        <option value="">Aceleriq</option>
+        {fluxo.clientId && !opcoes.some((o) => o.id === fluxo.clientId) && <option value={fluxo.clientId}>{fluxo.cliente ?? "Cliente"}</option>}
+        {opcoes.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
+      </select>
+    </label>
+  );
+}
+
+const cartaoDaPasta = juntar(superficie.painel, "group flex h-full w-full min-w-0 flex-col p-4 text-left transition-transform duration-200 [@media(hover:hover)]:hover:-translate-y-0.5 active:translate-y-0 sm:p-5", foco);
+
+function CartaoDaPasta({ pasta, agora, aoAbrir }: { pasta: Pasta; agora: number; aoAbrir: () => void }) {
+  const Icone = pasta.tipo === "cliente" ? Building2 : Folder;
+  return (
+    <li className="min-w-0" data-pasta={pasta.chave}>
+      <button type="button" className={cartaoDaPasta} onClick={aoAbrir} title={`Abrir a pasta ${pasta.titulo}`}>
+        <span className="flex min-w-0 items-center">
+          <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Icone className="h-4 w-4" /></span>
+          <span className="min-w-0 flex-1">
+            <span className={juntar(texto.tituloSecao, "block truncate")}>{pasta.titulo}</span>
+            <span className={juntar(texto.auxiliar, "block truncate")}>{pasta.fluxos.length} {pasta.fluxos.length === 1 ? "fluxo" : "fluxos"} · {pasta.ligados} {pasta.ligados === 1 ? "ligado" : "ligados"}</span>
+          </span>
+          {pasta.erros24h > 0 ? <Chip tone="danger" dot className="ml-2">{pasta.erros24h} {pasta.erros24h === 1 ? "erro" : "erros"}</Chip>
+            : pasta.ligados > 0 ? <Chip tone="success" dot className="ml-2">ok</Chip>
+            : <Chip className="ml-2">parado</Chip>}
+        </span>
+        <span className="mt-4 flex min-w-0 flex-wrap gap-1.5" aria-hidden="true">
+          {pasta.fluxos.slice(0, 16).map((f) => (
+            <StatusDot key={f.id} tone={!f.ativo ? "neutral" : f.erros24h > 0 ? "danger" : "success"} className="h-2 w-2" />
+          ))}
+        </span>
+        <span className={juntar(texto.auxiliar, "mt-auto flex min-w-0 items-center justify-between gap-2 pt-4 tabular-nums")}>
+          <span className="truncate">{pasta.ultimaEm ? `última ${haQuanto(pasta.ultimaEm, agora)}` : "sem rodada"}</span>
+          <span className="shrink-0">{pasta.rodadas24h.toLocaleString("pt-BR")} em 24 h</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function GradeDePastas({ pastas, agora, aoAbrir, vazio }: { pastas: Pasta[]; agora: number; aoAbrir: (p: Pasta) => void; vazio: string }) {
+  if (pastas.length === 0) return <EmptyState title={vazio} />;
+  return (
+    <ul className={juntar(espaco.grade, "sm:grid-cols-2 xl:grid-cols-3")} aria-label="Pastas">
+      {pastas.map((p) => <CartaoDaPasta key={p.chave} pasta={p} agora={agora} aoAbrir={() => aoAbrir(p)} />)}
+    </ul>
+  );
+}
+
+function JanelaDaPasta({ pasta, agora, podeLigar, aoFechar, aoAbrirFluxo, aoAlternar }: { pasta: Pasta | null; agora: number; podeLigar: boolean; aoFechar: () => void; aoAbrirFluxo: (id: string) => void; aoAlternar: (f: Fluxo) => void }) {
+  return (
+    <JanelaCentral
+      aberta={pasta !== null}
+      onMudar={(v) => { if (!v) aoFechar(); }}
+      titulo={pasta?.titulo ?? "Pasta"}
+      icone={pasta?.tipo === "cliente" ? <Building2 className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+      descricao={pasta ? `${pasta.fluxos.length} ${pasta.fluxos.length === 1 ? "fluxo" : "fluxos"} · ${pasta.ligados} ligados · ${pasta.tipo === "cliente" ? "do cliente" : "da Aceleriq"}` : undefined}
+      largura="lg"
+    >
+      {pasta && (
+        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label={pasta.titulo}>
+          {pasta.fluxos.map((f) => (
+            <LinhaDoFluxo key={f.id} f={f} agora={agora} podeLigar={podeLigar} aoAbrir={() => aoAbrirFluxo(f.id)} aoAlternar={() => aoAlternar(f)} />
+          ))}
+        </ul>
+      )}
     </JanelaCentral>
   );
 }
@@ -328,17 +424,35 @@ export default function CentralDeAutomacoes() {
   const q = usePainel();
   const qc = useQueryClient();
   const agora = useAgora();
-  const [aba, setAba] = useState<Aba>("fluxos");
-  const [filtro, setFiltro] = useState<Filtro>("todos");
+  const [params, setParams] = useSearchParams();
+  const [aba, setAba] = useEstadoDaTela<Aba>("automacoes:aba", "aceleriq", { validar: (v) => (ABAS as string[]).includes(String(v)) });
   const [busca, setBusca] = useState("");
+  const [pastaAberta, setPastaAberta] = useState<string | null>(null);
   const [abertoId, setAbertoId] = useState<string | null>(null);
   const [pedido, setPedido] = useState<Fluxo | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   const p = q.data;
   const podeLigar = Boolean(p?.podeLigar);
-  const grupos = useMemo(() => agruparFluxos(p?.fluxos ?? [], { filtro, busca }), [p, filtro, busca]);
+  const daAceleriq = useMemo(() => pastasDaAceleriq(p?.fluxos ?? []), [p]);
+  const deClientes = useMemo(() => pastasDeClientes(p?.fluxos ?? []), [p]);
   const numeros = useMemo(() => (p ? numerosDoPainel(p) : null), [p]);
+  const achados = useMemo(() => (busca.trim() ? agruparFluxos(p?.fluxos ?? [], { busca }).flatMap((g) => g.fluxos) : []), [p, busca]);
+  const pasta = [...daAceleriq, ...deClientes].find((x) => x.chave === pastaAberta) ?? null;
+  const fluxosDaAceleriq = daAceleriq.reduce((n, x) => n + x.fluxos.length, 0);
+  const ligadosDaAceleriq = daAceleriq.reduce((n, x) => n + x.ligados, 0);
+  const fluxosDeClientes = deClientes.reduce((n, x) => n + x.fluxos.length, 0);
+
+  // Link da ficha do cliente: /automacoes?cliente=<id> abre a pasta dele.
+  const clienteDoLink = params.get("cliente");
+  useEffect(() => {
+    if (!clienteDoLink || !p) return;
+    setAba("clientes");
+    setPastaAberta(`cliente:${clienteDoLink}`);
+    const novo = new URLSearchParams(params);
+    novo.delete("cliente");
+    setParams(novo, { replace: true });
+  }, [clienteDoLink, p, params, setParams, setAba]);
 
   const confirmar = async () => {
     if (!pedido) return;
@@ -356,77 +470,71 @@ export default function CentralDeAutomacoes() {
     await Promise.all([qc.invalidateQueries({ queryKey: ["automacoes-painel"] }), qc.invalidateQueries({ queryKey: ["automacoes-fluxo"] })]);
   };
 
-  const estado = !p ? " " : !p.disponivel ? "esperando a primeira coleta"
-    : `${numeros?.ligados} de ${numeros?.total} ligados · atualizado ${haQuanto(p.coletadoEm, agora)}${p.atrasada ? " (coletor parado)" : ""}`;
+  const numero = (qual: Aba) => ({ variant: aba === qual ? ("accent" as const) : ("default" as const), onClick: () => { setAba(qual); setBusca(""); } });
+  const comBusca = (aba === "aceleriq" || aba === "clientes") && busca.trim() !== "";
 
   return (
     <div className={juntar(larguraDaMesa, espaco.pagina, "pb-10")} data-central-de-automacoes="">
-      <PageHeader
-        title="Automações"
-        subtitle={estado}
-        help="Todos os fluxos do n8n de produção, a saúde do servidor que move as automações e o caminho de cada execução. Um coletor no servidor lê o n8n e o systemd a cada minuto (só leitura) e manda para cá; o painel nunca entra no servidor. Ligar e desligar é só do dono, com confirmação, e chama a API do n8n na hora; fica registrado quem pediu e quando. Fluxo marcado 'fala com cliente', quando desligado, para de mandar mensagem a cliente ou lead."
-        actions={
+      <CabecalhoDePagina
+        titulo="Automações"
+        descricao={p?.disponivel ? `atualizado ${haQuanto(p.coletadoEm, agora)}${p.atrasada ? " · coletor parado" : ""}` : undefined}
+        ajuda="Todos os fluxos do n8n de produção, em pastas: as da Aceleriq (o que move a casa e atende todos os clientes) e as de cada cliente (fluxo feito para ele). Clique numa pasta para ver os fluxos e num fluxo para ver o desenho e as execuções. Um coletor no servidor lê o n8n a cada minuto, só leitura; o painel nunca entra no servidor. Ligar, desligar e dizer de quem é o fluxo é só do dono, com confirmação e registro. Fluxo que fala com cliente, quando desligado, para de mandar mensagem a cliente ou lead."
+        acoes={
           <button type="button" className={botao.icone} onClick={() => void q.refetch()} aria-label="Atualizar agora" title="Atualizar agora">
             <RefreshCw className={juntar("h-4 w-4", q.isFetching && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
           </button>
-        }
-        toolbar={
-          <PillTabs<Aba> label="O que ver" value={aba} onChange={setAba} tabs={[
-            { value: "fluxos", label: "Fluxos", icon: <Workflow className="h-3.5 w-3.5" />, count: numeros?.total },
-            { value: "saude", label: "Saúde", icon: <Activity className="h-3.5 w-3.5" /> },
-            { value: "ias", label: "Para as IAs", icon: <Bot className="h-3.5 w-3.5" /> },
-          ]} />
         }
       />
 
       {q.isLoading ? <Carregando rotulo="Lendo as automações" linhas={8} />
         : q.error ? <EstadoDeErro titulo="Não foi possível ler as automações." descricao={(q.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />
         : !p?.disponivel ? <EmptyState icon={<Workflow className="h-5 w-5" />} title="O coletor do servidor ainda não mandou o primeiro retrato." />
-        : aba === "saude" ? <Saude p={p} agora={agora} />
-        : aba === "ias" ? <ParaAsIas />
         : (
-          <div className="space-y-6">
-            <StatGrid cols={4} label="As automações agora">
-              <StatCard label="Ligados" value={numeros!.ligados} unit={`de ${numeros!.total}`} />
-              <StatCard label="Rodadas em 24 h" value={numeros!.rodadas24h.toLocaleString("pt-BR")} />
-              <StatCard label="Com erro em 24 h" value={numeros!.erros24h} hint={numeros!.erros24h ? "veja os marcados" : "nenhum"} />
-              <StatCard label="Saúde" value={`${numeros!.saudeOk} de ${numeros!.saudeTotal}`} hint={numeros!.piorSaude ? numeros!.piorSaude.nome : "tudo ok"} footer={{ label: "Ver saúde", onClick: () => setAba("saude") }} />
+          <>
+            <StatGrid cols={4} label="As automações agora: cada número abre a sua parte">
+              <StatCard {...numero("aceleriq")} label="Da Aceleriq" value={String(fluxosDaAceleriq)} icon={<Workflow className="h-4 w-4" />} progress={{ value: ligadosDaAceleriq, max: Math.max(fluxosDaAceleriq, 1) }} hint={`${ligadosDaAceleriq} ligados em ${daAceleriq.length} pastas`} />
+              <StatCard {...numero("clientes")} label="De clientes" value={String(fluxosDeClientes)} icon={<Users className="h-4 w-4" />} hint={deClientes.length === 1 ? "1 cliente" : `${deClientes.length} clientes`} />
+              <StatCard label="Com erro em 24 h" value={String(numeros!.erros24h)} icon={<AlertTriangle className="h-4 w-4" />} hint={`${numeros!.rodadas24h.toLocaleString("pt-BR")} rodadas`} />
+              <StatCard {...numero("saude")} label="Saúde" value={`${numeros!.saudeOk} de ${numeros!.saudeTotal}`} icon={<Activity className="h-4 w-4" />} hint={numeros!.piorSaude ? numeros!.piorSaude.nome : "tudo ok"} />
             </StatGrid>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <SearchField value={busca} onChange={setBusca} placeholder="Buscar fluxo" label="Buscar fluxo" className="min-w-0 flex-1 sm:max-w-xs" />
-              <PillTabs<Filtro> variant="soft" size="sm" label="Filtrar" value={filtro} onChange={setFiltro} tabs={[
-                { value: "todos", label: "Todos" },
-                { value: "ligados", label: "Ligados" },
-                { value: "desligados", label: "Desligados" },
-                { value: "com_erro", label: "Com erro", count: numeros!.erros24h ? p.fluxos.filter((f) => f.erros24h > 0).length : undefined },
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+              <PillTabs<Aba> label="Partes das automações" value={aba} onChange={(v) => { setAba(v); setBusca(""); }} tabs={[
+                { value: "aceleriq", label: "Da Aceleriq", count: fluxosDaAceleriq },
+                { value: "clientes", label: "De clientes", count: fluxosDeClientes },
+                { value: "saude", label: "Saúde" },
+                { value: "ias", label: "Para as IAs" },
               ]} />
+              {(aba === "aceleriq" || aba === "clientes") && <SearchField value={busca} onChange={setBusca} placeholder="Buscar fluxo" label="Buscar fluxo" className="w-full min-w-0 sm:w-64" />}
             </div>
 
-            {grupos.length === 0 ? <EmptyState title="Nenhum fluxo com esse filtro." />
-              : grupos.map((g) => (
-                <Collapsible key={g.grupo} title={g.rotulo} count={g.fluxos.length} summary={`${g.ligados} ligados`} storageKey={`automacoes:grupo:${g.grupo}`} defaultOpen={!g.grupo.startsWith("Desligado") && g.grupo !== "Temporários"}>
-                  <ul className={juntar(lista.aberta, lista.divisoria)} aria-label={g.rotulo}>
-                    {g.fluxos.map((f) => (
-                      <LinhaDoFluxo key={f.id} f={f} agora={agora} podeLigar={podeLigar} aoAbrir={() => setAbertoId(f.id)} aoAlternar={() => setPedido(f)} />
-                    ))}
+            {comBusca ? (
+              <Card as="section" title="Busca" subtitle={achados.length === 1 ? "1 fluxo" : `${achados.length} fluxos`}>
+                {achados.length === 0 ? <EmptyState title="Nenhum fluxo com esse nome." /> : (
+                  <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Fluxos achados">
+                    {achados.map((f) => <LinhaDoFluxo key={f.id} f={f} agora={agora} podeLigar={podeLigar} aoAbrir={() => setAbertoId(f.id)} aoAlternar={() => setPedido(f)} />)}
                   </ul>
-                </Collapsible>
-              ))}
+                )}
+              </Card>
+            ) : aba === "aceleriq" ? (
+              <GradeDePastas pastas={daAceleriq} agora={agora} aoAbrir={(x) => setPastaAberta(x.chave)} vazio="Nenhum fluxo da Aceleriq." />
+            ) : aba === "clientes" ? (
+              <GradeDePastas pastas={deClientes} agora={agora} aoAbrir={(x) => setPastaAberta(x.chave)} vazio="Nenhum fluxo de cliente ainda. Abra um fluxo e escolha de quem ele é." />
+            ) : aba === "saude" ? <Saude p={p} agora={agora} /> : <ParaAsIas />}
 
-            {p.acoes.length > 0 && (
+            {aba !== "ias" && p.acoes.length > 0 && (
               <Collapsible title="Ligado e desligado" count={p.acoes.length} storageKey="automacoes:acoes" defaultOpen={false} icon={<CircleAlert className="h-4 w-4" />}>
                 <ul className="space-y-1">
                   {p.acoes.map((a, i) => <li key={i} className={texto.auxiliar}>{diaHora(a.quando)} · {a.quem} {a.acao === "ligar" ? "ligou" : "desligou"} "{a.fluxoNome}"{a.via === "mcp" ? " pelo MCP" : ""}{a.resultado === "falhou" ? ` · falhou: ${a.erro ?? ""}` : ""}</li>)}
                 </ul>
               </Collapsible>
             )}
-          </div>
+          </>
         )}
 
+      <JanelaDaPasta pasta={pasta} agora={agora} podeLigar={podeLigar} aoFechar={() => setPastaAberta(null)} aoAbrirFluxo={setAbertoId} aoAlternar={setPedido} />
       <JanelaDoFluxo id={abertoId} agora={agora} podeLigar={podeLigar} aoFechar={() => setAbertoId(null)} aoAlternar={(f) => setPedido(f)} />
       <Confirmacao fluxo={pedido} enviando={enviando} aoFechar={() => setPedido(null)} aoConfirmar={() => void confirmar()} />
     </div>
   );
 }
-
