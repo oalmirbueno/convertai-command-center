@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Archive, ArrowLeft, Bell, CalendarPlus, CheckSquare, FileText, Inbox, Paperclip, RefreshCw, Reply, Send, ShieldAlert, Tag, Trash2, Users } from "lucide-react";
-import { diaLegivel, fraseDoErro } from "@/lib/produto/api";
+import { fraseDoErro } from "@/lib/produto/api";
 import { correio, correioDesligado, type CaixaDoCorreio, type ResumoDaMensagem } from "@/lib/produto/email-central";
-import { GRUPOS, agruparCaixa, criarTarefa, type EuNoCorreio, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
+import { GRUPOS, agruparCaixa, criarTarefa, horaDaMensagem, type EuNoCorreio, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
 import { CampoDeBusca, Carregando, EstadoDeErro, EstadoVazio, botao, foco, juntar, texto } from "@/components/sistema";
 import { NovoCompromisso, chaveDasTarefas } from "./PainelDoDia";
 import CorpoDoEmail from "./CorpoDoEmail";
@@ -287,7 +287,7 @@ export function LeituraDaMensagem({ caixa, pasta, m, eu, aoVoltar, rotuloVoltar 
           <span className={juntar(texto.corpo, "block truncate font-semibold")}>{nomeDe(m.de)}</span>
           <span className={juntar(texto.auxiliar, "block truncate")}>{enderecoDe(m.de)} para {m.para || caixa.endereco}</span>
         </span>
-        {m.recebida_em && <span className={juntar(texto.auxiliar, "ml-2 shrink-0")}>{diaLegivel(m.recebida_em, true)}</span>}
+        {m.recebida_em && <span className={juntar(texto.auxiliar, "ml-2 shrink-0")}>{horaDaMensagem(m.recebida_em, new Date(), true)}</span>}
       </div>
       <div className="mt-4 flex min-w-0 flex-wrap [&>*]:mb-2 [&>*]:mr-2">
         <a href="#resposta-do-correio" className={acao}><Reply className="mr-2 h-4 w-4" aria-hidden="true" />Responder</a>
@@ -344,7 +344,7 @@ export function Linha({ m, aberta, aoAbrir, aoPreparar, enviados }: { m: Mensage
         <span className="flex min-w-0 items-baseline">
           {!m.lida && <i className="correio-nao-lida mr-2 h-2 w-2 shrink-0 self-center rounded-full" aria-label="Não lida" />}
           <span className={juntar("min-w-0 flex-1 truncate text-[14px]", !m.lida ? "font-semibold" : "text-foreground")}>{quem}</span>
-          {m.recebida_em && <span className={juntar(texto.auxiliar, "ml-2 shrink-0")}>{diaLegivel(m.recebida_em)}</span>}
+          {m.recebida_em && <span className={juntar(texto.auxiliar, "ml-2 shrink-0 tabular-nums")} title={horaDaMensagem(m.recebida_em, new Date(), true)}>{horaDaMensagem(m.recebida_em)}</span>}
         </span>
         <span className={juntar("block truncate text-[13px]", !m.lida ? "font-medium text-foreground" : "text-muted-foreground")}>
           {m.tem_anexo && <Paperclip className="mr-1 inline h-3 w-3 align-[-1px]" aria-hidden="true" />}
