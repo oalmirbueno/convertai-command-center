@@ -3225,6 +3225,14 @@
       "remote_name": "casa_dominios_e_sites",
       "remote_statements_sha256": "8e5d475003459e3587628b0f28ede3c149e6d05a163f045e26a3dce62152e26e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261119150000",
+      "path": "supabase/migrations/20261119150000_produto_email_venda_automatica.sql",
+      "local_sha256": "99599dfe75fadf6add290620e962ed867813bea56bfb3c58c67fd63ebaed6a54",
+      "remote_name": "produto_email_venda_automatica",
+      "remote_statements_sha256": "ae8202738ec984c2d9f65624570ca50ad903e42632b85d771a100d6208dfdbdd",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
