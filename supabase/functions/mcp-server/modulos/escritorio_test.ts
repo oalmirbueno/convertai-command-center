@@ -136,6 +136,22 @@ Deno.test('escritório, grau e lugar: orquestrador fala com todos; coordenador c
   assert(fala('clio', 'trafe', true).ok, 'responder a quem falou com você sempre pode');
 });
 
+Deno.test('escritório 2.36.1: coordenador fala direto com o Fred (coordenador da área Coordenação), sem abrir outras áreas', () => {
+  const de = (s: string) => ELENCO.find((o) => o.slug === s)!;
+  const fala = (a: string, b: string) => podeFalarCom(de(a), de(b), ELENCO);
+  assert(fala('orion', 'fred').ok, 'orion (Conteúdo) fala com o Fred');
+  assert(fala('trafe', 'fred').ok, 'trafe (Tráfego) fala com o Fred');
+  const foraDaArea = fala('orion', 'trafe');
+  assert(!foraDaArea.ok && foraDaArea.codigo === 'fora_da_sua_area', 'coordenador de outra área continua fechado');
+  assert(foraDaArea.dica.includes('Coordenação'), 'a dica cita a área Coordenação');
+  const executor = fala('clio', 'fred');
+  assert(!executor.ok && executor.codigo === 'fale_com_o_coordenador', 'executor continua sem falar com o Fred');
+  const fredParado = { ...de('fred'), status: 'paused' };
+  const elencoComFredParado = ELENCO.map((o) => (o.slug === 'fred' ? fredParado : o));
+  const parado = podeFalarCom(de('orion'), fredParado, elencoComFredParado);
+  assert(!parado.ok && parado.codigo === 'destino_parado', 'Fred parado continua recusado');
+});
+
 Deno.test('escritório: dono, agente parado e destino aposentado', () => {
   const de = (s: string) => ELENCO.find((o) => o.slug === s)!;
   assert(podeFalarCom(de('orion'), DONO, ELENCO).ok);

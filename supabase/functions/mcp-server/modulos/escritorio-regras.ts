@@ -69,6 +69,9 @@ export const grauDe = (o: Pick<Operador, 'grau' | 'is_coordinator'>): Grau =>
 export const plataformaDe = (o: Pick<Operador, 'origem'>): string => o.origem || 'hermes';
 export const ativo = (o: Pick<Operador, 'status'>) => o.status === 'active';
 const mesmaArea = (a: Operador, b: Operador) => !!sem_acento(a.area) && sem_acento(a.area) === sem_acento(b.area);
+/** A área Coordenação (a ponte do dono, onde está o Fred): todo coordenador alcança o coordenador dela (MCP 2.36.1). */
+const AREA_COORDENACAO = sem_acento('Coordenação');
+const coordenadorDaCoordenacao = (o: Operador) => grauDe(o) === 'coordenador' && sem_acento(o.area) === AREA_COORDENACAO;
 
 // ─── Segredo ────────────────────────────────────────────────────
 
@@ -133,9 +136,10 @@ export function podeFalarCom(de: Operador, para: Operador | typeof DONO, todos: 
   const chefe = de.parent_slug === para.slug;
   const subordinado = para.parent_slug === de.slug;
   if (g === 'coordenador') {
-    if (grauDe(para) === 'orquestrador' || mesmaArea(de, para) || chefe || subordinado) return { ok: true };
+    // 2.36.1: coordenador também fala direto com o coordenador da área Coordenação (Fred); as outras áreas seguem fechadas.
+    if (grauDe(para) === 'orquestrador' || mesmaArea(de, para) || chefe || subordinado || coordenadorDaCoordenacao(para)) return { ok: true };
     return nao('fora_da_sua_area', `"${para.slug}" é de outra área (${para.area ?? 'sem área'}).`,
-      'Coordenador fala com a própria área e com os orquestradores. Para outra área, escreva na sala coordenacao ou peça a um orquestrador.');
+      'Coordenador fala com a própria área, com os orquestradores e com o coordenador da área Coordenação. Para outra área, escreva na sala coordenacao ou peça a um orquestrador.');
   }
   if (chefe || (grauDe(para) === 'coordenador' && mesmaArea(de, para))) return { ok: true };
   const quem = donoDaArea(de, todos);
