@@ -39,7 +39,7 @@ export default function LinhaDoAgente({
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 flex-wrap items-center">
           <span className={juntar(texto.corpo, "mr-2 truncate font-medium")}>{agente.display_name}</span>
-          {presente && <span className={juntar(etiqueta, "mr-1.5 bg-success-soft text-success")} data-presenca="agora">agora</span>}
+          {presente && <span className={juntar(etiqueta, "mr-1.5 bg-muted text-success")} data-presenca="agora">agora</span>}
           {comEtiquetas && <EtiquetaDaPlataforma origem={agente.origem} className="mr-1.5" />}
           {comEtiquetas && <EtiquetaDoGrau grau={agente.grau} />}
         </span>

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
+import AutomacoesDoCliente, { useAutomacoesDoCliente } from "@/components/automacoes/AutomacoesDoCliente";
 import { saldoDaCobranca, saldoDaParcela } from "@/lib/clientes/situacaoDaCobranca";
 import DiaPrioritarioNoCadastro from "@/components/dia-prioritario/DiaPrioritarioNoCadastro";
 import ModoDeAprovacaoNoCadastro from "@/components/admin/ModoDeAprovacaoNoCadastro";
@@ -72,8 +73,8 @@ const NON_RECURRING_TYPES = ["automation", "site", "landing_page", "event", "oth
 const NON_RECURRING_SERVICE_KEYS = ["automacao", "site"];
 
 /** Partes da ficha (abas). A aberta fica lembrada ao sair e voltar. */
-type AbaDaFicha = "resumo" | "cadastro" | "plano" | "acesso" | "contas" | "onboarding";
-const ABAS_DA_FICHA: AbaDaFicha[] = ["resumo", "cadastro", "plano", "acesso", "contas", "onboarding"];
+type AbaDaFicha = "resumo" | "cadastro" | "plano" | "acesso" | "contas" | "onboarding" | "automacoes";
+const ABAS_DA_FICHA: AbaDaFicha[] = ["resumo", "cadastro", "plano", "acesso", "contas", "onboarding", "automacoes"];
 
 const STATUS_DO_PROJETO: Record<string, string> = {
   todo: "A fazer",
@@ -445,6 +446,8 @@ export default function EditClientDrawer({
     setUploadingAvatar(false);
   };
 
+  // Antes do retorno cedo: hook sempre na mesma ordem. Só lê com a ficha aberta.
+  const automacoesDoCliente = useAutomacoesDoCliente(open ? client?.id ?? null : null);
   if (!open || !client) return null;
 
   const hasUnsavedChanges =
@@ -757,6 +760,7 @@ export default function EditClientDrawer({
     ...(isAdmin ? [{ value: "acesso" as AbaDaFicha, label: "Acesso" }] : []),
     { value: "contas", label: "Contas e cofre" },
     { value: "onboarding", label: "Onboarding" },
+    { value: "automacoes", label: "Automações", count: automacoesDoCliente.fluxos.length || undefined },
   ];
   const abaAberta: AbaDaFicha = abas.some((a) => a.value === aba) ? aba : "resumo";
   const painelDaAba = (valor: AbaDaFicha) => juntar("space-y-5", abaAberta !== valor && "hidden");
@@ -898,7 +902,7 @@ export default function EditClientDrawer({
                     <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground max-sm:hidden" aria-hidden="true" />
                   </button>
                   <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais`)} className={AZULEJO}>
-                    <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-primary"><FolderOpen className="h-5 w-5" /></span>
+                    <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground"><FolderOpen className="h-5 w-5" /></span>
                     <span className="mt-3 text-[13px] font-medium leading-5 text-foreground">Ver entregas</span>
                     <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground max-sm:hidden" aria-hidden="true" />
                   </button>
@@ -928,7 +932,7 @@ export default function EditClientDrawer({
                   acao={
                     <>
                       <button type="button" onClick={() => setVincularAberto((v) => !v)} aria-expanded={vincularAberto} className={botao.secundario} aria-label="Vincular projeto existente">
-                        <Briefcase className="h-4 w-4 text-primary" aria-hidden="true" />
+                        <Briefcase className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                         <span className="ml-1.5 hidden sm:inline">Vincular existente</span>
                       </button>
                       <button type="button" onClick={() => setNovoProjetoAberto(true)} className={botao.primario} aria-label="Novo projeto">
@@ -1332,7 +1336,7 @@ export default function EditClientDrawer({
                                       const isOverdue = !isPaid && new Date(inst.due_date) < new Date();
                                       return (
                                         <li key={inst.id} className="flex min-w-0 items-center py-2.5">
-                                          <span className={`mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isPaid ? "bg-success-soft text-success" : isOverdue ? "bg-danger-soft text-destructive" : "bg-warning-soft text-warning"}`} aria-hidden="true">
+                                          <span className={`mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isPaid ? "bg-muted text-success" : isOverdue ? "bg-danger-soft text-destructive" : "bg-warning-soft text-warning"}`} aria-hidden="true">
                                             {isPaid ? <CheckCircle2 className="h-4 w-4" /> : isOverdue ? <AlertCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                                           </span>
                                           <div className="min-w-0 flex-1">
@@ -1461,6 +1465,15 @@ export default function EditClientDrawer({
               <div className={BLOCO}>
                 <Secao titulo="Esteira de onboarding">
                   <ClientOnboardingPanel clientId={client.id} servicesConfig={services} />
+                </Secao>
+              </div>
+            </div>
+
+            {/* ── Automações do cliente (19/11/2026): os fluxos do n8n feitos para ele ── */}
+            <div className={painelDaAba("automacoes")}>
+              <div className={BLOCO}>
+                <Secao titulo="Automações" recolher={false}>
+                  {abaAberta === "automacoes" && <AutomacoesDoCliente clientId={client.id} />}
                 </Secao>
               </div>
             </div>

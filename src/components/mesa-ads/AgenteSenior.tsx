@@ -156,7 +156,7 @@ function PlanoDeTesteNaTela({ e, mensagemId, onPlanoPronto }: { e: EstrategiaSen
     <section className="min-w-0" aria-label="Plano de teste do agente">
       <div className="flex min-w-0 flex-wrap items-center">
         <p className="mb-1 mr-2 flex items-center text-[12px] font-semibold text-muted-foreground">
-          <FlaskConical className="mr-1 h-3.5 w-3.5 text-primary" /> Plano de teste
+          <FlaskConical className="mr-1 h-3.5 w-3.5 text-muted-foreground" /> Plano de teste
         </p>
         {mensagemId && <BotaoDoPlanoDoAgente mensagemId={mensagemId} onPlanoPronto={onPlanoPronto} className="mb-1 ml-auto" />}
       </div>
@@ -250,9 +250,9 @@ export function EstrategiaNaTela({
           <div className="mt-2 min-w-0 space-y-3">
             {(re.porque || re.campanhas.length > 0) && (
               <div className="min-w-0">
-                <p className="text-[12px] font-semibold text-primary">Reestruturação recomendada</p>
+                <p className="text-[12px] font-semibold text-foreground">Reestruturação recomendada</p>
                 <p className="mt-1 text-[12px] leading-snug">
-                  {re.objetivo && <span className="mr-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(re.objetivo)}</span>}
+                  {re.objetivo && <span className="mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-foreground">{rotuloDoObjetivo(re.objetivo)}</span>}
                   {re.evento_otimizacao && <span className="text-muted-foreground">Otimizar para {re.evento_otimizacao}. </span>}
                   <span className="text-muted-foreground">Verba diária total: {re.verba_total_diaria_brl !== null ? brl(re.verba_total_diaria_brl) : "sem base para definir"}.</span>
                 </p>
@@ -347,7 +347,7 @@ function FalaDaEquipe({ children }: { children: ReactNode }) {
 
 /** A resposta do agente: sem caixa, com uma linha de destaque à esquerda. */
 function FalaDoAgente({ children }: { children: ReactNode }) {
-  return <div className="min-w-0 border-l-2 border-primary/40 pl-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{children}</div>;
+  return <div className="min-w-0 border-l-2 border-border pl-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{children}</div>;
 }
 
 /** Quantas mensagens ficam à vista: a última troca (pedido da equipe, resposta e avisos depois dela). */

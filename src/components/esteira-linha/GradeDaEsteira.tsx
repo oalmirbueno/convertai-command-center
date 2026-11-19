@@ -167,7 +167,7 @@ export default function GradeDaEsteira({
                     {faixa.diaPrioritario !== null && (
                         // Uma linha apagada com a bandeirinha (15/11: sem pílula repetida em cada cliente); o nome inteiro segue para leitor de tela.
                         <span className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-center sm:mt-1.5 sm:pl-[52px]")} title={`Dia prioritário: ${faixa.nomeDoDiaPrioritario}`} data-dia-prioritario-da-faixa="">
-                          <Flag className="mr-1 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                          <Flag className="mr-1 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
                           <span className="min-w-0 truncate"><span className="sr-only">Dia prioritário: </span>{faixa.nomeDoDiaPrioritario.split("-")[0]}{faixa.nomeDoDiaPrioritario.includes("-") && <span className="max-sm:sr-only">-{faixa.nomeDoDiaPrioritario.split("-").slice(1).join("-")}</span>}</span>
                         </span>
                       )}

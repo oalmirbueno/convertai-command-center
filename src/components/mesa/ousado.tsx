@@ -153,7 +153,7 @@ export function NumerosAbertos({
 export function IconeEmCirculo({ children, tom = "neutro", tamanho = "md", className = "" }: { children: ReactNode; tom?: "neutro" | "marca" | "solido" | "tinta"; tamanho?: "sm" | "md" | "lg"; className?: string }) {
   const tons = {
     neutro: "bg-muted text-foreground",
-    marca: "bg-accent-soft text-primary",
+    marca: "bg-muted text-foreground",
     solido: "bg-accent-solid text-on-accent",
     tinta: "bg-foreground text-background",
   } as const;
@@ -231,7 +231,7 @@ export function CartaoDeIndicador({
         {(temVariacao || apoio) && (
           <span className="mt-2.5 flex min-w-0 items-center">
             {temVariacao && (
-              <span className={juntar("inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-medium leading-none tabular-nums", bom ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")} title={dicaDaVariacao}>
+              <span className={juntar("inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-medium leading-none tabular-nums", bom ? "bg-muted text-success" : "bg-danger-soft text-destructive")} title={dicaDaVariacao}>
                 <svg aria-hidden="true" viewBox="0 0 10 10" className={juntar("mr-1 inline-block h-2.5 w-2.5 shrink-0", !sobe && "rotate-180")} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 8.5v-7M2 4.5l3-3 3 3" />
                 </svg>

@@ -192,10 +192,10 @@ export const rotuloDoObjetivo = (v: string) => {
 
 export const SITUACOES: Record<Situacao, { rotulo: string; tom: string }> = {
   rascunho: { rotulo: "Rascunho", tom: "bg-muted text-muted-foreground" },
-  arte_pronta: { rotulo: "Arte pronta", tom: "bg-primary/10 text-primary" },
-  agendado: { rotulo: "Agendado", tom: "bg-success/15 text-success" },
+  arte_pronta: { rotulo: "Arte pronta", tom: "bg-muted text-foreground" },
+  agendado: { rotulo: "Agendado", tom: "bg-muted text-success" },
   postar_pelo_app: { rotulo: "Postar pelo app", tom: "bg-warning/15 text-warning" },
-  publicado: { rotulo: "Publicado", tom: "bg-success/15 text-success" },
+  publicado: { rotulo: "Publicado", tom: "bg-muted text-success" },
   falhou: { rotulo: "Falhou", tom: "bg-destructive/10 text-destructive" },
 };
 

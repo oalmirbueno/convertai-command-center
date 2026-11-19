@@ -303,7 +303,7 @@ export default function GeradorDeDestaques({
                     <ImagePlus className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
-                {feita && <span className={juntar(etiqueta, "ml-1.5 bg-success-soft text-success")}>capa</span>}
+                {feita && <span className={juntar(etiqueta, "ml-1.5 bg-muted text-success")}>capa</span>}
                 <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => onLista(lista.filter((_, k) => k !== i))} aria-label={`Tirar ${d.nome}`} title={`Tirar ${d.nome}`}>
                   <X className="h-3.5 w-3.5" />
                 </button>

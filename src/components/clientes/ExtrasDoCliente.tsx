@@ -185,7 +185,7 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
 function LinhaDoCrm({ extra, crm, carregando, aoLigar }: { extra: Extra; crm: CrmDoCliente | null; carregando: boolean; aoLigar: () => void }) {
   if (carregando) return null;
   const s = situacaoDoCrm(crm, extra);
-  const cor = s.tom === "ok" ? "bg-success-soft text-success" : s.tom === "espera" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground";
+  const cor = s.tom === "ok" ? "bg-muted text-success" : s.tom === "espera" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground";
   return (
     <div className="mt-2 min-w-0" data-crm-do-extra="">
       <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">

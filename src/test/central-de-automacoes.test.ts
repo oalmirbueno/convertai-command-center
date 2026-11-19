@@ -9,6 +9,9 @@ import {
   normalizarPainel,
   numerosDoPainel,
   ORDEM_DOS_GRUPOS,
+  fluxosDoCliente,
+  pastasDaAceleriq,
+  pastasDeClientes,
 } from "@/lib/centralDeAutomacoes";
 
 /**
@@ -124,5 +127,32 @@ describe("central de automações: contrato do banco", () => {
     const baseline = readFileSync(resolve(raiz, "supabase/production-migration-baseline.json"), "utf8");
     expect(manifesto).toContain("20261119180000_central_de_automacoes.sql");
     expect(baseline).toContain("20261119180000");
+  });
+});
+
+describe("central de automações: pastas da Aceleriq e de clientes", () => {
+  const p = normalizarPainel({
+    ...BRUTO,
+    fluxos: [
+      ...BRUTO.fluxos,
+      { id: "dk1", nome: "Grupos DK · 02 Motor de disparo", grupo: "Grupos DK", ativo: true, total_24h: 27, erros_24h: 0, gatilhos: [], efeito_no_cliente: true, client_id: "c-dk", cliente: "Vip DK", ultima_execucao: { id: 3, status: "success", inicio: "2026-11-19T12:00:00Z" } },
+      { id: "dk2", nome: "Grupos DK · 01 Captura (reserva)", grupo: "Grupos DK", ativo: false, total_24h: 0, erros_24h: 0, gatilhos: [], efeito_no_cliente: true, client_id: "c-dk", cliente: "Vip DK" },
+      { id: "st1", nome: "Stop: cupom", grupo: "Outros", ativo: true, total_24h: 1, erros_24h: 1, gatilhos: [], efeito_no_cliente: true, client_id: "c-stop", cliente: "Stop Informatica" },
+    ],
+  });
+
+  it("fluxo com cliente sai das pastas da Aceleriq e entra na pasta do cliente", () => {
+    const aceleriq = pastasDaAceleriq(p.fluxos);
+    expect(aceleriq.flatMap((x) => x.fluxos.map((f) => f.id))).not.toContain("dk1");
+    expect(aceleriq.map((x) => x.titulo)).toEqual(["Clientes", "Comercial (Rafael)", "Apoio (não desligar)", "Temporários"]);
+    const clientes = pastasDeClientes(p.fluxos);
+    expect(clientes.map((x) => x.titulo)).toEqual(["Stop Informatica", "Vip DK"]);
+    expect(clientes[1]).toMatchObject({ ligados: 1, rodadas24h: 27, ultimaEm: "2026-11-19T12:00:00Z" });
+    expect(clientes[0].erros24h).toBe(1);
+  });
+
+  it("a ficha do cliente vê só os fluxos dele, ligados primeiro", () => {
+    expect(fluxosDoCliente(p.fluxos, "c-dk").map((f) => f.id)).toEqual(["dk1", "dk2"]);
+    expect(fluxosDoCliente(p.fluxos, "c-nada")).toEqual([]);
   });
 });

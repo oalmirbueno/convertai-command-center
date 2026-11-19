@@ -95,7 +95,7 @@ export function TextoDoRoteiro({ roteiro: r, compacto }: { roteiro: Roteiro; com
               <li key={i} className={juntar(texto.corpo, "min-w-0 [overflow-wrap:anywhere]")} data-gancho-escolhido={i === r.gancho_escolhido ? "" : undefined}>
                 <span className="mr-1 text-muted-foreground">{i + 1}.</span>
                 {g.texto}
-                {i === r.gancho_escolhido && <span className={juntar(texto.etiqueta, "ml-2 text-primary")}>escolhido</span>}
+                {i === r.gancho_escolhido && <span className={juntar(texto.etiqueta, "ml-2 text-foreground")}>escolhido</span>}
               </li>
             ))}
           </ol>
@@ -331,7 +331,7 @@ export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCor
             </div>
             {escolha && (
               <p className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-start [overflow-wrap:anywhere]")} data-escolha-do-jev="">
-                <Sparkles className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                <Sparkles className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="min-w-0">
                   Jev: {escolha.porque}
                   {escolha.outra ? ` A outra é a v${escolha.outra}.` : ""}
@@ -354,8 +354,8 @@ export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCor
                         <span className="flex min-w-0 items-center gap-1 text-[12px] font-medium">
                           {linha && <span className="shrink-0">v{v.numero}</span>}
                           <span className="truncate">{v.conteudo.ganchos[v.conteudo.gancho_escolhido] ? v.conteudo.ganchos[v.conteudo.gancho_escolhido].texto : v.conteudo.titulo}</span>
-                          {v.jev && <Star className="h-3 w-3 shrink-0 text-primary" aria-label="Recomendada pelo Jev" />}
-                          {v.atual && <span className={juntar(texto.etiqueta, "shrink-0 text-primary")}>atual</span>}
+                          {v.jev && <Star className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Recomendada pelo Jev" />}
+                          {v.atual && <span className={juntar(texto.etiqueta, "shrink-0 text-foreground")}>atual</span>}
                         </span>
                         <span className="block truncate text-[11px] text-muted-foreground" title={v.nota}>
                           {rotuloDaDuracao(v.conteudo.duracao_alvo_s)} · {v.conteudo.blocos.length} blocos · {v.nota}

@@ -200,7 +200,7 @@ export default function CampanhaRevisao({
                   )}
                   {(p.estado === "na_agenda" || p.estado === "no_roteiro") && (
                     <span className="inline-flex h-8 w-8 items-center justify-center" role="img" aria-label="Na agenda" title="Na agenda">
-                      <CalendarCheck2 className="h-4 w-4 text-success" aria-hidden="true" />
+                      <CalendarCheck2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     </span>
                   )}
                 </div>

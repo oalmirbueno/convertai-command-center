@@ -148,7 +148,7 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
         </p>
         <p className={juntar(texto.corpo, "mt-3 max-w-[72ch] whitespace-pre-line")}>{item.resumo}</p>
         {item.proximo_passo && (
-          <p className={juntar(texto.corpo, "mt-4 max-w-[72ch] rounded-md bg-accent-soft px-4 py-3")}>
+          <p className={juntar(texto.corpo, "mt-4 max-w-[72ch] rounded-md bg-muted px-4 py-3")}>
             <span className="font-medium">Próximo passo:</span> {item.proximo_passo}
           </p>
         )}
@@ -307,7 +307,7 @@ function CobrancasDoMercurio() {
             <span className="min-w-0 truncate font-medium">{c.lead?.company || c.lead?.name || c.nome}</span>
             <span className="text-muted-foreground">{c.plano_nome}</span>
             <span className="font-semibold tabular-nums">{Number(c.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
-            <span className={c.situacao === "paga" ? "text-primary" : "text-muted-foreground"}>{c.situacao === "paga" ? "Pago, confirmado no Asaas" : c.situacao === "aguardando" ? "Aguardando pagamento" : "Cancelada"}</span>
+            <span className={c.situacao === "paga" ? "text-foreground" : "text-muted-foreground"}>{c.situacao === "paga" ? "Pago, confirmado no Asaas" : c.situacao === "aguardando" ? "Aguardando pagamento" : "Cancelada"}</span>
             {c.link ? <a className="underline" href={c.link} target="_blank" rel="noreferrer">Ver cobrança</a> : null}
           </li>
         ))}

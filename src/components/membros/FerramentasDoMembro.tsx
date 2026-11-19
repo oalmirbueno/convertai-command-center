@@ -69,7 +69,7 @@ export default function FerramentasDoMembro({
         <TituloMembros
           titulo="Ferramentas"
           principal
-          icone={<Wrench size={19} className="text-primary" />}
+          icone={<Wrench size={19} className="text-muted-foreground" />}
         >
           Para testar uma licença, entre com a conta do titular.
         </TituloMembros>
@@ -90,7 +90,7 @@ export default function FerramentasDoMembro({
       <TituloMembros
         titulo="Ferramentas"
         principal
-        icone={<Wrench size={19} className="text-primary" />}
+        icone={<Wrench size={19} className="text-muted-foreground" />}
       >
         A licença de cada ferramenta é individual e tem validade própria.
         Compras e aulas continuam independentes. Ao vencer, o CRM fica guardado

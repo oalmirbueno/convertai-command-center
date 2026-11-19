@@ -346,7 +346,7 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
                     ? `Projeto: ${(d.project as { name?: string } | null)?.name ?? "(sem nome)"}`
                     : `Tipo: ${String(d.dossier_type)}`}
                 </span>
-                <span className={juntar(etiqueta, "mr-2 bg-primary/10 text-primary")}>
+                <span className={juntar(etiqueta, "mr-2 bg-muted text-foreground")}>
                   v{String(d.version)}
                 </span>
                 <span className="mr-2 min-w-0 truncate text-foreground/70">

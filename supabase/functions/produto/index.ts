@@ -12,8 +12,12 @@
  *   dns { dominio_id }                                -> { checagem }   (qualquer pessoa da empresa, ou a casa)
  *
  * A casa (admin do painel):
- *   admin_criar_conta { nome, email, ... }            -> { conta_id, enviado }
- *   admin_convidar { conta_id, email, nome?, papel? } -> { membro_id, enviado }
+ *   admin_criar_conta { nome, email, client_id?, convidar?, com_link? } -> { conta_id, enviado, membro_id, link }
+ *   admin_convidar { conta_id, email, nome?, papel?, enviar?, com_link? } -> { membro_id, enviado, message_id, link, extra }
+ *   admin_remover_membro { membro_id }                -> { removido, extra, aviso }
+ *   admin_definir_senha { membro_id, senha }          -> { definida, email }  (a senha nunca volta nem é gravada)
+ *   admin_enviar_link { membro_id }                   -> { enviado, message_id }
+ *   admin_estado_do_envio { message_id }              -> { situacao, frase }
  *   admin_sincronizar { conta_id }                    -> { assinatura }
  *   admin_cobrar_migracao { conta_id, valor? }        -> { link }
  *
@@ -42,6 +46,7 @@ import {
 } from "./modulos/asaas.ts";
 import { conferirDominio, type Provedor } from "./modulos/dns.ts";
 import { comPedido, ehReducao, fimDoAcessoAoCancelar } from "./modulos/regras.ts";
+import { ajusteDoExtraCrm, leituraDoEnvio, problemaDaSenha, type MudancaNaEquipe } from "./modulos/acessos.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -170,18 +175,24 @@ async function linkDeAcesso(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ link, email: membro.email });
 }
 
-async function enviarConvite(membroId: string, quemConvidou: string | null): Promise<boolean> {
+/**
+ * Manda o link de acesso por e-mail (o mesmo modelo do convite: cria o acesso de quem é novo e entra direto
+ * para quem já tem login). `qualquerEstado`: a casa manda também para quem já entrou (troca de senha).
+ * Devolve o id da mensagem na fila, para a tela conferir depois se saiu de fato.
+ */
+async function mandarLinkPorEmail(membroId: string, quemConvidou: string | null, qualquerEstado = false): Promise<{ enviado: boolean; message_id: string | null; link: string | null }> {
   const { data: m } = await servico().from("produto_membros").select("id, conta_id, email, nome, papel, estado").eq("id", membroId).maybeSingle();
   const membro = m as { id: string; conta_id: string; email: string; nome: string; papel: string; estado: string } | null;
-  if (!membro || membro.estado !== "convidado") return false;
+  if (!membro || membro.estado === "removido" || (!qualquerEstado && membro.estado !== "convidado")) return { enviado: false, message_id: null, link: null };
   const { data: conta } = await servico().from("produto_contas").select("nome").eq("id", membro.conta_id).maybeSingle();
-  const link = (await gerarLinkDeAcesso(membro.email)) || `${app()}/app`;
+  const gerado = await gerarLinkDeAcesso(membro.email);
+  const link = gerado || `${app()}/app`;
   let nomeDeQuem = "";
   if (quemConvidou) {
     const { data: p } = await servico().from("profiles").select("full_name").eq("id", quemConvidou).maybeSingle();
     nomeDeQuem = texto((p as { full_name?: string } | null)?.full_name, 80);
   }
-  const { error } = await servico().functions.invoke("send-transactional-email", {
+  const { data, error } = await servico().functions.invoke("send-transactional-email", {
     body: {
       templateName: "produto-convite",
       recipientEmail: membro.email,
@@ -196,7 +207,12 @@ async function enviarConvite(membroId: string, quemConvidou: string | null): Pro
     },
   });
   if (error) console.error("[produto] convite não enviado", String(error.message || "").slice(0, 160));
-  return !error;
+  const id = data && typeof (data as { message_id?: unknown }).message_id === "string" ? String((data as { message_id: string }).message_id) : null;
+  return { enviado: !error, message_id: id, link: gerado };
+}
+
+async function enviarConvite(membroId: string, quemConvidou: string | null): Promise<boolean> {
+  return (await mandarLinkPorEmail(membroId, quemConvidou)).enviado;
 }
 
 async function convidar(ch: Chamador, corpo: Record<string, unknown>) {
@@ -641,29 +657,156 @@ async function adminCriarConta(ch: Chamador, corpo: Record<string, unknown>) {
   }).select("id").single();
   if (erroDoMembro || !membro) throw erroDoBanco(erroDoMembro, "A empresa foi criada, mas o convite não. Convide pela ficha da empresa.");
   await registrar(contaId, ch.userId, "conta_criada", { plano: planoId, origem: "painel", cortesia });
-  const enviado = corpo.convidar === false ? false : await enviarConvite(String((membro as { id: string }).id), ch.userId);
-  return json({ conta_id: contaId, enviado });
+  const membroId = String((membro as { id: string }).id);
+  const enviado = corpo.convidar === false ? false : await enviarConvite(membroId, ch.userId);
+  // 19/11 (Central de acessos): "Adicionar pessoa" num cliente que ainda não tinha empresa no CRM cria a empresa
+  // já ligada ao cliente e devolve o link de primeiro acesso de quem vai administrar.
+  const link = corpo.com_link === true ? await gerarLinkDeAcesso(email) : null;
+  return json({ conta_id: contaId, enviado, membro_id: membroId, link });
 }
 
+/**
+ * Central de acessos: numa empresa cobrada pelo plano do cliente (extra "crm"), pôr ou tirar uma pessoa
+ * acompanha a quantidade e o valor do extra, pelo mesmo caminho da ficha do cliente (quantidade direto no
+ * extra e valor pelo extra_editar, com a sessão do dono). O banco recalcula os usuários da empresa sozinho.
+ */
+async function ajustarExtraDoCrm(ch: Chamador, contaId: string, mudanca: MudancaNaEquipe, pessoasDepois: number): Promise<{ extra_id: string; quantidade: number; valor: number } | null> {
+  const { data: c } = await servico().from("produto_contas").select("cobranca_por, extra_id, plano_id").eq("id", contaId).maybeSingle();
+  const conta = c as { cobranca_por?: string; extra_id?: string | null; plano_id?: string } | null;
+  if (!conta || conta.cobranca_por !== "plano" || !conta.extra_id) return null;
+  const { data: e } = await servico().from("client_extras").select("id, quantidade, valor, produto_plano_id, status").eq("id", conta.extra_id).maybeSingle();
+  const extra = e as { id: string; quantidade: number | null; valor: number | null; produto_plano_id: string | null; status: string } | null;
+  if (!extra || extra.status === "encerrado") return null;
+  const { data: pl } = await servico().from("produto_planos").select("preco_usuario").eq("id", extra.produto_plano_id || conta.plano_id || "starter").maybeSingle();
+  const ajuste = ajusteDoExtraCrm({
+    quantidadeAtual: Number(extra.quantidade) || 1,
+    valorAtual: Number(extra.valor) || 0,
+    pessoasDepois,
+    mudanca,
+    precoDoPlano: Number((pl as { preco_usuario?: number } | null)?.preco_usuario) || 0,
+  });
+  if (!ajuste) return null;
+  const comoDono = comoAPessoa(ch.token);
+  const { error: eq } = await comoDono.from("client_extras").update({ quantidade: ajuste.quantidade }).eq("id", extra.id);
+  if (eq) throw new ErroHttp(500, "extra", "Não consegui atualizar os usuários do extra de CRM do cliente.");
+  if (ajuste.valor > 0) {
+    const { error: ev } = await comoDono.rpc("extra_editar", { _id: extra.id, _dados: { valor: ajuste.valor } });
+    if (ev) throw new ErroHttp(500, "extra", "Os usuários do extra mudaram, mas o valor não. Confira o extra de CRM na ficha do cliente.");
+  }
+  await registrar(contaId, ch.userId, "extra_crm_acompanhou", { quantidade: ajuste.quantidade, valor: ajuste.valor, mudanca });
+  return { extra_id: extra.id, ...ajuste };
+}
+
+const contarPessoas = async (contaId: string) => {
+  const { count } = await servico().from("produto_membros").select("id", { count: "exact", head: true }).eq("conta_id", contaId).neq("estado", "removido");
+  return count || 0;
+};
+
+/**
+ * A casa põe uma pessoa no CRM de uma empresa. `enviar: false` não manda o e-mail na hora (a tela oferece
+ * depois) e `com_link: true` devolve o link de primeiro acesso para copiar ou mandar no WhatsApp.
+ */
 async function adminConvidar(ch: Chamador, corpo: Record<string, unknown>) {
   exigirDono(ch);
   const contaId = uuidDe(corpo.conta_id, "conta");
   const email = texto(corpo.email, 254).toLowerCase();
   if (!EMAIL.test(email)) throw new ErroHttp(400, "email_invalido", "E-mail inválido.");
   const conta = await lerConta(contaId);
-  const [{ data: ja }, { count }] = await Promise.all([
+  const [{ data: ja }, ocupados] = await Promise.all([
     servico().from("produto_membros").select("id").eq("email", email).neq("estado", "removido").limit(1),
-    servico().from("produto_membros").select("id", { count: "exact", head: true }).eq("conta_id", contaId).neq("estado", "removido"),
+    contarPessoas(contaId),
   ]);
   if (ja && ja.length) throw new ErroHttp(409, "email_em_uso", "Esse e-mail já está numa empresa do produto.");
-  if ((count || 0) >= conta.usuarios_contratados) throw new ErroHttp(409, "sem_lugar", `Os ${conta.usuarios_contratados} usuários da empresa estão em uso. Aumente os usuários antes.`);
+  // Cobrada pelo plano do cliente: a pessoa nova entra e o extra de CRM acompanha. Senão, vale o contratado.
+  const extra = await ajustarExtraDoCrm(ch, contaId, "entrou", ocupados + 1);
+  if (!extra && conta.cobranca_por !== "plano" && ocupados >= conta.usuarios_contratados) {
+    throw new ErroHttp(409, "sem_lugar", `Os ${conta.usuarios_contratados} usuários da empresa estão em uso. Aumente os usuários antes.`);
+  }
   const { data, error } = await servico().from("produto_membros").insert({
     conta_id: contaId, email, nome: texto(corpo.nome, 120), papel: corpo.papel === "admin" ? "admin" : corpo.papel === "gerente" ? "gerente" : "usuario", estado: "convidado", convidado_por: ch.userId,
   }).select("id").single();
   if (error || !data) throw erroDoBanco(error, "Não foi possível convidar agora.");
   const id = String((data as { id: string }).id);
   await registrar(contaId, ch.userId, "membro_convidado", { membro: id, pela_casa: true });
-  return json({ membro_id: id, enviado: await enviarConvite(id, ch.userId) });
+  if (corpo.enviar === false) {
+    const link = corpo.com_link === true ? await gerarLinkDeAcesso(email) : null;
+    return json({ membro_id: id, enviado: false, message_id: null, link, extra });
+  }
+  const envio = await mandarLinkPorEmail(id, ch.userId);
+  return json({ membro_id: id, enviado: envio.enviado, message_id: envio.message_id, link: corpo.com_link === true ? envio.link : null, extra });
+}
+
+/** A casa tira uma pessoa do CRM. Numa empresa cobrada pelo plano, o extra de CRM acompanha. */
+async function adminRemoverMembro(ch: Chamador, corpo: Record<string, unknown>) {
+  exigirDono(ch);
+  const id = uuidDe(corpo.membro_id, "membro");
+  const { data, error } = await servico().rpc("produto_admin_remover_membro", { _membro: id, _ator: ch.userId });
+  if (error || !data) throw erroDoBanco(error, "Não foi possível tirar a pessoa agora.");
+  const r = data as { conta_id: string; pessoas: number };
+  let extra = null;
+  let aviso: string | null = null;
+  try {
+    extra = await ajustarExtraDoCrm(ch, r.conta_id, "saiu", r.pessoas);
+  } catch (e) {
+    aviso = e instanceof ErroHttp ? e.message : "O extra de CRM não acompanhou. Confira na ficha do cliente.";
+  }
+  return json({ removido: true, extra, aviso });
+}
+
+/**
+ * Definir senha nova (a senha do CRM não é recuperável, então não aparece em lugar nenhum). A casa digita
+ * ou gera a senha na tela; aqui ela só passa para o Supabase Auth. Nunca vai para o banco, o histórico ou o
+ * log, e a resposta não a devolve. Quem ainda não tinha login ganha o login já com essa senha.
+ */
+async function adminDefinirSenha(ch: Chamador, corpo: Record<string, unknown>) {
+  exigirDono(ch);
+  const id = uuidDe(corpo.membro_id, "membro");
+  const senha = typeof corpo.senha === "string" ? corpo.senha : "";
+  const problema = problemaDaSenha(senha);
+  if (problema) throw new ErroHttp(400, "senha_fraca", problema);
+  const { data: m } = await servico().from("produto_membros").select("conta_id, email, estado, user_id, nome").eq("id", id).maybeSingle();
+  const membro = m as { conta_id: string; email: string; estado: string; user_id: string | null; nome: string } | null;
+  if (!membro || membro.estado === "removido") throw new ErroHttp(404, "sem_pessoa", "Essa pessoa não está mais na empresa.");
+  let userId = membro.user_id;
+  if (!userId) {
+    const { data: achado } = await servico().rpc("produto_auth_usuario_por_email", { _email: membro.email });
+    userId = typeof achado === "string" ? achado : null;
+  }
+  let criado = false;
+  if (userId) {
+    // E-mail confirmado: a casa responde por esta pessoa, e sem isso a senha nova não entra.
+    const { error } = await servico().auth.admin.updateUserById(userId, { password: senha, email_confirm: true });
+    if (error) throw new ErroHttp(502, "auth", "O login não aceitou a senha nova agora. Tente de novo.");
+  } else {
+    const { error } = await servico().auth.admin.createUser({ email: membro.email, password: senha, email_confirm: true, user_metadata: { full_name: membro.nome || "" } });
+    if (error) throw new ErroHttp(502, "auth", "Não foi possível criar o login com essa senha agora.");
+    criado = true;
+  }
+  await registrar(membro.conta_id, ch.userId, "senha_definida_pela_casa", { membro: id, login_criado: criado });
+  return json({ definida: true, email: membro.email, login_criado: criado });
+}
+
+/** A casa manda o link de acesso por e-mail para qualquer pessoa da empresa (primeiro acesso ou troca de senha). */
+async function adminEnviarLink(ch: Chamador, corpo: Record<string, unknown>) {
+  exigirDono(ch);
+  const id = uuidDe(corpo.membro_id, "membro");
+  const { data: m } = await servico().from("produto_membros").select("conta_id").eq("id", id).maybeSingle();
+  const contaDoMembro = (m as { conta_id?: string } | null)?.conta_id || "";
+  if (!contaDoMembro) throw new ErroHttp(404, "sem_pessoa", "Essa pessoa não está mais na empresa.");
+  const { count } = await servico().from("produto_historico").select("id", { count: "exact", head: true }).eq("conta_id", contaDoMembro).eq("acao", "convite_reenviado").eq("detalhe->>membro", id).gte("criado_em", new Date(Date.now() - 3600 * 1000).toISOString());
+  if ((count || 0) >= 3) throw new ErroHttp(429, "muitos_reenvios", "O link já foi mandado há pouco. Espere um pouco ou copie o link.");
+  await registrar(contaDoMembro, ch.userId, "convite_reenviado", { membro: id, pela_casa: true });
+  const r = await mandarLinkPorEmail(id, ch.userId, true);
+  return json({ enviado: r.enviado, message_id: r.message_id });
+}
+
+/** O que a fila de e-mail disse sobre uma mensagem (a tela pergunta logo depois de mandar). */
+async function adminEstadoDoEnvio(ch: Chamador, corpo: Record<string, unknown>) {
+  exigirDono(ch);
+  const id = uuidDe(corpo.message_id, "mensagem");
+  const { data } = await servico().from("email_send_log").select("status, error_message, created_at").eq("message_id", id).order("created_at", { ascending: false }).limit(1);
+  const linha = ((data || []) as Array<{ status: string; error_message: string | null }>)[0];
+  return json(leituraDoEnvio(linha ? linha.status : "", linha ? linha.error_message : ""));
 }
 
 /** Depois que a casa muda plano, usuários ou e-mail de uma empresa: leva o valor novo ao Asaas e confere o estado. */
@@ -801,6 +944,10 @@ const ACOES: Record<string, Acao> = {
   dns,
   admin_criar_conta: adminCriarConta,
   admin_convidar: adminConvidar,
+  admin_remover_membro: adminRemoverMembro,
+  admin_definir_senha: adminDefinirSenha,
+  admin_enviar_link: adminEnviarLink,
+  admin_estado_do_envio: adminEstadoDoEnvio,
   admin_sincronizar: adminSincronizar,
   admin_cobrar_migracao: adminCobrarMigracao,
   admin_cobrar_entrada_email: adminCobrarEntradaEmail,

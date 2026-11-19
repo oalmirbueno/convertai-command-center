@@ -23,9 +23,9 @@ export default function TesteDoAgente({ plano }: { plano: PlanoAds }) {
     ["Critério de vitória", t.criterio_vitoria],
   ] as [string, string][]);
   return (
-    <section className="min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Teste montado pelo agente sênior">
+    <section className="min-w-0 rounded-lg border border-border bg-muted p-4" aria-label="Teste montado pelo agente sênior">
       <h3 className="flex items-center text-[15px] font-semibold">
-        <Briefcase className="mr-1.5 h-4 w-4 text-primary" />
+        <Briefcase className="mr-1.5 h-4 w-4 text-muted-foreground" />
         Teste montado pelo agente sênior
       </h3>
       <p className="text-[12px] text-muted-foreground">Preenchido com a análise da conta. Revise e produza os criativos.</p>

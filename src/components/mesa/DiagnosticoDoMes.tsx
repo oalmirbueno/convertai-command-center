@@ -226,7 +226,7 @@ function ListaDePontos({ itens, tom }: { itens: Ponto[]; tom: "bom" | "ruim" }) 
 
 const ROTULO_PRIORIDADE: Record<Recomendacao["prioridade"], string> = { alta: "alta", media: "média", baixa: "baixa" };
 const COR_PRIORIDADE: Record<Recomendacao["prioridade"], string> = {
-  alta: "bg-accent-soft text-primary",
+  alta: "bg-muted text-foreground",
   media: "bg-muted text-foreground",
   baixa: "bg-muted text-muted-foreground",
 };
@@ -324,7 +324,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
         aria-controls={idDoCorpo}
         className="flex w-full min-w-0 items-start rounded-lg px-4 py-3.5 text-left transition-colors hover:bg-muted/40"
       >
-        <span className="mr-3 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary">
+        <span className="mr-3 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
           <Compass className="h-4 w-4" />
         </span>
         <span className="block min-w-0 flex-1">
@@ -373,7 +373,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
                   <ul className="space-y-2">
                     {d.oportunidades_do_mes.map((o, i) => (
                       <li key={i} className="flex items-start text-[13px] leading-relaxed">
-                        <span className="mr-2.5 mt-0.5 w-12 shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-center text-[11px] font-medium text-primary">
+                        <span className="mr-2.5 mt-0.5 w-12 shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-center text-[11px] font-medium text-foreground">
                           {o.data ? dataCurta(o.data) : "mês"}
                         </span>
                         <span className="min-w-0 [overflow-wrap:anywhere]">

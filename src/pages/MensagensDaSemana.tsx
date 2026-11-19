@@ -57,7 +57,7 @@ const POR_PAGINA = 12;
 type Ocupado = "aprovar" | "pular" | "ajustar";
 
 function Situacao({ m, agora }: { m: MensagemDaSemana; agora: number }) {
-  if (m.situacao === "aprovada") return <span className={juntar(etiqueta, "h-6 bg-success-soft px-2.5 text-success")} data-prazo=""><CheckCheck className="mr-1 h-3 w-3" aria-hidden="true" />aprovada</span>;
+  if (m.situacao === "aprovada") return <span className={juntar(etiqueta, "h-6 bg-muted px-2.5 text-success")} data-prazo=""><CheckCheck className="mr-1 h-3 w-3" aria-hidden="true" />aprovada</span>;
   if (m.situacao === "venceu") return <span className={juntar(etiqueta, "h-6 bg-danger-soft px-2.5 text-destructive")} data-prazo=""><AlertTriangle className="mr-1 h-3 w-3" aria-hidden="true" />{prazoEmPalavras(m.venceEm, agora)}</span>;
   const urgente = !!m.venceEm && Date.parse(m.venceEm) - agora < 6 * 3_600_000;
   return <span className={juntar(etiqueta, "h-6 px-2.5", urgente ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground")} data-prazo=""><Clock className="mr-1 h-3 w-3" aria-hidden="true" />{prazoEmPalavras(m.venceEm, agora)}</span>;
@@ -353,7 +353,7 @@ export default function MensagensDaSemana() {
               <textarea id={`texto-${aberta.chave}`} value={textoDe(aberta)} onChange={(e) => setTextos((x) => ({ ...x, [aberta.chave]: e.target.value }))} rows={8} className={campoTexto} disabled={!!ocupado[aberta.chave]} />
             </div>
             <div>
-              <label className={juntar(texto.rotulo, "mb-1 flex items-center")} htmlFor={`ajuste-${aberta.chave}`}><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />Pedir ajuste ao agente</label>
+              <label className={juntar(texto.rotulo, "mb-1 flex items-center")} htmlFor={`ajuste-${aberta.chave}`}><Sparkles className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />Pedir ajuste ao agente</label>
               <div className="flex min-w-0 items-center">
                 <input id={`ajuste-${aberta.chave}`} value={ajustes[aberta.chave] || ""} onChange={(e) => setAjustes((x) => ({ ...x, [aberta.chave]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void ajustar(aberta); }} placeholder="Ex.: mais curto, cite o novo criativo" className={juntar(campo, "min-w-0 flex-1")} disabled={!!ocupado[aberta.chave]} />
                 <button type="button" onClick={() => void ajustar(aberta)} disabled={!!ocupado[aberta.chave] || !(ajustes[aberta.chave] || "").trim()} className={juntar(botao.icone, "ml-1")} title="Enviar o pedido de ajuste ao agente da Central" aria-label="Enviar o pedido de ajuste">

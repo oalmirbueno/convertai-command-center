@@ -170,8 +170,8 @@ export function normalizarClone(v: any): Clone | null {
 
 export const STATUS_DO_CLONE: Record<string, { rotulo: string; cor: string }> = {
   rascunho: { rotulo: "só fotos reais", cor: "bg-muted text-muted-foreground" },
-  folha: { rotulo: "folha em andamento", cor: "bg-primary/10 text-primary" },
-  pronta: { rotulo: "pronto", cor: "bg-success/15 text-success" },
+  folha: { rotulo: "folha em andamento", cor: "bg-muted text-foreground" },
+  pronta: { rotulo: "pronto", cor: "bg-muted text-success" },
   arquivada: { rotulo: "arquivado", cor: "bg-muted text-muted-foreground" },
 };
 export const statusDoClone = (s: string) => STATUS_DO_CLONE[s] || STATUS_DO_CLONE.rascunho;

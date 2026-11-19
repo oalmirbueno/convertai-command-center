@@ -466,8 +466,8 @@ export const ESCALA_DE_EVIDENCIA: { valor: Evidencia; rotulo: string; dica: stri
   { valor: "E0", rotulo: "Referência", dica: "Só inspiração: nada se sabe do resultado.", cor: "bg-muted text-muted-foreground" },
   { valor: "E1", rotulo: "Circulação observada", dica: "Vista no ar, sem sinal de retorno.", cor: "bg-info/10 text-info" },
   { valor: "E2", rotulo: "Sinal indireto", dica: "Longevidade ou muitas variações. Sugere, não prova.", cor: "bg-warning/15 text-warning" },
-  { valor: "E3", rotulo: "Resultado documentado", dica: "Gasto, resultado, período e atribuição conhecidos.", cor: "bg-success/10 text-success" },
-  { valor: "E4", rotulo: "Replicação própria", dica: "Testado na nossa conta e confirmado em nova janela.", cor: "bg-primary/15 text-primary" },
+  { valor: "E3", rotulo: "Resultado documentado", dica: "Gasto, resultado, período e atribuição conhecidos.", cor: "bg-muted text-success" },
+  { valor: "E4", rotulo: "Replicação própria", dica: "Testado na nossa conta e confirmado em nova janela.", cor: "bg-muted text-foreground" },
 ];
 
 export const AVISO_DA_EVIDENCIA = "Longevidade, curtidas e \"biblioteca de vencedores\" não são prova de retorno.";
@@ -528,7 +528,7 @@ export const ZONA_SEGURA = { topo: 0.14, base: 0.2 };
 export const STATUS_DO_CRIATIVO: { valor: StatusDoCriativo; rotulo: string; tom: string }[] = [
   { valor: "rascunho", rotulo: "Rascunho", tom: "bg-muted text-muted-foreground" },
   { valor: "pronto", rotulo: "Pronto", tom: "bg-info/10 text-info" },
-  { valor: "no_ar", rotulo: "No ar", tom: "bg-success/10 text-success" },
+  { valor: "no_ar", rotulo: "No ar", tom: "bg-muted text-success" },
   { valor: "pausado", rotulo: "Pausado", tom: "bg-warning/15 text-warning" },
   { valor: "encerrado", rotulo: "Encerrado", tom: "bg-muted text-muted-foreground" },
 ];
@@ -1473,7 +1473,7 @@ export async function lerOfertas(clientId: string): Promise<Oferta[]> {
 export type SinalDoAnuncio = "escalar" | "manter" | "observar" | "renovar" | "pausar" | "sem_dados";
 
 export const SINAIS: { valor: SinalDoAnuncio; rotulo: string; dica: string; tom: string }[] = [
-  { valor: "escalar", rotulo: "Escalar", dica: "Resultado abaixo do custo tolerável e volume estável.", tom: "border-success/30 bg-success/10 text-success" },
+  { valor: "escalar", rotulo: "Escalar", dica: "Resultado abaixo do custo tolerável e volume estável.", tom: "border-border bg-muted text-success" },
   { valor: "pausar", rotulo: "Pausar", dica: "Gasta sem resultado ou muito acima do custo tolerável.", tom: "border-destructive/30 bg-destructive/10 text-destructive" },
   { valor: "renovar", rotulo: "Renovar", dica: "Fadiga: frequência alta e CTR caindo. Novo criativo no mesmo ângulo.", tom: "border-warning/40 bg-warning/15 text-warning" },
   { valor: "observar", rotulo: "Observar", dica: "Números em movimento. Espere mais volume antes de mexer.", tom: "border-info/30 bg-info/10 text-info" },

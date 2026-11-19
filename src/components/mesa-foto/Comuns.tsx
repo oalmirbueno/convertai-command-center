@@ -319,7 +319,7 @@ export function SeloDaFoto({
       )}
       {classe === "gerada" && (
         <span
-          className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary"
+          className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-foreground"
           title="Imagem gerada por IA: pode ter partes que não existem nas fotos originais"
           data-selo="gerada"
         >
@@ -338,7 +338,7 @@ export function SeloDaFoto({
         </span>
       )}
       {foto.aprovada && (
-        <span className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[11px] font-medium text-success" data-selo="aprovada">
+        <span className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-medium text-success" data-selo="aprovada">
           <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
         </span>
       )}
@@ -362,14 +362,14 @@ export function SeloCurto({ foto }: { foto: Pick<FotoDoAcervo, "gerada" | "deriv
   }
   if (foto.aprovada) {
     return (
-      <span className="mb-1 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[11px] font-medium text-success" data-selo-curto="aprovada">
+      <span className="mb-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-medium text-success" data-selo-curto="aprovada">
         <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
       </span>
     );
   }
   if (classe === "gerada") {
     return (
-      <span className="mb-1 inline-flex items-center whitespace-nowrap rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-medium text-primary" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
+      <span className="mb-1 inline-flex items-center whitespace-nowrap rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-medium text-muted-foreground" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
         a aprovar
       </span>
     );

@@ -16,7 +16,7 @@ const FUNDO: Record<TomVisual, string> = {
   perigo: "bg-danger-soft text-destructive",
   aviso: "bg-warning-soft text-warning",
   info: "bg-info-soft text-info",
-  sucesso: "bg-success-soft text-success",
+  sucesso: "bg-muted text-success",
   neutro: "bg-muted text-foreground",
   tinta: "bg-foreground text-background",
   marca: "bg-accent-solid text-on-accent",
@@ -73,7 +73,7 @@ export function BarraSegmentada({ itens, rotulo, className = "" }: { itens: Segm
   );
 }
 
-const CORES_DE_AVATAR = ["bg-accent-soft text-primary", "bg-info-soft text-info", "bg-warning-soft text-warning", "bg-muted text-foreground", "bg-success-soft text-success"];
+const CORES_DE_AVATAR = ["bg-muted text-foreground", "bg-info-soft text-info", "bg-warning-soft text-warning", "bg-muted text-foreground", "bg-muted text-success"];
 
 /** Pilha de avatares (iniciais em círculo, sobrepostos) com "+N" no fim. */
 export function PilhaDeAvatares({ nomes, max = 4, tamanho = 32, className = "" }: { nomes: string[]; max?: number; tamanho?: number; className?: string }) {

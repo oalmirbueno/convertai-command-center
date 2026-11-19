@@ -99,10 +99,10 @@ const ROTULO: Record<Situacao, string> = {
 const corDaSituacao = (s: Situacao) => (s === "erro" ? "text-destructive" : s === "pronto" ? "text-success" : "text-muted-foreground");
 
 const TOM_DO_SELO = {
-  andamento: "bg-primary/10 text-primary",
+  andamento: "bg-muted text-foreground",
   atencao: "bg-warning/15 text-warning",
   erro: "bg-destructive/10 text-destructive",
-  ok: "bg-success/10 text-success",
+  ok: "bg-muted text-success",
   neutro: "bg-muted text-muted-foreground",
 } as const;
 
@@ -850,7 +850,7 @@ export default function AgenteDaCentral() {
                   </span>
                 </span>
                 {i.preparo?.fase && (
-                  <span className={juntar(etiqueta, "mr-2 hidden bg-primary/10 text-primary sm:inline-flex")} title={i.preparo.motivo_da_fase}>
+                  <span className={juntar(etiqueta, "mr-2 hidden bg-muted text-foreground sm:inline-flex")} title={i.preparo.motivo_da_fase}>
                     Acelera · {FASE[i.preparo.fase] ?? i.preparo.fase}
                   </span>
                 )}
@@ -860,7 +860,7 @@ export default function AgenteDaCentral() {
                 <div className="border-t border-border px-3 pb-3 pt-2">
                   <div className="flex flex-wrap items-center">
                     {i.preparo?.fase && (
-                      <span className={juntar(etiqueta, "mb-1 mr-2 bg-primary/10 text-primary sm:hidden")} title={i.preparo.motivo_da_fase}>
+                      <span className={juntar(etiqueta, "mb-1 mr-2 bg-muted text-foreground sm:hidden")} title={i.preparo.motivo_da_fase}>
                         Acelera · {FASE[i.preparo.fase] ?? i.preparo.fase}
                       </span>
                     )}
@@ -972,7 +972,7 @@ export default function AgenteDaCentral() {
               <li key={i.cliente.id} className="rounded-md border border-border p-3">
                 <div className="flex min-w-0 flex-wrap items-center">
                   <p className="mr-2 min-w-0 truncate text-[14px] font-semibold text-foreground">{i.cliente.nome}</p>
-                  <span className={juntar(etiqueta, "mr-2", i.publicado ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
+                  <span className={juntar(etiqueta, "mr-2", i.publicado ? "bg-muted text-success" : "bg-muted text-muted-foreground")}>
                     {i.publicado ? (i.canal === "grupo" ? "Enviado no grupo" : "Publicado no portal") : "Rascunho na fila da Central"}
                   </span>
                   {i.aplicado?.dossie_versao != null && <span className="text-[12px] text-muted-foreground">dossiê v{i.aplicado.dossie_versao}</span>}
@@ -1119,7 +1119,7 @@ export default function AgenteDaCentral() {
         // 16/10/2026 (dono: "só ícone, sem borda, com o número em cima como notificação").
         className={juntar(botao.icone, "relative")}
       >
-        {carregandoLista || rodando ? <Loader2 className="h-[18px] w-[18px] animate-spin text-primary" aria-hidden="true" /> : <Bot className="h-[18px] w-[18px] text-primary" aria-hidden="true" />}
+        {carregandoLista || rodando ? <Loader2 className="h-[18px] w-[18px] animate-spin text-primary" aria-hidden="true" /> : <Bot className="h-[18px] w-[18px] text-muted-foreground" aria-hidden="true" />}
         {selo && (
           <span className={juntar("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[11px] font-semibold leading-4 tabular-nums", TOM_DO_SELO[selo.tom])} data-selo-da-rodada="">
             <span aria-hidden="true">{/^\d/.test(selo.curto) ? selo.curto.split(" ")[0] : "•"}</span>

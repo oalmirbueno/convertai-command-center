@@ -174,7 +174,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
           {titulo}
         </span>
         {selo ? (
-          <span className="mr-1 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/10 px-2 text-[11px] font-medium leading-none text-primary" title={selo.titulo} data-selo-da-campanha={selo.texto}>
+          <span className="mr-1 inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 text-[11px] font-medium leading-none text-foreground" title={selo.titulo} data-selo-da-campanha={selo.texto}>
             <Megaphone className="mr-1 h-3 w-3" aria-hidden="true" />
             {selo.texto}
           </span>
@@ -185,7 +185,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
             Aguardando entradas
           </span>
         ) : noMotorDaCasa(no.tipo, execucao) ? (
-          <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-primary/10 px-2 text-[11px] font-medium leading-none text-primary" title="O motor da casa está gerando: as imagens aparecem conforme chegam" data-estado-do-no="no_motor">
+          <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 text-[11px] font-medium leading-none text-foreground" title="O motor da casa está gerando: as imagens aparecem conforme chegam" data-estado-do-no="no_motor">
             <WandSparkles className="mr-1 h-3 w-3 animate-pulse motion-reduce:animate-none" aria-hidden="true" />
             No motor
           </span>

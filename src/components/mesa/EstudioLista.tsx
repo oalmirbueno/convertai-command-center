@@ -54,8 +54,8 @@ import { dataLocal, fonteDoArquivo, PROXIMOS_DIAS, ultimasVersoes, type ArteNaAg
 
 const COR_DO_SELO: Record<TomDoSelo, string> = {
   neutro: "bg-secondary text-muted-foreground",
-  primario: "bg-accent-soft text-primary",
-  ok: "bg-success-soft text-success",
+  primario: "bg-muted text-foreground",
+  ok: "bg-muted text-success",
   alerta: "bg-warning/15 text-warning",
   erro: "bg-danger-soft text-destructive",
 };
@@ -282,7 +282,7 @@ function CartaoDoItem({
           {marcado && <Check className="h-3 w-3" />}
         </span>
       )}
-      {modoDaPauta(item, t) === "video" ? <span className="flex shrink-0 items-center justify-center rounded-[10px] bg-accent-soft text-primary" style={capa}><Film className="h-4 w-4" aria-label="Vídeo rápido" /></span> : capaDoEstudio ? (
+      {modoDaPauta(item, t) === "video" ? <span className="flex shrink-0 items-center justify-center rounded-[10px] bg-muted text-muted-foreground" style={capa}><Film className="h-4 w-4" aria-label="Vídeo rápido" /></span> : capaDoEstudio ? (
         <span className="block shrink-0 overflow-hidden rounded-[10px]" style={capa}>
           <ImagemDaMesa caminho={capaDoEstudio.storage_path} alt="" className="h-full w-full" />
         </span>
@@ -293,7 +293,7 @@ function CartaoDoItem({
       ) : (
         // v4 (referências): sem arte ainda, a capa é um azulejo hachurado com o ícone do formato (não o "sem imagem").
         <span className={`ds-hatch flex shrink-0 items-center justify-center rounded-[10px] ${ativo ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"}`} style={capa} data-capa-sem-arte="">
-          {modoDaPauta(item, t) === "fotos" ? <Camera className="h-4 w-4 text-primary" aria-label="Fotos" /> : /carrossel/i.test(formatoDoItem(item)) ? <GalleryHorizontalEnd className="h-4 w-4" aria-hidden="true" /> : <ImageIcon className="h-4 w-4" aria-hidden="true" />}
+          {modoDaPauta(item, t) === "fotos" ? <Camera className="h-4 w-4 text-muted-foreground" aria-label="Fotos" /> : /carrossel/i.test(formatoDoItem(item)) ? <GalleryHorizontalEnd className="h-4 w-4" aria-hidden="true" /> : <ImageIcon className="h-4 w-4" aria-hidden="true" />}
         </span>
       )}
       <span className="ml-2.5 min-w-0 flex-1 pr-1">
@@ -308,7 +308,7 @@ function CartaoDoItem({
           {/* 17/10: conteúdo de hype ou de assunto em alta no nicho (o mesmo foguinho dos Hypes da semana). */}
           {item.momento && (
             <span title={item.gancho || (item.momento === "nicho" ? "Em alta no nicho" : "Hype")} className="ml-1 shrink-0" data-foguinho={item.momento}>
-              <Flame className={`h-3 w-3 ${item.momento === "nicho" ? "text-primary" : "text-warning"}`} aria-label={item.momento === "nicho" ? "Em alta no nicho" : "Hype"} />
+              <Flame className={`h-3 w-3 ${item.momento === "nicho" ? "text-muted-foreground" : "text-warning"}`} aria-label={item.momento === "nicho" ? "Em alta no nicho" : "Hype"} />
             </span>
           )}
           {/* 24/10 (dono): a peça de vídeo mostra A fazer / Pronto (pronto = vídeo final na peça ou no post da Agenda). */}

@@ -137,7 +137,7 @@ export default function PrecosDoCrm() {
       ) : (
         <CardSurface className="min-w-0 p-5 sm:p-6" data-cobranca-no-cartao={ligada ? "ligada" : "desligada"}>
           <div className="flex min-w-0 flex-wrap items-center">
-            <span className={juntar("mr-4 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full", ligada ? "bg-success-soft text-success" : "bg-muted text-muted-foreground")} aria-hidden="true">
+            <span className={juntar("mr-4 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full", ligada ? "bg-muted text-muted-foreground" : "bg-muted text-muted-foreground")} aria-hidden="true">
               <CreditCard className="h-5 w-5" />
             </span>
             <span className="min-w-0 flex-1">

@@ -158,7 +158,7 @@ function CartaoDaFamilia({
         <span className="flex min-w-0 items-center">
           <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{f.familia}</span>
           {sugerida && !marcado && (
-            <span className="ml-1.5 shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[11px] font-medium text-primary">par sugerido</span>
+            <span className="ml-1.5 shrink-0 rounded-full bg-muted px-1.5 py-px text-[11px] font-medium text-foreground">par sugerido</span>
           )}
         </span>
         <span className="block truncate text-[11px] text-muted-foreground">

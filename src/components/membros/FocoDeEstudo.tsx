@@ -102,7 +102,7 @@ export function PomodoroCompacto({
       className={`membros-foco-compacto ${flutuante ? "flutuante" : ""}`}
       aria-label="Pomodoro compacto"
     >
-      <Timer size={16} className="text-primary" />
+      <Timer size={16} className="text-muted-foreground" />
       <span
         role="timer"
         aria-label="Tempo restante no Pomodoro"
@@ -297,7 +297,7 @@ export function FocoDeEstudo({
               {estado.sessoes} sessões concluídas
             </p>
             {aviso && (
-              <p role="status" className="text-[13px] text-primary text-center">
+              <p role="status" className="text-[13px] text-foreground text-center">
                 <Coffee size={16} className="inline mr-2" />
                 {aviso}
               </p>

@@ -591,7 +591,7 @@ export default function AbaCampanhas({
             largura="lg"
             corpo="fixo"
             semEspaco
-            icone={<Sparkles className="h-4 w-4 text-primary" />}
+            icone={<Sparkles className="h-4 w-4 text-muted-foreground" />}
             titulo="Agente da campanha"
             descricao={escolhida ? escolhida.nome : undefined}
           >

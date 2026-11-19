@@ -88,8 +88,8 @@ export default function CamposDaConta({ estado }: { estado: EstadoDoProduto }) {
     >
       <div data-campos-da-conta="">
         {nicho && faltam.length > 0 && (
-          <div className="mb-4 flex min-w-0 flex-wrap items-center rounded-lg bg-primary/[0.07] px-3 py-2.5" data-campos-do-ramo="">
-            <Sparkles className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <div className="mb-4 flex min-w-0 flex-wrap items-center rounded-lg bg-muted px-3 py-2.5" data-campos-do-ramo="">
+            <Sparkles className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <p className={juntar(texto.corpo, "mr-3 min-w-0 flex-1")}>
               {nicho.nome} costuma pedir: {faltam.map((f) => f.rotulo).join(", ")}.
             </p>

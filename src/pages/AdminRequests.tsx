@@ -54,8 +54,8 @@ import { Avatar, PageHeader } from "@/components/ds";
 const statusOptions = [
   { value: "new", label: "Novo", cls: "bg-info-soft text-info" },
   { value: "analyzing", label: "Em Análise", cls: "bg-warning-soft text-warning" },
-  { value: "in_progress", label: "Em Andamento", cls: "bg-accent-soft text-primary" },
-  { value: "completed", label: "Concluído", cls: "bg-success-soft text-success" },
+  { value: "in_progress", label: "Em Andamento", cls: "bg-muted text-foreground" },
+  { value: "completed", label: "Concluído", cls: "bg-muted text-success" },
 ];
 
 const taskPriorityOptions: Array<{ value: RequestTaskPriority; label: string }> = [
@@ -514,7 +514,7 @@ export default function AdminRequests() {
           </p>
         ) : null}
         {linkedRequestTask ? (
-          <p className="mt-2 text-[12px] text-primary">
+          <p className="mt-2 text-[12px] text-muted-foreground">
             Status sincronizado pelo Kanban da tarefa vinculada.
           </p>
         ) : null}

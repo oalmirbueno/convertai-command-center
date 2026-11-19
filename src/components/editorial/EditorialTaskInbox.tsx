@@ -151,7 +151,7 @@ function TaskCard({
         isDragging && "z-20 border-primary/45 opacity-55 shadow-sm",
       )}
     >
-      <div className="flex min-w-0 items-center gap-2 text-[12px] leading-4 font-medium text-primary">
+      <div className="flex min-w-0 items-center gap-2 text-[12px] leading-4 font-medium text-muted-foreground">
         <Palette className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span className="truncate" title={projectScopeName}>
           {projectScopeName}

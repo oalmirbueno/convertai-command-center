@@ -194,7 +194,7 @@ export default function AgenteDoInstagram({
         }
         return (
           <div key={m.id || i} className={juntar("min-w-0", m.papel === "usuario" ? "flex justify-end" : "")}>
-            <div className={juntar("min-w-0 max-w-full rounded-lg px-3 py-2 text-[13px] leading-5 [overflow-wrap:anywhere]", m.papel === "usuario" ? "ml-6 bg-primary/10" : "bg-muted/50")}>
+            <div className={juntar("min-w-0 max-w-full rounded-lg px-3 py-2 text-[13px] leading-5 [overflow-wrap:anywhere]", m.papel === "usuario" ? "ml-6 bg-muted" : "bg-muted/50")}>
               <TextoDoAgente texto={m.conteudo} clientId={clientId} />
               {m.papel === "agente" && <DestaquesDoAnexo anexos={m.anexos} onUsar={onUsarDestaques} />}
             </div>
@@ -223,7 +223,7 @@ export default function AgenteDoInstagram({
         <>
           {pedidoAgora && (
             <div className="flex justify-end">
-              <p className="ml-6 rounded-lg bg-primary/10 px-3 py-2 text-[13px] [overflow-wrap:anywhere]">{pedidoAgora}</p>
+              <p className="ml-6 rounded-lg bg-muted px-3 py-2 text-[13px] [overflow-wrap:anywhere]">{pedidoAgora}</p>
             </div>
           )}
           <p className={juntar(texto.auxiliar, "flex items-center")} aria-live="polite">

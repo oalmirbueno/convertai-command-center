@@ -511,7 +511,7 @@ export default function InvestorCapital({ billing: cobrancas = [], projectPaymen
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto border-border bg-card">
           <DialogHeader>
             <DialogTitle className="flex items-center text-foreground">
-              <Briefcase className="mr-2 h-4 w-4 text-primary" aria-hidden="true" />
+              <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
               {modal?.data?.id ? "Editar aporte" : "Novo aporte de capital"}
             </DialogTitle>
           </DialogHeader>
@@ -557,7 +557,7 @@ function InvestorForm({ initial, onSave, onCancel }: any) {
   return (
     <div className="space-y-4">
       <p className={juntar(superficie.poco, "flex min-w-0 items-center px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
-        <span className="min-w-0 truncate"><span className="font-semibold text-primary">Capital de investidor</span> fora do DRE</span>
+        <span className="min-w-0 truncate"><span className="font-semibold text-foreground">Capital de investidor</span> fora do DRE</span>
         <AjudaRecolhida className="ml-1" rotulo="Sobre capital de investidor">
           Não conta como receita nem como despesa. É a base do ROI bruto a partir da data do aporte.
         </AjudaRecolhida>

@@ -91,7 +91,7 @@ export default function EstudioRefinarTexto({
         aria-expanded={aberto}
         className="flex min-h-9 w-full min-w-0 items-center rounded-lg px-2.5 py-1 text-left hover:bg-secondary"
       >
-        <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 text-[12px] font-medium">Refinar texto</span>
         <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">3 opções com técnica</span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${aberto ? "rotate-180" : ""}`} />

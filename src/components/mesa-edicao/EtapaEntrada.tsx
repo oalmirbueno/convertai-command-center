@@ -81,8 +81,8 @@ export function LinhaDoArquivo({ arquivo, aberto, onAbrir, selo, acoes, abaixo }
           </p>
         </div>
         {selo}
-        {arquivo.tipo === "gerado" && !(arquivo.origem && arquivo.origem.tipo === "tratamento") && <span className={juntar(etiqueta, "ml-2 bg-accent-soft text-primary")}>Da Mesa Vídeos</span>}
-        {arquivo.origem && arquivo.origem.tipo === "tratamento" && <span className={juntar(etiqueta, "ml-2 bg-accent-soft text-primary")}>Depois</span>}
+        {arquivo.tipo === "gerado" && !(arquivo.origem && arquivo.origem.tipo === "tratamento") && <span className={juntar(etiqueta, "ml-2 bg-muted text-foreground")}>Da Mesa Vídeos</span>}
+        {arquivo.origem && arquivo.origem.tipo === "tratamento" && <span className={juntar(etiqueta, "ml-2 bg-muted text-foreground")}>Depois</span>}
         {acoes}
       </div>
       {aberto && (
@@ -226,7 +226,7 @@ function Transcricao({ videos }: { videos: ArquivoDeVideo[] }) {
                     </span>
                   ) : fala ? (
                     <>
-                      <span className={juntar(etiqueta, "mr-1 bg-accent-soft text-primary")}>{fala.length} palavras</span>
+                      <span className={juntar(etiqueta, "mr-1 bg-muted text-foreground")}>{fala.length} palavras</span>
                       {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
                       <button type="button" className={botao.icone} onClick={() => copiarTexto(tipo === "legendar" ? srtDasLinhas(linhas) : linhas.map((l) => l.texto).join("\n"))} aria-label={`Copiar ${tipo === "legendar" ? "legenda SRT" : "texto"} de ${t.nome}`} title={tipo === "legendar" ? "Copiar a legenda (SRT)" : "Copiar o texto"}>
                         <Copy className="h-4 w-4" />

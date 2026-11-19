@@ -96,7 +96,7 @@ function Escolhas<T extends SugestaoDeBio | SugestaoDeNome>({
             )}
           >
             <span className="flex min-w-0 items-center">
-              {doJev === s.id && <span className={juntar(etiqueta, "mr-1.5 bg-success-soft text-success")}>Escolha do Jev{typeof probabilidades[s.id] === "number" ? ` ${Math.round(probabilidades[s.id] * 100)}%` : ""}</span>}
+              {doJev === s.id && <span className={juntar(etiqueta, "mr-1.5 bg-muted text-success")}>Escolha do Jev{typeof probabilidades[s.id] === "number" ? ` ${Math.round(probabilidades[s.id] * 100)}%` : ""}</span>}
               <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">{s.caracteres}</span>
             </span>
             <span className="mt-0.5 block whitespace-pre-line text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{s.texto}</span>
@@ -182,7 +182,7 @@ export default function BioENome({ perfil, analise, onAnalise }: { perfil: Perfi
       {v && (
         <div className="min-w-0 space-y-3">
           {v.boa || jevManteveBio ? (
-            <div className="flex min-w-0 items-start rounded-md border border-success/30 bg-success/5 px-3 py-2" data-bio-boa="">
+            <div className="flex min-w-0 items-start rounded-md border border-border bg-success/5 px-3 py-2" data-bio-boa="">
               <CheckCircle2 className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium text-foreground">A bio já está boa, sigo com ela.</p>

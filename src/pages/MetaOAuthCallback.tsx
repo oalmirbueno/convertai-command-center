@@ -145,7 +145,7 @@ export default function MetaOAuthCallback() {
           {status === "loading" ? (
             <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
           ) : status === "success" ? (
-            <CheckCircle2 className="h-8 w-8 text-emerald-600" aria-hidden="true" />
+            <CheckCircle2 className="h-8 w-8 text-success" aria-hidden="true" />
           ) : (
             <XCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
           )}

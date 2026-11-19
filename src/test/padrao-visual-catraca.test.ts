@@ -57,7 +57,8 @@ type Metrica =
   | "tituloQueQuebra"
   | "sombraForte"
   | "caixaAlta"
-  | "h1FeitoAMao";
+  | "h1FeitoAMao"
+  | "iconeVerdeDecorativo";
 
 /**
  * TETO de hoje (28/09, frente L0). Só desce.
@@ -80,6 +81,7 @@ const TETO: Record<Metrica, number> = {
   sombraForte: 15, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 14
   caixaAlta: 22, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 21
   h1FeitoAMao: 11, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 10
+  iconeVerdeDecorativo: 1, // 19/11 (verde só em ação e estado ativo, SISTEMA.md 0.1): sobra a seta de link externo do cartão que leva em Hoje
 };
 
 const METRICAS = Object.keys(TETO) as Metrica[];
@@ -156,6 +158,14 @@ function medir(texto: string, rel: string): Record<Metrica, number> {
     no.forEachChild(literais);
   })(sf);
 
+  // Ícones do lucide importados no arquivo (para a métrica do verde decorativo).
+  const iconesLucide = new Set<string>();
+  for (const st of sf.statements) {
+    if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier) || st.moduleSpecifier.text !== "lucide-react") continue;
+    const nb = st.importClause && st.importClause.namedBindings;
+    if (nb && ts.isNamedImports(nb)) for (const el of nb.elements) iconesLucide.add(el.name.text);
+  }
+
   // 2) Por elemento: as classes dele (className e afins), com os ancestrais.
   function classes(el: ts.JsxElement | ts.JsxSelfClosingElement, comTokens: boolean): string {
     const saida: string[] = [];
@@ -177,7 +187,7 @@ function medir(texto: string, rel: string): Record<Metrica, number> {
     return saida.join(" ");
   }
 
-  type Pai = { tag: string; cartao: boolean; rola: boolean };
+  type Pai = { tag: string; cartao: boolean; rola: boolean; acao: boolean };
   const pilha: Pai[] = [];
   (function andar(no: ts.Node) {
     let empilhou = false;
@@ -203,6 +213,14 @@ function medir(texto: string, rel: string): Record<Metrica, number> {
       if (rola && !dentroDeFlutuante && pilha.some((p) => p.rola)) n.rolagemDentroDeRolagem += 1;
       if (/^h[1-3]$/.test(tag) && tituloQueQuebra(cls)) n.tituloQueQuebra += 1;
       if (tag === "h1" && !doSistema) n.h1FeitoAMao += 1;
+      // Ícone com verde fixo (className="... text-primary") fora de botão/link: o verde é só
+      // de ação e estado ativo (SISTEMA.md 0.1). Ícone decorativo usa text-muted-foreground.
+      // Só conta texto fixo (sem condição); não conta o ícone de "marcado" (Check...) nem o que gira (carregando).
+      if (iconesLucide.has(tag) && !/Check/.test(tag) && !(pilha.length && pilha[pilha.length - 1].acao)) {
+        const a = atributo(no, "className");
+        const ini = a && a.initializer;
+        if (ini && ts.isStringLiteral(ini) && /(^|\s)text-primary(\s|$)/.test(ini.text) && !/(^|\s)animate-/.test(ini.text)) n.iconeVerdeDecorativo += 1;
+      }
       // Descrição de título com cara de explicação (mais de 60 caracteres ou frase
       // com ponto): vai para `ajuda` (o "?"); na tela fica só estado curto.
       if (/^(Secao|CabecalhoDeSecao|CabecalhoDePagina|Painel|GrupoDeCampos)$/.test(tag)) {
@@ -222,7 +240,8 @@ function medir(texto: string, rel: string): Record<Metrica, number> {
           .trim();
         if (corrido.length >= 90) n.paragrafoFixo += 1;
       }
-      pilha.push({ tag, cartao, rola: rola && !dentroDeFlutuante });
+      const acao = /^(a|button|Button|Link|NavLink|LinkDoRouter|IconButton)$|Trigger$|Item$/.test(tag) || atributos(no).some((x) => ts.isJsxAttribute(x) && /^(href|to|onClick)$/.test(x.name.getText()));
+      pilha.push({ tag, cartao, rola: rola && !dentroDeFlutuante, acao });
       empilhou = true;
     }
     no.forEachChild(andar);

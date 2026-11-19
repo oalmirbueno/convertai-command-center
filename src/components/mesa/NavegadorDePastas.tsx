@@ -112,7 +112,7 @@ function LinhaDePasta({ nome, detalhe, onClick }: { nome: string; detalhe?: stri
       onClick={onClick}
       className={juntar(superficie.painel, "flex w-full min-w-0 items-center px-3 py-2 text-left hover:border-primary/50")}
     >
-      <Folder className="mr-2 h-4 w-4 shrink-0 text-primary" />
+      <Folder className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate text-[13px]">{nome}</span>
       {detalhe && <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{detalhe}</span>}
       <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -222,7 +222,7 @@ export function ExploradorDePastas<T>({
                 className="flex min-w-0 flex-1 items-center py-1 pr-1.5 text-left"
                 title={p.nome}
               >
-                <Folder className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary/80" />
+                <Folder className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{p.nome}</span>
                 <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">{arvore.total[p.id] || 0}</span>
               </button>

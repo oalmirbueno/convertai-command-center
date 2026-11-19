@@ -18,7 +18,7 @@ import { progressoDoEstado, type EstadoDosAjustes } from "../../../../supabase/f
  */
 
 const ESTADO: Record<EstadoDaParte, { rotulo: string; classe: string }> = {
-  passa: { rotulo: "Passa", classe: "bg-success-soft text-success" },
+  passa: { rotulo: "Passa", classe: "bg-muted text-success" },
   melhorar: { rotulo: "Melhorar", classe: "bg-warning/15 text-warning" },
   falha: { rotulo: "Falha", classe: "bg-destructive/15 text-destructive" },
   nao_lido: { rotulo: "Confira no app", classe: "bg-muted text-muted-foreground" },

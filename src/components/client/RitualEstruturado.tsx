@@ -48,11 +48,11 @@ export function RitualEstruturado({ body, nextSteps, compact = false, className 
         // Sistema de design: bloco sem caixa (quem mostra o ritual já está num
         // painel); o título do bloco é um rótulo curto, sem caixa alta.
         <section key={`${b.titulo}-${i}`} className="min-w-0">
-          <p className="text-[12px] font-medium leading-4 text-primary">{rotulo(b.titulo)}</p>
+          <p className="text-[12px] font-medium leading-4 text-muted-foreground">{rotulo(b.titulo)}</p>
           {b.linhas.length > 1 ? (
             <ul className="mt-1 space-y-1">
               {b.linhas.map((l, j) => (
-                <li key={j} className="flex text-[13px] leading-5 text-foreground"><span className="mr-2 mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" aria-hidden="true" /><span className="min-w-0">{l}</span></li>
+                <li key={j} className="flex text-[13px] leading-5 text-foreground"><span className="mr-2 mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/60" aria-hidden="true" /><span className="min-w-0">{l}</span></li>
               ))}
             </ul>
           ) : (
@@ -66,8 +66,8 @@ export function RitualEstruturado({ body, nextSteps, compact = false, className 
         </p>
       )}
       {!compact && !passoRepetido && (
-        <section className="min-w-0 border-l-2 border-primary/60 pl-3">
-          <p className="text-[12px] font-medium leading-4 text-primary">Próximo passo combinado</p>
+        <section className="min-w-0 border-l-2 border-border pl-3">
+          <p className="text-[12px] font-medium leading-4 text-muted-foreground">Próximo passo combinado</p>
           <p className="mt-1 text-[13px] leading-5 text-foreground">{passo}</p>
         </section>
       )}

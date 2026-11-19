@@ -78,7 +78,7 @@ function DoLote({ selecao }: { selecao: Selecao }) {
             <button type="button" className="block w-full cursor-zoom-in" onClick={() => setAmpliada(i)} aria-label={`Ver grande: ${p.tomada.nome}`}>
               <Moldura proporcao={proporcaoDoFormato(p.tomada.formato)} className="border border-border">
                 <ImagemDaMesa caminho={p.versao.storage_path || ""} alt={p.tomada.nome} className="h-full w-full !object-contain" />
-                <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
+                <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
                   gerada
                 </span>
               </Moldura>

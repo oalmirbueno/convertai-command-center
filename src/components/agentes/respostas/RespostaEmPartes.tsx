@@ -46,7 +46,7 @@ export default function RespostaEmPartes({ texto, partes, recusados, evidencias,
       {fonteAberta && (
         <div className={juntar(superficie.painel, "w-full max-w-[640px] p-4 sm:p-5 text-[12px]")} data-evidencia="">
           <div className="flex items-center gap-1.5">
-            <FileSearch className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <FileSearch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <p className="min-w-0 flex-1 truncate font-medium">Evidência: {fonteAberta}</p>
             <button type="button" onClick={() => setFonteAberta(null)} aria-label="Fechar a evidência" className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-3.5 w-3.5" /></button>
           </div>

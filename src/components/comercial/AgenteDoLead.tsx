@@ -99,7 +99,7 @@ export default function AgenteDoLead({ lead, aoMudar }: { lead: Lead; aoMudar: (
   return (
     <section className="min-w-0 space-y-4" aria-label="Agente do lead">
       <div className="flex min-w-0 items-center gap-2">
-        <Bot className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <Bot className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <label className="flex min-w-0 flex-1 items-center text-[13px] font-medium">
           <input type="checkbox" className="mr-2" checked={atende} disabled={mudando} onChange={(e) => void trocar(e.target.checked)} aria-label="Mercúrio atende este lead" />
           Mercúrio atende este lead

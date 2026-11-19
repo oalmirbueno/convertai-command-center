@@ -144,7 +144,7 @@ export default function GerarComIA({
       ) : null}
       {feito ? (
         <div className="mb-2 flex min-w-0 items-center" data-feito-pela-ia="">
-          <WandSparkles className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <WandSparkles className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate")} title={feito.explicacao}>
             {feito.explicacao || "Preenchido pela IA"}
           </span>

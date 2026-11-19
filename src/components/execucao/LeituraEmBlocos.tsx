@@ -15,9 +15,9 @@ const ORDEM: TomDaSecao[] = ["travado", "proximo", "andamento", "feito", "nota"]
 
 const TOM: Record<TomDaSecao, { Icone: typeof Lock; caixa: string; titulo: string }> = {
   travado: { Icone: Lock, caixa: "border-warning/40 bg-warning/10", titulo: "text-warning" },
-  proximo: { Icone: ArrowRight, caixa: "border-primary/30 bg-primary/5", titulo: "text-primary" },
+  proximo: { Icone: ArrowRight, caixa: "border-border bg-muted", titulo: "text-foreground" },
   andamento: { Icone: CircleDot, caixa: "border-border bg-muted/30", titulo: "text-foreground" },
-  feito: { Icone: CheckCircle2, caixa: "border-success/30 bg-success/5", titulo: "text-success" },
+  feito: { Icone: CheckCircle2, caixa: "border-border bg-success/5", titulo: "text-success" },
   nota: { Icone: StickyNote, caixa: "border-border bg-muted/20", titulo: "text-muted-foreground" },
 };
 

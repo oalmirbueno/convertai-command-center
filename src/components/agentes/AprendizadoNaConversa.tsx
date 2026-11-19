@@ -91,7 +91,7 @@ export default function AprendizadoNaConversa({ anexos, clientId }: { anexos: un
     <div className="min-w-0 space-y-1 px-1" data-aprendizado-da-mensagem="">
       {aprendizado && (
         <p className="flex min-w-0 items-start text-[12px] leading-snug text-muted-foreground" data-aprendi="">
-          <BookmarkCheck className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <BookmarkCheck className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className={`min-w-0 flex-1 [overflow-wrap:anywhere] ${esquecida ? "line-through" : ""}`}>
             {fraseDoAprendizado(aprendizado)}
             {aprendizado.categoria === "evitar" ? " (não faço mais)" : ""}

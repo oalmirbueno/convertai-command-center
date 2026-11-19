@@ -323,7 +323,7 @@ function Referencias(p: PropsDoCampo & { id: string }) {
                 <span className={juntar(texto.etiqueta, "mr-2 shrink-0 tabular-nums text-muted-foreground")}>{i + 1}</span>
                 {anexo ? (
                   <span className={juntar(texto.corpo, "flex min-w-0 flex-1 items-center")}>
-                    <ImagePlus className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                    <ImagePlus className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="min-w-0 truncate">{anexo.nome}</span>
                   </span>
                 ) : (

@@ -261,7 +261,7 @@ function CapaDaIdeia({ ideia, imagem, cliente }: { ideia: RadarIdea; imagem?: st
       )}
       {comImagem && <span className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" aria-hidden="true" />}
       <span className={juntar(etiqueta, "absolute left-3 top-3 bg-background/90 text-foreground")}>
-        {ideia.source === "ia" ? <Sparkles className="mr-1 h-3 w-3 text-primary" aria-hidden="true" /> : <Icone className="mr-1 h-3 w-3 text-primary" aria-hidden="true" />}
+        {ideia.source === "ia" ? <Sparkles className="mr-1 h-3 w-3 text-muted-foreground" aria-hidden="true" /> : <Icone className="mr-1 h-3 w-3 text-muted-foreground" aria-hidden="true" />}
         {ideia.source === "ia" ? "IA + web" : lente ? lente.label : "Ideia"}
       </span>
       {cliente && (
@@ -326,7 +326,7 @@ function CartaoDaIdeia({
           <ol className="mt-3 min-w-0 space-y-1.5" aria-label="Passos">
             {ideia.moves.slice(0, 4).map((passo, i) => (
               <li key={`${i}-${passo}`} className={juntar("flex min-w-0 items-start", i >= 2 && "max-sm:hidden")}>
-                <span className="mr-2 mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold tabular-nums text-primary" aria-hidden="true">
+                <span className="mr-2 mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold tabular-nums text-muted-foreground" aria-hidden="true">
                   {i + 1}
                 </span>
                 <span className={juntar(texto.auxiliar, "line-clamp-2 min-w-0 leading-5")}>{passo}</span>
@@ -403,7 +403,7 @@ const TEXTO_DO_PEDIDO: Record<PedidoDaIdeia, string> = {
 
 function NumeroDoPasso({ n }: { n: number }) {
   return (
-    <span className="mr-2 mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold tabular-nums text-primary" aria-hidden="true">
+    <span className="mr-2 mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold tabular-nums text-muted-foreground" aria-hidden="true">
       {n}
     </span>
   );
@@ -453,7 +453,7 @@ function ReelsNaConversa({ reels }: { reels: ReelDaIdeia[] }) {
     <ol className="mt-2 space-y-2" aria-label="Ideias de Reels" data-reels="">
       {reels.map((r, i) => (
         <li key={`${i}-${r.gancho}`} className="flex min-w-0 items-start border-t border-border/60 pt-2 first:border-t-0 first:pt-0">
-          <Clapperboard className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <Clapperboard className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="font-medium text-foreground">{r.gancho}</p>
             <p className="mt-0.5 text-[13px] text-muted-foreground">{r.cena}</p>

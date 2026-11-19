@@ -73,7 +73,7 @@ export default function AdminBackfillPage() {
   const numeros = result
     ? [
         { rotulo: "Total", valor: result.total ?? 0, cor: "text-foreground", ponto: undefined },
-        { rotulo: "Sucesso", valor: result.success ?? 0, cor: "text-primary", ponto: "verde" as const },
+        { rotulo: "Sucesso", valor: result.success ?? 0, cor: "text-foreground", ponto: "verde" as const },
         { rotulo: "Falhas", valor: result.failed ?? 0, cor: "text-destructive", ponto: "perigo" as const },
       ]
     : [];

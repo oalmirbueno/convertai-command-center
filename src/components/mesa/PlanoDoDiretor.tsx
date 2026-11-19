@@ -175,7 +175,7 @@ export default function PlanoDoDiretor({
                   )}
                   {antes && ultima && <span className="mr-1.5 text-[11px] text-muted-foreground" aria-hidden>→</span>}
                   {ultima && (
-                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded border border-primary/50" title={`Depois (v${ultima.versao})`}>
+                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded border border-border" title={`Depois (v${ultima.versao})`}>
                       <ImagemDaMesa caminho={ultima.storage_path} alt={`Depois, v${ultima.versao}`} className="h-full w-full" />
                     </span>
                   )}

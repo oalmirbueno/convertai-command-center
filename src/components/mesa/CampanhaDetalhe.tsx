@@ -64,7 +64,7 @@ import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_share
 export const ROTULO_DO_ESTADO: Record<string, string> = { planejada: "planejada", gravada: "gravada", encerrada: "encerrada" };
 
 export function SeloDoEstado({ estado }: { estado: string }) {
-  const cor = estado === "gravada" ? "bg-success-soft text-success" : estado === "encerrada" ? "bg-muted text-muted-foreground" : "bg-accent-soft text-primary";
+  const cor = estado === "gravada" ? "bg-muted text-success" : estado === "encerrada" ? "bg-muted text-muted-foreground" : "bg-muted text-foreground";
   return <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${cor}`}>{ROTULO_DO_ESTADO[estado] || estado}</span>;
 }
 

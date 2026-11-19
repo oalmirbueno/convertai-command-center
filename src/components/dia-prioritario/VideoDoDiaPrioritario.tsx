@@ -81,7 +81,7 @@ export default function VideoDoDiaPrioritario({ className }: { className?: strin
       >
         <span className="relative mr-3 block h-12 w-20 shrink-0 overflow-hidden rounded bg-muted">
           {capa && <img src={capa} alt="" className="h-full w-full object-cover" loading="lazy" />}
-          <PlayCircle className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 text-primary drop-shadow" aria-hidden="true" />
+          <PlayCircle className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 text-muted-foreground drop-shadow" aria-hidden="true" />
         </span>
         <span className="min-w-0">
           <span className="block truncate text-[13px] font-medium text-foreground">{video.titulo}</span>

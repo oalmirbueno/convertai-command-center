@@ -247,7 +247,7 @@ export default function AdminProjection() {
       cor: "text-info",
       corIcone: "text-info",
     },
-    { rotulo: "Meta 2x", valor: fmt(doubleTarget), sub: "Dobro da projeção", icone: <Target className="h-4 w-4" />, cor: "text-success", corIcone: "text-success" },
+    { rotulo: "Meta 2x", valor: fmt(doubleTarget), sub: "Dobro da projeção", icone: <Target className="h-4 w-4" />, cor: "text-success", corIcone: "text-muted-foreground" },
     { rotulo: "Diferença", valor: fmt(gap), sub: "Falta para chegar a 2x", icone: <TrendingUp className="h-4 w-4" />, cor: "text-warning", corIcone: "text-warning" },
   ];
 

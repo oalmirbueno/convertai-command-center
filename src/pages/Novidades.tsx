@@ -103,7 +103,7 @@ export default function Novidades() {
             recolher="novidades:no-ar"
             titulo={
               <span className="inline-flex items-center">
-                <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" /> Já está no ar
+                <Sparkles className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Já está no ar
               </span>
             }
           >

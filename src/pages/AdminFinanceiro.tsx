@@ -991,7 +991,7 @@ function LegacyFinanceiro() {
       valor: fmt(cashBalance),
       sub: reservedInBoxes > 0 ? `Caixinhas ${fmt(reservedInBoxes)} · livre ${fmt(cashBalance - reservedInBoxes)}` : undefined,
       icone: <DollarSign className="h-3.5 w-3.5" />,
-      cor: "text-primary",
+      cor: "text-foreground",
       ajuda: "Base de meses anteriores + tudo que entrou − tudo que saiu. Concilie no Fluxo de caixa.",
     },
     { rotulo: `Recebido ${noPeriodo}`, valor: fmt(receivedVal), sub: receivedBreakdown, icone: <TrendingUp className="h-3.5 w-3.5" />, cor: "text-success" },
@@ -1009,7 +1009,7 @@ function LegacyFinanceiro() {
       valor: fmt(mesDoHistorico.caixaNoFim),
       sub: "quanto ficou no caixa",
       icone: <DollarSign className="h-3.5 w-3.5" />,
-      cor: "text-primary",
+      cor: "text-foreground",
     }])] : []),
     ...(periodFilter === "month" && origem !== "freela" ? [{
       rotulo: "Receita esperada",
@@ -1697,7 +1697,7 @@ function LegacyFinanceiro() {
                     <div className="space-y-4">
                       <Resumo
                         itens={[
-                          { rotulo: "Total contratado", valor: fmt(indivTotal), cor: "text-primary" },
+                          { rotulo: "Total contratado", valor: fmt(indivTotal), cor: "text-foreground" },
                           { rotulo: "Recebido", valor: fmt(indivPaid), cor: "text-success" },
                           { rotulo: "Pendente", valor: fmt(indivPending), cor: "text-warning" },
                           { rotulo: "Atrasado", valor: fmt(indivOverdue), cor: "text-destructive" },
@@ -1935,7 +1935,7 @@ function LegacyFinanceiro() {
                   <Resumo
                     itens={[
                       { rotulo: "Mensalistas", valor: String(mensalistas.length) },
-                      { rotulo: "Planos distintos", valor: String(planNames.length), cor: "text-primary" },
+                      { rotulo: "Planos distintos", valor: String(planNames.length), cor: "text-foreground" },
                       { rotulo: "MRR esperado", valor: fmt(mensalistas.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0)), cor: "text-success" },
                       // 14/11/2026: extras mensais ativos (suporte, CRM, e-mail, automação) somam à parte, para o MRR do plano não mudar de sentido.
                       ...(extrasPorMes > 0 ? [{ rotulo: "Extras recorrentes", valor: `${fmt(extrasPorMes)}/mês`, cor: "text-success" }] : []),
@@ -2173,10 +2173,10 @@ function LegacyFinanceiro() {
                 <ListaDoFinanceiro memoria="financeiro:historico" rotulo="Histórico de alterações" alta>
                   {(auditLogs || []).map((log: any) => {
                     const actionLabels: Record<string, { label: string; color: string }> = {
-                      paid_full: { label: "Pago total", color: "text-success bg-success-soft" },
+                      paid_full: { label: "Pago total", color: "text-success bg-muted" },
                       paid_partial: { label: "Pago parcial", color: "text-warning bg-warning-soft" },
                       status_change: { label: "Status alterado", color: "text-info bg-info-soft" },
-                      amount_change: { label: "Valor alterado", color: "text-primary bg-accent-soft" },
+                      amount_change: { label: "Valor alterado", color: "text-foreground bg-muted" },
                     };
                     const actionInfo = actionLabels[log.action] || { label: log.action, color: "text-muted-foreground bg-muted" };
                     const typeLabel = log.entity_type === "billing" ? "Fatura" : "Parcela";
@@ -2201,7 +2201,7 @@ function LegacyFinanceiro() {
                           <p className="text-[11px] tabular-nums text-muted-foreground/70">
                             {new Date(log.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                           </p>
-                          {log.performerName && <p className="mt-0.5 max-w-[120px] truncate text-[11px] text-primary">{log.performerName}</p>}
+                          {log.performerName && <p className="mt-0.5 max-w-[120px] truncate text-[11px] text-muted-foreground">{log.performerName}</p>}
                         </div>
                       </li>
                     );
@@ -2322,7 +2322,7 @@ function LegacyFinanceiro() {
             {rechargeForm.amount && (
               <div className={juntar(superficie.poco, "px-3 py-2.5")}>
                 <p className={texto.corpo}>
-                  <span className="font-semibold tabular-nums text-primary">{fmt(Number(rechargeForm.amount))}</span>
+                  <span className="font-semibold tabular-nums text-foreground">{fmt(Number(rechargeForm.amount))}</span>
                   <span className="text-muted-foreground"> / {rechargeForm.period} · <span className="capitalize">{rechargeModal?.platform}</span> Ads</span>
                 </p>
                 {rechargeForm.period === "mensal" && (

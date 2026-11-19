@@ -97,10 +97,10 @@ export const IDADE_MINIMA = 21;
 
 export const STATUS_DA_PERSONA: Record<StatusDaPersona, { rotulo: string; cor: string }> = {
   rascunho: { rotulo: "Ficha", cor: "bg-muted text-muted-foreground" },
-  candidatos: { rotulo: "Escolhendo", cor: "bg-primary/10 text-primary" },
-  ancora: { rotulo: "Âncora escolhida", cor: "bg-primary/10 text-primary" },
-  folha: { rotulo: "Folha em andamento", cor: "bg-primary/10 text-primary" },
-  pronta: { rotulo: "Pronta", cor: "bg-success/15 text-success" },
+  candidatos: { rotulo: "Escolhendo", cor: "bg-muted text-foreground" },
+  ancora: { rotulo: "Âncora escolhida", cor: "bg-muted text-foreground" },
+  folha: { rotulo: "Folha em andamento", cor: "bg-muted text-foreground" },
+  pronta: { rotulo: "Pronta", cor: "bg-muted text-success" },
   arquivada: { rotulo: "Arquivada", cor: "bg-muted text-muted-foreground" },
 };
 

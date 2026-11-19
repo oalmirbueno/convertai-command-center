@@ -3235,6 +3235,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261119160841",
+      "path": "supabase/migrations/20261119160841_produto_central_de_acessos.sql",
+      "local_sha256": "d7190cbe81fdaa2e1018b9443d8397870589dd9269c1b7180b043db41fce5da1",
+      "remote_name": "produto_central_de_acessos",
+      "remote_statements_sha256": "94c6f3727a69868801eeab872824a0dcd76a943efc9b884fa62ecf8dd4521403",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261119180000",
       "path": "supabase/migrations/20261119180000_central_de_automacoes.sql",
       "local_sha256": "0bee5565013715c1b754a41ef676a40996b23c962924be84e89994be1e3cd0d1",
@@ -3248,6 +3256,22 @@
       "local_sha256": "ede2a015a0f47fafe5a33c9d8196ab5cc7937be085617b7b91c09cf573eebe99",
       "remote_name": "produto_email_migracao_pelo_cliente",
       "remote_statements_sha256": "96bbf87d56540d0f28e644273062e11f298c0df48ce612dd3794f332c62f031a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261119210000",
+      "path": "supabase/migrations/20261119210000_atelie_de_cor.sql",
+      "local_sha256": "104b11f40615994d26665f0cf22a5448062c0440299a3a660f9d995be6455c9c",
+      "remote_name": "atelie_de_cor",
+      "remote_statements_sha256": "189cfc84251664fb03a64f561cb594956a9b895a7cb5515a0e65bfadc4326f61",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261119213000",
+      "path": "supabase/migrations/20261119213000_automacoes_por_cliente.sql",
+      "local_sha256": "219265fe347d654d2cb237a38b0849d158ca3730748cbd3bf9642e06b0579fef",
+      "remote_name": "automacoes_por_cliente",
+      "remote_statements_sha256": "44d739fb58b65973b44aa37eee531c7487909724c734c00e4c1f3a2a9ad5a598",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],

@@ -191,8 +191,8 @@ export default function CampanhaAgente({
     <div className={`flex min-h-0 min-w-0 flex-col overflow-hidden bg-card ${className}`} data-agente-da-campanha="">
       {!naJanela && (
         <div className="flex shrink-0 items-center border-b border-border py-3 pl-4 pr-4">
-          <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+            <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-semibold">Agente da campanha</span>

@@ -98,7 +98,7 @@ function PedidoDaImagem({ no, pedido, onFechar, onIniciado }: { no: NoDoLab; ped
     }
   };
   return (
-    <div className="mb-2 min-w-0 rounded-md bg-primary/[0.06] p-2" data-pedido-da-imagem={pedido.modo}>
+    <div className="mb-2 min-w-0 rounded-md bg-muted p-2" data-pedido-da-imagem={pedido.modo}>
       <p className={juntar(texto.auxiliar, "mb-1.5 text-foreground")}>Só a peça {pedido.indice + 1}{pedido.modo === "variar" ? " ganha variações" : " será ajustada"}. As demais permanecem.</p>
       {custo !== null ? (
         <div className="flex min-w-0 flex-wrap items-center" data-confirmar-custo="">

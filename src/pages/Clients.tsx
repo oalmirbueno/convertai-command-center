@@ -147,7 +147,7 @@ const SERVICE_FILTERS: { value: string; label: string }[] = [
 ];
 
 const typeBadge: Record<string, { label: string; cls: string }> = {
-  recurring: { label: "Recorrente", cls: "bg-accent-soft text-primary" },
+  recurring: { label: "Recorrente", cls: "bg-muted text-foreground" },
   one_off: { label: "Avulso", cls: "bg-warning-soft text-warning" },
   hybrid: { label: "Híbrido", cls: "bg-accent/15 text-foreground" },
 };
@@ -524,7 +524,7 @@ function normalizeClientFinancial(record: FinancialRecord): ClientFinancialView 
 function financialStatusMeta(status: string | null) {
   const normalized = status?.toLowerCase().trim() || "";
   if (["current", "active", "em_dia"].includes(normalized)) {
-    return { label: "Em dia", className: "border-transparent bg-success-soft text-success" };
+    return { label: "Em dia", className: "border-transparent bg-muted text-success" };
   }
   if (["review_required", "needs_review", "draft"].includes(normalized)) {
     return { label: "Revisar", className: "border-transparent bg-warning-soft text-warning" };
@@ -533,7 +533,7 @@ function financialStatusMeta(status: string | null) {
     return { label: "Pausado", className: "border-border bg-secondary text-muted-foreground" };
   }
   if (["paid", "received", "completed", "pago", "recebido"].includes(normalized)) {
-    return { label: "Recebido", className: "border-transparent bg-success-soft text-success" };
+    return { label: "Recebido", className: "border-transparent bg-muted text-success" };
   }
   if (["partial", "partially_paid", "parcial"].includes(normalized)) {
     return { label: "Parcial", className: "border-transparent bg-warning-soft text-warning" };
@@ -951,7 +951,7 @@ export default function Clients() {
       label: "MRR (mensalidades)",
       value: formatCurrency(grossBilling),
       helper: `soma real de ${payingClients.length} mensalista(s)`,
-      tone: "text-primary",
+      tone: "text-foreground",
       loading: isLoading,
     },
     {
@@ -1110,7 +1110,7 @@ export default function Clients() {
                 ? "border-transparent bg-danger-soft text-destructive"
                 : billingRead.tone === "due"
                   ? "border-transparent bg-warning-soft text-warning"
-                  : "border-transparent bg-success-soft text-success",
+                  : "border-transparent bg-muted text-success",
           }
         : (c.client_type || "recurring") === "one_off"
           ? { label: "Por projeto", className: "border-border bg-secondary/60 text-muted-foreground" }
@@ -1318,7 +1318,7 @@ export default function Clients() {
                     financial?.pricingMode === "custom"
                       ? "bg-warning-soft text-warning"
                       : financial?.pricingMode === "linked"
-                        ? "bg-accent-soft text-primary"
+                        ? "bg-muted text-foreground"
                         : "bg-muted text-muted-foreground",
                   )}
                 >

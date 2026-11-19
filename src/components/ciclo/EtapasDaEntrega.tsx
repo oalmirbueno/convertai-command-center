@@ -100,8 +100,8 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
     <>
       {/* O que a Aceleriq faz para este cliente, na língua dele. */}
       {resumo && (
-        <div className="mt-3 rounded-md border border-primary/20 bg-primary/[0.05] px-3 py-2.5">
-          <p className="text-[12px] font-medium text-primary">
+        <div className="mt-3 rounded-md border border-border bg-muted px-3 py-2.5">
+          <p className="text-[12px] font-medium text-muted-foreground">
             O seu time é
           </p>
           <p className="mt-1 text-[13px] leading-relaxed text-foreground">{resumo}</p>

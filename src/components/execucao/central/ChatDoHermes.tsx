@@ -167,7 +167,7 @@ function ChipDaFerramenta({ f }: { f: FerramentaDoTurno }) {
     <span
       className={juntar(
         "inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px]",
-        f.estado === "falhou" ? "bg-destructive/10 text-destructive" : f.estado === "feita" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
+        f.estado === "falhou" ? "bg-destructive/10 text-destructive" : f.estado === "feita" ? "bg-muted text-success" : "bg-muted text-muted-foreground",
       )}
       title={f.resumo || f.nome}
       data-ferramenta={f.estado}
@@ -619,7 +619,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
       <EstadoDeErro titulo="Não consegui ler as conversas do Hermes." descricao={textoDoErro(conversas.error)} acao={<button type="button" className={botao.secundario} onClick={() => void conversas.refetch()}>Tentar de novo</button>} />
     ) : (
       <div className="flex flex-col items-center py-10 text-center">
-        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary"><Bot className="h-5 w-5" /></span>
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground"><Bot className="h-5 w-5" /></span>
         {/* 16/10 (dono: "quer conversar comigo? como se fosse uma pessoa"): pelo perfil do agente,
             a conversa é com ele (o Hermes coordena e responde com o andamento real). */}
         <p className="mt-3 text-[15px] font-semibold">{contexto.agente ? `Converse com ${contexto.agente.nome}` : daCentral ? "Nenhuma conversa com o Hermes ainda." : "Converse com o Hermes sobre esta execução."}</p>
@@ -646,7 +646,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
       <>
         {mensagens.length === 0 && !mostrarLocal && !emTurno && (
           <div className="flex flex-col items-center py-10 text-center">
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary"><Bot className="h-5 w-5" /></span>
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground"><Bot className="h-5 w-5" /></span>
             <p className="mt-3 text-[15px] font-semibold">Converse com o Hermes</p>
             <p className="mt-1 max-w-xs text-[12px] text-muted-foreground">Ele coordena os agentes. Pode mandar texto, imagem ou arquivo de texto.</p>
           </div>
@@ -712,7 +712,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
       )}
 
       <div className="flex min-w-0 shrink-0 items-center gap-1.5 border-b border-border/70 px-3 py-2 sm:px-4">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Bot className="h-4 w-4" /></span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Bot className="h-4 w-4" /></span>
         {ponte ? (
           <SeletorDeSessoes aberta={aberta} aoEscolher={(s) => trocarDeSessao(s.id)} aoCriar={() => criar.mutate()} criando={criar.isPending} habilitado={ponte} />
         ) : (
@@ -721,7 +721,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
             <p className="truncate text-[11px] text-muted-foreground">{estado.isLoading ? "Ligando…" : "Ponte desligada"}</p>
           </div>
         )}
-        {emTurno && <span className="hidden shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success min-[420px]:inline-flex"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />trabalhando</span>}
+        {emTurno && <span className="hidden shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-success min-[420px]:inline-flex"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />trabalhando</span>}
         {aoAbrirDiario && (
           <button type="button" onClick={aoAbrirDiario} className={botao.icone} aria-label="Diário da coordenação" title="Diário da coordenação">
             <NotebookPen className="h-4 w-4" />

@@ -28,7 +28,7 @@ const GRUPOS: Array<{ fontes: Fonte[]; titulo: string }> = [
 ];
 
 function IconeTendencia({ t }: { t: Insight["tendencia"] }) {
-  if (t === "sobe") return <TrendingUp className="h-3.5 w-3.5 text-primary" />;
+  if (t === "sobe") return <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />;
   if (t === "cai") return <TrendingDown className="h-3.5 w-3.5 text-destructive" />;
   return <Minus className="h-3.5 w-3.5 text-muted-foreground" />;
 }
@@ -43,7 +43,7 @@ function fmtNumero(n: Numero): string {
 const ROTULO_PLATAFORMA: Record<PlataformaAds, string> = { meta_ads: "Meta Ads", google_ads: "Google Ads", tiktok_ads: "TikTok Ads" };
 
 function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) {
-  const cor = (t: Numero["tendencia"]) => (t === "sobe" ? "text-primary" : t === "cai" ? "text-destructive" : "text-muted-foreground");
+  const cor = (t: Numero["tendencia"]) => (t === "sobe" ? "text-foreground" : t === "cai" ? "text-destructive" : "text-muted-foreground");
   const titulo = leitura.frente === "social" ? "Números do Instagram" : `Números · ${leitura.plataforma ? ROTULO_PLATAFORMA[leitura.plataforma] : "anúncios"}`;
   const colunas = leitura.numeros.length >= 5 ? "grid-cols-2 sm:grid-cols-3" : leitura.numeros.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3";
   // Sistema de design: seção sem caixa; cada número num poço; subiu, parado e
@@ -73,7 +73,7 @@ function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) 
       </div>
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
-          { t: "Subiu", lista: leitura.subiu, cls: "text-primary" },
+          { t: "Subiu", lista: leitura.subiu, cls: "text-foreground" },
           { t: "Parado", lista: leitura.parado, cls: "text-muted-foreground" },
           { t: "Caiu", lista: leitura.caiu, cls: "text-destructive" },
         ].map((g) => (

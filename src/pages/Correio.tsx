@@ -139,7 +139,7 @@ function ConectarCaixa({ caixa, aoConectar }: { caixa: CaixaDoCorreio; aoConecta
   };
   return (
     <div className="mx-auto max-w-[520px] rounded-3xl bg-card p-6" data-conectar-caixa="">
-      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-soft text-primary">
+      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
         <KeyRound className="h-5 w-5" aria-hidden="true" />
       </span>
       <h2 className={juntar(texto.tituloSecao, "mt-4")}>Conectar {caixa.endereco}</h2>
@@ -182,7 +182,7 @@ function SeletorDeCaixa({ caixas, atual, master, aoEscolher }: { caixas: CaixaDo
         <div className="flex items-center px-3 pb-2 pt-1.5">
           <span className={juntar(texto.auxiliar, "flex-1 font-semibold uppercase tracking-wide")}>Caixas</span>
           {master && (
-            <span className={juntar(etiqueta, "bg-accent-soft text-primary")} title="Você administra a empresa e vê todas as caixas">
+            <span className={juntar(etiqueta, "bg-muted text-foreground")} title="Você administra a empresa e vê todas as caixas">
               <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />
               Você vê todas
             </span>

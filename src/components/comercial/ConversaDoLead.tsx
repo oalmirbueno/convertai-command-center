@@ -58,7 +58,7 @@ export default function ConversaDoLead({ leadId, nomeDoLead }: { leadId: string;
         <ol className="min-w-0 space-y-2" aria-label="Mensagens">
           {mensagens.map((m) => (
             <li key={m.id} className={juntar("flex min-w-0", m.direcao === "saida" ? "justify-end" : "justify-start")} data-direcao={m.direcao}>
-              <div className={juntar("max-w-[85%] rounded-md px-3 py-2", m.direcao === "saida" ? "bg-primary/10" : "bg-muted")}>
+              <div className={juntar("max-w-[85%] rounded-md px-3 py-2", m.direcao === "saida" ? "bg-muted" : "bg-muted")}>
                 <p className="whitespace-pre-line break-words text-[13px] leading-5 text-foreground">{m.texto}</p>
                 <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
                   {quemEscreveu(m, nomeDoLead)} · {ROTULO_DO_CANAL[m.canal] || m.canal} · {hora(m.enviada_em)}

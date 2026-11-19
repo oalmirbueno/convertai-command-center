@@ -154,7 +154,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
           <span className="text-[12px] text-muted-foreground">{refs.length}/{MAX_REFERENCIAS_DA_PAUTA}</span>
         </div>
       </div>
-      {sugerirOrganizar && refs.length > 0 && <p role="status" className="mb-2 text-[12px] text-primary">Fotos novas: use a varinha para a IA entender e organizar.</p>}
+      {sugerirOrganizar && refs.length > 0 && <p role="status" className="mb-2 text-[12px] text-muted-foreground">Fotos novas: use a varinha para a IA entender e organizar.</p>}
       <div role="radiogroup" aria-label="Papel das próximas referências" className="mb-2 flex flex-wrap">
         {PAPEIS_DA_REFERENCIA.map((p) => <button key={p} type="button" role="radio" aria-checked={papelNovo === p} onClick={() => setPapelNovo(p)} className={juntar("mb-1 mr-1 rounded-full border px-2.5 py-1 text-[12px]", foco, papelNovo === p ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground")}>{ROTULO_DO_PAPEL[p]}</button>)}
       </div>
@@ -162,7 +162,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
         {grupos.map((g) => g.tipo === "par"
           ? <li key={`${g.antes.imagem_id}-${g.depois.imagem_id}`} className="col-span-2 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1" data-par-antes-depois="" aria-label={`Par: ${porId.get(g.antes.imagem_id)!.nome} antes, ${porId.get(g.depois.imagem_id)!.nome} depois`}>
               {itemDaReferencia(g.antes)}
-              <ArrowRight className="mt-8 h-4 w-4 text-primary" aria-hidden="true" />
+              <ArrowRight className="mt-8 h-4 w-4 text-muted-foreground" aria-hidden="true" />
               {itemDaReferencia(g.depois)}
             </li>
           : <li key={g.referencia.imagem_id} className="min-w-0">{itemDaReferencia(g.referencia)}</li>)}
@@ -200,7 +200,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
         } finally { setProgresso(""); invalidarFotos(cache, clientId); atualizarCusto(); }
       }} /></AcoesDaBancada>
     {!modelo && <p className="text-[12px] text-muted-foreground">Escolha o modelo de imagem.</p>}
-    {progresso && <p role="status" className="text-[12px] text-primary">{progresso}</p>}
+    {progresso && <p role="status" className="text-[12px] text-muted-foreground">{progresso}</p>}
     <JanelaCentral aberta={escolhendo} onFechar={() => setEscolhendo(false)} titulo={`Referências: ${ROTULO_DO_PAPEL[papelNovo]}`} largura="xl">
       {escolhendo && <SeletorDeFotos fotos={(fotos.data || []).filter((f) => f.client_id === clientId && f.ativa)} titulo={`Escolher ${ROTULO_DO_PAPEL[papelNovo].toLowerCase()}`} multiplas jaEscolhidas={refs.map((r) => r.imagem_id)} limiteSelecao={MAX_REFERENCIAS_DA_PAUTA - refs.length} onUsar={(ids) => { acrescentarRefs(ids, papelNovo); setEscolhendo(false); }} onFechar={() => setEscolhendo(false)} />}
     </JanelaCentral>

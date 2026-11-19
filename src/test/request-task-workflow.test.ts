@@ -108,7 +108,7 @@ describe("request to task source contract", () => {
     );
     expect(drawer).toContain("syncClientRequestStatusForTask");
     expect(clientRequests).toContain(
-      'completed: { cls: "bg-success/10 text-success", label: "Concluído" }',
+      'completed: { cls: "bg-muted text-success", label: "Concluído" }',
     );
   });
 

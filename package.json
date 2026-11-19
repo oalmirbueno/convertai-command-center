@@ -25,7 +25,8 @@
     "migrations:verify": "node scripts/verify-migration-integrity.mjs",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "mcp:portability": "node scripts/verify-mcp-portability.mjs",
-    "mcp:test:scripts": "node scripts/verify-mcp-portability.mjs --self-test && node scripts/mcp-smoke.mjs --self-test"
+    "mcp:test:scripts": "node scripts/verify-mcp-portability.mjs --self-test && node scripts/mcp-smoke.mjs --self-test",
+    "design:contraste": "node scripts/design/contraste-tokens.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

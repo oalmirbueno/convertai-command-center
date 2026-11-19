@@ -74,7 +74,7 @@ type LinhaDaLista = LinhaDoBriefingNoPainel & { rascunho_salvo_em?: string | nul
 
 const ETIQUETA: Record<SituacaoNoPainel, { rotulo: string; classe: string }> = {
   reabrir: { rotulo: "Reabrir", classe: "bg-warning-soft text-warning" },
-  recebido: { rotulo: "Recebido", classe: "bg-accent-soft text-primary" },
+  recebido: { rotulo: "Recebido", classe: "bg-muted text-foreground" },
   expirado: { rotulo: "Expirado", classe: "bg-muted text-muted-foreground" },
   vencendo: { rotulo: "Vencendo", classe: "bg-warning-soft text-warning" },
   pendente: { rotulo: "Aguardando", classe: "bg-muted text-foreground" },

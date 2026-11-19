@@ -262,7 +262,7 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
     <li onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onSoltar(); }}>
       {/* Pasta é item de grade (cartão com função): o cartão sólido do sistema. */}
       <button type="button" onClick={onClick} className={juntar(superficie.painel, "flex w-full min-w-0 items-center px-4 py-3.5 text-left hover:border-primary/60")}>
-        <Folder className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <Folder className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{nome}</span>
         {detalhe && <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">{detalhe}</span>}
       </button>

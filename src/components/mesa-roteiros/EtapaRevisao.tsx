@@ -188,7 +188,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
             <ol className="divide-y divide-border">
               {versao.conteudo.blocos.map((b, i) => (
                 <li key={b.id} className={juntar("min-w-0 py-2.5", i === 0 && "border-l-2 border-primary pl-3")}>
-                  <p className="text-[11px] font-semibold text-primary">
+                  <p className="text-[11px] font-semibold text-foreground">
                     {String(i + 1).padStart(2, "0")} {b.funcao} · {b.segundos}s
                   </p>
                   <p className="mt-0.5 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{b.fala}</p>

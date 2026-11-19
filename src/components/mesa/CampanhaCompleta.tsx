@@ -206,7 +206,7 @@ export function ProgressoDaCampanha({ execucao }: { execucao: Execucao }) {
   return (
     <section className="min-w-0 border-b border-border pb-3" aria-label="Andamento da campanha completa" data-execucao={execucao.situacao}>
       <div className="flex min-w-0 items-center">
-        {execucao.situacao === "rodando" ? <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden="true" /> : <Wand2 className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />}
+        {execucao.situacao === "rodando" ? <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden="true" /> : <Wand2 className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
         <p className="min-w-0 flex-1 truncate text-[13px] font-medium">
           {ROTULO_DA_SITUACAO[execucao.situacao]}
           <span className="ml-1.5 font-normal text-muted-foreground">

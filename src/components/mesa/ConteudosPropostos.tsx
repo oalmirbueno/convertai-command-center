@@ -268,7 +268,7 @@ export function BlocoDaProposta({
       )}
       {gravada ? (
         <div className="flex flex-wrap items-center rounded-lg bg-muted px-3 py-2 text-[12px]">
-          <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" />
+          <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="mr-2 min-w-0 flex-1">Na agenda{proposta.task_ids && proposta.task_ids.length ? ` · ${proposta.task_ids.length} item(ns)` : ""}</span>
           {primeiraTarefa && onAbrirNoEstudio && (
             <button

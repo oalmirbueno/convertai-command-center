@@ -1019,7 +1019,7 @@ className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-fu
           perfil={
             <div className="flex min-w-0 items-center">
               <Avatar className="h-9 w-9 shrink-0">
-                <AvatarFallback className="bg-primary/15 text-[12px] font-semibold text-primary">{iniciais}</AvatarFallback>
+                <AvatarFallback className="bg-muted text-[12px] font-semibold text-foreground">{iniciais}</AvatarFallback>
               </Avatar>
               <div className="ml-3 min-w-0 flex-1">
                 <p className="truncate text-[13px] font-medium leading-5 text-foreground">{profile?.full_name}</p>

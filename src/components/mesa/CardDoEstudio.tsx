@@ -799,7 +799,7 @@ export default function CardDoEstudio({
                   {pedidosAnteriores.slice(-6).map((m) => (
                     <li
                       key={m.id}
-                      className={`rounded-lg px-2.5 py-1.5 text-[12px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "bg-primary/10 text-foreground" : "bg-secondary text-muted-foreground"}`}
+                      className={`rounded-lg px-2.5 py-1.5 text-[12px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "bg-muted text-foreground" : "bg-secondary text-muted-foreground"}`}
                     >
                       {m.conteudo}
                     </li>

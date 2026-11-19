@@ -29,7 +29,7 @@ import {
 
 const COR_DO_TOM: Record<"neutro" | "novo" | "aviso", string> = {
   neutro: "bg-muted text-muted-foreground",
-  novo: "bg-accent-soft text-primary",
+  novo: "bg-muted text-foreground",
   aviso: "bg-warning/15 text-foreground",
 };
 

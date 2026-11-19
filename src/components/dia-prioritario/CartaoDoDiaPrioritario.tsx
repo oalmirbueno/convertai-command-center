@@ -65,9 +65,9 @@ export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora, co
         <span className={juntar("mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full", hoje ? "bg-foreground/10 text-foreground" : "bg-accent-solid text-on-accent")}><CalendarHeart className="h-4 w-4" aria-hidden="true" /></span>
         <p className="min-w-0 flex-1 text-[13px] leading-5 text-foreground">
           {hoje ? (
-            <strong className="font-semibold text-primary">Hoje é seu Dia Prioritário!</strong>
+            <strong className="font-semibold text-foreground">Hoje é seu Dia Prioritário!</strong>
           ) : dia ? (
-            <>Seu Dia Prioritário: toda <strong className="font-semibold text-primary">{nomeDoDia(dia)}</strong></>
+            <>Seu Dia Prioritário: toda <strong className="font-semibold text-foreground">{nomeDoDia(dia)}</strong></>
           ) : (
             "Seu Dia Prioritário está sendo organizado."
           )}
@@ -103,7 +103,7 @@ export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora, co
           {dia ? (
             <>
               <p className="mt-1.5 text-[20px] font-semibold leading-7 tracking-[-0.02em] text-foreground sm:text-[24px] sm:leading-8">
-                Seu Dia Prioritário é toda <strong className="font-semibold text-primary">{nomeDoDia(dia)}</strong>.
+                Seu Dia Prioritário é toda <strong className="font-semibold text-foreground">{nomeDoDia(dia)}</strong>.
               </p>
               <p className="mt-2 text-[13px] leading-5 text-muted-foreground">Um momento especial para falarmos de resultados, ideias e próximos passos.</p>
               <p className="text-[13px] leading-5 text-muted-foreground">Traga suas dúvidas, necessidades e sugestões.</p>

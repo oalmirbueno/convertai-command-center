@@ -61,7 +61,7 @@ function Linha({ rotulo, linhas, campo }: { rotulo: string; linhas: SocialMetric
       </div>
       {pontos ? (
         <svg viewBox="0 0 200 44" preserveAspectRatio="none" className="mt-3 h-14 w-full" role="img" aria-label={`${rotulo} nas últimas semanas`}>
-          <polyline points={pontos} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary" vectorEffect="non-scaling-stroke" />
+          <polyline points={pontos} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground" vectorEffect="non-scaling-stroke" />
         </svg>
       ) : (
         <p className={juntar(texto.auxiliar, "mt-1")}>Poucas semanas para a linha.</p>

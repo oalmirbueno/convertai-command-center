@@ -721,6 +721,9 @@ export interface ContaNaCasa {
   dominios: number;
   negocios: number;
   ultimo_uso: string | null;
+  /** Quem paga o CRM: a assinatura no cartão ou o extra "crm" do plano do cliente. */
+  cobranca_por?: "assinatura" | "plano";
+  extra_id?: string | null;
 }
 
 export async function listarContasDaCasa(): Promise<ContaNaCasa[]> {
@@ -904,7 +907,7 @@ export async function lerFaturamento(mes: string): Promise<FaturamentoDoProduto>
 }
 
 export const casa = {
-  criarConta: (p: Record<string, unknown>) => chamar<{ conta_id: string; enviado: boolean }>({ acao: "admin_criar_conta", ...p }),
+  criarConta: (p: Record<string, unknown>) => chamar<{ conta_id: string; enviado: boolean; membro_id?: string; link?: string | null }>({ acao: "admin_criar_conta", ...p }),
   convidar: (p: { conta_id: string; email: string; nome?: string; papel?: PapelNaConta }) => chamar<{ membro_id: string; enviado: boolean }>({ acao: "admin_convidar", ...p }),
   sincronizar: (contaId: string) => chamar<{ valor: number }>({ acao: "admin_sincronizar", conta_id: contaId }),
   testarAsaas: () => chamar<{ ok: boolean; ambiente?: string; link?: string; expira_em?: string; etapa?: string; mensagem?: string }>({ acao: "admin_testar_asaas" }),
