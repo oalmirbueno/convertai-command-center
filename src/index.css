@@ -19,8 +19,9 @@
    *   Texto neutro (--foreground, --muted-foreground) não conta como cor.
    * WCAG 2.2 AA medido por `npm run design:contraste` (a CI barra regressão em
    * src/test/contraste-tokens.test.ts): texto 4,5:1; botão e anel 3:1 contra
-   * fundo e cartão. Escuro: verde 14,5:1 no fundo. Claro: verde 3,17:1 no
-   * fundo e 3,57:1 no cartão (era 2,59 e 2,91), texto em cima 5,49:1.
+   * fundo e cartão. Escuro: verde 14,5:1 no fundo. Claro: o verde de
+   * preenchimento segue 145 80% 38% por decisão do Almir (19/11, 15h14): 2,59:1 no
+   * fundo e 2,91:1 no cartão, EXCEÇÃO registrada em verificacoes.ts (EXCECOES_DO_DONO).
    */
   :root,
   .dark {
@@ -122,13 +123,14 @@
 
     /*
      * v4 (15/11/2026, dono: "botões sem leitura"): o texto EM CIMA do verde é
-     * quase preto (branco dava 2,9:1). 19/11: o verde de preenchimento desceu
-     * de 38% para 34% de luz para o botão ter 3:1 contra o fundo (3,17) e o
-     * cartão (3,57); 35% dava 2,99. Texto em cima: 5,49:1. O verde usado como
+     * quase preto (branco dava 2,9:1). 19/11: o verde de preenchimento FICA em
+     * 38% de luz (o PR #160 chegou a baixar para 34%; o Almir mandou manter o
+     * verde atual, 15h14). Botão 2,59:1 no fundo e 2,91:1 no cartão: exceção
+     * decidida pelo dono. Texto quase preto em cima: 6,73:1. O verde usado como
      * texto (text-primary) é o --primary-text (6,47:1 sobre branco), ligado
      * no tailwind.config.ts.
      */
-    --primary: 145 80% 34%;
+    --primary: 145 80% 38%;
     --primary-foreground: 150 30% 4%;
     --primary-text: 145 85% 23%;
 
@@ -138,7 +140,7 @@
     --muted: 140 8% 94.5%;
     --muted-foreground: 240 4% 40%;
 
-    --accent: 145 80% 34%;
+    --accent: 145 80% 38%;
     --accent-foreground: 150 30% 4%;
 
     --destructive: 0 74% 45%;
@@ -157,7 +159,7 @@
 
     --border: 140 6% 90.5%;
     --input: 140 6% 86%;
-    --ring: 145 80% 34%;
+    --ring: 145 80% 38%;
 
     /* Verde mais vivo no cartão sólido (é superfície, não botão), com texto quase preto (9,66:1).
        O poço dentro dele (-deep) segue em 38%: texto em cima 6,73:1. */
@@ -174,7 +176,7 @@
     --card-ink-border: 240 4% 19%;
     --card-ink-accent: 145 100% 50%;
 
-    --chart-1: 145 80% 34%;
+    --chart-1: 145 80% 38%;
     --chart-2: 255 70% 60%;
     --chart-3: 240 6% 10%;
     --chart-4: 24 95% 53%;
@@ -185,12 +187,12 @@
 
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 240 4% 36%;
-    --sidebar-primary: 145 80% 34%;
+    --sidebar-primary: 145 80% 38%;
     --sidebar-primary-foreground: 150 30% 4%;
     --sidebar-accent: 140 8% 94.5%;
     --sidebar-accent-foreground: 240 8% 7%;
     --sidebar-border: 140 6% 90.5%;
-    --sidebar-ring: 145 80% 34%;
+    --sidebar-ring: 145 80% 38%;
   }
 }
 

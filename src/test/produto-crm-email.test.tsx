@@ -373,8 +373,10 @@ describe("personalização da empresa", () => {
       for (const c of CORES_DA_EMPRESA) {
         const r = contrasteDaCor(c.id, tema);
         expect(r.botao, `${c.id} ${tema} botão`).toBeGreaterThanOrEqual(4.5);
-        expect(r.fundo, `${c.id} ${tema} fundo`).toBeGreaterThanOrEqual(3);
-        expect(r.cartao, `${c.id} ${tema} cartão`).toBeGreaterThanOrEqual(3);
+        // Exceção do Almir (19/11, 15h14): o verde do claro é o do painel (145 80% 38%), 2,59:1 e 2,91:1.
+        const excecaoDoDono = c.id === "verde" && tema === "light";
+        expect(r.fundo, `${c.id} ${tema} fundo`).toBeGreaterThanOrEqual(excecaoDoDono ? 2.5 : 3);
+        expect(r.cartao, `${c.id} ${tema} cartão`).toBeGreaterThanOrEqual(excecaoDoDono ? 2.5 : 3);
         expect(r.texto, `${c.id} ${tema} texto`).toBeGreaterThanOrEqual(4.5);
         expect(["AA", "AAA"]).toContain(r.notaBotao);
       }
@@ -383,8 +385,8 @@ describe("personalização da empresa", () => {
 
   it("contrasteDaCor mede o que a tela mostra", () => {
     const verdeClaro = contrasteDaCor("verde", "light");
-    expect(verdeClaro.fundo).toBeCloseTo(3.18, 1);
-    expect(verdeClaro.cartao).toBeCloseTo(3.57, 1);
+    expect(verdeClaro.fundo).toBeCloseTo(2.59, 1);
+    expect(verdeClaro.cartao).toBeCloseTo(2.91, 1);
     expect(verdeClaro.notaBotao).toBe("AA");
     expect(contrasteDaCor(undefined, "dark")).toEqual(contrasteDaCor("verde", "dark"));
     expect(contrasteDaCor("verde", "dark").notaBotao).toBe("AAA");

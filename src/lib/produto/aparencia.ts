@@ -39,7 +39,7 @@ const BRANCO = "0 0% 100%";
 
 export const CORES_DA_EMPRESA: CorDaPaleta[] = [
   // Verde é o do painel (src/index.css): no claro, preenchimento vivo com texto quase preto e um tom mais fundo para texto.
-  { id: "verde", nome: "Verde", escuro: "145 100% 50%", claro: "145 80% 34%", textoNoEscuro: QUASE_PRETO, textoNoClaro: "150 30% 4%", tomDoTextoNoClaro: "145 85% 23%" },
+  { id: "verde", nome: "Verde", escuro: "145 100% 50%", claro: "145 80% 38%", textoNoEscuro: QUASE_PRETO, textoNoClaro: "150 30% 4%", tomDoTextoNoClaro: "145 85% 23%" },
   { id: "azul", nome: "Azul", escuro: "212 100% 62%", claro: "216 88% 48%", textoNoEscuro: QUASE_PRETO, textoNoClaro: BRANCO, tomDoTextoNoClaro: "216 88% 44%" },
   { id: "roxo", nome: "Roxo", escuro: "262 92% 70%", claro: "262 70% 52%", textoNoEscuro: QUASE_PRETO, textoNoClaro: BRANCO },
   { id: "laranja", nome: "Laranja", escuro: "26 100% 56%", claro: "22 92% 46%", textoNoEscuro: QUASE_PRETO, textoNoClaro: QUASE_PRETO, tomDoTextoNoClaro: "22 92% 36%" },

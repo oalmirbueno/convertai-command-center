@@ -80,15 +80,17 @@ Lógica de cor do @jorgedaweb (Combina, Sacana!) aplicada ao v4, só pelos token
 
 | Token ou cor | Par | Antes | Depois |
 |---|---|---|---|
-| Claro: `--primary`, `--accent`, `--ring`, `--sidebar-primary`, `--sidebar-ring`, `--chart-1` (`145 80% 38%` para `145 80% 34%`) | botão / fundo | 2,59 reprova | 3,17 |
-| | botão / cartão | 2,91 reprova | 3,57 |
-| | texto quase preto no botão | 6,73 | 5,49 |
+| Claro: `--primary`, `--accent`, `--ring`, `--sidebar-primary`, `--sidebar-ring`, `--chart-1` (`145 80% 38%`, **mantido**) | botão / fundo | 2,59 | 2,59 (exceção do Almir, 19/11 15h14) |
+| | botão / cartão | 2,91 | 2,91 (exceção do Almir) |
+| | texto quase preto no botão | 6,73 | 6,73 |
 | Empresa, escuro: azul, roxo, rosa (texto no botão branco para `0 0% 5%`) | texto no botão | 2,94 / 3,50 / 3,22 | 6,60 / 5,56 / 6,03 |
 | Empresa, claro: laranja, ciano (texto no botão branco para `0 0% 5%`) | texto no botão | 3,73 / 4,00 | 5,21 / 4,85 |
-| Empresa, claro: verde (igual ao painel) | botão / cartão | 2,91 | 3,57 |
+| Empresa, claro: verde (igual ao painel, `145 80% 38%`) | botão / fundo e cartão | 2,59 / 2,91 | 2,59 / 2,91 (mesma exceção) |
 | Empresa, claro: rosa (tom de texto `336 78% 40%`) | texto / fundo | 4,31 | 5,76 |
 | Empresa, claro: laranja, ciano (tom de texto próprio) | texto / fundo | 3,31 / 3,56 | 5,04 / 4,95 |
 | Empresa, claro: azul (tom de texto `216 88% 44%`, para ler também na etiqueta suave) | texto / accent-soft | novo par | 4,86 |
+
+**Exceção decidida pelo dono (19/11/2026, 15h14).** O PR #160 baixou o verde do claro para 34% de luz (3,17:1 e 3,57:1). O Almir mandou manter o verde atual (`145 80% 38%`). Os 6 pares de botão e anel do verde no claro (painel e "verde" da empresa) ficam abaixo de 3:1 e estão em `EXCECOES_DO_DONO` (`src/lib/design/verificacoes.ts`): o script marca "exceção" e o teste só aceita esses pares e piso de 2,5:1. Qualquer outro par abaixo do mínimo continua reprovando. O texto em cima do botão passa 4,5:1 (6,73:1).
 
 O `--accent-solid` do claro (`145 78% 46%`, cartão `.ds-accent`) é superfície, não botão, e ficou igual
 (texto em cima 9,66:1); o poço dele (`--accent-solid-deep`, `145 80% 38%`) também (6,73:1).

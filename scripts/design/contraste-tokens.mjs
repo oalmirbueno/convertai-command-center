@@ -28,12 +28,12 @@ for (const grupo of ["texto", "grafico", "empresa"]) {
     console.log(`\n${TITULOS[grupo]} · tema ${tema}`);
     for (const l of doGrupo) {
       const marca = l.passa ? "ok " : "XX ";
-      const rotulo = l.minimo === 3 ? (l.passa ? "passa 3:1" : "reprova") : nota(l.razao);
+      const rotulo = l.excecao ? "EXCEÇÃO do Almir (19/11)" : l.minimo === 3 ? (l.passa ? "passa 3:1" : "reprova") : nota(l.razao);
       console.log(`  ${marca}${l.par.padEnd(largura)}${formatarRazao(l.razao).padStart(8)}  ${rotulo}`);
       if (!l.passa) reprovados += 1;
     }
   }
 }
 
-console.log(`\n${linhas.length} pares, ${reprovados} reprovado(s).`);
+console.log(`\n${linhas.length} pares, ${reprovados} reprovado(s), ${linhas.filter((l) => l.excecao).length} exceção(ões) decidida(s) pelo dono.`);
 process.exit(reprovados ? 1 : 0);
