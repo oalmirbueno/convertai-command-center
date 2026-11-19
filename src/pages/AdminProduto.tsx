@@ -7,6 +7,7 @@ import ContasDaCasa from "@/components/produto/casa/ContasDaCasa";
 const MonitorDoProduto = lazy(() => import("@/components/produto/casa/MonitorDoProduto"));
 const EmailDaCasa = lazy(() => import("@/components/produto/casa/EmailDaCasa"));
 const PrecosDoProduto = lazy(() => import("@/components/produto/casa/PrecosDoProduto"));
+const PrecosDoCrm = lazy(() => import("@/components/produto/casa/PrecosDoCrm"));
 const FaturamentoDoProduto = lazy(() => import("@/components/produto/casa/FaturamentoDoProduto"));
 const CentralDeEmail = lazy(() => import("@/components/produto/casa/CentralDeEmail"));
 const CaixaDaAceleriq = lazy(() => import("@/components/produto/casa/CaixaDaAceleriq"));
@@ -97,7 +98,7 @@ export default function AdminProduto() {
       {produto === "crm" && aba === "empresas" && <ContasDaCasa />}
       <Suspense fallback={<Carregando linhas={5} />}>
         {produto === "crm" && aba === "inicio" && <MonitorDoProduto />}
-        {produto === "crm" && aba === "precos" && <PrecosDoProduto parte="crm" />}
+        {produto === "crm" && aba === "precos" && <PrecosDoCrm />}
         {produto === "crm" && aba === "faturamento" && <FaturamentoDoProduto />}
         {produto === "email" && aba === "inicio" && <CentralDeEmail />}
         {produto === "email" && aba === "entradas" && <EmailDaCasa />}
