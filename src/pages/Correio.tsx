@@ -38,6 +38,25 @@ export default function Correio() {
     };
   }, []);
 
+  // O correio é sempre claro (19/11/2026, pedido do dono: no escuro a leitura cansava). Ao sair, o
+  // painel volta ao tema que a pessoa escolheu.
+  useEffect(() => {
+    const raiz = document.documentElement;
+    const tinhaEscuro = raiz.classList.contains("dark");
+    raiz.classList.remove("dark");
+    raiz.classList.add("light");
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const corAntes = meta ? meta.getAttribute("content") : null;
+    if (meta) meta.setAttribute("content", "#f4f6f8");
+    return () => {
+      if (tinhaEscuro) {
+        raiz.classList.remove("light");
+        raiz.classList.add("dark");
+      }
+      if (meta && corAntes) meta.setAttribute("content", corAntes);
+    };
+  }, []);
+
   if (!user) return null;
   if (!liberado) {
     return (

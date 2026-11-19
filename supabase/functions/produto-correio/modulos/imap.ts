@@ -253,12 +253,23 @@ export interface ServidoresDoCorreio {
 
 /** O adaptador do contrato do correio sobre IMAP e SMTP. */
 export function adaptadorImap(servidores: ServidoresDoCorreio, conectar: Conectar = conectarTls): AdaptadorDeCorreio {
-  const com = async <T>(caixa: CaixaAberta, fazer: (imap: Imap) => Promise<T>): Promise<T> => {
+  const umaVez = async <T>(caixa: CaixaAberta, fazer: (imap: Imap) => Promise<T>): Promise<T> => {
     const imap = await Imap.abrir(conectar, servidores.imap.host, servidores.imap.porta, caixa.endereco, caixa.segredo);
     try {
       return await fazer(imap);
     } finally {
       imap.fechar();
+    }
+  };
+  // Conexão que caiu ou demorou (rede, servidor ocupado) tenta mais uma vez. Senha errada não repete.
+  const com = async <T>(caixa: CaixaAberta, fazer: (imap: Imap) => Promise<T>): Promise<T> => {
+    try {
+      return await umaVez(caixa, fazer);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      const deRede = !(e instanceof ErroDoCorreio) || /fechou a conexão|demorou demais|recusou a conexão/.test(msg);
+      if (!deRede) throw e;
+      return await umaVez(caixa, fazer);
     }
   };
   const pastaDeEnviados = async (imap: Imap): Promise<string> => {
@@ -334,7 +345,8 @@ export function adaptadorImap(servidores: ServidoresDoCorreio, conectar: Conecta
       ].join("\r\n");
       await enviarSmtp(conectar, servidores.smtp.host, servidores.smtp.porta, { usuario: caixa.endereco, senha: caixa.segredo, de: caixa.endereco, para: envio.para, mensagem });
       // Uma cópia em Enviados (o SMTP não guarda sozinho). Se falhar, o e-mail já foi.
-      await com(caixa, async (imap) => {
+      // Sem repetir: uma segunda tentativa poderia guardar a cópia duas vezes.
+      await umaVez(caixa, async (imap) => {
         const pasta = await pastaDeEnviados(imap);
         await imap.comando(`APPEND ${aspas(pasta)} (\\Seen)`, mensagem);
       }).catch(() => undefined);
