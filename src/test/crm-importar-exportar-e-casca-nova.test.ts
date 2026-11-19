@@ -58,6 +58,10 @@ describe("a Aceleriq na casca nova (19/11/2026)", () => {
     expect(app).toContain('<Route path="/vendas/:aba" element={<ProtectedRoute><ComercialRoute><CrmDaCasa /></ComercialRoute></ProtectedRoute>} />');
     expect(ler("src/pages/CrmDaCasa.tsx")).toContain('definirEscopoDoCrm({ modo: "casa", base: "/vendas" })');
     expect(ler("src/pages/AdminComercial.tsx")).toContain("data-abrir-crm-novo");
-    expect(ler("src/pages/ProdutoApp.tsx")).toContain("useTemaDoCorreio(CHAVE_DO_TEMA_DO_CRM)");
+    const produtoApp = ler("src/pages/ProdutoApp.tsx");
+    expect(produtoApp).toContain("useTemaDoCorreio(CHAVE_DO_TEMA_DO_CRM)");
+    // A conta da Aceleriq no produto lê o comercial da casa; o botão de voltar leva ao painel.
+    expect(produtoApp).toContain('definirEscopoDoCrm(ehDaCasa ? { modo: "casa", base: "/app/crm" } : escopo)');
+    expect(produtoApp).toContain("data-voltar-do-crm");
   });
 });

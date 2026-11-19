@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, MessagesSquare, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
+import { ArrowLeft, Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, MessagesSquare, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CHAVE_DO_TEMA_DO_CRM, useTemaDoCorreio } from "@/components/correio/TemaDoCorreio";
@@ -111,7 +111,10 @@ function CrmDaEmpresa({ estado }: { estado: EstadoDoProduto }) {
     qc.removeQueries({ predicate: (q) => ehDoComercial(q.queryKey) });
     return null;
   });
-  definirEscopoDoCrm(escopo);
+  // 19/11/2026: a conta da própria Aceleriq no produto mostra o comercial da casa (os mesmos negócios do
+  // painel e do /vendas, com o Rafael), em vez de um CRM vazio. Só para quem administra a casa.
+  const ehDaCasa = estado.dono_da_casa && /aceleriq/i.test(conta.nome || "");
+  definirEscopoDoCrm(ehDaCasa ? { modo: "casa", base: "/app/crm" } : escopo);
   useEffect(
     () => () => {
       definirEscopoDoCrm(null);
@@ -384,6 +387,13 @@ export default function ProdutoApp() {
       {/* Não é <header>: o tema claro do painel pinta de branco os links de "header nav", e aqui o topo é claro. */}
       <div role="banner" className="produto-vidro fixed inset-x-0 top-0 z-30 border-b border-border pt-[env(safe-area-inset-top)]" data-produto-topo="">
         <div className="flex h-[52px] w-full min-w-0 items-center px-4 md:px-5">
+          {/* O mesmo "voltar" do Correio e do CRM de vendas: para o painel, quando a pessoa tem um. */}
+          {(temPainel || (estado && estado.conta && estado.conta.tem_painel)) && (
+            <button type="button" onClick={() => (temPainel ? navigate("/dashboard") : trocaDeAcesso.abrir("painel"))} className={juntar("mr-2 flex h-9 shrink-0 items-center rounded-xl bg-muted px-3 text-[13px] font-semibold hover:bg-muted/70", foco)} title="Voltar ao painel" data-voltar-do-crm="">
+              <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Painel
+            </button>
+          )}
           {irPara}
           <Link to="/app" className={juntar("mr-4 flex min-w-0 shrink-0 items-center rounded-md", comLateral && !recolhida && "md:w-[204px]", foco)} aria-label="Início do CRM">
             {aparencia.logo ? (
