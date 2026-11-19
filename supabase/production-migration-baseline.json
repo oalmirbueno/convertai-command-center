@@ -3217,6 +3217,14 @@
       "remote_name": "regras_permanentes",
       "remote_statements_sha256": "21cc6c4a31627cde270cd36375b2c2f4949cdc559de700be1abf27a81871c0a5",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261119120000",
+      "path": "supabase/migrations/20261119120000_casa_dominios_e_sites.sql",
+      "local_sha256": "d1243cb394af66b2ecc3f8c97e08b0286a0063dfdb2af3c68c6f72558cd4b17b",
+      "remote_name": "casa_dominios_e_sites",
+      "remote_statements_sha256": "8e5d475003459e3587628b0f28ede3c149e6d05a163f045e26a3dce62152e26e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
