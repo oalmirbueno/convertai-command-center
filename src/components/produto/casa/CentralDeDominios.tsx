@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Cloud, Plus, RefreshCw } from "lucide-react";
-import { diaLegivel, fraseDoErro, reais } from "@/lib/produto/api";
+import { diaLegivel, fraseDoErro, reais, ROTULO_DO_ESTADO_DO_DOMINIO, ROTULO_DO_PROVEDOR, type EstadoDoDominio, type ProvedorDeEmail } from "@/lib/produto/api";
 import {
   ROTULO_DA_SAUDE,
   arquivar,
@@ -64,6 +64,7 @@ const hojeEmSaoPaulo = () => new Date(Date.now() - 3 * 3600 * 1000).toISOString(
 const porPeriodo = (v: number | null, p: Periodo) => (v === null ? "" : `${reais(v)}${p === "anual" ? " por ano" : " por mês"}`);
 
 type Parte = "dominios" | "sites";
+const VAZIA: Central = { dominios: [], sites: [], clientes: [], leitura: { dominios_em: null, cloudflare_em: null, sites_em: null } };
 
 /**
  * Central de domínios e sites da casa: os domínios dos clientes (registrador, DNS, vencimento, e-mail)
@@ -101,7 +102,7 @@ export default function CentralDeDominios({ parte }: { parte: Parte }) {
     onError: (e) => toast.error(fraseDoErro(e, "Não foi possível ler a Cloudflare.")),
   });
 
-  const dados: Central = central.data || { dominios: [], sites: [], clientes: [], leitura: { dominios_em: null, cloudflare_em: null, sites_em: null } };
+  const dados: Central = central.data || VAZIA;
   const resumo = useMemo(() => resumoDaCentralDeDominios(dados, hoje), [dados, hoje]);
 
   if (central.isLoading) return <Carregando linhas={6} rotulo="Carregando a central" />;
@@ -409,7 +410,7 @@ function FichaDoDominio({ d, central, hoje, onFechar, aoSalvar }: { d: DominioDa
             ["Nameservers", d.nameservers.join(", ") || "não lidos"],
             ["DNS", d.na_cloudflare_da_casa ? `Cloudflare da casa${d.cloudflare_status ? ` (${d.cloudflare_status === "active" ? "ativa" : d.cloudflare_status})` : ""}` : ondeEstaODns(d.nameservers) || ""],
             ["Vencimento", d.vence_em ? `${diaLegivel(d.vence_em, true)} (${quando(d.vence_em, hoje)})${d.vencimento_fonte === "rdap" ? " · lido no RDAP" : " · anotado"}` : "não lido"],
-            ["E-mail", d.email ? `${d.email.provedor} · ${d.email.estado}` : temEmail(d) ? "MX de outro provedor" : "sem e-mail"],
+            ["E-mail", d.email ? `${ROTULO_DO_PROVEDOR[d.email.provedor as ProvedorDeEmail] || d.email.provedor} · ${ROTULO_DO_ESTADO_DO_DOMINIO[d.email.estado as EstadoDoDominio] || d.email.estado}` : temEmail(d) ? "MX de outro provedor" : "sem e-mail"],
             ["Sites", sitesDoDominio.map((s) => s.endereco || s.nome).join(", ")],
           ]}
         />

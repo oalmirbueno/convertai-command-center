@@ -9,7 +9,7 @@ import { diasAteODia } from "./email-central";
  */
 
 const db = supabase as unknown as {
-  rpc: (f: string, a?: Record<string, unknown>) => Promise<{ data: any; error: { message: string; code?: string } | null }>;
+  rpc: (f: string, a?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
 };
 
 export type Periodo = "mensal" | "anual";
@@ -87,10 +87,13 @@ const valor = (v: unknown) => (v === null || v === undefined || v === "" ? null 
 const periodo = (v: unknown, padrao: Periodo): Periodo => (v === "mensal" || v === "anual" ? v : padrao);
 const textos = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
 
-export function lerCentral(d: any): CentralDeDominios {
-  const x = d || {};
+type Linha = Record<string, unknown>;
+const linhas = (v: unknown): Linha[] => (Array.isArray(v) ? (v as Linha[]) : []);
+
+export function lerCentral(d: unknown): CentralDeDominios {
+  const x = (d || {}) as Linha;
   return {
-    dominios: (Array.isArray(x.dominios) ? x.dominios : []).map((r: any) => ({
+    dominios: linhas(x.dominios).map((r) => ({
       ...r,
       nameservers: textos(r.nameservers),
       na_cloudflare_da_casa: r.na_cloudflare_da_casa === true,
@@ -99,8 +102,8 @@ export function lerCentral(d: any): CentralDeDominios {
       custo_periodo: periodo(r.custo_periodo, "anual"),
       preco_periodo: periodo(r.preco_periodo, "mensal"),
       arquivado: r.arquivado === true,
-    })),
-    sites: (Array.isArray(x.sites) ? x.sites : []).map((r: any) => ({
+    }) as DominioDaCasa),
+    sites: linhas(x.sites).map((r) => ({
       ...r,
       dominios_personalizados: textos(r.dominios_personalizados),
       cliente_herdado: r.cliente_herdado === true,
@@ -111,9 +114,9 @@ export function lerCentral(d: any): CentralDeDominios {
       custo_periodo: periodo(r.custo_periodo, "mensal"),
       preco_periodo: periodo(r.preco_periodo, "mensal"),
       arquivado: r.arquivado === true,
-    })),
-    clientes: Array.isArray(x.clientes) ? x.clientes : [],
-    leitura: x.leitura || { dominios_em: null, cloudflare_em: null, sites_em: null },
+    }) as SiteDaCasa),
+    clientes: linhas(x.clientes) as CentralDeDominios["clientes"],
+    leitura: (x.leitura as CentralDeDominios["leitura"]) || { dominios_em: null, cloudflare_em: null, sites_em: null },
   };
 }
 

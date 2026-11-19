@@ -105,7 +105,7 @@ describe("números do topo", () => {
   it("receita, custo e margem por mês sem os arquivados", () => {
     const c = lerCentral({
       dominios: [dominio(), dominio({ id: "d2", dominio: "b.com", arquivado: true, preco_valor: 1000 })],
-      sites: [site(), site({ id: "s2", http_status: null, erro: "x", preco_valor: "50", custo_valor: "120", custo_periodo: "anual" } as any)],
+      sites: [site(), { ...site({ id: "s2", http_status: null, erro: "x", custo_periodo: "anual" }), preco_valor: "50", custo_valor: "120" }],
       clientes: [],
     });
     const r = resumoDaCentralDeDominios(c, HOJE);

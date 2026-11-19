@@ -311,6 +311,13 @@ Marcos`, anexos: [] } });
   await contexto.close();
 }
 
+// O tour de boas-vindas reabre a cada tela com o perfil sintético, e clicar em "Pular" fecha a janela
+// aberta por baixo: aqui ele só some da frente.
+const pularTour = async (p) => {
+  await p.addStyleTag({ content: 'div[class="fixed inset-0 z-[9999]"]{display:none !important}' });
+  await p.waitForTimeout(400);
+};
+
 const telas = [
   { nome: "01-inicio", caminho: "/app", espera: "[data-inicio-do-produto]" },
   { nome: "02-crm-funil", caminho: "/app/crm/crm", espera: "[data-produto-conteudo] header" },
@@ -359,11 +366,11 @@ const telas = [
   { nome: "22e-casa-caixa", caminho: "/produto?area=caixa", papel: "admin", espera: "[data-caixa-desligada]" },
   { nome: "26-central", caminho: "/produto?area=central", papel: "admin", espera: "[data-clientes-da-central]" },
   { nome: "26b-central-ficha", caminho: "/produto?area=central", papel: "admin", espera: "[data-clientes-da-central]", depois: async (p) => { await p.locator('[data-cliente="critico"]').first().click(); await p.waitForSelector("[data-ficha-do-email]"); await p.waitForTimeout(400); } },
-  { nome: "27-dominios", caminho: "/produto/dominios", papel: "admin", espera: "[data-lista-de-dominios]" },
-  { nome: "27b-dominios-ficha", caminho: "/produto/dominios", papel: "admin", espera: "[data-lista-de-dominios]", depois: async (p) => { await p.locator('[data-dominio="critico"]').first().click(); await p.waitForSelector("[data-ficha-do-dominio]"); await p.waitForTimeout(400); } },
-  { nome: "27c-sites", caminho: "/produto/dominios/sites", papel: "admin", espera: "[data-lista-de-sites]" },
-  { nome: "27d-sites-claro", caminho: "/produto/dominios/sites", papel: "admin", tema: "light", espera: "[data-lista-de-sites]" },
-  { nome: "27e-cadastro", caminho: "/produto/dominios/sites", papel: "admin", espera: "[data-lista-de-sites]", depois: async (p) => { await p.locator("[data-cadastrar]").click(); await p.waitForSelector("[data-confirmar-cadastro]"); await p.fill('[data-campo="endereco"]', "loja.exemplo.com.br"); await p.fill('[data-campo="preco"]', "99,90"); await p.waitForTimeout(300); } },
+  { nome: "27-dominios", caminho: "/produto/dominios", papel: "admin", espera: "[data-lista-de-dominios]", depois: pularTour },
+  { nome: "27b-dominios-ficha", caminho: "/produto/dominios", papel: "admin", espera: "[data-lista-de-dominios]", depois: async (p) => { await pularTour(p); await p.locator('[data-dominio="critico"]').first().click(); await p.waitForSelector("[data-ficha-do-dominio]"); await pularTour(p); } },
+  { nome: "27c-sites", caminho: "/produto/dominios/sites", papel: "admin", espera: "[data-lista-de-sites]", depois: pularTour },
+  { nome: "27d-sites-claro", caminho: "/produto/dominios/sites", papel: "admin", tema: "light", espera: "[data-lista-de-sites]", depois: pularTour },
+  { nome: "27e-cadastro", caminho: "/produto/dominios/sites", papel: "admin", espera: "[data-lista-de-sites]", depois: async (p) => { await pularTour(p); await p.locator("[data-cadastrar]").click(); await p.waitForSelector("[data-confirmar-cadastro]"); await p.fill('[data-campo="endereco"]', "loja.exemplo.com.br"); await p.fill('[data-campo="preco"]', "99,90"); await p.waitForTimeout(300); } },
   { nome: "50-correio-porta", caminho: "/correio", espera: "[data-porta-do-correio]" },
   { nome: "51-correio", caminho: "/correio", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },
   { nome: "51b-correio-claro", caminho: "/correio", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },
