@@ -10,6 +10,7 @@ import { quemSouNoCorreio } from "@/lib/produto/correio-dia";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import { Carregando, EstadoDeErro, EstadoVazio, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
 import CaixaPorPrioridade from "@/components/correio/CaixaPorPrioridade";
+import "@/components/correio/correio-tema.css";
 import { CampanhasDoCorreio, FerramentasDoCorreio, MeuDia, QuadroDaCaixa } from "@/components/correio/AreasDoCorreio";
 
 /**
@@ -61,7 +62,7 @@ export default function Correio() {
   if (!user) return null;
   if (!liberado) {
     return (
-      <div className="flex min-h-[100dvh] min-w-0 flex-col bg-muted/40 text-foreground" data-correio="">
+      <div className="correio-tema flex min-h-[100dvh] min-w-0 flex-col text-foreground" data-correio="">
         <Porta
           email={user.email || ""}
           aoAbrir={() => {
@@ -264,7 +265,7 @@ function CorreioAberto() {
   else corpo = <CaixaPorPrioridade key={caixa.id} caixa={caixa} eu={euNoCorreio} />;
 
   return (
-    <div className="min-h-[100dvh] min-w-0 bg-muted/50 text-foreground" data-correio={area}>
+    <div className="correio-tema min-h-[100dvh] min-w-0 text-foreground" data-correio={area}>
       <div className="mx-auto min-w-0 max-w-[1680px] space-y-4 p-3 sm:p-4">
         <header className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2 rounded-3xl bg-card p-2" data-topo-do-correio="">
           <Link to="/app/email" className={juntar("flex h-11 shrink-0 items-center rounded-2xl pl-2 pr-3 hover:bg-muted", foco)} aria-label="Voltar ao painel" title="Voltar ao painel">

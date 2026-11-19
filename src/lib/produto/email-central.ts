@@ -229,6 +229,8 @@ export interface ResumoDaMensagem {
 }
 export interface MensagemAberta extends ResumoDaMensagem {
   texto: string;
+  /** O e-mail como foi enviado (HTML já limpo no servidor). Mostrado num iframe sandbox, sem script. */
+  html?: string | null;
   anexos: Array<{ nome: string; tamanho: number }>;
 }
 

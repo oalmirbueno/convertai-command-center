@@ -223,7 +223,7 @@ export function automatica(c: Record<string, string>): boolean {
   const auto = String(c["auto-submitted"] || "").toLowerCase();
   const prec = String(c["precedence"] || "").toLowerCase();
   const de = String(c["from"] || "").toLowerCase();
-  return !!c["list-id"] || !!c["list-unsubscribe"] || (!!auto && auto !== "no") || /bulk|list|junk/.test(prec) || /no-?reply|nao-?responda|mailer-daemon|notifica/.test(de);
+  return !!c["list-id"] || !!c["list-unsubscribe"] || (!!auto && auto !== "no") || /bulk|list|junk/.test(prec) || /no-?reply|nao-?responda|naoresponda|mailer-daemon|postmaster|notifica|notify|notificat|alert|newsletter|news@|marketing@|bounce|info@.*(mail|news)/.test(de);
 }
 
 export function resumoDoFetch(f: FetchLido, pasta: string, enviados: boolean): ResumoDaMensagem {
@@ -343,7 +343,7 @@ export function adaptadorImap(servidores: ServidoresDoCorreio, conectar: Conecta
         const resumo = resumoDoFetch({ ...f, literal: f.literal.split(/\r?\n\r?\n/)[0] }, p.pasta, /sent|enviad/i.test(p.pasta));
         const corpo = lerCorpo(f.literal);
         if (!resumo.lida) await imap.comando(`UID STORE ${p.id} +FLAGS.SILENT (\\Seen)`).catch(() => []);
-        return { ...resumo, lida: true, resumo: corpo.texto.slice(0, 200), texto: corpo.texto, anexos: corpo.anexos, tem_anexo: corpo.anexos.length > 0 };
+        return { ...resumo, lida: true, resumo: corpo.texto.slice(0, 200), texto: corpo.texto, html: corpo.conteudo_html, anexos: corpo.anexos, tem_anexo: corpo.anexos.length > 0 };
       });
     },
     async enviar(caixa, envio: Envio): Promise<{ id: string }> {
