@@ -41,7 +41,7 @@ export interface Painel {
 
 export interface PassoDoCaminho { no: string; estado: string; vezes: number }
 export interface Execucao { id: number; modo: string | null; status: string; inicio: string | null; fim: string | null; caminho: PassoDoCaminho[]; parouEm: string | null; erro: string | null; erroNo: string | null; grande: boolean }
-export interface NoDoDesenho { nome: string; tipo: string; x: number; y: number; desligado: boolean }
+export interface NoDoDesenho { nome: string; tipo: string; x: number; y: number; desligado: boolean; resumo: string[]; codigo: string | null }
 export interface LigacaoDoDesenho { de: string; para: string; saida: number; tipo: string }
 export interface DetalheDoFluxo extends Fluxo { desenho: { nos: NoDoDesenho[]; ligacoes: LigacaoDoDesenho[] }; execucoes: Execucao[]; acoes: AcaoRegistrada[] }
 
@@ -115,7 +115,7 @@ export function normalizarDetalhe(v: unknown): DetalheDoFluxo | null {
   return {
     ...normalizarFluxo(o),
     desenho: {
-      nos: arr(d.nos).map((x) => { const k = obj(x); return { nome: t(k.nome), tipo: t(k.tipo), x: n(k.x), y: n(k.y), desligado: k.desligado === true }; }),
+      nos: arr(d.nos).map((x) => { const k = obj(x); return { nome: t(k.nome), tipo: t(k.tipo), x: n(k.x), y: n(k.y), desligado: k.desligado === true, resumo: arr(k.resumo).map((r) => t(r)).filter(Boolean), codigo: typeof k.codigo === "string" && k.codigo ? k.codigo : null }; }),
       ligacoes: arr(d.ligacoes).map((x) => { const k = obj(x); return { de: t(k.de), para: t(k.para), saida: n(k.saida), tipo: t(k.tipo) }; }),
     },
     execucoes: arr(o.execucoes).map((x) => {
@@ -298,4 +298,38 @@ export function pastasDeClientes(fluxos: Fluxo[]): Pasta[] {
 
 export function fluxosDoCliente(fluxos: Fluxo[], clientId: string): Fluxo[] {
   return fluxos.filter((f) => f.clientId === clientId).sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome));
+}
+
+// ---------------------------------------------------------------- o que é cada nó
+export type CategoriaDoNo = "gatilho" | "codigo" | "chamada" | "banco" | "decisao" | "subfluxo" | "resposta" | "dados" | "espera" | "passagem" | "ia" | "outro";
+
+export const CATEGORIAS: Record<CategoriaDoNo, { rotulo: string; explica: string }> = {
+  gatilho: { rotulo: "Gatilho", explica: "É onde o fluxo começa: num horário, quando alguém chama o endereço (webhook), à mão ou quando outro fluxo chama." },
+  codigo: { rotulo: "Código", explica: "Faz contas, monta textos e decide em código. Nos fluxos da casa, o código vem do repositório lf-N8N." },
+  chamada: { rotulo: "Chamada externa", explica: "Fala com outro sistema pela internet: o painel, a Meta, o Jev, o OpenRouter, o Google." },
+  banco: { rotulo: "Banco de dados", explica: "Lê ou grava no banco (Supabase)." },
+  decisao: { rotulo: "Decisão", explica: "Escolhe por qual caminho o fluxo segue." },
+  subfluxo: { rotulo: "Outro fluxo", explica: "Chama outro fluxo e espera a resposta dele." },
+  resposta: { rotulo: "Resposta", explica: "Devolve a resposta para quem chamou o webhook." },
+  dados: { rotulo: "Dados", explica: "Junta, separa ou arruma os dados entre um passo e outro." },
+  espera: { rotulo: "Espera", explica: "Para por um tempo antes de seguir." },
+  passagem: { rotulo: "Passagem", explica: "Não faz nada: só marca um ponto do caminho." },
+  ia: { rotulo: "IA", explica: "Pede a um modelo de IA para escrever, ler ou decidir." },
+  outro: { rotulo: "Nó do n8n", explica: "Um passo do n8n." },
+};
+
+export function categoriaDoNo(tipo: string): CategoriaDoNo {
+  const t = tipo.toLowerCase();
+  if (t.endsWith("trigger") || t === "webhook" || t === "formtrigger") return "gatilho";
+  if (t === "code" || t.startsWith("function")) return "codigo";
+  if (t === "httprequest") return "chamada";
+  if (t === "postgres" || t === "supabase" || t === "mysql") return "banco";
+  if (t === "if" || t === "switch" || t === "filter") return "decisao";
+  if (t === "executeworkflow") return "subfluxo";
+  if (t === "respondtowebhook") return "resposta";
+  if (["set", "merge", "splitinbatches", "itemlists", "aggregate", "splitout", "sort", "limit", "removeduplicates"].includes(t)) return "dados";
+  if (t === "wait") return "espera";
+  if (t === "noop") return "passagem";
+  if (t.includes("lmchat") || t.includes("openai") || t === "agent" || t.includes("anthropic")) return "ia";
+  return "outro";
 }

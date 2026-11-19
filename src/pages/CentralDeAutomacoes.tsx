@@ -8,18 +8,15 @@ import { toast } from "sonner";
 import { Card, Collapsible, EmptyState, PillTabs, SearchField, StatCard, StatGrid, StatusDot, StatusPill, Chip, type Tone } from "@/components/ds";
 import { CabecalhoDePagina, Carregando, EstadoDeErro, JanelaCentral, botao, campo, espaco, foco, juntar, larguraDaMesa, lista, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { useClients } from "@/hooks/useSupabaseData";
+import CanvasDoFluxo from "@/components/automacoes/CanvasDoFluxo";
 import { GUIA_DO_N8N } from "../../supabase/functions/_shared/automacoes-guia";
 import {
-  NO_ALTURA,
-  NO_LARGURA,
   ROTULO_DO_MODO,
   ROTULO_DO_STATUS,
   agruparFluxos,
   pastasDaAceleriq,
   pastasDeClientes,
   type Pasta,
-  caminhoPorNo,
-  desenharFluxo,
   emQuanto,
   haQuanto,
   nomeCurto,
@@ -126,51 +123,6 @@ function LinhaDoFluxo({ f, agora, podeLigar, aoAbrir, aoAlternar }: { f: Fluxo; 
   );
 }
 
-const COR_DO_NO: Record<string, string> = {
-  success: "fill-success-soft stroke-success",
-  error: "fill-danger-soft stroke-destructive",
-  nao: "fill-card stroke-border",
-};
-
-function Desenho({ detalhe, execucao }: { detalhe: DetalheDoFluxo; execucao: Execucao | null }) {
-  const d = useMemo(() => desenharFluxo(detalhe.desenho), [detalhe.desenho]);
-  const passos = useMemo(() => caminhoPorNo(execucao?.caminho ?? []), [execucao]);
-  // Fluxo largo (mais de ~6 nós em fila) fica ilegível encolhido: abre em tamanho real, com rolagem para o lado.
-  const [real, setReal] = useState(() => d.largura > 1400);
-  if (!d.nos.length) return <EmptyState title="O desenho chega na próxima coleta." />;
-  const largura = real ? d.largura : undefined;
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <span className={texto.auxiliar}>{execucao ? `Execução ${execucao.id}: ${execucao.caminho.length} passos${execucao.parouEm ? `, parou em "${execucao.parouEm}"` : ""}` : `${d.nos.length} nós`}</span>
-        <button type="button" className={juntar(botao.discreto, "h-7 px-3 text-[12px]")} onClick={() => setReal((v) => !v)}>{real ? "Caber na tela" : "Tamanho real"}</button>
-      </div>
-      <div className={juntar("rounded-md border border-border/60 bg-muted/30", real && "overflow-x-auto")}>
-        <svg viewBox={`0 0 ${d.largura} ${d.altura}`} width={largura ?? "100%"} style={real ? { height: d.altura } : { maxHeight: 420 }} role="img" aria-label={`Desenho do fluxo ${detalhe.nome}`}>
-          {d.ligacoes.map((l, i) => {
-            const passou = passos.has(l.de) && passos.has(l.para);
-            return <path key={i} d={l.caminho} fill="none" className={passou ? "stroke-success" : "stroke-border"} strokeWidth={passou ? 2.5 : 1.5} strokeDasharray={passou || !execucao ? undefined : "4 4"} />;
-          })}
-          {d.nos.map((no) => {
-            const p = passos.get(no.nome);
-            const cor = !execucao ? "fill-card stroke-border" : p ? COR_DO_NO[p.estado === "error" ? "error" : "success"] : COR_DO_NO.nao;
-            return (
-              <g key={no.nome} transform={`translate(${no.x} ${no.y})`} opacity={no.desligado ? 0.45 : execucao && !p ? 0.55 : 1}>
-                <title>{`${no.nome} (${no.tipo})${p ? ` · passo ${p.ordem}${p.vezes > 1 ? `, ${p.vezes} vezes` : ""}` : ""}${no.desligado ? " · desligado" : ""}`}</title>
-                <rect width={NO_LARGURA} height={NO_ALTURA} rx={10} className={cor} strokeWidth={1.5} />
-                <text x={12} y={18} className="fill-foreground text-[12px] font-medium">{no.nome.length > 22 ? `${no.nome.slice(0, 21)}…` : no.nome}</text>
-                <text x={12} y={33} className="fill-muted-foreground text-[11px]">{no.tipo.length > 24 ? `${no.tipo.slice(0, 23)}…` : no.tipo}</text>
-                {p && <circle cx={NO_LARGURA - 12} cy={12} r={8} className={p.estado === "error" ? "fill-destructive" : "fill-success"} />}
-                {p && <text x={NO_LARGURA - 12} y={15.5} textAnchor="middle" className="fill-white text-[11px] font-medium">{p.ordem}</text>}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-    </div>
-  );
-}
-
 function JanelaDoFluxo({ id, agora, podeLigar, aoFechar, aoAlternar }: { id: string | null; agora: number; podeLigar: boolean; aoFechar: () => void; aoAlternar: (f: Fluxo) => void }) {
   const q = useDetalhe(id);
   const [execId, setExecId] = useState<number | null>(null);
@@ -184,7 +136,7 @@ function JanelaDoFluxo({ id, agora, podeLigar, aoFechar, aoAlternar }: { id: str
       titulo={d ? nomeCurto(d) : "Fluxo"}
       icone={<Workflow className="h-4 w-4" />}
       descricao={d ? `${d.cliente ?? "Aceleriq"} · ${d.ativo ? "ligado" : "desligado"} · ${d.total24h} rodadas em 24 h` : undefined}
-      largura="xl"
+      largura="tela"
       acoes={d && podeLigar ? <Switch checked={d.ativo} onCheckedChange={() => aoAlternar(d)} aria-label={d.ativo ? "Desligar este fluxo" : "Ligar este fluxo"} title={d.ativo ? "Desligar" : "Ligar"} /> : undefined}
     >
       {q.isLoading ? <Carregando rotulo="Lendo o fluxo" linhas={5} />
@@ -193,7 +145,7 @@ function JanelaDoFluxo({ id, agora, podeLigar, aoFechar, aoAlternar }: { id: str
         : (
           <div className="space-y-6">
             {podeLigar && <DonoDoFluxo fluxo={d} />}
-            <Desenho detalhe={d} execucao={execucao} />
+            <CanvasDoFluxo detalhe={d} execucao={execucao} />
             <section aria-label="Últimas execuções">
               <h3 className={juntar(texto.rotulo, "mb-1")}>Últimas execuções</h3>
               {d.execucoes.length === 0 ? <p className={texto.auxiliar}>Nenhuma execução guardada ainda.</p> : (

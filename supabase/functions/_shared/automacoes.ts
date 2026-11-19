@@ -53,6 +53,13 @@ export function mascarar(texto: unknown, teto = 320): string | null {
   return t.length > teto ? `${t.slice(0, teto)}…` : t;
 }
 
+/** Trecho de código do nó: mantém as quebras de linha, mascara o que parece segredo, no máximo 1.500 caracteres. */
+export function mascarCodigo(codigo: string): string {
+  let t = codigo.slice(0, 1500);
+  for (const [p, troca] of SEGREDO) t = t.replace(p as RegExp, troca as string);
+  return t;
+}
+
 const texto = (v: unknown, teto = 300) => (v == null ? null : String(v).slice(0, teto));
 const data = (v: unknown) => {
   if (v == null || v === '') return null;
@@ -94,6 +101,8 @@ export function validarRetrato(bruto: any) {
     if (f.desenho && typeof f.desenho === 'object') {
       const nos = Array.isArray(f.desenho.nos) ? f.desenho.nos.slice(0, 300).map((n: any) => ({
         nome: texto(n?.nome, 120), tipo: texto(n?.tipo, 60), x: Number(n?.x) || 0, y: Number(n?.y) || 0, desligado: n?.desligado === true,
+        resumo: Array.isArray(n?.resumo) ? n.resumo.slice(0, 8).map((r: unknown) => mascarar(r, 240)).filter(Boolean) : [],
+        codigo: typeof n?.codigo === 'string' && n.codigo ? mascarCodigo(n.codigo) : null,
       })) : [];
       const ligacoes = Array.isArray(f.desenho.ligacoes) ? f.desenho.ligacoes.slice(0, 600).map((l: any) => ({
         de: texto(l?.de, 120), para: texto(l?.para, 120), saida: inteiro(l?.saida), tipo: texto(l?.tipo, 30),
