@@ -131,7 +131,8 @@ const ENTRADAS: ReleaseEntry[] = [
   {
     id: "correio-do-cliente",
     date: "2026-11-19",
-    status: "no-ar",
+    // 19/11: aparece como "chegando" até o Migadu ser contratado e a cobrança do e-mail ligar.
+    status: "esta-semana",
     publico: "cliente",
     title: "O e-mail da sua empresa no painel",
     summary: "Você lê, responde e organiza o e-mail profissional da sua empresa sem sair do painel.",
