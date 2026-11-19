@@ -240,7 +240,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Visão geral", url: "/comercial", icon: Briefcase, soGestao: true, fimExato: true },
       // 18/11: "CRM de vendas" (o funil da Aceleriq), para não confundir com o CRM vendido em Produtos.
-      { title: "CRM de vendas", url: "/comercial/crm", icon: KanbanSquare, soGestao: true },
+      // 19/11: o CRM de vendas abre na casca nova (/vendas); o /comercial do painel fica de acompanhamento.
+      { title: "CRM de vendas", url: "/vendas/crm", icon: KanbanSquare, soGestao: true },
       { title: "Agenda", url: "/comercial/agenda", icon: CalendarClock, soGestao: true },
       { title: "Metas", url: "/comercial/metas", icon: Target, soGestao: true },
       { title: "Campanhas", url: "/comercial/campanhas", icon: Megaphone, soGestao: true },

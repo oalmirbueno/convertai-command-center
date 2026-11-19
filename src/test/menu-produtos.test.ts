@@ -16,7 +16,7 @@ describe("menu: Produto CRM e Produto E-mail separados", () => {
     expect(layout).not.toContain('{ title: "CRM e E-mail", url: "/produto"');
   });
   it("o CRM do comercial se chama CRM de vendas e a conversa com clientes tem grupo próprio", () => {
-    expect(layout).toContain('{ title: "CRM de vendas", url: "/comercial/crm"');
+    expect(layout).toContain('{ title: "CRM de vendas", url: "/vendas/crm"');
     expect(layout).toContain('label: "Clientes"');
   });
 });

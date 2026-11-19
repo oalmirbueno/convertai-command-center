@@ -63,6 +63,7 @@ const ProdutoComecar = rotas.lazy(() => import("@/pages/ProdutoComecar"));
 const EmailLanding = rotas.lazy(() => import("@/pages/EmailLanding"));
 const EmailPedir = rotas.lazy(() => import("@/pages/EmailPedir"));
 const Correio = rotas.lazy(() => import("@/pages/Correio"));
+const CrmDaCasa = rotas.lazy(() => import("@/pages/CrmDaCasa"));
 const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
 const AcessosDosClientes = rotas.lazy(() => import("@/pages/AcessosDosClientes"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
@@ -405,6 +406,9 @@ export function AppRoutes() {
       <Route path="/email" element={<EmailLanding />} />
       <Route path="/email/pedir" element={<EmailPedir />} />
       <Route path="/correio" element={<ProtectedRoute><Correio /></ProtectedRoute>} />
+      {/* 19/11/2026: o CRM da Aceleriq na casca nova, com os mesmos dados do Comercial do painel. */}
+      <Route path="/vendas" element={<ProtectedRoute><ComercialRoute><CrmDaCasa /></ComercialRoute></ProtectedRoute>} />
+      <Route path="/vendas/:aba" element={<ProtectedRoute><ComercialRoute><CrmDaCasa /></ComercialRoute></ProtectedRoute>} />
       <Route path="/app" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao/:aba" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />

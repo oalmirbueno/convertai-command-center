@@ -360,6 +360,7 @@ describe("Comercial é área própria, não item de Gestão", () => {
 
   it("a aba sai da URL, então o voltar do navegador funciona", () => {
     expect(pagina).toContain("useParams<{ aba?: string }>()");
-    expect(pagina).toContain('navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`)');
+    // 19/11/2026: a base da casa é /comercial no painel e /vendas na casca nova (baseDaCasa).
+    expect(pagina).toContain('navigate(proxima === "visao" ? baseDaCasa() : `${baseDaCasa()}/${proxima}`)');
   });
 });
