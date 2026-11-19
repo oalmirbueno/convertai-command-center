@@ -229,3 +229,60 @@ export function dominiosParaCaixaNova(dominios: DominioDeEmail[], nomes: Record<
 
 /** Empresa sem cliente ligado: o Financeiro e a ficha do cliente não acompanham. */
 export const semCliente = (c: Pick<ContaNaCasa, "client_id"> | null | undefined) => !!c && !c.client_id;
+
+// ------------------------------------------------------------------ todos os clientes no "Adicionar pessoa" (19/11)
+
+/** O que acontece ao escolher a empresa no "Adicionar pessoa". */
+export type DestinoDaPessoa =
+  | { tipo: "conta"; conta_id: string }
+  | { tipo: "ativar"; conta_id: string }
+  | { tipo: "plano"; extra_id: string; client_id: string }
+  | { tipo: "nova"; client_id: string };
+
+export type OpcaoDeEmpresa = { valor: string; nome: string; rotulo: string; grupo: "crm" | "clientes"; destino: DestinoDaPessoa };
+
+/**
+ * Dono (19/11): "puxar todos os clientes em selecionar a empresa". Primeiro as empresas que já têm CRM; depois
+ * cada cliente do painel que ainda não tem: empresa existente só com e-mail (liga o CRM), cliente com o extra
+ * de CRM no plano (liga pelo plano, o Financeiro já cobra) ou cliente sem nada (nasce a empresa ligada a ele).
+ */
+export function opcoesDeEmpresaParaPessoa(
+  contas: Array<Pick<ContaNaCasa, "id" | "nome" | "crm_ativo" | "client_id">>,
+  clientes: Array<{ id: string; nome: string }>,
+  extrasDeCrm: Array<{ id: string; client_id: string }>,
+): OpcaoDeEmpresa[] {
+  const porNome = (a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome, "pt-BR");
+  const comCrm: OpcaoDeEmpresa[] = contas
+    .filter((c) => c.crm_ativo)
+    .map((c) => ({ valor: `conta:${c.id}`, nome: c.nome, rotulo: c.nome, grupo: "crm" as const, destino: { tipo: "conta" as const, conta_id: c.id } }))
+    .sort(porNome);
+  const resto: OpcaoDeEmpresa[] = [];
+  for (const cliente of clientes) {
+    const nome = (cliente.nome || "").trim() || "Cliente";
+    const contasDoCliente = contas.filter((c) => c.client_id === cliente.id);
+    if (contasDoCliente.some((c) => c.crm_ativo)) continue;
+    const semCrm = contasDoCliente[0];
+    if (semCrm) {
+      resto.push({ valor: `ativar:${semCrm.id}`, nome: semCrm.nome, rotulo: `${semCrm.nome} (ligar o CRM)`, grupo: "clientes", destino: { tipo: "ativar", conta_id: semCrm.id } });
+      continue;
+    }
+    const extra = extrasDeCrm.filter((e) => e.client_id === cliente.id)[0];
+    if (extra) {
+      resto.push({ valor: `plano:${extra.id}`, nome, rotulo: `${nome} (CRM do plano)`, grupo: "clientes", destino: { tipo: "plano", extra_id: extra.id, client_id: cliente.id } });
+    } else {
+      resto.push({ valor: `nova:${cliente.id}`, nome, rotulo: `${nome} (nova no CRM)`, grupo: "clientes", destino: { tipo: "nova", client_id: cliente.id } });
+    }
+  }
+  return comCrm.concat(resto.sort(porNome));
+}
+
+/** Os extras de CRM vivos dos clientes (para ligar o CRM pelo plano). */
+export async function extrasDeCrmVivos(): Promise<Array<{ id: string; client_id: string }>> {
+  const { data, error } = await (supabase as unknown as { from: (t: string) => any })
+    .from("client_extras")
+    .select("id, client_id, status")
+    .eq("categoria", "crm")
+    .neq("status", "encerrado");
+  if (error) throw error;
+  return ((data || []) as Array<{ id: string; client_id: string }>).map((e) => ({ id: e.id, client_id: e.client_id }));
+}
