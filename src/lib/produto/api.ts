@@ -443,6 +443,7 @@ export interface CobrancaDoPedido {
 
 /** O cliente paga o pedido de e-mail (migração, 1º mês e ofertas) numa fatura só do Asaas. */
 export const pagarEmail = (p: { ofertas?: string[]; documento?: string }) => chamar<CobrancaDoPedido>({ acao: "pagar_email", ...p });
+export const contratarEmailExtras = (p: { caixas_a_mais: number; ofertas: string[] }) => chamar<{ ok: boolean; itens: string[]; mensal_a_mais: number; unico: number }>({ acao: "contratar_email_extras", ...p });
 
 /** A casa gera o link do pedido de uma empresa (vale com a cobrança geral desligada). */
 export const cobrarEntradaEmail = (p: { conta_id: string; documento?: string }) => chamar<CobrancaDoPedido>({ acao: "admin_cobrar_entrada_email", ...p });
@@ -720,6 +721,9 @@ export interface ContaNaCasa {
   dominios: number;
   negocios: number;
   ultimo_uso: string | null;
+  /** Quem paga o CRM: a assinatura no cartão ou o extra "crm" do plano do cliente. */
+  cobranca_por?: "assinatura" | "plano";
+  extra_id?: string | null;
 }
 
 export async function listarContasDaCasa(): Promise<ContaNaCasa[]> {

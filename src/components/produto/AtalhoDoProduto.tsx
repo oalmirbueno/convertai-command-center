@@ -1,53 +1,62 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { KanbanSquare, Mail } from "lucide-react";
+import { ArrowRight, KanbanSquare, Mail } from "lucide-react";
 import { useProduto } from "@/hooks/useProduto";
-import { botao, juntar, texto } from "@/components/sistema";
+import { juntar, texto } from "@/components/sistema";
 import { useTrocaDeAcesso } from "./TrocaDeAcesso";
+import { linkDoCorreio } from "@/lib/produto/rotas-do-correio";
 
 /**
- * O caminho para o produto CRM e E-mail, em destaque, para quem tem empresa
- * nele. Aparece no painel do cliente e na área de membros: são lugares
- * separados, e este é o atalho de um para o outro. Quem não tem não vê nada.
+ * O acesso rápido do painel ao Correio e ao CRM, em destaque, para quem tem empresa no produto. Aparece no
+ * painel do cliente e na área de membros.
  *
- * 18/11/2026: o login geral do painel não é usuário do CRM. Quando a empresa
- * tem CRM e quem está no painel é o login geral, o atalho explica que cada
- * pessoa entra com o próprio usuário e leva ao login do CRM.
+ * 19/11/2026 (pedido do dono: "fácil de ir e voltar, sem misturar"): dois cartões, um para cada lugar. O Correio
+ * abre com ?de=painel, e o botão de voltar dele traz para o painel. O CRM continua com a sua casa em /app.
+ *
+ * 18/11/2026: o login geral do painel não é usuário do CRM nem do Correio. Nesse caso o cartão explica que
+ * cada pessoa entra com o próprio usuário e passa pela troca de acesso.
  */
 export default function AtalhoDoProduto({ className = "" }: { className?: string }) {
   const produto = useProduto();
   const troca = useTrocaDeAcesso();
   const estado = produto.data;
   if (!estado) return null;
-  if (!estado.conta && estado.crm_da_empresa) {
-    return (
-      <div className={juntar("flex min-w-0 flex-wrap items-center rounded-lg bg-primary/[0.07] px-3 py-2", className)} data-atalho-do-produto="login-do-crm">
-        <span className="mr-3 min-w-0 flex-1">
-          <span className={juntar(texto.corpo, "block truncate font-medium")}>{estado.crm_da_empresa.nome} tem CRM</span>
-          <span className={juntar(texto.auxiliar, "block truncate")}>Cada pessoa entra no CRM com o próprio usuário.</span>
-        </span>
-        <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => troca.abrir("crm")} data-atalho="entrar-no-crm">
-          <KanbanSquare className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Entrar no CRM
-        </button>
-        {troca.janela}
-      </div>
-    );
-  }
-  if (!estado.conta) return null;
+  const geral = !estado.conta && !!estado.crm_da_empresa;
+  if (!estado.conta && !geral) return null;
   const conta = estado.conta;
+  const temCrm = geral || !!(conta && conta.crm_ativo);
+  const temEmail = geral || !!(conta && conta.email_ativo);
+
+  const cartao = "group flex min-w-0 flex-1 basis-[260px] items-center rounded-xl border border-border bg-card p-3.5 text-left transition-shadow hover:shadow-md";
+  const conteudo = (icone: ReactNode, cor: string, titulo: string, ajuda: string) => (
+    <>
+      <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", cor)} aria-hidden="true">{icone}</span>
+      <span className="min-w-0 flex-1">
+        <span className={juntar(texto.corpo, "block truncate font-semibold")}>{titulo}</span>
+        <span className={juntar(texto.auxiliar, "block truncate")}>{ajuda}</span>
+      </span>
+      <ArrowRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+    </>
+  );
+  const correio = conteudo(<Mail className="h-5 w-5" />, "bg-[#0E4A35] text-[#12E86A]", "Correio", geral ? "Entre com o seu usuário" : "Sua caixa de e-mail");
+  const crm = conteudo(<KanbanSquare className="h-5 w-5" />, "bg-primary/10 text-primary", "CRM", geral ? "Entre com o seu usuário" : "Funil, agenda e equipe");
+
   return (
-    <div className={juntar("flex min-w-0 flex-wrap items-center rounded-lg bg-primary/[0.07] px-3 py-2", className)} data-atalho-do-produto="">
-      <p className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>{conta.nome}</p>
-      {conta.crm_ativo && (
-        <Link to="/app/crm" className={juntar(botao.primario, "h-8")} data-atalho="crm">
-          <KanbanSquare className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          CRM
-        </Link>
-      )}
-      <Link to="/app/email" className={juntar(conta.crm_ativo ? botao.secundario : botao.primario, "ml-2 h-8")} data-atalho="email">
-        <Mail className="mr-1.5 h-4 w-4" aria-hidden="true" />
-        E-mail
-      </Link>
-    </div>
+    <section className={juntar("min-w-0", className)} aria-label="Acesso rápido" data-atalho-do-produto={geral ? "login-do-crm" : ""}>
+      <p className={juntar(texto.auxiliar, "mb-2 font-medium")}>Acesso rápido{conta ? ` · ${conta.nome}` : estado.crm_da_empresa ? ` · ${estado.crm_da_empresa.nome}` : ""}</p>
+      <div className="flex min-w-0 flex-wrap [&>*]:mb-2 [&>*]:mr-2">
+        {temEmail && (geral ? (
+          <button type="button" className={cartao} onClick={() => troca.abrir("correio")} data-atalho="correio">{correio}</button>
+        ) : (
+          <Link to={linkDoCorreio("painel")} className={cartao} data-atalho="correio">{correio}</Link>
+        ))}
+        {temCrm && (geral ? (
+          <button type="button" className={cartao} onClick={() => troca.abrir("crm")} data-atalho="entrar-no-crm">{crm}</button>
+        ) : (
+          <Link to="/app" className={cartao} data-atalho="crm">{crm}</Link>
+        ))}
+      </div>
+      {troca.janela}
+    </section>
   );
 }

@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronsUpDown, Inbox, KeyRound, Lock, ShieldCheck } from "lucide-react";
+import { Check, ChevronsUpDown, Inbox, KeyRound, Lock, ShieldCheck } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { abrirPorta, carregarMinhasCaixas, correio, portaAberta, type CaixaDoCorreio } from "@/lib/produto/email-central";
 import { quemSouNoCorreio } from "@/lib/produto/correio-dia";
-import { MarcaAceleriq } from "@/components/publico/CascaPublica";
+import LogoDoCorreio from "@/components/correio/LogoDoCorreio";
+import { BotaoInstalarCorreio, SaidaDoCorreio } from "@/components/correio/NavegacaoDoCorreio";
+import { useTrocaDeAcesso } from "@/components/produto/TrocaDeAcesso";
+import { useProduto } from "@/hooks/useProduto";
+import { usePwaProfile } from "@/hooks/usePwaProfile";
 import { Carregando, EstadoDeErro, EstadoVazio, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
 import CaixaPorPrioridade from "@/components/correio/CaixaPorPrioridade";
 import "@/components/correio/correio-tema.css";
@@ -30,6 +34,8 @@ const AREAS: Array<{ id: Area; nome: string }> = [
 
 export default function Correio() {
   const { user } = useAuth();
+  // App próprio: quem instala daqui ganha o "Correio" com o ícone do envelope (public/correio.webmanifest).
+  usePwaProfile({ manifestHref: "/correio.webmanifest", appleTitle: "Correio", appleIcon: "/correio-apple-touch-icon.png" });
   const [liberado, setLiberado] = useState(() => (user ? portaAberta(user.id) : false));
 
   useEffect(() => {
@@ -105,8 +111,7 @@ function Porta({ email, aoAbrir }: { email: string; aoAbrir: () => void }) {
         }}
       >
         <div className="mb-5 flex items-center">
-          <MarcaAceleriq altura={20} />
-          <span className={juntar(texto.corpo, "ml-3 font-medium")}>Correio</span>
+          <LogoDoCorreio tamanho={34} />
         </div>
         <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
           <Lock className="h-5 w-5" />
@@ -240,6 +245,8 @@ function CorreioAberto() {
   const minhas = useQuery({ queryKey: ["produto", "correio", "caixas"], queryFn: carregarMinhasCaixas, retry: 1 });
   const eu = useQuery({ queryKey: ["produto", "correio", "eu"], queryFn: quemSouNoCorreio, retry: 1 });
   const [escolhida, setEscolhida] = useState<string | null>(null);
+  const produto = useProduto();
+  const troca = useTrocaDeAcesso();
   const irPara = (a: Area) => {
     const nova = new URLSearchParams(busca);
     if (a === "caixa") nova.delete("area");
@@ -254,36 +261,36 @@ function CorreioAberto() {
   let corpo;
   if (minhas.isLoading || eu.isLoading) corpo = <div className="rounded-3xl bg-card p-5"><Carregando linhas={5} rotulo="Abrindo o correio" /></div>;
   else if (minhas.isError || !d) corpo = <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void minhas.refetch()}>Tentar de novo</button>} />;
+  else if (!d.conta && produto.data && produto.data.crm_da_empresa) corpo = <EstadoVazio icone={<KeyRound className="h-5 w-5" aria-hidden="true" />} titulo={`${produto.data.crm_da_empresa.nome} tem e-mail profissional`} descricao="O Correio abre com o usuário de cada pessoa, e não com o login geral do painel." acao={<button type="button" className={juntar(botao.primario, "correio-botao-forte")} onClick={() => troca.abrir("correio")} data-entrar-com-meu-usuario="">Entrar com o meu usuário</button>} />;
   else if (!d.conta) corpo = <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Você ainda não tem uma caixa" descricao="O correio é das empresas com e-mail profissional na Aceleriq." acao={<Link to="/email" className={botao.primario}>Conhecer o e-mail profissional</Link>} />;
   else if (!d.liberado) corpo = <EstadoVazio icone={<Lock className="h-5 w-5" aria-hidden="true" />} titulo="O e-mail da empresa não está liberado" descricao="Fale com quem administra a empresa." />;
-  else if (area === "campanhas") corpo = <CampanhasDoCorreio />;
-  else if (area === "ferramentas") corpo = <FerramentasDoCorreio />;
+  else if (area === "campanhas") corpo = <CampanhasDoCorreio key={caixa ? caixa.id : ""} caixa={caixa} />;
+  else if (area === "ferramentas") corpo = <FerramentasDoCorreio caixas={d.caixas} master={d.master} aoIr={(x) => irPara(x as Area)} />;
   else if (area === "dia") corpo = euNoCorreio ? <MeuDia caixa={caixa} eu={euNoCorreio} nome={euNoCorreio.nome} /> : <EstadoVazio titulo="Seu acesso ainda não está ligado a esta empresa." />;
   else if (!caixa) corpo = <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Nenhuma caixa ligada a você" descricao={d.master ? "As caixas aparecem aqui quando a migração criar as primeiras." : "Peça para quem administra a empresa ligar a sua caixa ao seu acesso."} />;
   else if (!caixa.ligado && d.master) corpo = <ConectarCaixa key={caixa.id} caixa={caixa} aoConectar={() => void minhas.refetch()} />;
-  else if (area === "quadro") corpo = <QuadroDaCaixa key={caixa.id} caixa={caixa} />;
+  else if (area === "quadro") corpo = <QuadroDaCaixa key={caixa.id} caixa={caixa} eu={euNoCorreio} />;
   else corpo = <CaixaPorPrioridade key={caixa.id} caixa={caixa} eu={euNoCorreio} />;
 
   return (
     <div className="correio-tema min-h-[100dvh] min-w-0 text-foreground" data-correio={area}>
       <div className="mx-auto min-w-0 max-w-[1680px] space-y-4 p-3 sm:p-4">
         <header className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2 rounded-3xl bg-card p-2" data-topo-do-correio="">
-          <Link to="/app/email" className={juntar("flex h-11 shrink-0 items-center rounded-2xl pl-2 pr-3 hover:bg-muted", foco)} aria-label="Voltar ao painel" title="Voltar ao painel">
-            <ArrowLeft className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <MarcaAceleriq altura={22} className="logo-do-topo" />
-            <span className="ml-2.5 text-[15px] font-semibold">Correio</span>
-          </Link>
-          <nav className="flex min-w-0 flex-1 [&>*]:mr-1 [&>*:last-child]:mr-0 overflow-x-auto" aria-label="Áreas do correio">
+          <SaidaDoCorreio />
+          <span className="flex h-11 shrink-0 items-center pl-1 pr-2" aria-label="Correio da Aceleriq"><LogoDoCorreio tamanho={34} className="max-sm:[&>.logo-do-topo]:hidden max-sm:[&>i]:hidden" /></span>
+          <nav className="flex min-w-0 flex-1 [&>*]:mr-1 [&>*:last-child]:mr-0 overflow-x-auto max-md:order-last max-md:basis-full" aria-label="Áreas do correio">
             {AREAS.map((a) => (
               <button key={a.id} type="button" onClick={() => irPara(a.id)} aria-current={a.id === area ? "page" : undefined} className={juntar("h-10 shrink-0 rounded-2xl px-4 text-[14px] font-medium", foco, a.id === area ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")} data-area-do-correio={a.id}>
                 {a.nome}
               </button>
             ))}
           </nav>
+          <BotaoInstalarCorreio />
           {d && d.caixas.length > 0 && caixa && <SeletorDeCaixa caixas={d.caixas} atual={caixa} master={d.master} aoEscolher={setEscolhida} />}
         </header>
         {corpo}
       </div>
+      {troca.janela}
     </div>
   );
 }

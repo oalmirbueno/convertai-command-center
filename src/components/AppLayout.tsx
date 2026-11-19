@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, BookOpen, Boxes, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle, Workflow,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, Palette, CircleDollarSign, CalendarRange, Library, MessageCircle, Workflow,
   Activity, Building2, Mail, Inbox, Tags, Wallet, Globe, MonitorSmartphone, MailOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -212,6 +212,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Base dos agentes", url: "/base-dos-agentes", icon: GraduationCap, soCriacao: true },
       // Laboratório (19/10/2026): trabalhos avulsos com ou sem cliente (admin, gestor e design).
       { title: "Laboratório", url: "/laboratorio", icon: FlaskConical, soCriacao: true },
+      // Ateliê de Cor (19/11/2026): paletas com motivo (60-30-10, contraste, OKLCH) que vão para o kit do cliente.
+      { title: "Ateliê de Cor", url: "/cores", icon: Palette, soCriacao: true },
       { title: "Ciclo", url: "/ciclo", icon: Repeat },
       // 14/11/2026: linha do tempo das peças por cliente e por dia (só leitura).
       { title: "Esteira", url: "/esteira", icon: CalendarRange },
@@ -373,8 +375,10 @@ const clientMainNav: NavItem[] = semItensOcultos([
 ]);
 
 const clientMoreNav: NavItem[] = semItensOcultos([
-  // 13/11/2026: o produto CRM e E-mail é um lugar à parte; daqui o cliente entra nele.
-  { title: "CRM e E-mail", url: "/app", icon: Boxes },
+  // 19/11/2026: Correio e CRM são lugares à parte, um item para cada (antes era um "CRM e E-mail" misturado).
+  // O ?de=painel faz o botão de voltar do Correio trazer de volta para cá.
+  { title: "Correio", url: "/correio?de=painel", icon: Mail },
+  { title: "CRM", url: "/app", icon: Boxes },
   { title: "Área de membros", url: "/membros", icon: BookOpen },
   { title: "Novidades", url: "/novidades", icon: Sparkles },
   { title: "Cofre", url: "/cofre", icon: KeyRound },

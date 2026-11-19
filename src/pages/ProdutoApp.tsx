@@ -18,6 +18,7 @@ import SemAcesso from "@/components/produto/SemAcesso";
 import { destinoDoInicio } from "@/lib/produto/email-pedidos";
 import CriarSenha from "@/components/produto/CriarSenha";
 import { useTrocaDeAcesso } from "@/components/produto/TrocaDeAcesso";
+import { linkDoCorreio } from "@/lib/produto/rotas-do-correio";
 
 const AdminComercial = lazy(() => import("@/pages/AdminComercial"));
 const EmailDoProduto = lazy(() => import("@/components/produto/EmailDoProduto"));
@@ -217,6 +218,7 @@ export default function ProdutoApp() {
   const admin = !!(estado && estado.conta && estado.eu && estado.eu.papel === "admin");
   const gestor = !!(estado && estado.eu && ehGestor(estado.eu.papel));
   const noEmail = secao === "email";
+  const comCorreio = !!(estado && estado.conta && estado.conta.email_ativo);
   useEffect(() => setGaveta(false), [local.pathname, local.search]);
 
   const menuDaPessoa = (
@@ -228,6 +230,8 @@ export default function ProdutoApp() {
         !temPainel && estado && estado.conta && estado.conta.tem_painel && { rotulo: "Painel da empresa", icone: <LayoutGrid className="h-4 w-4" />, aoEscolher: () => trocaDeAcesso.abrir("painel") },
         { rotulo: "Área de membros", icone: <BookOpen className="h-4 w-4" />, aoEscolher: () => navigate("/membros") },
         estado && estado.dono_da_casa && { rotulo: "Administrar o produto", icone: <Settings2 className="h-4 w-4" />, aoEscolher: () => navigate("/produto") },
+        comCorreio && { rotulo: "Correio", icone: <Mail className="h-4 w-4" />, aoEscolher: () => navigate(linkDoCorreio("crm")), separadorAntes: true },
+        comCorreio && admin && { rotulo: "Configurar o e-mail", icone: <Settings2 className="h-4 w-4" />, aoEscolher: () => navigate("/app/email") },
         admin && { rotulo: "Conexões", icone: <Plug className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=conexoes"), separadorAntes: true },
         admin && { rotulo: "Personalizar", icone: <Palette className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=aparencia") },
         { rotulo: "Meu acesso", icone: <UserRound className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=acesso"), separadorAntes: !admin },
@@ -332,7 +336,11 @@ export default function ProdutoApp() {
     <div className="mr-2 flex h-8 shrink-0 items-center rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Produtos" data-troca-de-produto="">
       {[
         { rotulo: "CRM", para: "/app", ativo: !noEmail, icone: <KanbanSquare className="h-3.5 w-3.5" aria-hidden="true" /> },
-        { rotulo: "E-mail", para: "/app/email", ativo: noEmail, icone: <Mail className="h-3.5 w-3.5" aria-hidden="true" /> },
+        // 19/11/2026: com o e-mail ligado, o outro lado é o Correio (a caixa), com voltar para cá; a configuração
+        // do e-mail fica no menu da pessoa. Sem e-mail, segue a página que apresenta e vende o e-mail.
+        comCorreio
+          ? { rotulo: "Correio", para: linkDoCorreio("crm"), ativo: false, icone: <Mail className="h-3.5 w-3.5" aria-hidden="true" /> }
+          : { rotulo: "E-mail", para: "/app/email", ativo: noEmail, icone: <Mail className="h-3.5 w-3.5" aria-hidden="true" /> },
       ].map((p) => (
         <Link key={p.rotulo} to={p.para} role="tab" aria-selected={p.ativo} className={juntar("inline-flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium transition-colors", foco, p.ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
           <span className="mr-1.5">{p.icone}</span>
@@ -432,9 +440,9 @@ export default function ProdutoApp() {
               <button type="button" className={botao.icone} onClick={() => setGaveta(false)} aria-label="Fechar"><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
             {montarLateral(false, false)}
-            <Link to="/app/email" className={juntar("mt-3 flex h-10 items-center rounded-lg border border-border px-3 text-[13px] font-medium", foco)}>
+            <Link to={comCorreio ? linkDoCorreio("crm") : "/app/email"} className={juntar("mt-3 flex h-10 items-center rounded-lg border border-border px-3 text-[13px] font-medium", foco)}>
               <Mail className="mr-2 h-4 w-4" aria-hidden="true" />
-              E-mail profissional
+              {comCorreio ? "Correio" : "E-mail profissional"}
             </Link>
           </div>
         </div>
