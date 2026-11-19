@@ -3235,11 +3235,27 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261119160841",
+      "path": "supabase/migrations/20261119160841_produto_central_de_acessos.sql",
+      "local_sha256": "d7190cbe81fdaa2e1018b9443d8397870589dd9269c1b7180b043db41fce5da1",
+      "remote_name": "produto_central_de_acessos",
+      "remote_statements_sha256": "94c6f3727a69868801eeab872824a0dcd76a943efc9b884fa62ecf8dd4521403",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261119180000",
       "path": "supabase/migrations/20261119180000_central_de_automacoes.sql",
       "local_sha256": "0bee5565013715c1b754a41ef676a40996b23c962924be84e89994be1e3cd0d1",
       "remote_name": "central_de_automacoes",
       "remote_statements_sha256": "4e9a834f35fb4d9337227b15a4c9a8e99d4d987f8b3612d19d702346ee4ef9b9",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261119200000",
+      "path": "supabase/migrations/20261119200000_produto_email_migracao_pelo_cliente.sql",
+      "local_sha256": "ede2a015a0f47fafe5a33c9d8196ab5cc7937be085617b7b91c09cf573eebe99",
+      "remote_name": "produto_email_migracao_pelo_cliente",
+      "remote_statements_sha256": "96bbf87d56540d0f28e644273062e11f298c0df48ce612dd3794f332c62f031a",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],
