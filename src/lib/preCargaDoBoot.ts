@@ -53,7 +53,16 @@ const carregarLogin: Carregar = () => import("@/pages/Login");
  * link no WhatsApp). "equipe" e "cliente" são as que dependem do papel; sem a
  * dica do papel guardada, nada baixa (baixar as duas seria desperdício).
  */
-type TelaComLogin = { todos?: Carregar; equipe?: Carregar; cliente?: Carregar };
+type TelaComLogin = { todos?: Carregar; equipe?: Carregar; cliente?: Carregar; admin?: Carregar };
+
+/** Página e a aba que ela abre por dentro, juntas (sem esperar a página rodar para pedir a aba). */
+const juntas = (...partes: Carregar[]): Carregar => () => Promise.all(partes.map((p) => p()));
+
+// 19/11/2026 (painel lento): as telas do produto abriam em cascata, primeiro a
+// página e só depois a aba que ela carrega sob demanda. Aqui as duas saem juntas.
+const carregarAdminProduto: Carregar = () => import("@/pages/AdminProduto");
+const PRODUTO_CRM: TelaComLogin = { admin: juntas(carregarAdminProduto, () => import("@/components/produto/casa/MonitorDoProduto")) };
+const PRODUTO_EMAIL: TelaComLogin = { admin: juntas(carregarAdminProduto, () => import("@/components/produto/casa/CentralDeEmail")) };
 
 const PAINEL: TelaComLogin = {
   equipe: () => import("@/pages/AdminDashboard"),
@@ -77,6 +86,12 @@ const TELAS_COM_LOGIN: Record<string, TelaComLogin> = {
   "/projetos": { todos: () => import("@/pages/Projects") },
   "/calendario": { todos: () => import("@/pages/EditorialCalendar") },
   "/onde-estamos": { todos: () => import("@/pages/ClientJourneyUpdates") },
+  "/produto": PRODUTO_CRM,
+  "/produto/crm": PRODUTO_CRM,
+  "/produto/crm/empresas": { admin: carregarAdminProduto },
+  "/produto/email": PRODUTO_EMAIL,
+  "/produto/email/entradas": { admin: juntas(carregarAdminProduto, () => import("@/components/produto/casa/EmailDaCasa")) },
+  "/produto/acessos": { admin: () => import("@/pages/AcessosDosClientes") },
 };
 
 /** Onde o Supabase guarda a sessão neste navegador (mesma regra do supabase-js). */
@@ -172,7 +187,7 @@ export function preCarregarTelaDoEndereco(
       return "mesa";
     }
     const lado = ladoDoPapel(papel);
-    const carregar = tela.todos || (lado ? tela[lado] : undefined);
+    const carregar = tela.todos || (papel === "admin" && tela.admin) || (lado ? tela[lado] : undefined);
     if (!carregar) return null;
     baixar(carregar);
     return "tela";

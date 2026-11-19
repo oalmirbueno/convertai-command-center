@@ -87,6 +87,79 @@ async function sairSoDesteNavegador(): Promise<void> {
   }
 }
 
+/**
+ * Busca perfil e papel. Devolve null quando o servidor NÃO respondeu depois
+ * de todas as tentativas (ver getOrCreateProfile).
+ */
+async function buscarPerfil(authUser: User): Promise<UserProfile | null> {
+  for (let attempt = 1; attempt <= PROFILE_MAX_ATTEMPTS; attempt++) {
+    try {
+      // Perfil e papel JUNTOS, não um depois do outro.
+      //
+      // As duas consultas são independentes, e em sequência somavam duas idas
+      // ao servidor antes de qualquer coisa aparecer na tela. Em conexão com
+      // meio segundo de latência isso é um segundo inteiro de tela parada, e
+      // é o tipo de espera que faz o painel "demorar para abrir" sem que
+      // nenhuma consulta esteja lenta.
+      const [
+        { data: profileData, error: profileQueryError },
+        { data: roleData, error: roleQueryError },
+      ] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name, email, company_name, avatar_url, plan_renewal_date, plan_status, services_config, onboarding_done")
+          .eq("id", authUser.id)
+          .maybeSingle(),
+        supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", authUser.id)
+          .maybeSingle(),
+      ]);
+
+      // Erro em qualquer uma das duas é motivo para tentar de novo. Papel
+      // ausente SEM erro: identidade de membros, sem acesso operacional.
+      if (profileQueryError || roleQueryError) {
+        throw profileQueryError || roleQueryError;
+      }
+
+      const role = (roleData?.role as AppRole) || "member";
+
+      if (profileData) {
+        return { ...profileData, role };
+      }
+
+      // Perfil ainda não existe (o gatilho pode não ter rodado): cria.
+      const meta = authUser.user_metadata || {};
+      const newProfile = {
+        id: authUser.id,
+        email: authUser.email || "",
+        full_name: meta.full_name || authUser.email?.split("@")[0] || "Usuário",
+        company_name: meta.company_name || null,
+      };
+
+      const { error: upsertError } = await supabase.from("profiles").upsert(newProfile, { onConflict: "id" });
+      if (upsertError) {
+        // O papel já é conhecido; o perfil mínimo serve até o gatilho criar
+        // a linha. Não vale deixar a pessoa presa por causa do upsert.
+        console.warn("[Auth] upsert do perfil falhou; seguindo com o mínimo:", upsertError.message);
+      }
+
+      return {
+        ...newProfile,
+        avatar_url: null,
+        role,
+      };
+    } catch (err) {
+      console.error(`[Auth] perfil/papel falhou (tentativa ${attempt}/${PROFILE_MAX_ATTEMPTS}):`, err);
+      if (attempt < PROFILE_MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, profileBackoffMs(attempt)));
+      }
+    }
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -106,6 +179,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userIdRef = useRef<string | null>(null);
   /** O botão sair está rodando: o SIGNED_OUT dele é de verdade, não precisa reler o storage. */
   const saindoDeProposito = useRef(false);
+  /** Busca de perfil em andamento (para não buscar duas vezes o mesmo usuário ao mesmo tempo). */
+  const perfilEmVoo = useRef<{ id: string; promessa: Promise<UserProfile | null> } | null>(null);
 
   /**
    * Busca perfil e papel. Devolve null quando o servidor NÃO respondeu depois
@@ -113,74 +188,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * ou mostrar o erro. Nunca inventa um papel: antes, qualquer erro de
    * consulta caía no padrão "client", e o dono via a tela de cliente.
    */
-  const getOrCreateProfile = useCallback(async (authUser: User): Promise<UserProfile | null> => {
-    for (let attempt = 1; attempt <= PROFILE_MAX_ATTEMPTS; attempt++) {
-      try {
-        // Perfil e papel JUNTOS, não um depois do outro.
-        //
-        // As duas consultas são independentes, e em sequência somavam duas idas
-        // ao servidor antes de qualquer coisa aparecer na tela. Em conexão com
-        // meio segundo de latência isso é um segundo inteiro de tela parada, e
-        // é o tipo de espera que faz o painel "demorar para abrir" sem que
-        // nenhuma consulta esteja lenta.
-        const [
-          { data: profileData, error: profileQueryError },
-          { data: roleData, error: roleQueryError },
-        ] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, full_name, email, company_name, avatar_url, plan_renewal_date, plan_status, services_config, onboarding_done")
-            .eq("id", authUser.id)
-            .maybeSingle(),
-          supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", authUser.id)
-            .maybeSingle(),
-        ]);
-
-        // Erro em qualquer uma das duas é motivo para tentar de novo. Papel
-        // ausente SEM erro: identidade de membros, sem acesso operacional.
-        if (profileQueryError || roleQueryError) {
-          throw profileQueryError || roleQueryError;
-        }
-
-        const role = (roleData?.role as AppRole) || "member";
-
-        if (profileData) {
-          return { ...profileData, role };
-        }
-
-        // Perfil ainda não existe (o gatilho pode não ter rodado): cria.
-        const meta = authUser.user_metadata || {};
-        const newProfile = {
-          id: authUser.id,
-          email: authUser.email || "",
-          full_name: meta.full_name || authUser.email?.split("@")[0] || "Usuário",
-          company_name: meta.company_name || null,
-        };
-
-        const { error: upsertError } = await supabase.from("profiles").upsert(newProfile, { onConflict: "id" });
-        if (upsertError) {
-          // O papel já é conhecido; o perfil mínimo serve até o gatilho criar
-          // a linha. Não vale deixar a pessoa presa por causa do upsert.
-          console.warn("[Auth] upsert do perfil falhou; seguindo com o mínimo:", upsertError.message);
-        }
-
-        return {
-          ...newProfile,
-          avatar_url: null,
-          role,
-        };
-      } catch (err) {
-        console.error(`[Auth] perfil/papel falhou (tentativa ${attempt}/${PROFILE_MAX_ATTEMPTS}):`, err);
-        if (attempt < PROFILE_MAX_ATTEMPTS) {
-          await new Promise((resolve) => setTimeout(resolve, profileBackoffMs(attempt)));
-        }
-      }
-    }
-    return null;
+  const getOrCreateProfile = useCallback((authUser: User): Promise<UserProfile | null> => {
+    // A abertura pede o perfil duas vezes quase juntas (a leitura da sessão e o
+    // SIGNED_IN do supabase-js): a segunda pega carona na primeira (19/11).
+    const emVoo = perfilEmVoo.current;
+    if (emVoo && emVoo.id === authUser.id) return emVoo.promessa;
+    const promessa = buscarPerfil(authUser).finally(() => {
+      if (perfilEmVoo.current?.promessa === promessa) perfilEmVoo.current = null;
+    });
+    perfilEmVoo.current = { id: authUser.id, promessa };
+    return promessa;
   }, []);
+
 
   /**
    * Entrega o resultado da busca de perfil ao estado. Sem resultado, o perfil

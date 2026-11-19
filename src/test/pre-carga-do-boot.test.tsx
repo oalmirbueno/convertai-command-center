@@ -40,6 +40,8 @@ vi.mock("@/pages/Login", () => ({ default: () => <h1>Login</h1> }));
 vi.mock("@/pages/AdminDashboard", () => ({ default: () => <h1>Painel da equipe</h1> }));
 vi.mock("@/pages/ClientDashboard", () => ({ default: () => <h1>Painel do cliente</h1> }));
 vi.mock("@/pages/Projects", () => ({ default: () => <h1>Projetos</h1> }));
+vi.mock("@/pages/AdminProduto", () => ({ default: () => <h1>Produto</h1> }));
+vi.mock("@/components/produto/casa/MonitorDoProduto", () => ({ default: () => <p>Monitor</p> }));
 
 import { AppRoutes } from "@/App";
 import { chaveDoPapel, preCarregarTelaDoEndereco, rotaPublicaPorToken, ROTAS_PUBLICAS_POR_TOKEN } from "@/lib/preCargaDoBoot";
@@ -148,6 +150,14 @@ describe("o boot adianta o download da tela do endereço", () => {
     entrar("u6", "design");
     expect(preCarregarTelaDoEndereco(local("/mesa-ads", "?client=x"))).toBe("mesa");
     expect(estado.mesa).toHaveBeenCalledWith("/mesa-ads?client=x");
+  });
+
+  it("telas do produto (só admin) baixam a página e a aba juntas", () => {
+    entrar("u8", "manager");
+    expect(preCarregarTelaDoEndereco(local("/produto/crm"))).toBeNull();
+    entrar("u9", "admin");
+    expect(preCarregarTelaDoEndereco(local("/produto/crm"))).toBe("tela");
+    expect(preCarregarTelaDoEndereco(local("/produto/acessos"))).toBe("tela");
   });
 
   it("endereço fora das listas não baixa nada", () => {

@@ -408,6 +408,8 @@ type Carregar = () => Promise<unknown>;
 export async function preCarregarEmSegundoPlano(
   carregadores: ReadonlyArray<Carregar>,
   simultaneos = 3,
+  /** Espera entre um módulo e o próximo (o agendamento usa o ócio do navegador). */
+  pausa?: () => Promise<void>,
 ): Promise<number> {
   preCargasEmFundo += 1;
   let proximo = 0;
@@ -420,6 +422,7 @@ export async function preCarregarEmSegundoPlano(
       } catch {
         falhas += 1;
       }
+      if (pausa && proximo < carregadores.length) await pausa().catch(() => undefined);
     }
   };
   const fila: Array<Promise<void>> = [];
@@ -454,7 +457,11 @@ export function agendarPreCargaEmSegundoPlano(
       } catch {
         return;
       }
-      void preCarregarEmSegundoPlano(lista).catch(() => undefined);
+      // 19/11/2026 (painel lento): eram 3 módulos de uma vez, sem respiro. Rodar o código de várias
+      // telas seguidas travava o clique de quem já estava usando (medido: tarefa de 2 s na troca de
+      // tela com a CPU 4x mais lenta). Agora 2 por vez, e cada próximo só no ócio e com a tela
+      // aberta já fora do esqueleto (quandoOcioso).
+      void preCarregarEmSegundoPlano(lista, 2, () => new Promise<void>((ok) => { quandoOcioso(ok, 2_000); })).catch(() => undefined);
     }, 8_000);
   }, esperaMs);
   return () => {
