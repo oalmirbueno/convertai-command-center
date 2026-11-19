@@ -54,12 +54,20 @@ function falha(codigo: string, mensagem: string): Error {
 const PAPEIS_QUE_EMPRESTAM_A_SESSAO = ['admin', 'manager'];
 const sessoesDosDonos = new Map<string, { token: string; validoAte: number }>();
 
-async function sessaoDoDonoDaChave(userId: string): Promise<string> {
-  const guardada = sessoesDosDonos.get(userId);
-  if (guardada && guardada.validoAte > Date.now() + 5 * 60_000) return guardada.token;
+/** Falha de infraestrutura ao abrir a sessão (banco/auth oscilou): vale repetir só este passo. */
+const SESSAO_INDISPONIVEL = 'Não foi possível abrir a sessão do dono da chave agora. Tente de novo.';
+const CONFERIR_INDISPONIVEL = 'Não foi possível conferir o dono da chave agora. Tente de novo.';
+const ehFalhaPassageiraDaSessao = (e: unknown) =>
+  e instanceof Error && e.message.startsWith('mesa:dono_da_chave ') &&
+  (e.message.includes(SESSAO_INDISPONIVEL) || e.message.includes(CONFERIR_INDISPONIVEL));
+
+/** Recuo entre tentativas de abrir a sessão; o teste troca para 0. */
+export const recuoDaSessaoDoDono = { ms: [300, 900] };
+
+async function abrirSessaoDoDono(userId: string): Promise<string> {
   try {
     const papeis = await db().from('user_roles').select('role').eq('user_id', userId);
-    if (papeis.error) throw falha('dono_da_chave', 'Não foi possível conferir o dono da chave agora. Tente de novo.');
+    if (papeis.error) throw falha('dono_da_chave', CONFERIR_INDISPONIVEL);
     const roles = ((papeis.data ?? []) as Array<{ role: string }>).map((r) => String(r.role));
     if (!roles.some((r) => PAPEIS_QUE_EMPRESTAM_A_SESSAO.includes(r))) {
       throw falha('dono_da_chave', 'O dono desta chave não é admin nem gestor da equipe: ela lê as mesas, mas não age nelas.');
@@ -69,18 +77,40 @@ async function sessaoDoDonoDaChave(userId: string): Promise<string> {
     if (usuario.error || !email) throw falha('dono_da_chave', 'O dono desta chave não tem e-mail para abrir a sessão.');
     const link = await db().auth.admin.generateLink({ type: 'magiclink', email });
     const hash = link.data?.properties?.hashed_token;
-    if (link.error || !hash) throw falha('dono_da_chave', 'Não foi possível abrir a sessão do dono da chave agora. Tente de novo.');
+    if (link.error || !hash) throw falha('dono_da_chave', SESSAO_INDISPONIVEL);
     const { url, anon } = enderecoDoProjeto();
     const publico = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
     const sessao = await publico.auth.verifyOtp({ token_hash: hash, type: 'magiclink' });
     const token = sessao.data?.session?.access_token;
-    if (sessao.error || !token) throw falha('dono_da_chave', 'Não foi possível abrir a sessão do dono da chave agora. Tente de novo.');
+    if (sessao.error || !token) throw falha('dono_da_chave', SESSAO_INDISPONIVEL);
     const expira = Number(sessao.data?.session?.expires_at ?? 0) * 1000;
     sessoesDosDonos.set(userId, { token, validoAte: expira > Date.now() ? expira : Date.now() + 50 * 60_000 });
     return token;
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('mesa:')) throw e;
-    throw falha('dono_da_chave', 'Não foi possível abrir a sessão do dono da chave agora. Tente de novo.');
+    throw falha('dono_da_chave', SESSAO_INDISPONIVEL);
+  }
+}
+
+/**
+ * 18/11/2026 (MCP 2.35.1): abrir a sessão só emite um JWT, então repetir é seguro.
+ * Repete só a falha passageira (banco/auth/rede), com recuo curto; recusa
+ * permanente (não é admin/gestor, sem e-mail) sai na primeira.
+ */
+export async function sessaoDoDonoDaChave(
+  userId: string,
+  abrir: (userId: string) => Promise<string> = abrirSessaoDoDono,
+): Promise<string> {
+  const guardada = sessoesDosDonos.get(userId);
+  if (guardada && guardada.validoAte > Date.now() + 5 * 60_000) return guardada.token;
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      return await abrir(userId);
+    } catch (e) {
+      const recuo = recuoDaSessaoDoDono.ms[tentativa];
+      if (recuo === undefined || !ehFalhaPassageiraDaSessao(e)) throw e;
+      if (recuo > 0) await new Promise((r) => setTimeout(r, recuo));
+    }
   }
 }
 
