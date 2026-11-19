@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Check, ExternalLink, Mail, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { carregarEmailDoCliente, fraseDoPedido } from "@/lib/produto/email-pedidos";
+import TrazerEmailsAntigos from "./TrazerEmailsAntigos";
 import {
   fraseDoErro,
   lerPrecos,
@@ -187,6 +188,7 @@ function EmailContratado({ estado }: { estado: EstadoDoProduto }) {
           )
         }
       />
+      {admin && dominio.provedor === "migadu" && <TrazerEmailsAntigos caixas={caixas.filter((c) => c.dominio_id === dominio.id)} />}
       {dominio.estado !== "concluido" && <Andamento etapas={etapas.filter((e) => e.dominio_id === dominio.id)} />}
       </div>
       </div>

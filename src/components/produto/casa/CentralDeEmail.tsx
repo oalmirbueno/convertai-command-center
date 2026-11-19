@@ -1,3 +1,4 @@
+import NovoClienteDeEmail from "./NovoClienteDeEmail";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -52,6 +53,7 @@ export default function CentralDeEmail() {
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState<string | null>(null);
+  const [novo, setNovo] = useState(false);
   const hoje = hojeEmSaoPaulo();
 
   const clientes = central.data || [];
@@ -94,7 +96,7 @@ export default function CentralDeEmail() {
         title="Clientes"
         subtitle={`${visiveis.length} de ${clientes.length}`}
         help="Uma linha por cliente com e-mail na Aceleriq, do mais urgente para o mais tranquilo. A saúde junta pagamento, vencimento do domínio e do plano de e-mail, DNS, limite de caixas e pedidos parados. Abra o cliente para ver os avisos e anotar os vencimentos."
-        action={<BotaoDeReler aoReler={() => void central.refetch()} relendo={central.isFetching} />}
+        action={<><button type="button" className={juntar(botao.primario, "mr-2 h-8")} onClick={() => setNovo(true)} data-novo-cliente-email="">Novo cliente</button><BotaoDeReler aoReler={() => void central.refetch()} relendo={central.isFetching} /></>}
         data-clientes-da-central-cartao=""
       >
         <div className="mb-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
@@ -141,6 +143,7 @@ export default function CentralDeEmail() {
           aoSalvar={() => qc.invalidateQueries({ queryKey: ["produto", "casa", "email"] })}
         />
       )}
+      {novo && <NovoClienteDeEmail onFechar={() => setNovo(false)} />}
     </div>
   );
 }
