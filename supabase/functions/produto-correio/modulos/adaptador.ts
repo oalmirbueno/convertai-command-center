@@ -48,6 +48,8 @@ export interface ResumoDaMensagem {
 export interface Mensagem extends ResumoDaMensagem {
   /** Só texto: o HTML do remetente nunca é devolvido cru para a tela. */
   texto: string;
+  /** O HTML original já limpo (sem script nem evento). A tela mostra num iframe sandbox. */
+  html?: string | null;
   anexos: Array<{ nome: string; tamanho: number }>;
 }
 

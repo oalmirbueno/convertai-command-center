@@ -281,7 +281,7 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
 Segue a proposta do apartamento 302 como combinamos. O cliente pode fechar ainda esta semana.
 
 Abraço,
-Marcos`, anexos: [] } });
+Marcos`, html: '<table width="100%" style="background:#0b3d2e;border-radius:16px"><tr><td style="padding:28px;color:#fff;font-family:Arial"><h1 style="margin:0 0 8px;color:#00ff6a">Proposta do 302</h1><p style="margin:0">Segue a proposta como combinamos. O cliente pode fechar ainda esta semana.</p><a href="https://exemplo.com" style="display:inline-block;margin-top:16px;background:#00ff6a;color:#0b3d2e;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:bold">Ver a proposta</a></td></tr></table><p style="font-family:Arial">Abraço,<br>Marcos</p>', anexos: [{ nome: "proposta-302.pdf", tamanho: 120000 }] } });
       return json({ mensagens: mensagensDoCorreio });
     }
     if (/\/auth\/v1\/token/.test(url.pathname)) return json({ access_token: "sintetico", token_type: "bearer", expires_in: 3600, refresh_token: "sintetico", user: { id: EU, email: "priscila@imobiliariaexemplo.com.br" } });

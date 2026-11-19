@@ -1,0 +1,96 @@
+/*
+ * Paleta do correio (19/11/2026). Regra dos três: base clara (menta), cor forte (verde floresta da
+ * Aceleriq) em blocos grandes e um acento (o verde neon da marca) só no que importa: não lida,
+ * contador, enviar. Os tons saem da mesma família do verde, no lugar do cinza. Cada remetente ganha
+ * uma cor suave (o avatar), para a lista não ficar toda branca.
+ */
+.correio-tema {
+  --background: 140 33% 95%;
+  --card: 0 0% 100%;
+  --muted: 142 32% 93%;
+  --muted-foreground: 160 14% 36%;
+  --foreground: 162 45% 10%;
+  --border: 142 22% 87%;
+  --input: 142 20% 82%;
+  --ring: 145 78% 36%;
+  --primary: 152 72% 26%;
+  --primary-foreground: 0 0% 100%;
+  --accent-soft: 145 72% 89%;
+  --success: 145 85% 26%;
+
+  /* Os blocos fortes. */
+  --correio-floresta: 160 62% 13%;
+  --correio-floresta-2: 158 48% 20%;
+  --correio-neon: 145 100% 50%;
+  --correio-menta: 145 70% 90%;
+  --correio-menta-forte: 146 58% 78%;
+
+  background:
+    radial-gradient(1200px 500px at 0% -10%, hsl(145 80% 88% / 0.55), transparent 60%),
+    radial-gradient(900px 420px at 100% 0%, hsl(170 70% 88% / 0.45), transparent 60%),
+    hsl(var(--background));
+}
+
+/* A coluna das pastas: o bloco de cor forte da tela. */
+.correio-tema .correio-pastas {
+  background: linear-gradient(180deg, hsl(var(--correio-floresta)), hsl(var(--correio-floresta-2)));
+  color: hsl(0 0% 100% / 0.86);
+}
+.correio-tema .correio-pastas [data-pasta] {
+  color: hsl(0 0% 100% / 0.82);
+}
+.correio-tema .correio-pastas [data-pasta]:hover {
+  background: hsl(0 0% 100% / 0.08);
+  color: #fff;
+}
+.correio-tema .correio-pastas [data-pasta][aria-current="page"] {
+  background: hsl(var(--correio-neon));
+  color: hsl(var(--correio-floresta));
+  font-weight: 600;
+}
+.correio-tema .correio-pastas .correio-contador {
+  background: hsl(var(--correio-neon));
+  color: hsl(var(--correio-floresta));
+}
+.correio-tema .correio-pastas [aria-current="page"] .correio-contador {
+  background: hsl(var(--correio-floresta));
+  color: hsl(var(--correio-neon));
+}
+.correio-tema .correio-cartao-cor {
+  background: linear-gradient(135deg, hsl(var(--correio-menta)), hsl(165 70% 92%));
+}
+
+/* A linha aberta e a não lida. */
+.correio-tema [data-mensagem][aria-pressed="true"] {
+  background: hsl(var(--correio-menta));
+  box-shadow: inset 3px 0 0 hsl(var(--primary));
+}
+.correio-tema .correio-nao-lida {
+  background: hsl(var(--correio-neon));
+  box-shadow: 0 0 0 3px hsl(var(--correio-neon) / 0.22);
+}
+
+/* Botões principais em verde floresta, com o neon no foco. */
+.correio-tema .correio-botao-forte {
+  background: hsl(var(--correio-floresta));
+  color: #fff;
+}
+.correio-tema .correio-botao-forte:hover {
+  background: hsl(var(--correio-floresta-2));
+}
+.correio-tema .correio-botao-forte:disabled {
+  opacity: 0.45;
+}
+
+/* A rolagem fina das colunas. */
+.correio-tema .correio-rolagem {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--correio-menta-forte)) transparent;
+}
+.correio-tema .correio-rolagem::-webkit-scrollbar {
+  width: 8px;
+}
+.correio-tema .correio-rolagem::-webkit-scrollbar-thumb {
+  background: hsl(var(--correio-menta-forte));
+  border-radius: 999px;
+}
