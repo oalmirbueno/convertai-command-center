@@ -11,8 +11,10 @@
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chave } from "../_shared/chaves.ts";
+import { assinarEmailDepoisDoPagamento } from "../produto/modulos/email-venda.ts";
 import {
   contaDaReferencia,
+  contaDaReferenciaDoEmail,
   descricaoDosItens,
   estadoDaCobranca,
   itensValidos,
@@ -94,12 +96,23 @@ async function contaDaAssinatura(db: SupabaseClient, token: string, assinaturaId
 
 interface DonoDoPagamento {
   contaId: string;
-  tipo: "mensalidade" | "migracao" | "avulsa";
+  /** "email": a mensalidade do e-mail, que mora em produto_email_assinaturas (não mexe no CRM). */
+  tipo: "mensalidade" | "migracao" | "avulsa" | "email";
   checkoutId: string | null;
+}
+
+/** A assinatura é a mensalidade do e-mail? Pelo banco ou pela referência "email:<empresa>" no Asaas. */
+async function contaDaAssinaturaDoEmail(db: SupabaseClient, token: string, assinaturaId: string): Promise<string | null> {
+  const { data } = await db.from("produto_email_assinaturas").select("conta_id").eq("asaas_assinatura_id", assinaturaId).maybeSingle();
+  if (data) return String((data as { conta_id: string }).conta_id);
+  const lida = await lerAssinaturaNoAsaas(token, fetch, assinaturaId).catch(() => null);
+  return lida ? contaDaReferenciaDoEmail(lida.referencia) : null;
 }
 
 async function contaDoPagamento(db: SupabaseClient, token: string, p: PagamentoNoAsaas): Promise<DonoDoPagamento | null> {
   if (p.assinatura_id) {
+    const doEmail = await contaDaAssinaturaDoEmail(db, token, p.assinatura_id);
+    if (doEmail) return { contaId: doEmail, tipo: "email", checkoutId: null };
     const dona = await contaDaAssinatura(db, token, p.assinatura_id);
     return dona ? { contaId: dona.contaId, tipo: "mensalidade", checkoutId: dona.checkoutId } : null;
   }
@@ -180,8 +193,8 @@ async function tratarPagamento(db: SupabaseClient, token: string, evento: string
   const { error } = await db.from("produto_cobrancas").upsert({
     conta_id: dono.contaId,
     asaas_pagamento_id: p.id,
-    tipo: dono.tipo,
-    descricao: (p.descricao || (dono.tipo === "migracao" ? "Migração do e-mail profissional" : "Mensalidade")).slice(0, 200),
+    tipo: dono.tipo === "email" ? "mensalidade" : dono.tipo,
+    descricao: (p.descricao || (dono.tipo === "migracao" ? "Migração do e-mail profissional" : dono.tipo === "email" ? "Mensalidade do e-mail profissional" : "Mensalidade")).slice(0, 200),
     valor: p.valor,
     valor_liquido: p.liquido,
     vencimento: p.vencimento,
@@ -218,6 +231,19 @@ async function tratarPagamento(db: SupabaseClient, token: string, evento: string
         }).eq("conta_id", dono.contaId);
         if (ass.troca_agendada) await aplicarTrocaAgendada(db, token, dono.contaId, ass);
       }
+    } else if (dono.tipo === "migracao") {
+      // O pedido do e-mail foi pago (o gatilho do banco já liberou): nasce a mensalidade do mês que vem.
+      try {
+        const r = await assinarEmailDepoisDoPagamento(db, token, fetch, { contaId: dono.contaId, clienteId: p.cliente_id });
+        if (r.feito === "sem_cliente") {
+          await db.rpc("produto_avisar_casa", { _mensagem: `E-mail: ${await nomeDaConta(db, dono.contaId)} pagou o pedido, mas a mensalidade não foi criada (sem cliente no Asaas). Confira.`, _link: "/produto?area=email" });
+        }
+      } catch (e) {
+        console.error("[produto-asaas-webhook] assinatura do e-mail", String((e as Error).message || "").slice(0, 160));
+        await db.rpc("produto_avisar_casa", { _mensagem: `E-mail: ${await nomeDaConta(db, dono.contaId)} pagou o pedido, mas a mensalidade não chegou ao Asaas. Crie pela ficha da empresa.`, _link: "/produto?area=email" });
+      }
+    } else if (dono.tipo === "email") {
+      await db.from("produto_email_assinaturas").update({ estado: "ativa", atualizado_em: agora() }).eq("conta_id", dono.contaId).neq("estado", "cancelada");
     }
     await db.from("produto_historico").insert({ conta_id: dono.contaId, acao: "pagamento_recebido", detalhe: { pagamento: p.id, valor: p.valor, tipo: dono.tipo } });
     if (ativou) await db.rpc("produto_avisar_casa", { _mensagem: `CRM e E-mail: ${await nomeDaConta(db, dono.contaId)} pagou ${reais(p.valor)}.`, _link: "/produto" });
@@ -225,6 +251,17 @@ async function tratarPagamento(db: SupabaseClient, token: string, evento: string
 
   // Venceu sem pagar, ou o pagamento voltou (estorno, contestação): o acesso entra na tolerância.
   const perdeuOPagamento = (estado === "atrasada" && estadoAnterior !== "atrasada") || (estado === "estornada" && estadoAnterior !== "estornada");
+  if (perdeuOPagamento && dono.tipo === "email") {
+    // Fase 1: o e-mail não é cortado sozinho. A casa é avisada e decide.
+    await db.from("produto_email_assinaturas").update({ estado: "atrasada", atualizado_em: agora() }).eq("conta_id", dono.contaId).eq("estado", "ativa");
+    await db.from("produto_historico").insert({ conta_id: dono.contaId, acao: estado === "estornada" ? "email_mensalidade_estornada" : "email_mensalidade_atrasada", detalhe: { pagamento: p.id, valor: p.valor } });
+    await db.rpc("produto_avisar_casa", {
+      _mensagem: estado === "estornada"
+        ? `E-mail: a mensalidade de ${await nomeDaConta(db, dono.contaId)} foi estornada ou contestada.`
+        : `E-mail: a mensalidade de ${await nomeDaConta(db, dono.contaId)} venceu e não foi paga.`,
+      _link: "/produto?area=email",
+    });
+  }
   if (perdeuOPagamento && dono.tipo === "mensalidade") {
     const { data: c } = await db.from("produto_contas").select("estado, atrasada_desde").eq("id", dono.contaId).maybeSingle();
     const conta = (c || {}) as { estado?: string; atrasada_desde?: string | null };
@@ -246,6 +283,24 @@ async function tratarPagamento(db: SupabaseClient, token: string, evento: string
 async function tratarAssinatura(db: SupabaseClient, token: string, evento: string, bruto: Record<string, unknown>) {
   const id = String(bruto.id || "");
   if (!id) return { ignorado: "sem_assinatura" };
+  // A mensalidade do e-mail tem a linha dela; não mexe na assinatura do CRM.
+  const doEmail = await contaDaAssinaturaDoEmail(db, token, id);
+  if (doEmail) {
+    const { data: guardada } = await db.from("produto_email_assinaturas").select("asaas_assinatura_id, estado").eq("conta_id", doEmail).maybeSingle();
+    const g = guardada as { asaas_assinatura_id?: string | null; estado?: string } | null;
+    if (!g || g.asaas_assinatura_id !== id) return { ignorado: "assinatura_do_email_substituida" };
+    if (evento === "SUBSCRIPTION_DELETED" || evento === "SUBSCRIPTION_INACTIVATED") {
+      if (g.estado !== "cancelada") {
+        await db.from("produto_email_assinaturas").update({ estado: "cancelada", atualizado_em: agora() }).eq("conta_id", doEmail);
+        await db.from("produto_historico").insert({ conta_id: doEmail, acao: "email_assinatura_encerrada", detalhe: { evento } });
+        await db.rpc("produto_avisar_casa", { _mensagem: `E-mail: a mensalidade de ${await nomeDaConta(db, doEmail)} foi encerrada no Asaas.`, _link: "/produto?area=email" });
+      }
+      return { conta: doEmail, estado: "cancelada" };
+    }
+    const lidaDoEmail = await lerAssinaturaNoAsaas(token, fetch, id).catch(() => null);
+    if (lidaDoEmail) await db.from("produto_email_assinaturas").update({ proximo_vencimento: lidaDoEmail.proximo_vencimento, valor_mensal: lidaDoEmail.valor, atualizado_em: agora() }).eq("conta_id", doEmail);
+    return { conta: doEmail };
+  }
   const dona = await contaDaAssinatura(db, token, id);
   if (!dona) return { ignorado: "assinatura_de_fora" };
   const contaId = dona.contaId;

@@ -56,6 +56,11 @@ export interface PedidoDeEmail {
   etapas_feitas?: number;
   etapas_total?: number;
   extras_de_email?: Array<{ id: string; nome: string; cobranca: string; valor: number }>;
+  /** As ofertas marcadas no pedido (order bumps), com o preço que o cliente viu. */
+  ofertas?: Array<{ id: string; nome: string; cobranca: "mensal" | "unica"; valor: number }>;
+  /** A fatura única aberta no Asaas, quando houver. */
+  cobranca_link?: string | null;
+  cobranca_valor?: number | null;
 }
 
 export const ROTULO_DO_PEDIDO: Record<EstadoDoPedido, string> = {
@@ -94,6 +99,9 @@ export function lerPedido(x: any): PedidoDeEmail {
     etapas_feitas: n(x && x.etapas_feitas),
     etapas_total: n(x && x.etapas_total),
     extras_de_email: Array.isArray(x && x.extras_de_email) ? x.extras_de_email.map((e: any) => ({ ...e, valor: n(e.valor) })) : [],
+    ofertas: Array.isArray(x && x.ofertas) ? x.ofertas.map((o: any) => ({ id: String(o.id || ""), nome: String(o.nome || ""), cobranca: o.cobranca === "unica" ? "unica" : "mensal", valor: n(o.valor) })) : [],
+    cobranca_link: x && typeof x.cobranca_link === "string" ? x.cobranca_link : null,
+    cobranca_valor: x && x.cobranca_valor != null ? n(x.cobranca_valor) : null,
   } as PedidoDeEmail;
 }
 
@@ -203,6 +211,41 @@ export interface ConferenciaDoZoho {
 
 export const conferirCloudflare = (dominioId: string) => chamarEmail<{ resumo: ConferenciaDaCloudflare }>({ acao: "conferir_cloudflare", dominio_id: dominioId }).then((r) => r.resumo);
 export const conferirZoho = (dominioId: string) => chamarEmail<{ resumo: ConferenciaDoZoho }>({ acao: "conferir_zoho", dominio_id: dominioId }).then((r) => r.resumo);
+// ------------------------------------------------------------------ Migadu (o correio da Aceleriq)
+
+export interface RegistroDoMigadu {
+  tipo: "MX" | "TXT" | "CNAME";
+  nome: string;
+  valor: string;
+  prioridade?: number;
+  papel: "mx" | "spf" | "dkim" | "dmarc" | "verificacao";
+}
+
+export interface ConferenciaDoMigadu {
+  ok: boolean;
+  existe: boolean;
+  dominio?: { nome: string; estado: string; ativo: boolean; pode_enviar: boolean; pode_receber: boolean };
+  registros: RegistroDoMigadu[];
+  caixas?: Array<{ endereco: string; nome: string; ativa: boolean; espaco_gb: number | null }>;
+  pendentes?: Array<{ id: string; endereco: string; motivo: string }>;
+  conferido_em: string;
+}
+
+export function lerConferenciaDoMigadu(integracao: unknown): ConferenciaDoMigadu | null {
+  const m = integracao && typeof integracao === "object" ? (integracao as { migadu?: unknown }).migadu : null;
+  if (!m || typeof m !== "object") return null;
+  const x = m as Partial<ConferenciaDoMigadu>;
+  return { ok: !!x.ok, existe: !!x.existe, dominio: x.dominio, registros: Array.isArray(x.registros) ? x.registros : [], caixas: Array.isArray(x.caixas) ? x.caixas : [], pendentes: Array.isArray(x.pendentes) ? x.pendentes : [], conferido_em: String(x.conferido_em || "") };
+}
+
+/** Os registros do Migadu prontos para colar no painel de DNS (um por linha). */
+export const registrosDoMigaduParaColar = (registros: RegistroDoMigadu[]) =>
+  registros.map((r) => `${r.nome}.  ${r.tipo}  ${r.tipo === "MX" ? `${r.prioridade ?? 10}  ` : ""}${r.tipo === "TXT" ? `"${r.valor}"` : r.valor.replace(/\.?$/, ".")}`).join("\n");
+
+export const conferirMigadu = (dominioId: string) => chamarEmail<{ resumo: ConferenciaDoMigadu }>({ acao: "conferir_migadu", dominio_id: dominioId }).then((r) => r.resumo);
+export const montarMigadu = (dominioId: string) => chamarEmail<{ dominio_criado: boolean; criadas: string[]; ja_existiam: string[]; pendentes: Array<{ endereco: string; motivo: string }> }>({ acao: "montar_migadu", dominio_id: dominioId });
+export const ativarMigadu = (dominioId: string) => chamarEmail<{ ativo: boolean; motivo: string | null }>({ acao: "ativar_migadu", dominio_id: dominioId });
+
 /** O token vai direto para o cofre (Vault) pela função; a tela nunca lê de volta. "" apaga. */
 export const guardarTokenZoho = (dominioId: string, token: string) => chamarEmail<{ guardado: boolean }>({ acao: "guardar_token_zoho", dominio_id: dominioId, token }).then((r) => r.guardado);
 

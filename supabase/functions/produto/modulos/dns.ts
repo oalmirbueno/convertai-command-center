@@ -6,7 +6,7 @@
 
 type Buscar = (url: string, init?: RequestInit) => Promise<Response>;
 
-export type Provedor = "zoho" | "google" | "microsoft" | "outro";
+export type Provedor = "migadu" | "zoho" | "google" | "microsoft" | "outro";
 
 export interface ItemDaChecagem {
   chave: "mx" | "spf" | "dkim" | "dmarc";
@@ -28,6 +28,8 @@ export interface Checagem {
 /** O que cada provedor pede no DNS. */
 // O Zoho pede hoje include:zohomail.com; include:zoho.com é o pedido antigo e continua valendo.
 export const GABARITO: Record<Provedor, { mx: string[]; spf: string; spfTambem?: string[]; mxTexto: string; seletorPadrao: string }> = {
+  // Migadu (o correio da Aceleriq, 19/11/2026): DKIM por CNAME em key1/key2/key3, que a consulta segue até o TXT.
+  migadu: { mx: ["migadu.com"], spf: "include:spf.migadu.com", mxTexto: "aspmx1.migadu.com (10), aspmx2.migadu.com (20)", seletorPadrao: "key1" },
   zoho: { mx: ["zoho.com", "zoho.eu", "zohomail.com"], spf: "include:zohomail.com", spfTambem: ["include:zoho.com"], mxTexto: "mx.zoho.com (10), mx2.zoho.com (20), mx3.zoho.com (50)", seletorPadrao: "zmail" },
   google: { mx: ["google.com", "googlemail.com"], spf: "include:_spf.google.com", mxTexto: "smtp.google.com (1)", seletorPadrao: "google" },
   microsoft: { mx: ["outlook.com"], spf: "include:spf.protection.outlook.com", mxTexto: "<domínio>.mail.protection.outlook.com (0)", seletorPadrao: "selector1" },

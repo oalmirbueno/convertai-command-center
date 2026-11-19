@@ -3,20 +3,25 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Minus, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { carregarProduto, criarConta, fraseDoErro, lerPrecos, pedirEmail, reais } from "@/lib/produto/api";
+import { carregarProduto, criarConta, fraseDoErro, lerOfertas, lerPrecos, pagarEmail, pedirEmail, reais } from "@/lib/produto/api";
 import {
   CAIXAS_MAXIMO,
   CAIXAS_MINIMO,
   RASCUNHO_VAZIO,
   caixasValidas,
   contaDoEmail,
+  contaDoPedido,
   corpoDoPedido,
+  documentoDoPagador,
   dominioLimpo,
   dominioPessoal,
   dominioValido,
   guardarRascunho,
   lerRascunho,
+  ofertasDoTipo,
+  ofertasEscolhidas,
   precosProntos,
+  tipoDoRascunho,
   type RascunhoDoPedido,
 } from "@/lib/produto/venda-email";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
@@ -28,7 +33,11 @@ import "./email-landing.css";
  * envio. O pedido chega à Aceleriq pelo fluxo que já existia: a ação
  * `pedir_email` da função `produto` avisa a casa e abre o negócio no Comercial.
  * Quem ainda não tem empresa no produto cria uma com `produto_criar_conta`.
- * Nada aqui cria cobrança.
+ *
+ * Venda automática (19/11/2026): no último passo entram as ofertas do pedido
+ * (order bumps). Com a cobrança geral ligada, o botão abre a fatura única do
+ * Asaas (`pagar_email`); desligada, o pedido vai com as ofertas e a casa manda
+ * o link. O preço que vale é o do banco, conferido de novo no servidor.
  */
 
 type Passo = "pedido" | "acesso" | "confirmar" | "enviar" | "feito";
@@ -39,6 +48,7 @@ const TEXTO = {
   recebido: "A Aceleriq já foi avisada e vai falar com você para combinar a migração.",
   jaTem: "O domínio, as caixas e o andamento da migração estão no painel. Para mais caixas, peça por lá.",
   envio: "O pedido vai para a equipe da Aceleriq, que fala com você para combinar a migração.",
+  pagar: "Escolha o que levar junto e pague numa fatura só. O trabalho começa assim que o pagamento cair.",
   confirmar: "Ao confirmar, você volta para cá com o pedido preenchido e só falta enviar.",
   soAdmin: "Peça para quem administra a conta abrir esta página e enviar.",
 };
@@ -98,6 +108,7 @@ export default function EmailPedir() {
   const [senha, setSenha] = useState("");
   const [verSenha, setVerSenha] = useState(false);
   const [aceito, setAceito] = useState(false);
+  const [documento, setDocumento] = useState("");
   const contaCriada = useRef(false);
 
   const mudar = (parte: Partial<RascunhoDoPedido>) => {
@@ -133,8 +144,20 @@ export default function EmailPedir() {
   const p = precosProntos(precos.data) ? precos.data : null;
   const estado = useQuery({ queryKey: ["produto", "estado", "pedido-de-email"], queryFn: carregarProduto, enabled: !!user && passo === "enviar", retry: 1 });
 
+  const listaDeOfertas = useQuery({ queryKey: ["produto", "ofertas", "venda-email"], queryFn: lerOfertas, staleTime: 300_000, retry: 1 });
+  const ofertas = listaDeOfertas.data || [];
+
   const dominio = dominioLimpo(r.dominio);
   const conta = p ? contaDoEmail(p, r.caixas) : null;
+  const tipo = tipoDoRascunho(r);
+  const cabem = ofertasDoTipo(ofertas, tipo);
+  const escolhidas = ofertasEscolhidas(ofertas, r);
+  const pedido = conta ? contaDoPedido(conta, ofertas, escolhidas, tipo) : null;
+  const pagaAgora = !!(p && p.pagamentos_ativos);
+  const marcarOferta = (id: string, sim: boolean) => {
+    const atual = ofertasEscolhidas(ofertas, r);
+    mudar({ ofertas: sim ? [...atual.filter((x) => x !== id), id] : atual.filter((x) => x !== id) });
+  };
 
   const continuar = () => {
     if (!r.semDominio) {
@@ -174,15 +197,24 @@ export default function EmailPedir() {
 
   const enviar = async () => {
     if (!temConta && r.empresa.trim().length < 2) return setErro("Diga o nome da empresa.");
+    const doc = documentoDoPagador(documento);
+    if (pagaAgora && !doc) return setErro("Diga o CPF ou o CNPJ de quem paga.");
     setErro("");
     setEnviando(true);
     try {
       if (!temConta) {
-        await criarConta({ nome: r.empresa.trim() });
+        await criarConta({ nome: r.empresa.trim(), ...(doc ? { documento: doc } : {}) });
         contaCriada.current = true;
         void qc.invalidateQueries({ queryKey: ["produto"] });
       }
-      await pedirEmail(corpoDoPedido(r));
+      await pedirEmail(corpoDoPedido(r, escolhidas));
+      if (pagaAgora) {
+        // A fatura única do Asaas (Pix, boleto ou cartão). Depois de pagar, o Asaas devolve para o painel.
+        const cobranca = await pagarEmail({ ofertas: escolhidas, ...(doc ? { documento: doc } : {}) });
+        guardarRascunho(null);
+        window.location.assign(cobranca.link);
+        return;
+      }
       guardarRascunho(null);
       ir("feito");
     } catch (falha) {
@@ -362,8 +394,8 @@ export default function EmailPedir() {
     return (
       <Cartao etapa={3}>
         <div data-passo-do-pedido="enviar">
-          <h1 className="el-pedir-titulo">Confira e envie</h1>
-          <p className="el-pedir-apoio">{TEXTO.envio}</p>
+          <h1 className="el-pedir-titulo">{pagaAgora ? "Confira e pague" : "Confira e envie"}</h1>
+          <p className="el-pedir-apoio">{pagaAgora ? TEXTO.pagar : TEXTO.envio}</p>
           {!e.conta && (
             <label className="el-campo">
               <span>Nome da empresa</span>
@@ -390,19 +422,55 @@ export default function EmailPedir() {
                 <span>Mensalidade</span>
                 <span>Incluída no seu plano</span>
               </li>
-            ) : conta ? (
-              <li className="el-forte">
-                <span>Mensalidade prevista</span>
-                <span>{reais(conta.mensal)} por mês</span>
-              </li>
             ) : null}
-            {conta && conta.migracao > 0 && (
-              <li>
-                <span>Migração, uma vez</span>
-                <span>{reais(conta.migracao)}</span>
-              </li>
-            )}
           </ul>
+          {cabem.length > 0 && (
+            <div className="el-ofertas" data-ofertas-do-pedido="">
+              <p className="el-ofertas-titulo">Aproveite e leve junto</p>
+              <p className="el-ofertas-apoio">Marque o que quiser. Dá para tirar depois pelo painel.</p>
+              {cabem.map((o) => {
+                const marcada = escolhidas.indexOf(o.id) >= 0;
+                return (
+                  <label key={o.id} className={`el-oferta${marcada ? " el-marcada" : ""}`} data-oferta={o.id}>
+                    <input type="checkbox" checked={marcada} onChange={(ev) => marcarOferta(o.id, ev.target.checked)} />
+                    <span className="el-oferta-texto">
+                      <span className="el-oferta-nome">{o.nome}</span>
+                      {o.descricao && <span className="el-oferta-descricao">{o.descricao}</span>}
+                    </span>
+                    <span className="el-oferta-preco">
+                      {reais(o.valor)}
+                      <small>{o.cobranca === "mensal" ? "por mês" : "uma vez"}</small>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {pedido && !inclusoNoPlano && (
+            <ul className="el-resumo" data-conta-do-pedido="">
+              {pedido.linhas.map((l) => (
+                <li key={l.nome}>
+                  <span>{l.quando === "hoje" ? `${l.nome}` : `${l.nome}, por mês`}</span>
+                  <span>{reais(l.valor)}</span>
+                </li>
+              ))}
+              <li className="el-forte" data-total-hoje="">
+                <span>{pagaAgora ? "Você paga hoje" : "Total do primeiro pagamento"}</span>
+                <span>{reais(pedido.hoje)}</span>
+              </li>
+              <li data-mensal-depois="">
+                <span>Depois, todo mês</span>
+                <span>{reais(pedido.mensal)}</span>
+              </li>
+            </ul>
+          )}
+          {pagaAgora && (
+            <label className="el-campo">
+              <span>CPF ou CNPJ de quem paga</span>
+              <input className="el-entrada" value={documento} onChange={(ev) => setDocumento(ev.target.value)} inputMode="numeric" autoComplete="off" maxLength={18} data-campo="documento" />
+              <small>Vai na nota e na fatura do Asaas.</small>
+            </label>
+          )}
           {linhaDeErro}
           <div className="el-pedir-acoes">
             <button type="button" className="el-liga" onClick={() => ir("pedido")}>
@@ -410,11 +478,11 @@ export default function EmailPedir() {
             </button>
             <span className="el-espaco" />
             <Avancar onClick={() => void enviar()} disabled={enviando} dado="data-enviar-pedido">
-              {enviando ? "Enviando" : "Enviar pedido"}
+              {enviando ? (pagaAgora ? "Abrindo o pagamento" : "Enviando") : pagaAgora && pedido ? `Pagar ${reais(pedido.hoje)}` : "Enviar pedido"}
             </Avancar>
           </div>
           <p className="el-pedir-nota">
-            Enviar não gera cobrança.
+            {pagaAgora ? "Pix, boleto ou cartão, numa fatura só. A mensalidade começa no mês que vem, sem fidelidade." : "Enviar não gera cobrança. A Aceleriq manda o link de pagamento."}
             {!e.conta && precos.data && precos.data.teste_dias > 0 ? ` A conta da empresa nasce com o CRM da Aceleriq em teste por ${precos.data.teste_dias} dias, sem cartão.` : ""}
           </p>
         </div>
@@ -448,6 +516,12 @@ export default function EmailPedir() {
           <input type="checkbox" checked={r.semDominio} onChange={(ev) => mudar({ semDominio: ev.target.checked })} data-campo="sem-dominio" />
           <span>A empresa ainda não tem domínio próprio.</span>
         </label>
+        {!r.semDominio && (
+          <label className="el-marcar">
+            <input type="checkbox" checked={r.semEmail} onChange={(ev) => mudar({ semEmail: ev.target.checked })} data-campo="sem-email" />
+            <span>O domínio existe, mas ainda não tem e-mail (não há nada para migrar).</span>
+          </label>
+        )}
         <div className="el-campo">
           <span id="rotulo-caixas-do-pedido">Quantas caixas</span>
           <div className="el-passador" role="group" aria-labelledby="rotulo-caixas-do-pedido">
@@ -473,7 +547,7 @@ export default function EmailPedir() {
               <span>Mensalidade prevista</span>
               <span>{reais(conta.mensal)} por mês</span>
             </li>
-            {conta.migracao > 0 && (
+            {conta.migracao > 0 && tipo === "migracao" && (
               <li>
                 <span>Migração, uma vez</span>
                 <span>{reais(conta.migracao)}</span>

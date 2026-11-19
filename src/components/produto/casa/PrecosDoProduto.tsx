@@ -18,6 +18,7 @@ import {
   lista,
   texto,
 } from "@/components/sistema";
+import OfertasDoPedido from "./OfertasDoPedido";
 
 const numeroDe = (v: string) => {
   const n = parseFloat(String(v).replace(/\./g, "").replace(",", "."));
@@ -220,6 +221,8 @@ export default function PrecosDoProduto({ parte }: { parte?: "crm" | "email" } =
           )}
         </div>
       </Secao>
+
+      {doEmail && <OfertasDoPedido />}
 
       {editando && <EditorDePlano plano={editando === "novo" ? null : editando} onFechar={() => setEditando(null)} onSalvo={() => { reler(); setEditando(null); }} />}
 

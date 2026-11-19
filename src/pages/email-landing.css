@@ -2389,3 +2389,75 @@ textarea.el-entrada {
     font-size: 32px;
   }
 }
+
+/* Ofertas do pedido (order bumps): um cartão por oferta, marcado com o verde da marca. */
+.el-ofertas {
+  margin-top: 22px;
+}
+.el-ofertas-titulo {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.el-ofertas-apoio {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--el-fraco);
+}
+.el-oferta {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-linha);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 200ms var(--el-curva), background-color 200ms var(--el-curva);
+}
+.el-oferta:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.el-oferta.el-marcada {
+  border-color: rgba(0, 255, 106, 0.55);
+  background: var(--el-verde-fundo);
+}
+.el-oferta input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: #00ff6a;
+  margin-right: 12px;
+}
+.el-oferta-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.el-oferta-nome {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+}
+.el-oferta-descricao {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--el-suave);
+}
+.el-oferta-preco {
+  flex: 0 0 auto;
+  margin-left: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.el-oferta-preco small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--el-fraco);
+  text-align: right;
+}

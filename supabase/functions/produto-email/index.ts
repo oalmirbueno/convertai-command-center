@@ -2,7 +2,11 @@
  * E-mail profissional, a parte que fala com a Cloudflare e o Zoho (18/11/2026).
  * Contrato: supabase/migrations/20261118170000_produto_email_rota_unica.sql.
  *
- * Só o dono da casa chama. Tudo aqui é leitura nos provedores: nada muda DNS, caixa ou senha.
+ * Só o dono da casa chama. Cloudflare e Zoho: só leitura. Migadu (19/11/2026, o correio da Aceleriq):
+ *   conferir_migadu { dominio_id }  -> { resumo }  domínio, registros de DNS e caixas (leitura)
+ *   montar_migadu { dominio_id }    -> cria o domínio, as caixas por convite e os apelidos (pode repetir)
+ *   ativar_migadu { dominio_id }    -> pede ao Migadu para conferir o DNS e ativar
+ *   Segredos: MIGADU_USUARIO (e-mail da conta Migadu) e MIGADU_API_KEY. Nenhuma senha de caixa passa aqui.
  *   conferir_cloudflare { dominio_id }        -> { resumo }  zona, proxy, MX, SPF, DKIM, DMARC
  *   conferir_zoho { dominio_id }              -> { resumo }  organização, caixas, apelidos, domínio e DKIM
  *   guardar_token_zoho { dominio_id, token }  -> { guardado } refresh token do cliente no Vault ("" apaga)
@@ -20,6 +24,17 @@ import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { lerZona, resumirZona } from "./modulos/cloudflare.ts";
 import { dcValido, lerOrganizacao, resumirZoho, SemPermissaoNoZoho, tokenDeAcesso, urlDoMail } from "./modulos/zoho.ts";
 import { estadoDaCaixa, lerMensagens } from "./modulos/caixa.ts";
+import {
+  ativarNoMigadu,
+  caixasNoMigadu,
+  credencialValida,
+  dominioNoMigadu,
+  ErroDoMigadu,
+  montarNoMigadu,
+  registrosNoMigadu,
+  type CaixaPedida,
+  type CredencialDoMigadu,
+} from "./modulos/migadu.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -73,7 +88,7 @@ async function lerDominio(id: unknown): Promise<Dominio> {
   return data as Dominio;
 }
 
-async function gravar(dominioId: string, onde: "cloudflare" | "zoho", resultado: unknown) {
+async function gravar(dominioId: string, onde: "cloudflare" | "zoho" | "migadu", resultado: unknown) {
   const { error } = await servico().rpc("produto_email_gravar_conferencia", { _dominio_id: dominioId, _onde: onde, _resultado: resultado });
   if (error) console.error("[produto-email] conferência não gravada", error.message.slice(0, 160));
 }
@@ -183,8 +198,89 @@ async function caixaListar() {
   return json({ mensagens: lerMensagens(d2 && d2.data) });
 }
 
+// ------------------------------------------------------------------ Migadu (o correio da Aceleriq)
+
+function credencialDoMigadu(): CredencialDoMigadu {
+  const c = credencialValida(amb("MIGADU_USUARIO"), amb("MIGADU_API_KEY"));
+  if (!c) throw new ErroHttp(503, "migadu_sem_chave", "O Migadu ainda não está conectado: falta contratar o plano e guardar o e-mail da conta e a chave da API nos segredos da função.");
+  return c;
+}
+
+function erroDoMigadu(e: unknown): ErroHttp {
+  if (e instanceof ErroHttp) return e;
+  if (e instanceof ErroDoMigadu) {
+    console.error("[produto-email] migadu", e.etapa, e.status, e.message.slice(0, 160));
+    return new ErroHttp(e.status >= 500 ? 502 : 400, "migadu", e.status >= 500 ? "O Migadu não respondeu agora. Tente de novo em instantes." : e.message);
+  }
+  return new ErroHttp(500, "erro_interno", "Falha inesperada ao falar com o Migadu.");
+}
+
+/** Lê o domínio no Migadu: se existe, se está ativo, os registros de DNS e as caixas. Só leitura. */
+async function conferirMigadu(_ator: string, corpo: Record<string, unknown>) {
+  const d = await lerDominio(corpo.dominio_id);
+  const c = credencialDoMigadu();
+  try {
+    const dom = await dominioNoMigadu(c, fetch, d.dominio);
+    const resumo = dom
+      ? { ok: dom.ativo, existe: true, dominio: dom, registros: await registrosNoMigadu(c, fetch, d.dominio), caixas: await caixasNoMigadu(c, fetch, d.dominio), conferido_em: new Date().toISOString() }
+      : { ok: false, existe: false, registros: [], caixas: [], conferido_em: new Date().toISOString() };
+    await gravar(d.id, "migadu", resumo);
+    return json({ resumo });
+  } catch (e) {
+    throw erroDoMigadu(e);
+  }
+}
+
+/**
+ * Monta o domínio no Migadu: cria o domínio (DNS fora, na Cloudflare), as caixas pedidas por convite
+ * e os apelidos. Pode rodar de novo. Devolve os registros de DNS para publicar.
+ */
+async function montarMigadu(ator: string, corpo: Record<string, unknown>) {
+  const d = await lerDominio(corpo.dominio_id);
+  if (d.provedor !== "migadu") throw new ErroHttp(409, "outro_provedor", "Este domínio não está no Migadu. Mude o provedor do domínio antes.");
+  const c = credencialDoMigadu();
+  const [{ data: caixas }, { data: conta }] = await Promise.all([
+    servico().from("produto_email_caixas").select("id, endereco, tipo, pessoa, estado, email_convite, destinos").eq("dominio_id", d.id).neq("estado", "removida"),
+    servico().from("produto_contas").select("email_cobranca").eq("id", d.conta_id).maybeSingle(),
+  ]);
+  const reserva = String((conta as { email_cobranca?: string | null } | null)?.email_cobranca || "").toLowerCase();
+  const pedidas: CaixaPedida[] = ((caixas || []) as Array<{ id: string; endereco: string; tipo: CaixaPedida["tipo"]; pessoa: string | null; email_convite: string | null; destinos: string[] | null }>).map((x) => ({
+    id: x.id,
+    endereco: x.endereco,
+    tipo: x.tipo,
+    pessoa: x.pessoa,
+    // O convite vai para o e-mail de hoje da pessoa; sem ele, para quem administra a empresa (se for de fora do domínio).
+    recuperacao: x.email_convite || (reserva && !reserva.endsWith(`@${d.dominio}`) ? reserva : null),
+    destinos: x.destinos || [],
+  }));
+  try {
+    const r = await montarNoMigadu(c, fetch, { dominio: d.dominio, caixas: pedidas });
+    const feitas = new Set([...r.criadas, ...r.ja_existiam]);
+    const ids = pedidas.filter((x) => feitas.has(x.endereco.toLowerCase())).map((x) => x.id);
+    if (ids.length) await servico().from("produto_email_caixas").update({ estado: "criada", atualizado_em: new Date().toISOString() }).in("id", ids).eq("estado", "pedida");
+    await gravar(d.id, "migadu", { ok: r.dominio.ativo, existe: true, dominio: r.dominio, registros: r.registros, pendentes: r.pendentes, conferido_em: new Date().toISOString() });
+    await servico().from("produto_historico").insert({ conta_id: d.conta_id, ator, acao: "migadu_montado", detalhe: { dominio: d.dominio, criadas: r.criadas, pendentes: r.pendentes.length } });
+    return json(r);
+  } catch (e) {
+    throw erroDoMigadu(e);
+  }
+}
+
+/** Pede ao Migadu para conferir o DNS e ativar o domínio (depois de publicar os registros). */
+async function ativarMigadu(_ator: string, corpo: Record<string, unknown>) {
+  const d = await lerDominio(corpo.dominio_id);
+  try {
+    return json(await ativarNoMigadu(credencialDoMigadu(), fetch, d.dominio));
+  } catch (e) {
+    throw erroDoMigadu(e);
+  }
+}
+
 type Acao = (ator: string, corpo: Record<string, unknown>) => Promise<Response>;
 const ACOES: Record<string, Acao> = {
+  conferir_migadu: conferirMigadu,
+  montar_migadu: montarMigadu,
+  ativar_migadu: ativarMigadu,
   conferir_cloudflare: conferirCloudflare,
   conferir_zoho: conferirZoho,
   guardar_token_zoho: guardarTokenZoho,

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, Plus } from "lucide-react";
-import { diaLegivel, fraseDoErro, listarContasDaCasa, reais } from "@/lib/produto/api";
+import { cobrarEntradaEmail, diaLegivel, fraseDoErro, listarContasDaCasa, reais } from "@/lib/produto/api";
 import {
   extrasDeEmailDoCliente,
   FORMAS,
@@ -78,6 +78,18 @@ export default function EntradasDeEmail({ aoAbrirDominio }: { aoAbrirDominio: (d
     }
   };
 
+  // A fatura única do pedido (migração, 1º mês e ofertas) para mandar ao cliente. Pago, a mensalidade nasce sozinha.
+  const gerarLink = async (p: PedidoDeEmail) => {
+    try {
+      const r = await cobrarEntradaEmail({ conta_id: p.conta_id });
+      await navigator.clipboard.writeText(r.link).catch(() => undefined);
+      toast.success(`Link de ${reais(r.valor)} copiado. Depois, ${reais(r.mensal)} por mês.`);
+      await reler();
+    } catch (e) {
+      toast.error(fraseDoErro(e, "Não foi possível gerar o link agora."));
+    }
+  };
+
   const lista_ = pedidos.data || [];
   const esperando = lista_.filter(esperaPagamento).length;
   return (
@@ -112,6 +124,11 @@ export default function EntradasDeEmail({ aoAbrirDominio }: { aoAbrirDominio: (d
                 <span className={juntar(texto.auxiliar, "block truncate")}>
                   {[p.tipo === "migracao" ? "Migração" : "E-mail novo", `${p.caixas} ${p.caixas === 1 ? "caixa" : "caixas"}`, ROTULO_DA_ORIGEM[p.origem], diaLegivel(p.criado_em), p.extra_nome ? `extra: ${p.extra_nome}` : ""].filter(Boolean).join(" · ")}
                 </span>
+                {p.ofertas && p.ofertas.length > 0 && (
+                  <span className={juntar(texto.auxiliar, "block truncate")} data-ofertas-da-entrada="">
+                    Ofertas: {p.ofertas.map((o) => `${o.nome} (${reais(o.valor)}${o.cobranca === "mensal" ? "/mês" : ""})`).join(", ")}
+                  </span>
+                )}
                 <span className={juntar(texto.auxiliar, "block")}>{proximoPasso(p)}</span>
               </span>
               <span className={juntar(etiqueta, "mt-1.5 sm:ml-2 sm:mt-0", COR[p.estado])}>{ROTULO_DO_PEDIDO[p.estado]}</span>
@@ -130,6 +147,7 @@ export default function EntradasDeEmail({ aoAbrirDominio }: { aoAbrirDominio: (d
                 <MenuMais
                   rotulo={`Mais ações de ${p.empresa || "entrada"}`}
                   itens={[
+                    esperaPagamento(p) && !p.extra_id && { rotulo: p.cobranca_link ? "Copiar o link de pagamento" : "Gerar o link de pagamento", aoEscolher: () => void gerarLink(p) },
                     p.estado === "novo" && { rotulo: "Aguardando pagamento", aoEscolher: () => void mudar(p, "aguardando_pagamento") },
                     (p.estado === "em_andamento" || p.estado === "pago") && { rotulo: "Concluir", aoEscolher: () => void mudar(p, "concluido") },
                     p.email_contato && { rotulo: `Copiar ${p.email_contato}`, aoEscolher: () => void navigator.clipboard.writeText(String(p.email_contato)).then(() => toast.success("E-mail copiado.")) },

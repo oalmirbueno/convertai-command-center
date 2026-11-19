@@ -383,7 +383,69 @@ export async function marcarAvisosLidos(): Promise<void> {
 
 export const assinar = (p: { plano_id: string; usuarios: number; so_guardar?: boolean }) => chamar<{ link?: string; atualizado?: boolean; agendado?: boolean; a_partir_de?: string | null; valor?: number }>({ acao: "assinar", ...p });
 export const cancelarAssinatura = () => chamar<{ cancelada: boolean; acesso_ate: string }>({ acao: "cancelar" });
-export const pedirEmail = (p: { dominio?: string; caixas?: number; observacao?: string }) => chamar<{ ok: boolean }>({ acao: "pedir_email", ...p });
+export const pedirEmail = (p: { dominio?: string; caixas?: number; observacao?: string; tipo?: "novo" | "migracao"; ofertas?: string[] }) => chamar<{ ok: boolean }>({ acao: "pedir_email", ...p });
+
+// ------------------------------------------------------------------ venda automática do e-mail (order bumps)
+
+export interface OfertaDoPedido {
+  id: string;
+  nome: string;
+  descricao: string;
+  cobranca: "mensal" | "unica";
+  valor: number;
+  mostra_em: "novo" | "migracao" | "ambos";
+  marcada: boolean;
+}
+
+export interface OfertaDaCasa extends OfertaDoPedido {
+  ativo: boolean;
+  ordem: number;
+}
+
+const ofertaLida = (o: Record<string, unknown>): OfertaDoPedido => ({
+  id: String(o.id || ""),
+  nome: String(o.nome || ""),
+  descricao: String(o.descricao || ""),
+  cobranca: o.cobranca === "unica" ? "unica" : "mensal",
+  valor: numero(o.valor),
+  mostra_em: o.mostra_em === "novo" || o.mostra_em === "migracao" ? o.mostra_em : "ambos",
+  marcada: !!o.marcada,
+});
+
+/** As ofertas que a página do pedido mostra (só as ativas, sem nada da casa). */
+export async function lerOfertas(): Promise<OfertaDoPedido[]> {
+  const { data, error } = await db.rpc("produto_ofertas_publicas");
+  if (error) throw error;
+  return (Array.isArray(data) ? data : []).map((o: Record<string, unknown>) => ofertaLida(o)).filter((o: OfertaDoPedido) => o.id && o.valor > 0);
+}
+
+/** Todas as ofertas, ligadas ou não (tela de preços da casa). */
+export async function lerOfertasDaCasa(): Promise<OfertaDaCasa[]> {
+  const { data, error } = await db.from("produto_ofertas").select("*").order("ordem", { ascending: true });
+  if (error) throw error;
+  return ((data || []) as Array<Record<string, unknown>>).map((o) => ({ ...ofertaLida(o), ativo: !!o.ativo, ordem: numero(o.ordem) }));
+}
+
+export async function salvarOferta(o: OfertaDaCasa): Promise<void> {
+  const { error } = await db.rpc("produto_oferta_salvar", {
+    _id: o.id, _nome: o.nome, _cobranca: o.cobranca, _valor: o.valor, _descricao: o.descricao,
+    _mostra_em: o.mostra_em, _marcada: o.marcada, _ativo: o.ativo, _ordem: o.ordem,
+  });
+  if (error) throw error;
+}
+
+export interface CobrancaDoPedido {
+  link: string;
+  valor: number;
+  mensal: number;
+  reaproveitada?: boolean;
+}
+
+/** O cliente paga o pedido de e-mail (migração, 1º mês e ofertas) numa fatura só do Asaas. */
+export const pagarEmail = (p: { ofertas?: string[]; documento?: string }) => chamar<CobrancaDoPedido>({ acao: "pagar_email", ...p });
+
+/** A casa gera o link do pedido de uma empresa (vale com a cobrança geral desligada). */
+export const cobrarEntradaEmail = (p: { conta_id: string; documento?: string }) => chamar<CobrancaDoPedido>({ acao: "admin_cobrar_entrada_email", ...p });
 
 // ------------------------------------------------------------------ conexões (API, Claude, ChatGPT)
 
@@ -511,7 +573,7 @@ export async function listarCobrancas(contaId?: string, limite = 24): Promise<Co
 // ------------------------------------------------------------------ e-mail
 
 export type EstadoDoDominio = "levantamento" | "preparando" | "virada" | "concluido" | "pausado";
-export type ProvedorDeEmail = "zoho" | "google" | "microsoft" | "outro";
+export type ProvedorDeEmail = "migadu" | "zoho" | "google" | "microsoft" | "outro";
 
 export interface ItemDaChecagem {
   chave: "mx" | "spf" | "dkim" | "dmarc";
@@ -555,6 +617,10 @@ export interface CaixaDeEmail {
   estado: "pedida" | "criada" | "copiando" | "ativa" | "removida";
   tamanho_origem: string | null;
   observacao: string | null;
+  /** Migadu: o e-mail de hoje da pessoa, que recebe o convite para criar a senha. */
+  email_convite?: string | null;
+  /** Migadu: as caixas que recebem o apelido. */
+  destinos?: string[] | null;
 }
 
 export interface EtapaDaMigracao {
@@ -568,8 +634,8 @@ export interface EtapaDaMigracao {
   nota: string | null;
 }
 
-export const ROTULO_DO_PROVEDOR: Record<ProvedorDeEmail, string> = { zoho: "Zoho Mail", google: "Google Workspace", microsoft: "Microsoft 365", outro: "Outro provedor" };
-export const WEBMAIL_DO_PROVEDOR: Record<ProvedorDeEmail, string> = { zoho: "https://mail.zoho.com", google: "https://mail.google.com", microsoft: "https://outlook.office.com/mail", outro: "" };
+export const ROTULO_DO_PROVEDOR: Record<ProvedorDeEmail, string> = { migadu: "Migadu (correio da Aceleriq)", zoho: "Zoho Mail", google: "Google Workspace", microsoft: "Microsoft 365", outro: "Outro provedor" };
+export const WEBMAIL_DO_PROVEDOR: Record<ProvedorDeEmail, string> = { migadu: "https://webmail.migadu.com", zoho: "https://mail.zoho.com", google: "https://mail.google.com", microsoft: "https://outlook.office.com/mail", outro: "" };
 export const ROTULO_DO_ESTADO_DO_DOMINIO: Record<EstadoDoDominio, string> = {
   levantamento: "Levantamento",
   preparando: "Preparando",

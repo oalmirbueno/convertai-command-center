@@ -242,7 +242,7 @@ export async function lerPagamentoNoAsaas(token: string, buscar: Buscar, id: str
 }
 
 /** Cobrança avulsa (a migração do e-mail): o cliente escolhe Pix, boleto ou cartão na fatura do Asaas. */
-export async function criarCobrancaAvulsa(token: string, buscar: Buscar, p: { clienteId: string; valor: number; descricao: string; referencia: string; vencimento: string }): Promise<PagamentoNoAsaas> {
+export async function criarCobrancaAvulsa(token: string, buscar: Buscar, p: { clienteId: string; valor: number; descricao: string; referencia: string; vencimento: string; voltarPara?: string }): Promise<PagamentoNoAsaas> {
   const r = await chamar(buscar, token, "cobranca", "POST", "/v3/payments", {
     customer: p.clienteId,
     billingType: "UNDEFINED",
@@ -250,10 +250,54 @@ export async function criarCobrancaAvulsa(token: string, buscar: Buscar, p: { cl
     dueDate: p.vencimento,
     description: p.descricao.slice(0, 500),
     externalReference: p.referencia.slice(0, 200),
+    // Depois de pagar, a fatura leva o cliente de volta ao painel.
+    ...(p.voltarPara ? { callback: { successUrl: p.voltarPara, autoRedirect: true } } : {}),
   });
   const lido = lerPagamento(r);
   if (!lido.id) throw new ErroDoAsaas("cobranca", 502, "o Asaas não devolveu a cobrança");
   return lido;
+}
+
+/** Apaga uma cobrança que ainda não foi paga (o cliente mudou o pedido e vai pagar outra). */
+export async function apagarCobrancaNoAsaas(token: string, buscar: Buscar, id: string): Promise<boolean> {
+  if (!ID_DE_PAGAMENTO.test(id)) return false;
+  const r = await chamar(buscar, token, "apagar", "DELETE", `/v3/payments/${id}`);
+  return r.deleted === true;
+}
+
+/** A descrição da cobrança única do e-mail: "Aceleriq · Migração do e-mail · E-mail profissional, 1º mês". */
+export const descricaoDaEntrada = (itens: ItemDaAssinatura[]) => `Aceleriq · ${itens.map((i) => i.nome).join(" · ")}`.slice(0, 500);
+
+/** Mesmo dia do mês seguinte (o fim do mês fica no último dia), em AAAA-MM-DD. */
+export function mesQueVem(dia: string): string {
+  const [a, m, d] = dia.split("-").map((x) => Number(x));
+  const ano = m === 12 ? a + 1 : a;
+  const mes = m === 12 ? 1 : m + 1;
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(Math.min(d, ultimo)).padStart(2, "0")}`;
+}
+
+/** Acha a assinatura pela referência (para não criar duas quando o aviso chega de novo). */
+export async function acharAssinaturaPelaReferencia(token: string, buscar: Buscar, referencia: string): Promise<AssinaturaNoAsaas | null> {
+  const r = await chamar(buscar, token, "assinatura", "GET", `/v3/subscriptions?externalReference=${encodeURIComponent(referencia)}&limit=10`);
+  const lista = Array.isArray(r.data) ? (r.data as Array<Record<string, unknown>>).map(lerAssinatura) : [];
+  return lista.find((a) => !a.apagada && a.estado === "ACTIVE" && a.referencia === referencia) || null;
+}
+
+/** A mensalidade do e-mail: fatura todo mês, o cliente escolhe Pix, boleto ou cartão. */
+export async function criarAssinaturaMensal(token: string, buscar: Buscar, p: { clienteId: string; valor: number; descricao: string; referencia: string; primeiroVencimento: string }): Promise<AssinaturaNoAsaas> {
+  const r = await chamar(buscar, token, "assinatura", "POST", "/v3/subscriptions", {
+    customer: p.clienteId,
+    billingType: "UNDEFINED",
+    value: p.valor,
+    nextDueDate: p.primeiroVencimento,
+    cycle: "MONTHLY",
+    description: p.descricao.slice(0, 500),
+    externalReference: p.referencia.slice(0, 200),
+  });
+  const lida = lerAssinatura(r);
+  if (!lida.id) throw new ErroDoAsaas("assinatura", 502, "o Asaas não devolveu a assinatura");
+  return lida;
 }
 
 /** O estado da cobrança no produto, a partir do status do Asaas. */
@@ -269,4 +313,11 @@ export function estadoDaCobranca(status: string, apagado = false): "aberta" | "p
 export function contaDaReferencia(ref: string | null | undefined): { contaId: string; tipo: "mensalidade" | "migracao" } | null {
   const m = /^conta:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(:migracao)?$/i.exec(String(ref || ""));
   return m ? { contaId: m[1].toLowerCase(), tipo: m[2] ? "migracao" : "mensalidade" } : null;
+}
+
+/** A referência da mensalidade do e-mail: "email:<uuid da empresa>". */
+export const referenciaDoEmail = (contaId: string) => `email:${contaId}`;
+export function contaDaReferenciaDoEmail(ref: string | null | undefined): string | null {
+  const m = /^email:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(String(ref || ""));
+  return m ? m[1].toLowerCase() : null;
 }

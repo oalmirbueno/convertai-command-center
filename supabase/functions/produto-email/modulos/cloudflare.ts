@@ -42,11 +42,13 @@ export interface ResumoDaZona {
 }
 
 const MX_DO_PROVEDOR: Record<string, string[]> = {
+  migadu: ["aspmx1.migadu.com", "aspmx2.migadu.com"],
   zoho: ["mx.zoho.com", "mx2.zoho.com", "mx3.zoho.com"],
   google: ["smtp.google.com"],
   microsoft: ["mail.protection.outlook.com"],
 };
 const SPF_DO_PROVEDOR: Record<string, string[]> = {
+  migadu: ["include:spf.migadu.com"],
   zoho: ["include:zohomail.com", "include:zoho.com"],
   google: ["include:_spf.google.com"],
   microsoft: ["include:spf.protection.outlook.com"],
@@ -62,7 +64,7 @@ export function resumirZona(
   opcoes: { dominio: string; provedor: string; seletor?: string | null; agora?: Date },
 ): ResumoDaZona {
   const dominio = semPonto(opcoes.dominio);
-  const seletor = opcoes.seletor || (opcoes.provedor === "zoho" ? "zmail" : opcoes.provedor === "google" ? "google" : "selector1");
+  const seletor = opcoes.seletor || (opcoes.provedor === "migadu" ? "key1" : opcoes.provedor === "zoho" ? "zmail" : opcoes.provedor === "google" ? "google" : "selector1");
   const doApex = registros.filter((r) => semPonto(r.name) === dominio);
   const itens: ItemDaZona[] = [];
 
@@ -101,7 +103,9 @@ export function resumirZona(
 
   const nomeDkim = `${seletor}._domainkey.${dominio}`;
   const dkim = registros.filter((r) => r.type === "TXT" && semPonto(r.name) === nomeDkim);
-  itens.push(dkim.length && /p=[A-Za-z0-9+/]{40,}/.test(semAspas(dkim[0].content))
+  // O Migadu publica o DKIM por CNAME (key1._domainkey -> key1.<domínio>._domainkey.migadu.com).
+  const dkimCname = registros.some((r) => r.type === "CNAME" && semPonto(r.name) === nomeDkim && /\._domainkey\.migadu\.com\.?$/i.test(String(r.content || "")));
+  itens.push(dkimCname || (dkim.length && /p=[A-Za-z0-9+/]{40,}/.test(semAspas(dkim[0].content)))
     ? { chave: "dkim", situacao: "ok", texto: `DKIM publicado (${seletor}).` }
     : { chave: "dkim", situacao: "falta", texto: `Sem DKIM em ${nomeDkim}.` });
 

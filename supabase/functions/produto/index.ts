@@ -25,14 +25,18 @@ import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { documentoValido, ErroDoAsaas } from "../_shared/comercial-asaas.ts";
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
 import {
+  apagarCobrancaNoAsaas,
   cancelarAssinaturaNoAsaas,
   clienteNoAsaas,
   criarCheckoutDaAssinatura,
   criarCobrancaAvulsa,
+  descricaoDaEntrada,
   descricaoDosItens,
   diaEmSaoPaulo,
+  estadoDaCobranca,
   itensValidos,
   lerAssinaturaNoAsaas,
+  lerPagamentoNoAsaas,
   mudarValorDaAssinatura,
   totalDosItens,
 } from "./modulos/asaas.ts";
@@ -412,7 +416,13 @@ async function pedirEmail(ch: Chamador, corpo: Record<string, unknown>) {
     _provedor_atual: texto(corpo.provedor_atual, 120) || null,
   });
   if (erroDoPedido || !registro) throw erroDoBanco(erroDoPedido, "Não foi possível registrar o pedido agora.");
-  const r = registro as { pedido: { id: string }; novo: boolean };
+  const r = registro as { pedido: { id: string; estado: string }; novo: boolean };
+  // As ofertas marcadas no pedido (order bumps). Só antes de pagar; o banco guarda o preço de agora.
+  const ofertas = idsDasOfertas(corpo.ofertas);
+  if (ofertas && (r.pedido.estado === "novo" || r.pedido.estado === "aguardando_pagamento")) {
+    const { error: erroDasOfertas } = await servico().rpc("produto_email_escolher_ofertas", { _pedido: r.pedido.id, _ofertas: ofertas, _ator: ch.userId });
+    if (erroDasOfertas) console.error("[produto] ofertas do pedido", erroDasOfertas.message.slice(0, 160));
+  }
   if (!r.novo) return json({ ok: true, pedido_id: r.pedido.id, novo: false });
   const { error } = await servico().from("commercial_leads").insert({
     name: conta.nome,
@@ -423,11 +433,113 @@ async function pedirEmail(ch: Chamador, corpo: Record<string, unknown>) {
     stage: "novo",
     classe: "upsell",
     next_action: "Responder o pedido de e-mail profissional",
-    notes: [`Pedido feito dentro do CRM (${conta.nome}).`, dominio ? `Domínio: ${dominio}` : "", caixas ? `Caixas: ${caixas}` : "", observacao].filter(Boolean).join("\n"),
+    notes: [`Pedido feito dentro do CRM (${conta.nome}).`, dominio ? `Domínio: ${dominio}` : "", caixas ? `Caixas: ${caixas}` : "", ofertas && ofertas.length ? `Ofertas: ${ofertas.join(", ")}` : "", observacao].filter(Boolean).join("\n"),
     qualificacao: { fonte: "produto_crm", produto_conta_id: contaId, oferta: "E-mail profissional", email_pedido_id: r.pedido.id },
   });
   if (error) console.error("[produto] lead do pedido não criado", error.message.slice(0, 160));
   return json({ ok: true, pedido_id: r.pedido.id, novo: true });
+}
+
+/** Os códigos das ofertas que vieram do pedido: lista curta, só no formato do catálogo. Sem lista, null. */
+function idsDasOfertas(bruto: unknown): string[] | null {
+  if (!Array.isArray(bruto)) return null;
+  const saida: string[] = [];
+  for (const x of bruto) {
+    const id = String(x || "").trim().toLowerCase();
+    if (/^[a-z][a-z0-9_]{1,39}$/.test(id) && saida.indexOf(id) < 0) saida.push(id);
+    if (saida.length >= 12) break;
+  }
+  return saida;
+}
+
+interface CobrancaDoPedido {
+  pedido_id: string;
+  itens_hoje: unknown;
+  itens_mensais: unknown;
+  total_hoje: number;
+  total_mensal: number;
+}
+
+/**
+ * A cobrança única do pedido de e-mail: migração, 1º mês e as ofertas, numa fatura só do Asaas
+ * (Pix, boleto ou cartão). Quando é paga, o aviso do Asaas libera o pedido (gatilho do banco) e cria a
+ * mensalidade do e-mail para o mês que vem. Pedir de novo com o mesmo valor devolve a mesma fatura.
+ */
+async function cobrarEntradaDoEmail(contaId: string, ator: string | null, corpo: Record<string, unknown>) {
+  const conta = await lerConta(contaId);
+  const documento = documentoValido(conta.documento) || documentoValido(corpo.documento);
+  if (!documento) throw new ErroHttp(400, "sem_documento", "Diga o CPF ou o CNPJ de quem paga.");
+  if (!documentoValido(conta.documento)) {
+    await servico().from("produto_contas").update({ documento, atualizado_em: new Date().toISOString() }).eq("id", contaId);
+  }
+  const { data: aberto } = await servico().from("produto_email_pedidos")
+    .select("id, estado, cobranca_asaas_id, cobranca_link, cobranca_valor")
+    .eq("conta_id", contaId).in("estado", ["novo", "aguardando_pagamento"]).maybeSingle();
+  const pedido = aberto as { id: string; estado: string; cobranca_asaas_id: string | null; cobranca_link: string | null; cobranca_valor: number | null } | null;
+  if (!pedido) throw new ErroHttp(404, "sem_pedido", "Não há pedido de e-mail aberto para pagar.");
+
+  const ofertas = idsDasOfertas(corpo.ofertas);
+  if (ofertas) {
+    const { error } = await servico().rpc("produto_email_escolher_ofertas", { _pedido: pedido.id, _ofertas: ofertas, _ator: ator });
+    if (error) throw erroDoBanco(error, "Não foi possível guardar as ofertas agora.");
+  }
+  const { data: calc, error: erroDoCalculo } = await servico().rpc("produto_email_cobranca_do_pedido", { _pedido: pedido.id });
+  if (erroDoCalculo || !calc) throw erroDoBanco(erroDoCalculo, "Não consegui calcular o pedido agora.");
+  const c = calc as CobrancaDoPedido;
+  const itens = itensValidos(c.itens_hoje);
+  const total = totalDosItens(itens);
+  const mensal = totalDosItens(itensValidos(c.itens_mensais));
+  if (!(total >= 5)) throw new ErroHttp(400, "nada_a_cobrar", "Não há o que cobrar neste pedido.");
+
+  try {
+    const token = await tokenDoAsaas();
+    // Mesma conta, mesmo valor e fatura ainda aberta: é a mesma. Valor mudou: a antiga sai e nasce outra.
+    if (pedido.cobranca_asaas_id) {
+      const antiga = await lerPagamentoNoAsaas(token, fetch, pedido.cobranca_asaas_id).catch(() => null);
+      const aberta = antiga && !antiga.apagado && estadoDaCobranca(antiga.estado) === "aberta";
+      if (aberta && pedido.cobranca_link && Math.abs(Number(pedido.cobranca_valor) - total) < 0.01) {
+        return json({ link: pedido.cobranca_link, valor: total, mensal, itens, reaproveitada: true });
+      }
+      if (aberta) {
+        await apagarCobrancaNoAsaas(token, fetch, pedido.cobranca_asaas_id).catch(() => false);
+        await servico().from("produto_cobrancas").update({ estado: "cancelada", atualizado_em: new Date().toISOString() }).eq("asaas_pagamento_id", pedido.cobranca_asaas_id);
+      }
+    }
+    const { data: ass } = await servico().from("produto_assinaturas").select("asaas_cliente_id").eq("conta_id", contaId).maybeSingle();
+    const clienteId = (ass as { asaas_cliente_id?: string | null } | null)?.asaas_cliente_id || (await clienteNoAsaas(token, fetch, { nome: conta.nome, documento, email: conta.email_cobranca, telefone: conta.telefone }));
+    const pg = await criarCobrancaAvulsa(token, fetch, {
+      clienteId,
+      valor: total,
+      descricao: descricaoDaEntrada(itens),
+      referencia: `conta:${contaId}:migracao`,
+      vencimento: diaEmSaoPaulo(new Date(), 3),
+      voltarPara: `${app()}/app/email?pagamento=ok`,
+    });
+    await servico().from("produto_assinaturas").upsert({ conta_id: contaId, asaas_cliente_id: clienteId }, { onConflict: "conta_id" });
+    await servico().from("produto_cobrancas").insert({
+      conta_id: contaId, asaas_pagamento_id: pg.id, tipo: "migracao", descricao: "Pedido do e-mail profissional", valor: total, vencimento: pg.vencimento, estado: "aberta", link: pg.link,
+    });
+    await servico().from("produto_email_pedidos").update({
+      estado: "aguardando_pagamento", cobranca_asaas_id: pg.id, cobranca_link: pg.link, cobranca_valor: total, atualizado_em: new Date().toISOString(),
+    }).eq("id", pedido.id);
+    await registrar(contaId, ator, "email_cobranca_aberta", { valor: total, mensal, ofertas: ofertas || null });
+    return json({ link: pg.link, valor: total, mensal, itens });
+  } catch (e) {
+    throw erroDoPagamento(e);
+  }
+}
+
+/** O cliente paga o pedido sozinho (página /email/pedir). Só com a cobrança geral ligada. */
+async function pagarEmail(ch: Chamador, corpo: Record<string, unknown>) {
+  const contaId = exigirAdminDaConta(ch);
+  if (!(await pagamentosLigados())) throw new ErroHttp(409, "pagamentos_desligados", "O pagamento online ainda não foi aberto. O pedido ficou com a Aceleriq, que manda o link para você.");
+  return cobrarEntradaDoEmail(contaId, ch.userId, corpo);
+}
+
+/** A casa gera o link do pedido de uma empresa (vale com a cobrança geral desligada: venda fechada à mão). */
+async function adminCobrarEntradaEmail(ch: Chamador, corpo: Record<string, unknown>) {
+  exigirDono(ch);
+  return cobrarEntradaDoEmail(uuidDe(corpo.conta_id, "conta"), ch.userId, corpo);
 }
 
 // ------------------------------------------------------------------ e-mail
@@ -641,11 +753,13 @@ const ACOES: Record<string, Acao> = {
   assinar,
   cancelar: (ch) => cancelar(ch),
   pedir_email: pedirEmail,
+  pagar_email: pagarEmail,
   dns,
   admin_criar_conta: adminCriarConta,
   admin_convidar: adminConvidar,
   admin_sincronizar: adminSincronizar,
   admin_cobrar_migracao: adminCobrarMigracao,
+  admin_cobrar_entrada_email: adminCobrarEntradaEmail,
   admin_gerar_checkout: adminGerarCheckout,
   admin_crm_pelo_plano: adminCrmPeloPlano,
   admin_testar_asaas: (ch) => adminTestarAsaas(ch),
