@@ -88,7 +88,7 @@ export interface Item {
   literais: string[];
 }
 
-const aspas = (s: string) => `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+export const aspas = (s: string) => `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 /** Texto para busca IMAP sem CHARSET: sem acento e sem aspas. */
 const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "").replace(/["\\]/g, "").trim();
 
