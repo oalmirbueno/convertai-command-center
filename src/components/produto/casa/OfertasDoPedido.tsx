@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Pencil, Plus } from "lucide-react";
 import { fraseDoErro, lerOfertasDaCasa, reais, salvarOferta, type OfertaDaCasa } from "@/lib/produto/api";
-import { CampoDeFormulario, Carregando, EstadoDeErro, GrupoDeCampos, JanelaCentral, Secao, botao, campo, etiqueta, juntar, lista, texto } from "@/components/sistema";
+import { Card, List, ListRow, StatusPill } from "@/components/ds";
+import { CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, JanelaCentral, botao, campo, juntar, texto } from "@/components/sistema";
 
 const numeroDe = (v: string) => {
   const n = parseFloat(String(v).replace(/\./g, "").replace(",", "."));
@@ -22,13 +23,14 @@ export default function OfertasDoPedido() {
   const [editando, setEditando] = useState<OfertaDaCasa | "nova" | null>(null);
 
   return (
-    <Secao
-      titulo="Ofertas no pedido"
-      descricao={ofertas.data ? `${ofertas.data.filter((o) => o.ativo).length} à venda` : undefined}
-      ajuda="Aparecem no último passo do pedido de e-mail, como caixinhas. As mensais entram no 1º pagamento e na mensalidade; as de uma vez, só no 1º pagamento."
-      acao={
-        <button type="button" className={botao.icone} onClick={() => setEditando("nova")} aria-label="Nova oferta" title="Nova oferta" data-nova-oferta="">
-          <Plus className="h-4 w-4 text-primary" aria-hidden="true" />
+    <Card
+      title="Ofertas no pedido"
+      subtitle={ofertas.data ? `${ofertas.data.filter((o) => o.ativo).length} à venda` : undefined}
+      help="Aparecem no último passo do pedido de e-mail, como caixinhas. As mensais entram no 1º pagamento e na mensalidade; as de uma vez, só no 1º pagamento."
+      action={
+        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setEditando("nova")} aria-label="Nova oferta" data-nova-oferta="">
+          <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+          <span className="hidden sm:inline">Nova oferta</span>
         </button>
       }
     >
@@ -36,27 +38,27 @@ export default function OfertasDoPedido() {
         <Carregando linhas={3} rotulo="Carregando as ofertas" />
       ) : ofertas.isError ? (
         <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void ofertas.refetch()}>Tentar de novo</button>} />
+      ) : !(ofertas.data || []).length ? (
+        <EstadoVazio compacto titulo="Nenhuma oferta ainda." acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setEditando("nova")}>Criar</button>} />
       ) : (
-        <ul className={juntar(lista.aberta, lista.divisoria)} data-ofertas-da-casa="">
+        <List label="Ofertas do pedido">
           {(ofertas.data || []).map((o) => (
-            <li key={o.id} className={lista.linha}>
-              <span className="min-w-0 flex-1">
-                <span className={juntar(texto.corpo, "block truncate font-medium")}>{o.nome}</span>
-                <span className={juntar(texto.auxiliar, "block truncate")}>
-                  {ONDE[o.mostra_em]}
-                  {o.marcada ? " · já vem marcada" : ""}
-                </span>
-              </span>
-              {!o.ativo && <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")}>Fora de venda</span>}
-              <span className={juntar(texto.corpo, "ml-3 shrink-0 tabular-nums")}>
-                {reais(o.valor)} {o.cobranca === "mensal" ? "por mês" : "uma vez"}
-              </span>
-              <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => setEditando(o)} aria-label={`Editar a oferta ${o.nome}`} title="Editar">
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </li>
+            <ListRow
+              key={o.id}
+              title={o.nome}
+              subtitle={`${ONDE[o.mostra_em]}${o.marcada ? " · já vem marcada" : ""}`}
+              status={<StatusPill tone={o.ativo ? "success" : "neutral"}>{o.ativo ? "À venda" : "Fora de venda"}</StatusPill>}
+              value={reais(o.valor)}
+              valueHint={o.cobranca === "mensal" ? "por mês" : "uma vez"}
+              onClick={() => setEditando(o)}
+              action={
+                <button type="button" className={botao.icone} onClick={() => setEditando(o)} aria-label={`Editar a oferta ${o.nome}`} title="Editar">
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                </button>
+              }
+            />
           ))}
-        </ul>
+        </List>
       )}
       {editando && (
         <EditorDeOferta
@@ -68,7 +70,7 @@ export default function OfertasDoPedido() {
           }}
         />
       )}
-    </Secao>
+    </Card>
   );
 }
 
