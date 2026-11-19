@@ -447,7 +447,7 @@ function MesaRedonda({
         recolher={ativa ? undefined : { recolhido: recolhida, onAlternar: () => setRecolhida(!recolhida), resumo }}
         acao={
           mostrar && sessao.resultado ? (
-            <span className={juntar(texto.etiqueta, "shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-primary")} data-consenso={sessao.resultado.nivel}>
+            <span className={juntar(texto.etiqueta, "shrink-0 rounded-md bg-muted px-2 py-0.5 text-foreground")} data-consenso={sessao.resultado.nivel}>
               {NOME_DO_NIVEL[sessao.resultado.nivel]}
               {sessao.resultado.consenso != null ? ` ${Math.round(sessao.resultado.consenso * 100)}%` : ""}
             </span>
@@ -1001,7 +1001,7 @@ function ConversaComOConselho({
       data-conversa-do-conselho=""
     >
       <div className="flex shrink-0 items-center border-b border-border px-3.5 py-2.5">
-        <MessageSquare className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <MessageSquare className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <h3 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">Conversar</h3>
       </div>
       <MensagensDoAgente ref={fim} rotulo="Conversa com o conselho">

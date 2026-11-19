@@ -414,7 +414,7 @@ export function ImagemInteira({ caminho, alt, className = "", fundo }: { caminho
 
 /** Pastilha pequena de estado. */
 export function Pastilha({ tom = "neutro", children }: { tom?: "neutro" | "bom" | "alerta" | "ruim"; children: ReactNode }) {
-  const cor = tom === "bom" ? "bg-accent-soft text-primary" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "ruim" ? "bg-danger-soft text-destructive" : "bg-muted text-muted-foreground";
+  const cor = tom === "bom" ? "bg-muted text-foreground" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "ruim" ? "bg-danger-soft text-destructive" : "bg-muted text-muted-foreground";
   return <span className={juntar(etiqueta, cor)}>{children}</span>;
 }
 
@@ -440,7 +440,7 @@ export function NotaDoJev({ nota }: { nota?: number | null }) {
 export function EscolhaDoJev({ linha, className = "" }: { linha?: string | null; className?: string }) {
   if (!linha) return null;
   return (
-    <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-start text-primary", className)} title="O Jev aponta as melhores e diz por quê. É aviso: a escolha é da equipe." data-escolha-do-jev="">
+    <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-start text-foreground", className)} title="O Jev aponta as melhores e diz por quê. É aviso: a escolha é da equipe." data-escolha-do-jev="">
       <Sparkles className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       <span className="min-w-0 whitespace-normal">{linha}</span>
     </span>

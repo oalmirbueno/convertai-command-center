@@ -171,7 +171,7 @@ export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {
                           {ROTULO_DA_ORIGEM[linha.origem] || linha.origem}
                         </span>
                         {linha.ganhos > 0 && (
-                          <span className="mr-3 inline-flex h-6 shrink-0 items-center rounded-full bg-success-soft px-2.5 text-[12px] font-medium tabular-nums text-success">
+                          <span className="mr-3 inline-flex h-6 shrink-0 items-center rounded-full bg-muted px-2.5 text-[12px] font-medium tabular-nums text-success">
                             {linha.ganhos} fechou
                           </span>
                         )}

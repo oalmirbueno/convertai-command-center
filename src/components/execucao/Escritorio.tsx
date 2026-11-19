@@ -323,7 +323,7 @@ export default function Escritorio({
                               {a.display_name}
                             </span>
                             {a.is_coordinator && (
-                              <span className={juntar(etiqueta, "ml-1.5 shrink-0 bg-primary/10 text-primary")}>
+                              <span className={juntar(etiqueta, "ml-1.5 shrink-0 bg-muted text-foreground")}>
                                 coordena
                               </span>
                             )}

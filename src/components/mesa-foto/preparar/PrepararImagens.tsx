@@ -164,7 +164,7 @@ export default function PrepararImagens({ aberta, onFechar }: { aberta: boolean;
         onFechar();
       }}
       titulo={editando ? "Editar imagens" : "Preparar imagens"}
-      icone={editando ? <SlidersHorizontal className="h-4 w-4 text-primary" /> : <ImagePlus className="h-4 w-4 text-primary" />}
+      icone={editando ? <SlidersHorizontal className="h-4 w-4 text-muted-foreground" /> : <ImagePlus className="h-4 w-4 text-muted-foreground" />}
       descricao={editando ? `${editando.length} ${editando.length === 1 ? "imagem" : "imagens"} na fila` : resumo || "Escolha produtos, imagens e a pessoa"}
       ajuda="À esquerda, os produtos por departamento, as artes e as fotos do acervo (o filtro Editadas mostra as versões novas). À direita, as modelos da IA e os clones autorizados. Editar imagens grava versões novas no acervo, com antes e depois. Montar no Canvas abre uma caixa nova já ligada. Tudo fica no acervo do cliente, que a Mesa Vídeos, a Motion e o Estúdio também usam."
       largura="tela"

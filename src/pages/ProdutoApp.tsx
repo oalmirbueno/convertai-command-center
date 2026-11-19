@@ -1,16 +1,17 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, MessagesSquare, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
+import { ArrowLeft, Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, MessagesSquare, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CHAVE_DO_TEMA_DO_CRM, useTemaDoCorreio } from "@/components/correio/TemaDoCorreio";
 import { useProduto, useRelerProduto } from "@/hooks/useProduto";
 import { variaveisDaCor } from "@/lib/produto/aparencia";
 import "@/components/produto/produto.css";
 import { definirEscopoDoCrm, type EscopoDoCrm } from "@/lib/comercial/escopo";
 import { ROTULO_DO_PAPEL, avisoDaConta, ehGestor, listarAvisos, marcarAvisosLidos, type EstadoDoProduto } from "@/lib/produto/api";
 import { Carregando, EstadoDeErro, MenuMais, botao, foco, juntar, texto } from "@/components/sistema";
-import { MarcaAceleriq } from "@/components/publico/CascaPublica";
+import LogoDoCrm from "@/components/produto/LogoDoCrm";
 import { Foto } from "@/components/produto/pecas";
 import InicioDoProduto from "@/components/produto/InicioDoProduto";
 import PrimeirosPassos from "@/components/produto/PrimeirosPassos";
@@ -110,7 +111,10 @@ function CrmDaEmpresa({ estado }: { estado: EstadoDoProduto }) {
     qc.removeQueries({ predicate: (q) => ehDoComercial(q.queryKey) });
     return null;
   });
-  definirEscopoDoCrm(escopo);
+  // 19/11/2026: a conta da própria Aceleriq no produto mostra o comercial da casa (os mesmos negócios do
+  // painel e do /vendas, com o Rafael), em vez de um CRM vazio. Só para quem administra a casa.
+  const ehDaCasa = estado.dono_da_casa && /aceleriq/i.test(conta.nome || "");
+  definirEscopoDoCrm(ehDaCasa ? { modo: "casa", base: "/app/crm" } : escopo);
   useEffect(
     () => () => {
       definirEscopoDoCrm(null);
@@ -125,7 +129,7 @@ function CrmDaEmpresa({ estado }: { estado: EstadoDoProduto }) {
   );
 }
 
-const COR_DO_AVISO = { info: "bg-accent-soft text-primary", alerta: "bg-warning-soft text-warning", perigo: "bg-danger-soft text-destructive" } as const;
+const COR_DO_AVISO = { info: "bg-muted text-foreground", alerta: "bg-warning-soft text-warning", perigo: "bg-danger-soft text-destructive" } as const;
 
 const haQuanto = (iso: string) => {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -189,10 +193,15 @@ export default function ProdutoApp() {
   const navigate = useNavigate();
   const local = useLocation();
   const { user, profile, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  // 19/11/2026: o CRM tem tema próprio, claro por padrão (o branco com a cor da empresa) e escuro no botão,
+  // guardado à parte do painel, como o Correio.
+  const temaDoCrm = useTemaDoCorreio(CHAVE_DO_TEMA_DO_CRM);
+  const theme = temaDoCrm.tema === "escuro" ? "dark" : "light";
+  const toggleTheme = temaDoCrm.alternar;
   const produto = useProduto();
   const estado = produto.data;
   const [gaveta, setGaveta] = useState(false);
+  const [irParaAberto, setIrParaAberto] = useState(false);
   const trocaDeAcesso = useTrocaDeAcesso();
   // O menu lateral recolhe para uma faixa só de ícones; a escolha fica guardada no aparelho.
   const [recolhida, setRecolhida] = useState(() => {
@@ -332,22 +341,43 @@ export default function ProdutoApp() {
     </>
   );
 
-  const troca = comMenu && (
-    <div className="mr-2 flex h-8 shrink-0 items-center rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Produtos" data-troca-de-produto="">
-      {[
-        { rotulo: "CRM", para: "/app", ativo: !noEmail, icone: <KanbanSquare className="h-3.5 w-3.5" aria-hidden="true" /> },
-        // 19/11/2026: com o e-mail ligado, o outro lado é o Correio (a caixa), com voltar para cá; a configuração
-        // do e-mail fica no menu da pessoa. Sem e-mail, segue a página que apresenta e vende o e-mail.
-        comCorreio
-          ? { rotulo: "Correio", para: linkDoCorreio("crm"), ativo: false, icone: <Mail className="h-3.5 w-3.5" aria-hidden="true" /> }
-          : { rotulo: "E-mail", para: "/app/email", ativo: noEmail, icone: <Mail className="h-3.5 w-3.5" aria-hidden="true" /> },
-      ].map((p) => (
-        <Link key={p.rotulo} to={p.para} role="tab" aria-selected={p.ativo} className={juntar("inline-flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium transition-colors", foco, p.ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-          <span className="mr-1.5">{p.icone}</span>
-          {p.rotulo}
-        </Link>
-      ))}
-    </div>
+  // 19/11/2026: o mesmo topo do Correio e do CRM de vendas: "Ir para" e a marca. Nada de abas misturadas.
+  const daCasa = papelNoPainel === "admin" || papelNoPainel === "manager";
+  const destinos = [
+    comCorreio && { id: "correio", rotulo: "Correio", ajuda: "A caixa de e-mail", icone: Mail, ir: () => navigate(linkDoCorreio("crm")) },
+    comCorreio && admin && { id: "email", rotulo: "Configurar o e-mail", ajuda: "Domínio, caixas e senhas", icone: Settings2, ir: () => navigate("/app/email") },
+    !comCorreio && comMenu && { id: "email", rotulo: "E-mail profissional", ajuda: "Conhecer e pedir", icone: Mail, ir: () => navigate("/app/email") },
+    daCasa && { id: "vendas", rotulo: "CRM de vendas", ajuda: "O funil da Aceleriq", icone: KanbanSquare, ir: () => navigate("/vendas/crm") },
+    temPainel && { id: "painel", rotulo: papelNoPainel === "client" ? "Painel do cliente" : "Painel", ajuda: "Projetos, aprovações e financeiro", icone: LayoutGrid, ir: () => navigate("/dashboard") },
+    !temPainel && estado && estado.conta && estado.conta.tem_painel && { id: "painel", rotulo: "Painel da empresa", ajuda: "Entrar com o login geral", icone: LayoutGrid, ir: () => trocaDeAcesso.abrir("painel") },
+  ].filter(Boolean) as Array<{ id: string; rotulo: string; ajuda: string; icone: typeof Mail; ir: () => void }>;
+  const irPara = destinos.length > 0 && (
+    <Popover open={irParaAberto} onOpenChange={setIrParaAberto}>
+      <PopoverTrigger asChild>
+        <button type="button" className={juntar("mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl hover:bg-muted", foco)} aria-label="Ir para outro lugar" title="Ir para" data-ir-para="">
+          <LayoutGrid className="h-[18px] w-[18px]" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[280px] rounded-3xl p-2">
+        <p className="px-3 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Ir para</p>
+        <ul>
+          {destinos.map((d) => {
+            const Icone = d.icone;
+            return (
+              <li key={d.id}>
+                <button type="button" onClick={() => { setIrParaAberto(false); d.ir(); }} className={juntar("flex w-full min-w-0 items-center rounded-2xl p-2.5 text-left hover:bg-muted", foco)} data-destino={d.id}>
+                  <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted" aria-hidden="true"><Icone className="h-4 w-4" /></span>
+                  <span className="min-w-0">
+                    <span className="block text-[14px] font-medium">{d.rotulo}</span>
+                    <span className="block truncate text-[12px] text-muted-foreground">{d.ajuda}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 
   const barraDeBaixo: ItemDoMenu[] = grupos.length ? [grupos[0].itens[0], grupos[0].itens[1], grupos[0].itens[2], grupos[1].itens[0]] : [];
@@ -357,14 +387,21 @@ export default function ProdutoApp() {
       {/* Não é <header>: o tema claro do painel pinta de branco os links de "header nav", e aqui o topo é claro. */}
       <div role="banner" className="produto-vidro fixed inset-x-0 top-0 z-30 border-b border-border pt-[env(safe-area-inset-top)]" data-produto-topo="">
         <div className="flex h-[52px] w-full min-w-0 items-center px-4 md:px-5">
+          {/* O mesmo "voltar" do Correio e do CRM de vendas: para o painel, quando a pessoa tem um. */}
+          {(temPainel || (estado && estado.conta && estado.conta.tem_painel)) && (
+            <button type="button" onClick={() => (temPainel ? navigate("/dashboard") : trocaDeAcesso.abrir("painel"))} className={juntar("mr-2 flex h-9 shrink-0 items-center rounded-xl bg-muted px-3 text-[13px] font-semibold hover:bg-muted/70", foco)} title="Voltar ao painel" data-voltar-do-crm="">
+              <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Painel
+            </button>
+          )}
+          {irPara}
           <Link to="/app" className={juntar("mr-4 flex min-w-0 shrink-0 items-center rounded-md", comLateral && !recolhida && "md:w-[204px]", foco)} aria-label="Início do CRM">
             {aparencia.logo ? (
               <img src={aparencia.logo} alt={nomeNoTopo} className="h-7 w-auto max-w-[140px] object-contain" data-logo-da-empresa="" />
             ) : (
-              <MarcaAceleriq altura={20} className="logo-do-topo" />
+              <LogoDoCrm tamanho={30} rotulo="CRM" />
             )}
           </Link>
-          {troca}
           <span className="min-w-0 flex-1" />
           {nomeNoTopo && !aparencia.logo && (
             <span className={juntar(texto.auxiliar, "mr-2 hidden min-w-0 max-w-[220px] truncate lg:block")} title={nomeNoTopo}>{nomeNoTopo}</span>

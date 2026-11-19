@@ -4,6 +4,7 @@ import path from "path";
 import { readFileSync } from "fs";
 import { chunkPara, PISO_DE_TAMANHO } from "./config/chunk-strategy";
 import { pluginPedacosSemCiclo } from "./config/pedacos-sem-ciclo";
+import { pluginSemEfeitoColateral } from "./config/sem-efeito-colateral";
 import { pluginCsp } from "./config/csp";
 import { buildRevision } from "./config/build-revision";
 
@@ -151,6 +152,8 @@ export default defineConfig(({ command, mode }) => {
       // Build falha se dois pedaços se importarem em círculo: no navegador
       // isso vira tela de erro na abertura (config/pedacos-sem-ciclo.ts).
       pluginPedacosSemCiclo(),
+      // Arquivo importado e não usado sai do build (config/sem-efeito-colateral.ts, 19/11).
+      pluginSemEfeitoColateral(),
       {
         name: "aceleriq-emit-version",
         apply: "build" as const,

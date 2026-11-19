@@ -124,7 +124,7 @@ export default function SeletorDeModelo({ clientId, valor, onEscolher, incluir =
           {onCriar && (
             <li className="min-w-0">
               <button type="button" onClick={onCriar} className={juntar(cartao, "border-dashed border-border hover:border-primary/50", foco)} data-modelo-do-seletor="criar">
-                <span className="flex aspect-[3/4] w-full items-center justify-center text-primary">
+                <span className="flex aspect-[3/4] w-full items-center justify-center text-muted-foreground">
                   <Plus className="h-6 w-6" aria-hidden="true" />
                 </span>
                 <span className="block truncate px-1.5 py-1 text-[12px] font-medium">Criar modelo</span>

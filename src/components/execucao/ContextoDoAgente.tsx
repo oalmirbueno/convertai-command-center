@@ -36,7 +36,7 @@ const ROTULO_ESTADO: Record<string, string> = {
 const TOM_ESTADO: Record<string, string> = {
   queued: "bg-muted text-muted-foreground",
   in_progress: "bg-info/15 text-info",
-  done: "bg-success/15 text-success",
+  done: "bg-muted text-success",
   review: "bg-warning/15 text-warning",
   awaiting_input: "bg-warning/15 text-warning",
   blocked: "bg-destructive/15 text-destructive",
@@ -235,8 +235,8 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
               <li key={l.id} className="min-w-0 py-3 first:pt-0 last:pb-0">
                 {/* Quem, de qual área, e em que pé está. */}
                 <div className="flex min-w-0 items-center">
-                  <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <Bot className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                    <Bot className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   </span>
                   <div className="mr-2 min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-foreground">
@@ -263,7 +263,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                     <DocumentoDaExecucao texto={l.last_action} compacto />
                   )}
                   {l.next_step && (
-                    <div className="border-l-2 border-primary/40 pl-3"><span className="text-[12px] leading-4 font-semibold">Próximo passo</span><DocumentoDaExecucao texto={l.next_step} compacto /></div>
+                    <div className="border-l-2 border-border pl-3"><span className="text-[12px] leading-4 font-semibold">Próximo passo</span><DocumentoDaExecucao texto={l.next_step} compacto /></div>
                   )}
                   {l.block_reason && (
                     <p className="text-[12px] text-destructive">
@@ -334,7 +334,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
             {(data?.diario ?? []).map((d: any) => (
               <div key={d.id} className={juntar(
                 "rounded-md px-2.5 py-1.5",
-                d.author_kind === "humano" ? "bg-primary/10" : "bg-muted/50",
+                d.author_kind === "humano" ? "bg-muted" : "bg-muted/50",
               )}>
                 <p className={texto.auxiliar}>
                   {d.author_kind === "humano" ? "você" : "o agente"} ·{" "}

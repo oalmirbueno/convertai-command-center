@@ -140,7 +140,7 @@ import { useTelaPequena } from "@/components/client/useTelaPequena";
 type Conta = AdsConnectionStatus["contas"][number];
 
 const TOM: Record<string, string> = {
-  ativa: "bg-success/10 text-success",
+  ativa: "bg-muted text-success",
   pausada: "bg-muted text-muted-foreground",
   encerrada: "bg-muted text-muted-foreground",
   atencao: "bg-destructive/10 text-destructive",

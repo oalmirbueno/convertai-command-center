@@ -70,7 +70,7 @@ export default function EntregasNoDossie({ clientId }: { clientId: string }) {
   return (
     <div className="mt-3 border-t border-border pt-3">
       <div className="flex min-w-0 items-center">
-        <PackageCheck className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+        <PackageCheck className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <p className={juntar(texto.rotulo, "min-w-0 truncate")}>O que já foi entregue</p>
         <span className={juntar(etiqueta, "ml-1.5 bg-muted text-muted-foreground")}>{data.length}</span>
         <AjudaRecolhida className="ml-1" rotulo="De onde vêm as entregas">
@@ -98,7 +98,7 @@ export default function EntregasNoDossie({ clientId }: { clientId: string }) {
                   <span className={cn(
                     etiqueta,
                     "mr-2",
-                    autonoma ? "bg-info/15 text-info" : "bg-success/15 text-success",
+                    autonoma ? "bg-info/15 text-info" : "bg-muted text-success",
                   )}>
                     {autonoma ? <Sparkles className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> : <ShieldCheck className="mr-1 h-2.5 w-2.5" aria-hidden="true" />}
                     {autonoma ? "por conta" : "autorizado"}

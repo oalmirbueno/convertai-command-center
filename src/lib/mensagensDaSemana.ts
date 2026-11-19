@@ -20,6 +20,7 @@ import { callReviewRpc, prepareCentralReview, saveCentralReviewDraft } from "@/h
 import { latestReviewReports, reviewDecisionArgs } from "@/lib/centralReview";
 import type { CentralApproval, ReviewReport } from "@/lib/centralReview";
 import { salvarEPublicarRitual, type RitualDoAgente } from "@/components/central/agenteCentralApi";
+import { inicioDaSemana } from "./semanaDasMensagens";
 
 export type SituacaoDaMensagem = "pronta" | "venceu" | "aprovada";
 
@@ -45,12 +46,7 @@ export const NOME_DO_RITUAL: Record<string, string> = {
 };
 
 /** Segunda-feira 00:00 (horário local) da semana de `agora`. */
-export function inicioDaSemana(agora: number): number {
-  const d = new Date(agora);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d.getTime();
-}
+export { inicioDaSemana };
 
 /**
  * As mensagens da semana que pedem o dono: prontas (pedido em aberto no prazo),

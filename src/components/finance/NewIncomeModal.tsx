@@ -481,7 +481,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
       <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center text-foreground">
-            <Sparkles className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <Sparkles className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             Nova entrada avulsa
           </DialogTitle>
           <DialogDescription>Pagamento único, sem renovação.</DialogDescription>

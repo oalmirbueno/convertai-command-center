@@ -109,7 +109,7 @@ export default function EtapaConteudo({ site }: { site: LinhaDoSite; onIrPara?: 
               descricao={i === escolhida ? "Escolhida" : undefined}
               acao={
                 i === escolhida ? (
-                  <span className="inline-flex items-center text-[12px] text-primary">
+                  <span className="inline-flex items-center text-[12px] text-muted-foreground">
                     <Check className="mr-1 h-3.5 w-3.5" />
                     Escolhida
                   </span>
@@ -124,7 +124,7 @@ export default function EtapaConteudo({ site }: { site: LinhaDoSite; onIrPara?: 
                 <p className={texto.auxiliar}>{o.conceito}</p>
                 <p className={texto.tituloSecao}>{o.headline}</p>
                 <p className={texto.corpo}>{o.subtitulo}</p>
-                <p className={juntar(texto.rotulo, "text-primary")}>CTA: {o.cta}</p>
+                <p className={juntar(texto.rotulo, "text-foreground")}>CTA: {o.cta}</p>
                 {o.conferencia && <NotaDaCopy nota={o.conferencia.nota} alerta={o.conferencia.alerta} avisos={o.conferencia.avisos} />}
                 <ul className="space-y-1.5 border-t border-border pt-3">
                   {o.secoes.slice(0, 10).map((s) => (

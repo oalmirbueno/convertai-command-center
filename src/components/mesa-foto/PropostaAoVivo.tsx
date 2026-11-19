@@ -41,9 +41,9 @@ export default function PropostaAoVivo({ texto, onConfirmado }: { texto: string;
     if (onConfirmado) onConfirmado();
   };
   return (
-    <div className="mb-1.5 min-w-0 rounded-lg border border-primary/40 px-2.5 py-2" data-proposta-ao-vivo={intencao.objetivo}>
+    <div className="mb-1.5 min-w-0 rounded-lg border border-border px-2.5 py-2" data-proposta-ao-vivo={intencao.objetivo}>
       <div className="flex min-w-0 items-center">
-        <Icone className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <Icone className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium">Preencho assim?</span>
         <AjudaRecolhida rotulo="Sobre o preenchimento">
           Lido do que você escreveu, sem custo. Confirmar abre a ferramenta já preenchida (produto, quem aparece, quantas, ângulos, cenas e luz); lá aparece o custo antes de gerar as variações juntas.

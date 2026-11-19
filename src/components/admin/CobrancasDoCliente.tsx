@@ -150,7 +150,7 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
                     <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>
                       {linha.description || (linha.type === "renewal" ? "Mensalidade" : "Cobrança")}
                     </p>
-                    <span className={juntar(etiqueta, "ml-2", paga ? "bg-success/10 text-success" : "bg-warning/10 text-warning")}>
+                    <span className={juntar(etiqueta, "ml-2", paga ? "bg-muted text-success" : "bg-warning/10 text-warning")}>
                       {paga ? `Paga${linha.paid_date ? ` ${linha.paid_date.slice(8, 10)}/${linha.paid_date.slice(5, 7)}` : ""}` : "Pendente"}
                     </span>
                   </div>

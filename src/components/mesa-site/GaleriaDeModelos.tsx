@@ -21,7 +21,7 @@ function Esqueleto({ m }: { m: ModeloDePagina }) {
     <div className="relative w-full min-w-0 overflow-hidden rounded-md bg-muted/50" style={{ paddingTop: "62.5%" }} aria-hidden="true">
       <div className="absolute inset-0 flex flex-col justify-start overflow-hidden p-2">
         {esqueletoDoModelo(m).map((s, i) => (
-          <span key={`${s.tipo}-${i}`} className={juntar("mb-1 block w-full shrink-0 rounded-sm", alturaDaFaixa(s.tipo), s.tipo === "hero" || s.tipo === "hero_dividido" ? "bg-primary/25" : "bg-muted-foreground/15")} />
+          <span key={`${s.tipo}-${i}`} className={juntar("mb-1 block w-full shrink-0 rounded-sm", alturaDaFaixa(s.tipo), s.tipo === "hero" || s.tipo === "hero_dividido" ? "bg-muted" : "bg-muted-foreground/15")} />
         ))}
       </div>
     </div>

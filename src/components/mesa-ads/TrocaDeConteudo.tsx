@@ -75,7 +75,7 @@ export default function TrocaDeConteudo({ troca, onFechar }: { troca: TrocaParaA
   const girando = (qual: string) => (rodando === qual ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null);
 
   return (
-    <section className="space-y-2 rounded-lg border border-primary/40 bg-background p-3" aria-label="Troca de todo o conteúdo" data-troca={estado}>
+    <section className="space-y-2 rounded-lg border border-border bg-background p-3" aria-label="Troca de todo o conteúdo" data-troca={estado}>
       <div className="flex min-w-0 items-center">
         <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold">
           {estado === "pendente" ? `Conteúdo novo para ${troca.ids.length} criativo${troca.ids.length === 1 ? "" : "s"}` : estado === "feita" ? "Conteúdo trocado" : "Troca desfeita"}
@@ -96,7 +96,7 @@ export default function TrocaDeConteudo({ troca, onFechar }: { troca: TrocaParaA
             <li key={variacao} className="rounded-md border border-border p-2">
               <p className="mb-1 flex flex-wrap items-center text-[11px] text-muted-foreground">
                 <span className="mr-1.5 font-medium text-foreground">V{variacao}</span>
-                {rotuloDoAnguloDeVenda(proposta.depois.angulo_de_venda) && <span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-px text-primary">{rotuloDoAnguloDeVenda(proposta.depois.angulo_de_venda)}</span>}
+                {rotuloDoAnguloDeVenda(proposta.depois.angulo_de_venda) && <span className="mr-1.5 rounded-full bg-muted px-1.5 py-px text-foreground">{rotuloDoAnguloDeVenda(proposta.depois.angulo_de_venda)}</span>}
                 <span>{formatos.join(", ")}</span>
               </p>
               {proposta.antes.texto_principal && <p className="text-[12px] text-muted-foreground line-through [overflow-wrap:anywhere]">{proposta.antes.texto_principal}</p>}

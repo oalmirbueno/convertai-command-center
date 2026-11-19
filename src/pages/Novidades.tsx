@@ -1,122 +1,139 @@
-import { StatCard, StatGrid } from "@/components/ds";
-import { CheckCircle2, Hammer, Sparkles } from "lucide-react";
-import { ChevronDown } from "lucide-react";
-import { CabecalhoDePagina, EstadoVazio, Secao, foco, juntar, superficie, texto } from "@/components/sistema";
+import { useMemo, useState } from "react";
+import { Sparkles } from "lucide-react";
+import { CardSurface, Chip, Collapsible, EmptyState, PageHeader, PillTabs, type PillTab } from "@/components/ds";
+import { Carregando, juntar, texto } from "@/components/sistema";
+import { useAuth } from "@/contexts/AuthContext";
 import {
-  RELEASE_NOTES,
+  agruparPorMes,
+  filtrarPorPublico,
   formatReleaseDate,
-  releasesByStatus,
+  novidadesPara,
+  veTodasAsNovidades,
+  type FiltroDePublico,
   type ReleaseEntry,
 } from "@/lib/releaseNotes";
 
 /**
- * Novidades do painel.
+ * Novidades do painel (redesenho de 19/11/2026).
  *
- * Existe por um motivo simples: o cliente precisa saber que o sistema evolui
- * toda semana e o que exatamente mudou para ele. A tela separa o que já está
- * no ar do que está sendo construído agora, para nunca prometer antes da hora.
- * Lista limpa: uma entrada por linha, separadas por divisória, sem caixa.
+ * O cliente só lê o que mudou para ele (entradas "cliente"); admin e equipe
+ * leem tudo e escolhem Todas, Para clientes ou Da equipe. Cada entrada é um
+ * cartão limpo com a data, o público (para a equipe) e itens curtos. O mês
+ * mais recente abre; os anteriores ficam recolhidos.
  */
 
-function Novidade({ entry, aberta = false }: { entry: ReleaseEntry; aberta?: boolean }) {
-  const building = entry.status === "esta-semana";
+const ROTULO_DO_PUBLICO = { cliente: "Para clientes", equipe: "Da equipe" } as const;
+
+function Novidade({ entrada, mostrarPublico }: { entrada: ReleaseEntry; mostrarPublico: boolean }) {
+  const chegando = entrada.status === "esta-semana";
   return (
-    <article className="group/novidade relative min-w-0 px-5 py-5 pl-[60px] sm:px-6 sm:pl-[68px]">
-      {/* Linha do tempo: o círculo do registro e o fio que liga ao próximo. */}
-      <span aria-hidden="true" className="absolute bottom-0 left-[35px] top-0 w-px bg-border/70 group-first/novidade:top-6 group-last/novidade:bottom-auto group-last/novidade:h-6 sm:left-[39px]" />
-      <span
-        className={juntar(
-          "absolute left-5 top-5 flex h-8 w-8 items-center justify-center rounded-full ring-4 ring-card sm:left-6",
-          building ? "bg-warning-soft text-warning" : "bg-accent-soft text-primary",
-        )}
-        aria-hidden="true"
-      >
-        {building ? <Hammer className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-      </span>
-      <header className="min-w-0">
-        <time dateTime={entry.date} className={juntar(texto.auxiliar, "block tabular-nums")}>
-          {formatReleaseDate(entry.date)}
+    <CardSurface as="article" padded data-novidade={entrada.id}>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <time dateTime={entrada.date} className={juntar(texto.auxiliar, "tabular-nums")}>
+          {formatReleaseDate(entrada.date)}
         </time>
-        <h3 className={juntar(texto.tituloSecao, "mt-0.5 min-w-0 [overflow-wrap:anywhere]")}>{entry.title}</h3>
-      </header>
-
-      <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">{entry.summary}</p>
-
-      {entry.items.length > 0 && (
-        <details className="group mt-2" open={aberta}>
-          <summary className={juntar("relative -left-2.5 inline-flex h-7 cursor-pointer list-none items-center rounded-full px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground [&::-webkit-details-marker]:hidden", foco)}>
-            {entry.items.length} {entry.items.length === 1 ? "melhoria" : "melhorias"}
-            <ChevronDown className="ml-1 h-3.5 w-3.5 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
-          </summary>
-        <ul className="mt-2 space-y-2.5">
-          {entry.items.map((item) => (
-            <li key={item.title} className="min-w-0">
-              <p className={juntar(texto.corpo, "font-medium")}>{item.title}</p>
-              <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{item.description}</p>
+        {mostrarPublico && (
+          <Chip tone={entrada.publico === "cliente" ? "info" : "neutral"} dot>
+            {ROTULO_DO_PUBLICO[entrada.publico]}
+          </Chip>
+        )}
+        {chegando && <Chip tone="warning">Chegando</Chip>}
+      </div>
+      <h3 className={juntar(texto.tituloSecao, "mt-2")}>{entrada.title}</h3>
+      <p className="mt-1 text-[13px] leading-5 text-muted-foreground">{entrada.summary}</p>
+      {entrada.items.length > 0 && (
+        <ul className="mt-4 space-y-2.5">
+          {entrada.items.map((item) => (
+            <li key={item.title} className="flex min-w-0 items-start">
+              <span aria-hidden="true" className="mr-2.5 mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+              <p className={juntar(texto.corpo, "min-w-0")}>
+                <span className="font-medium">{item.title}.</span>{" "}
+                <span className="text-muted-foreground">{item.description}</span>
+              </p>
             </li>
           ))}
         </ul>
-        </details>
       )}
-    </article>
+    </CardSurface>
+  );
+}
+
+function EsqueletoDasNovidades() {
+  return (
+    <div aria-busy="true" aria-label="Carregando as novidades" className="space-y-3">
+      <div className="h-5 w-40 animate-pulse rounded-md bg-muted" />
+      {[0, 1, 2].map((i) => (
+        <CardSurface key={i} padded>
+          <div className="h-4 w-28 animate-pulse rounded-md bg-muted" />
+          <div className="mt-3 h-5 w-2/3 animate-pulse rounded-md bg-muted" />
+          <div className="mt-2 h-4 w-full animate-pulse rounded-md bg-muted/70" />
+          <Carregando linhas={2} rotulo="Carregando os itens" className="mt-4" />
+        </CardSurface>
+      ))}
+    </div>
   );
 }
 
 export default function Novidades() {
-  const live = releasesByStatus("no-ar");
-  const building = releasesByStatus("esta-semana");
+  const { profile, loading } = useAuth();
+  const [filtro, setFiltro] = useState<FiltroDePublico>("todas");
+  const papel = profile?.role;
+  const daEquipe = veTodasAsNovidades(papel);
+  const carregando = loading && !profile;
+
+  // Sem papel conhecido a lista já sai só com as entradas do cliente.
+  const visiveis = useMemo(() => novidadesPara(papel), [papel]);
+  const filtradas = useMemo(() => (daEquipe ? filtrarPorPublico(visiveis, filtro) : visiveis), [daEquipe, visiveis, filtro]);
+  const meses = useMemo(() => agruparPorMes(filtradas), [filtradas]);
+
+  const abas: PillTab<FiltroDePublico>[] = [
+    { value: "todas", label: "Todas", count: visiveis.length },
+    { value: "cliente", label: "Para clientes", count: filtrarPorPublico(visiveis, "cliente").length },
+    { value: "equipe", label: "Da equipe", count: filtrarPorPublico(visiveis, "equipe").length },
+  ];
+
+  const maisRecente = visiveis[0];
 
   return (
     <div className="min-w-0 space-y-6">
-      <CabecalhoDePagina
-        titulo="Novidades"
-        ajuda="O painel evolui toda semana. Aqui fica o que mudou e o que está sendo construído agora. Nada some nem muda de lugar sem estar escrito aqui."
+      <PageHeader
+        title="Novidades"
+        subtitle={!carregando && maisRecente ? `Atualizado em ${formatReleaseDate(maisRecente.date)}` : undefined}
+        help={
+          daEquipe
+            ? "O que mudou no painel, mês a mês. O cliente só vê as entradas marcadas Para clientes; as Da equipe aparecem só para a casa."
+            : "O painel evolui toda semana. Aqui fica o que mudou para você, mês a mês, em português claro."
+        }
+        toolbar={!carregando && daEquipe ? <PillTabs<FiltroDePublico> tabs={abas} value={filtro} onChange={setFiltro} label="Público das novidades" /> : undefined}
       />
 
-      {RELEASE_NOTES.length > 0 && (
-        <StatGrid cols={2} label="Novidades em números" className="max-w-3xl">
-          <StatCard variant="ink" icon={<Sparkles className="h-4 w-4" />} label="No ar" value={live.length} hint={live.length === 1 ? "novidade publicada" : "novidades publicadas"} />
-          <StatCard variant="accent" icon={<Hammer className="h-4 w-4" />} label="Chegando" value={building.length} hint="Em construção nesta semana" />
-        </StatGrid>
-      )}
-
-      <div className="max-w-3xl space-y-6">
-        {building.length > 0 && (
-          <Secao
-            recolher="novidades:chegando"
-            titulo={
-              <span className="inline-flex items-center">
-                <Hammer className="mr-1.5 h-3.5 w-3.5 text-warning" aria-hidden="true" /> Chegando nesta semana
-              </span>
-            }
-          >
-            <div className={juntar(superficie.painel, "min-w-0 py-1")}>
-              {building.map((entry) => (
-                <Novidade key={entry.id} entry={entry} aberta />
-              ))}
-            </div>
-          </Secao>
-        )}
-
-        {live.length > 0 && (
-          <Secao
-            recolher="novidades:no-ar"
-            titulo={
-              <span className="inline-flex items-center">
-                <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" /> Já está no ar
-              </span>
-            }
-          >
-            <div className={juntar(superficie.painel, "min-w-0 py-1")}>
-              {live.map((entry, i) => (
-                <Novidade key={entry.id} entry={entry} aberta={i === 0 && building.length === 0} />
-              ))}
-            </div>
-          </Secao>
-        )}
-
-        {RELEASE_NOTES.length === 0 && (
-          <EstadoVazio icone={<Sparkles className="h-5 w-5" />} titulo="Nada novo por enquanto" descricao="As próximas novidades do painel aparecem aqui." />
+      <div className="max-w-3xl">
+        {carregando ? (
+          <EsqueletoDasNovidades />
+        ) : meses.length === 0 ? (
+          <EmptyState
+            icon={<Sparkles className="h-5 w-5" />}
+            title="Nada novo por aqui"
+            description={filtro === "todas" ? "As próximas novidades do painel aparecem aqui." : "Nenhuma novidade com este público por enquanto."}
+          />
+        ) : (
+          <div className="space-y-6">
+            {meses.map((mes, i) => (
+              <Collapsible
+                key={mes.chave}
+                title={mes.rotulo.charAt(0).toUpperCase() + mes.rotulo.slice(1)}
+                count={mes.entradas.length}
+                defaultOpen={i === 0}
+                storageKey={`novidades:mes:${mes.chave}`}
+              >
+                <div className="space-y-3">
+                  {mes.entradas.map((entrada) => (
+                    <Novidade key={entrada.id} entrada={entrada} mostrarPublico={daEquipe} />
+                  ))}
+                </div>
+              </Collapsible>
+            ))}
+          </div>
         )}
       </div>
     </div>

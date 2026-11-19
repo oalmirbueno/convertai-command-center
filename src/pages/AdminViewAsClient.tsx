@@ -346,7 +346,7 @@ export default function AdminViewAsClient() {
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </button>
-          <Eye className="ml-3 mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <Eye className="ml-3 mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           {/* No celular o nome do cliente fica só no seletor (sem repetir e cortar). */}
           <p className="mr-2 shrink-0 truncate text-[13px] font-medium text-foreground sm:min-w-0 sm:flex-1 sm:shrink">
             Somente leitura<span className="hidden sm:inline"> · visualizando como: {nomeDoCliente}</span>

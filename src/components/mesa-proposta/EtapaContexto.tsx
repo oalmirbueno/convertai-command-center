@@ -204,7 +204,7 @@ function Reuniao({ proposta, modeloId }: { proposta: Proposta; modeloId: string 
         />
       )}
       {resumo && (
-        <div className="mb-4 min-w-0 border-l-2 border-primary pl-3" aria-label="Resumo da reunião">
+        <div className="mb-4 min-w-0 border-l-2 border-border pl-3" aria-label="Resumo da reunião">
           <p className={texto.rotulo}>Resumo da reunião</p>
           <pre className={juntar(texto.corpo, "mt-1 whitespace-pre-wrap font-sans [overflow-wrap:anywhere]")}>{resumo}</pre>
           <div className="mt-2 flex flex-wrap [&>*]:mb-2 [&>*]:mr-2">

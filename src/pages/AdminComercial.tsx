@@ -27,6 +27,8 @@ import {
   StickyNote,
   Target,
   X,
+  FileDown,
+  FileUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -48,7 +50,8 @@ import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/use
 import { useTeamMembers } from "@/hooks/useSupabaseData";
 import CamposDoNegocio from "@/components/produto/CamposDoNegocio";
 import { rotulosDeValor } from "@/lib/produto/nichos";
-import { escopoDoCrm, naConta } from "@/lib/comercial/escopo";
+import { baseDaCasa, escopoDoCrm, naConta } from "@/lib/comercial/escopo";
+import { ImportarCrm, exportarCrm } from "@/components/comercial/ImportarExportarCrm";
 import OrigemDoLead from "@/components/ads/OrigemDoLead";
 import CaixaDoComercial, { novosNaCaixa, useCaixaDoComercial } from "@/components/comercial/CaixaDoComercial";
 import ConversaDoLead from "@/components/comercial/ConversaDoLead";
@@ -314,7 +317,7 @@ export default function AdminComercial() {
   const setAba = (proxima: Aba) =>
     conta
       ? navigate(proxima === "visao" ? "/app" : `${conta.base}/${proxima}`)
-      : navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`);
+      : navigate(proxima === "visao" ? baseDaCasa() : `${baseDaCasa()}/${proxima}`);
   // 25/10/2026: o link do sino abre a Caixa com ?item=<id> destacado.
   const itemDaCaixa = busca.get("item");
   const caixa = useCaixaDoComercial(!conta);
@@ -328,6 +331,7 @@ export default function AdminComercial() {
   const [novoLead, setNovoLead] = useState(() => !!conta && busca.get("novo") === "1");
   const [campanhaAberta, setCampanhaAberta] = useState<Campanha | "nova" | null>(null);
   const [pedidoDeEmpresa, setPedidoDeEmpresa] = useState(0);
+  const [importarAberto, setImportarAberto] = useState(false);
   // Os filtros do CRM sobem para a linha do título quando cabem (16/10/2026:
   // as áreas viraram ícones nessa mesma linha, então o limite subiu de 1280
   // para 1440 px). Abaixo disso ficam numa fileira só, logo embaixo.
@@ -552,6 +556,13 @@ export default function AdminComercial() {
           desativado={importar.isPending}
         />
       )}
+      {/* 19/11/2026: trazer de outro CRM e levar para fora (CSV), no CRM da casa e no da empresa. */}
+      {aba === "crm" && visaoDoCrm === "negocios" && (
+        <BotaoDoCabecalho icone={<FileUp className="h-4 w-4" aria-hidden="true" />} texto="Trazer de outro CRM (importar)" onClick={() => setImportarAberto(true)} />
+      )}
+      {aba === "crm" && visaoDoCrm === "negocios" && (
+        <BotaoDoCabecalho icone={<FileDown className="h-4 w-4" aria-hidden="true" />} texto="Exportar o CRM (CSV)" onClick={() => exportarCrm(leads, conta ? "crm" : "crm-aceleriq")} desativado={!leads.length} />
+      )}
       {aba === "crm" && visaoDoCrm === "negocios" && (
         <BotaoDoCabecalho primario icone={<Plus className="h-4 w-4" aria-hidden="true" />} texto="Novo lead" onClick={() => setNovoLead(true)} />
       )}
@@ -592,6 +603,17 @@ export default function AdminComercial() {
 
   return (
     <div className="min-w-0 space-y-6">
+      {/* 19/11/2026: no painel o Comercial é o acompanhamento; o trabalho do dia é no CRM novo (/vendas),
+          com os mesmos dados. Aqui só aparece o atalho para lá. */}
+      {!conta && baseDaCasa() === "/comercial" && (
+        <div className="flex min-w-0 flex-wrap items-center rounded-2xl border border-primary/25 bg-accent-soft px-4 py-3" data-crm-novo-atalho="">
+          <span className="mr-3 min-w-0 flex-1 text-[14px] leading-5">
+            <b>O CRM de vendas agora abre na casa nova.</b> Mesmos negócios e o mesmo Rafael, com visual novo, tema escuro e celular.
+          </span>
+          <Link to={aba === "visao" ? "/vendas" : `/vendas/${aba}`} className={juntar(botao.primario, "my-1 h-9")} data-abrir-crm-novo="">Abrir o CRM de vendas</Link>
+        </div>
+      )}
+      <ImportarCrm aberta={importarAberto} onFechar={() => setImportarAberto(false)} leads={leads} />
       {/* ── Cabecalho: identidade, estado da área e as ações. Os numeros
              ficam com quem os usa, e nao empilhados aqui em cima: cinco
              cartoes iguais no topo de quatro telas diferentes obrigam a ler

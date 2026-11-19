@@ -28,7 +28,7 @@ function StoriesDaPauta({ item }: { item: ItemDoMes }) {
   };
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center p-6 text-center" data-stories-da-pauta={item.id}>
-      <Smartphone className="mb-2 h-6 w-6 text-primary" aria-hidden="true" />
+      <Smartphone className="mb-2 h-6 w-6 text-muted-foreground" aria-hidden="true" />
       <p className={juntar(texto.corpo, "max-w-md font-medium")}>{item.title}</p>
       <button type="button" className={juntar(botao.primario, "mt-3")} onClick={abrir}>Abrir nos Stories</button>
     </section>

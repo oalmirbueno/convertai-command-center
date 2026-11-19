@@ -271,7 +271,7 @@ export default function EditorDoDocumento({
                         <span className="min-w-0 flex-1">
                           <span className="flex min-w-0 items-center">
                             <span className="truncate text-[13px] font-medium text-foreground">{c.titulo}</span>
-                            {c.forte && <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>aprovada</span>}
+                            {c.forte && <span className={juntar(etiqueta, "ml-2 bg-muted text-foreground")}>aprovada</span>}
                           </span>
                           <input className={juntar(estiloDoCampo, "mt-1 h-8")} value={p.legenda} maxLength={200} onChange={(e) => setR({ ...r, provas: r.provas.map((x, k) => (k === i ? { ...x, legenda: e.target.value } : x)) })} aria-label={`Legenda de ${c.titulo}`} />
                         </span>

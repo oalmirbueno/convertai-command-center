@@ -320,7 +320,7 @@ export default function OnboardingDoProduto({ modo, testeDias: testeDiasDeFora, 
           <ol className="mt-5 min-w-0 space-y-1.5" data-funil-do-onboarding="">
             {ETAPAS_DO_FUNIL.filter((id) => id !== "perdido").map((id, i) => (
               <li key={id} className="flex min-w-0 items-center">
-                <span className={juntar("mr-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", id === "ganho" ? "bg-primary text-primary-foreground" : "bg-accent-soft text-primary")}>{id === "ganho" ? <Check className="h-3 w-3" aria-hidden="true" /> : i + 1}</span>
+                <span className={juntar("mr-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", id === "ganho" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>{id === "ganho" ? <Check className="h-3 w-3" aria-hidden="true" /> : i + 1}</span>
                 <input
                   value={nomeDaEtapa(id)}
                   onChange={(e) => mudar({ etapas: { ...r.etapas, [id]: e.target.value.slice(0, 24) } })}

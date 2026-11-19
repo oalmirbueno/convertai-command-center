@@ -212,3 +212,27 @@ describe("rolagem nos cartões", () => {
     expect(PAGINA).toContain("`/produto/acessos/${v}`");
   });
 });
+
+describe("Adicionar pessoa: todos os clientes no campo Empresa (19/11)", async () => {
+  const { opcoesDeEmpresaParaPessoa } = await import("@/lib/produto/central-de-acessos");
+  const contas = [
+    { id: "c1", nome: "Aceleriq", crm_ativo: true, client_id: "k1" },
+    { id: "c2", nome: "Prix", crm_ativo: false, client_id: "k2" },
+  ];
+  const clientes = [
+    { id: "k1", nome: "Aceleriq" },
+    { id: "k2", nome: "Imobiliária Prix" },
+    { id: "k3", nome: "HS Consórcios" },
+    { id: "k4", nome: "Verzelo" },
+  ];
+  const ops = opcoesDeEmpresaParaPessoa(contas, clientes, [{ id: "x3", client_id: "k3" }]);
+  it("empresas com CRM primeiro e depois todos os outros clientes", () => {
+    expect(ops.map((o) => o.valor)).toEqual(["conta:c1", "plano:x3", "ativar:c2", "nova:k4"]);
+  });
+  it("cada cliente vai pelo caminho certo", () => {
+    expect(ops.find((o) => o.valor === "ativar:c2")!.destino).toEqual({ tipo: "ativar", conta_id: "c2" });
+    expect(ops.find((o) => o.valor === "plano:x3")!.destino).toEqual({ tipo: "plano", extra_id: "x3", client_id: "k3" });
+    expect(ops.find((o) => o.valor === "nova:k4")!.destino).toEqual({ tipo: "nova", client_id: "k4" });
+    expect(ops.some((o) => o.nome === "Aceleriq" && o.grupo === "clientes")).toBe(false);
+  });
+});

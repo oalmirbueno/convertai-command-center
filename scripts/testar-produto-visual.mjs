@@ -203,6 +203,7 @@ const centralDeDominios = {
 
 const tabelas = {
   crm_campos: camposDaEmpresa, crm_automacoes: automacoes, crm_avisos: avisos, crm_paginas: [], crm_formularios: [], crm_conversoes: [], crm_automacao_execucoes: [],
+  commercial_leads: leads, commercial_organizations: organizacoes, commercial_contacts: [], commercial_activities: atividades, commercial_lead_events: eventos, commercial_campaigns: campanhas, commercial_goals: metas, commercial_lead_messages: [], commercial_handoffs: [], commercial_bolso_pedidos: [], commercial_agente_config: [], commercial_facts: [],
   crm_leads: leads, crm_organizations: organizacoes, crm_contacts: [], crm_activities: atividades, crm_lead_events: eventos, crm_campaigns: campanhas, crm_goals: metas, crm_lead_messages: [],
   produto_chaves_api: [
     { id: "ch1", nome: "Claude", prefixo: "acq_3e1b0e92", criado_em: dia(-6), ultimo_uso_em: dia(0), revogada_em: null },
@@ -224,6 +225,7 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
   await contexto.addInitScript((t) => {
     try {
       localStorage.setItem("aceleriq_theme", t);
+      localStorage.setItem("aceleriq:crm:tema", t === "dark" ? "escuro" : "claro");
     } catch {
       /* sem armazenamento */
     }
@@ -359,6 +361,9 @@ const telas = [
   { nome: "14c-conexoes", caminho: "/app/conta?parte=conexoes", espera: "[data-chaves-de-api]" },
   { nome: "14d-conexoes-claro", caminho: "/app/conta?parte=conexoes", espera: "[data-chaves-de-api]", tema: "light" },
   { nome: "15-inicio-claro", caminho: "/app", espera: "[data-inicio-do-produto]", tema: "light" },
+  { nome: "60-vendas-claro", caminho: "/vendas/crm", papel: "admin", espera: "[data-crm-da-casa]", tema: "light" },
+  { nome: "60b-vendas-escuro", caminho: "/vendas/crm", papel: "admin", espera: "[data-crm-da-casa]", tema: "dark" },
+  { nome: "61-crm-importar", caminho: "/app/crm/crm", espera: "[data-produto-conteudo] header", tema: "light", depois: async (p) => { await p.click('[aria-label="Trazer de outro CRM (importar)"]'); await p.waitForSelector("[data-escolher-arquivo]"); } },
   { nome: "16-crm-claro", caminho: "/app/crm/crm", espera: "[data-produto-conteudo] header", tema: "light" },
   { nome: "17-inicio-azul", caminho: "/app", espera: "[data-inicio-do-produto]", estado: estadoDoProduto({ conta: { aparencia: { cor: "azul", nome_curto: "Imob Exemplo" } } }) },
   { nome: "18-conta-plano-claro", caminho: "/app/conta?parte=plano", espera: "[data-escolha-de-plano]", tema: "light", estado: estadoDoProduto({ conta: { aparencia: { cor: "roxo" } } }) },
@@ -379,6 +384,7 @@ const telas = [
   { nome: "50-correio-porta", caminho: "/correio", espera: "[data-porta-do-correio]" },
   { nome: "51-correio", caminho: "/correio", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },
   { nome: "51b-correio-claro", caminho: "/correio?de=painel", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.click("[data-mensagem]"); await p.waitForSelector("[data-texto-da-mensagem]"); await p.waitForTimeout(500); } },
+  { nome: "51e-correio-escuro", caminho: "/correio?de=painel", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.click("[data-tema-do-correio]"); await p.click("[data-mensagem]"); await p.waitForSelector("[data-texto-da-mensagem]"); await p.waitForTimeout(500); } },
   { nome: "51c-correio-seletor", caminho: "/correio", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-caixas-do-correio]"); await p.click("[data-caixas-do-correio]"); await p.waitForSelector("[data-caixa-opcao]"); await p.waitForTimeout(400); } },
   { nome: "52-correio-em-preparo", caminho: "/correio", espera: "[data-porta-do-correio]", estado: { ...estadoDoProduto(), __caixas: { ...minhasCaixas, master: false, caixas: [minhasCaixas.caixas[2]] } }, depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-correio-em-preparo]"); await p.waitForTimeout(500); } },
   { nome: "53-correio-quadro", caminho: "/correio?area=quadro", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-coluna]"); await p.waitForTimeout(500); } },

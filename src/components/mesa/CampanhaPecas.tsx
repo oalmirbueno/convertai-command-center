@@ -30,7 +30,7 @@ const COR_DO_ESTADO: Record<EstadoDaPeca, string> = {
   a_fazer: "text-muted-foreground",
   sem_direcao: "text-warning",
   a_gerar: "text-warning",
-  gerando: "text-primary",
+  gerando: "text-foreground",
   erro: "text-destructive",
   pronta: "text-success",
   na_agenda: "text-success",

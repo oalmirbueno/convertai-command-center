@@ -45,7 +45,7 @@ export default function QuemEstaTrabalhando({ aberto, aoFechar, pessoas, aoConve
               {pessoas.map((p) => (
                 <li key={p.operatorId} className={juntar(superficie.painel, "flex min-w-0 flex-col p-5")}>
                   <div className="flex items-center gap-3">
-                    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[15px] font-semibold text-primary" aria-hidden="true">
+                    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-[15px] font-semibold text-muted-foreground" aria-hidden="true">
                       {p.agente.trim()[0]?.toUpperCase()}
                       <span className={juntar("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card", TOM[p.status] || "bg-muted-foreground", p.agora && "animate-pulse")} />
                     </span>

@@ -384,7 +384,7 @@ function DiretorDoBook({ aberto, paraODiretor, onLimpar }: { aberto: BookAberto;
       {escolhidos.length > 0 && (
         <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
           {escolhidos.map((i) => (
-            <span key={i.id} className="mb-1 mr-1 inline-flex max-w-full items-center rounded-full border border-primary/30 px-2 py-px text-[11px] text-primary">
+            <span key={i.id} className="mb-1 mr-1 inline-flex max-w-full items-center rounded-full border border-border px-2 py-px text-[11px] text-muted-foreground">
               <span className="truncate">{i.titulo}</span>
             </span>
           ))}
@@ -637,7 +637,7 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
       )}
       <ul className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 xl:grid-cols-5" aria-label="Resultados do book">
         {Array.from({ length: gerando }, (_x, i) => (
-          <li key={`gerando-${i}`} className="min-w-0 rounded-lg border border-dashed border-primary/40 p-1" data-resultado-gerando="">
+          <li key={`gerando-${i}`} className="min-w-0 rounded-lg border border-dashed border-border p-1" data-resultado-gerando="">
             <Moldura proporcao={1} className="animate-pulse">
               <span className="flex h-full w-full flex-col items-center justify-center text-[11px] text-muted-foreground">
                 <Loader2 className="mb-1 h-4 w-4 animate-spin text-primary" /> gerando

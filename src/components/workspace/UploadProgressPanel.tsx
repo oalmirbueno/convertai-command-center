@@ -61,7 +61,7 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
         aria-expanded={!collapsed}
         className={juntar("flex w-full min-w-0 items-center border-b border-border px-4 py-2.5 text-left transition-colors hover:bg-muted/50", foco)}
       >
-        <UploadIcon className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <UploadIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="min-w-0 flex-1">
           <span className={juntar(texto.tituloSecao, "block truncate text-[13px]")}>{titulo}</span>
           {active > 0 && (
@@ -106,7 +106,7 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
                         </>
                       )}
                       {item.status === "error" && <span className="text-destructive"> · {item.error}</span>}
-                      {item.status === "done" && <span className="text-primary"> · Concluído</span>}
+                      {item.status === "done" && <span className="text-foreground"> · Concluído</span>}
                       {item.status === "canceled" && " · Cancelado"}
                       {item.status === "queued" && " · Na fila"}
                     </p>

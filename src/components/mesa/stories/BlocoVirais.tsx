@@ -81,7 +81,7 @@ export default function BlocoVirais({
         {moldes.map((m) => (
           <li key={m.chave} className={juntar(superficie.painel, "flex min-w-0 flex-col p-4")} data-molde={m.chave}>
             <div className="flex min-w-0 items-center">
-              <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary" title={ROTULO_DO_ADESIVO[m.adesivo]}>
+              <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground" title={ROTULO_DO_ADESIVO[m.adesivo]}>
                 <IconeDoAdesivo tipo={m.adesivo} />
               </span>
               <div className="min-w-0 flex-1">

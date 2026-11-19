@@ -116,7 +116,7 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
             ))}
           </div>
           {p.bio && <p className="whitespace-pre-line text-[13px] leading-5 text-foreground">{p.bio}</p>}
-          {p.site && <p className="truncate text-[13px] text-primary">{p.site.replace(/^https?:\/\//, "")}</p>}
+          {p.site && <p className="truncate text-[13px] text-foreground">{p.site.replace(/^https?:\/\//, "")}</p>}
         </div>
       </Bloco>
 

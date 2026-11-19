@@ -12,7 +12,7 @@
  *   dns { dominio_id }                                -> { checagem }   (qualquer pessoa da empresa, ou a casa)
  *
  * A casa (admin do painel):
- *   admin_criar_conta { nome, email, ... }            -> { conta_id, enviado }
+ *   admin_criar_conta { nome, email, client_id?, convidar?, com_link? } -> { conta_id, enviado, membro_id, link }
  *   admin_convidar { conta_id, email, nome?, papel?, enviar?, com_link? } -> { membro_id, enviado, message_id, link, extra }
  *   admin_remover_membro { membro_id }                -> { removido, extra, aviso }
  *   admin_definir_senha { membro_id, senha }          -> { definida, email }  (a senha nunca volta nem é gravada)
@@ -657,8 +657,12 @@ async function adminCriarConta(ch: Chamador, corpo: Record<string, unknown>) {
   }).select("id").single();
   if (erroDoMembro || !membro) throw erroDoBanco(erroDoMembro, "A empresa foi criada, mas o convite não. Convide pela ficha da empresa.");
   await registrar(contaId, ch.userId, "conta_criada", { plano: planoId, origem: "painel", cortesia });
-  const enviado = corpo.convidar === false ? false : await enviarConvite(String((membro as { id: string }).id), ch.userId);
-  return json({ conta_id: contaId, enviado });
+  const membroId = String((membro as { id: string }).id);
+  const enviado = corpo.convidar === false ? false : await enviarConvite(membroId, ch.userId);
+  // 19/11 (Central de acessos): "Adicionar pessoa" num cliente que ainda não tinha empresa no CRM cria a empresa
+  // já ligada ao cliente e devolve o link de primeiro acesso de quem vai administrar.
+  const link = corpo.com_link === true ? await gerarLinkDeAcesso(email) : null;
+  return json({ conta_id: contaId, enviado, membro_id: membroId, link });
 }
 
 /**

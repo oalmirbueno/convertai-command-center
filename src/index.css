@@ -11,6 +11,17 @@
    * o sólido na cor da marca (.ds-accent) e o de tinta (.ds-ink: preto no tema
    * claro, claro no tema escuro), como nas referências.
    * Os nomes do shadcn continuam os mesmos: nada sem estilo quebra.
+   *
+   * Cor 60-30-10 (19/11/2026, docs/design/SISTEMA.md seção 0.1):
+   *   60% base: --background, --sidebar-background.
+   *   30% superfícies: --card, --popover, --secondary, --muted.
+   *   10% destaque, UM só (o verde): --primary, --accent, --accent-solid, --ring.
+   *   Texto neutro (--foreground, --muted-foreground) não conta como cor.
+   * WCAG 2.2 AA medido por `npm run design:contraste` (a CI barra regressão em
+   * src/test/contraste-tokens.test.ts): texto 4,5:1; botão e anel 3:1 contra
+   * fundo e cartão. Escuro: verde 14,5:1 no fundo. Claro: o verde de
+   * preenchimento segue 145 80% 38% por decisão do Almir (19/11, 15h14): 2,59:1 no
+   * fundo e 2,91:1 no cartão, EXCEÇÃO registrada em verificacoes.ts (EXCECOES_DO_DONO).
    */
   :root,
   .dark {
@@ -111,10 +122,13 @@
     --popover-foreground: 240 8% 7%;
 
     /*
-     * v4 (15/11/2026, dono: "botões sem leitura"): o verde de preenchimento
-     * continua vivo e o texto EM CIMA dele é quase preto (7:1; branco dava
-     * 2,9:1). O verde usado como texto (text-primary) é um tom mais fundo
-     * (--primary-text, 5,9:1 sobre branco), ligado no tailwind.config.ts.
+     * v4 (15/11/2026, dono: "botões sem leitura"): o texto EM CIMA do verde é
+     * quase preto (branco dava 2,9:1). 19/11: o verde de preenchimento FICA em
+     * 38% de luz (o PR #160 chegou a baixar para 34%; o Almir mandou manter o
+     * verde atual, 15h14). Botão 2,59:1 no fundo e 2,91:1 no cartão: exceção
+     * decidida pelo dono. Texto quase preto em cima: 6,73:1. O verde usado como
+     * texto (text-primary) é o --primary-text (6,47:1 sobre branco), ligado
+     * no tailwind.config.ts.
      */
     --primary: 145 80% 38%;
     --primary-foreground: 150 30% 4%;
@@ -147,7 +161,8 @@
     --input: 140 6% 86%;
     --ring: 145 80% 38%;
 
-    /* Verde mais vivo no cartão sólido, com texto quase preto (10:1). */
+    /* Verde mais vivo no cartão sólido (é superfície, não botão), com texto quase preto (9,66:1).
+       O poço dentro dele (-deep) segue em 38%: texto em cima 6,73:1. */
     --accent-solid: 145 78% 46%;
     --on-accent: 150 30% 4%;
     --on-accent-muted: 150 45% 13%;

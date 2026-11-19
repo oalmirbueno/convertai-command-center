@@ -259,7 +259,7 @@ export default function ComposicaoDoVideoDaPauta({ item, pedidos, arquivos, foto
 
       {!c && (
         <div className="flex min-h-[160px] flex-col items-center justify-center rounded-lg border border-dashed border-border p-4 text-center" data-composicao-vazia="">
-          <Clapperboard className="mb-2 h-6 w-6 text-primary" aria-hidden="true" />
+          <Clapperboard className="mb-2 h-6 w-6 text-muted-foreground" aria-hidden="true" />
           <p className={juntar(texto.corpo, "font-medium")}>Monte o vídeo pelo contexto da pauta</p>
           <p className={juntar(texto.auxiliar, "mt-1 max-w-xs")}>Foto real primeiro, uma por cena; sem foto, a IA cria a base.</p>
         </div>

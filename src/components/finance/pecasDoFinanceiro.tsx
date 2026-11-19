@@ -21,18 +21,18 @@ export const corDoTom: Record<Tom, string> = {
   perigo: "text-destructive",
   aviso: "text-warning",
   info: "text-info",
-  primario: "text-primary",
+  primario: "text-foreground",
   apagado: "text-muted-foreground",
 };
 
 /** Fundo suave + cor para etiquetas de estado. */
 export const fundoDoTom: Record<Tom, string> = {
   neutro: "bg-muted text-foreground",
-  sucesso: "bg-success-soft text-success",
+  sucesso: "bg-muted text-success",
   perigo: "bg-danger-soft text-destructive",
   aviso: "bg-warning-soft text-warning",
   info: "bg-info-soft text-info",
-  primario: "bg-accent-soft text-primary",
+  primario: "bg-muted text-foreground",
   apagado: "bg-muted text-muted-foreground",
 };
 

@@ -22,8 +22,8 @@ import {
 import { DollarSign, CheckCircle2, Clock, AlertCircle, Plus, Pencil } from "lucide-react";
 
 const statusConfig: Record<string, { icon: any; className: string; label: string; tone: Tone }> = {
-  paid: { icon: CheckCircle2, className: "text-success bg-success-soft", label: "Pago", tone: "success" },
-  partial: { icon: Clock, className: "text-primary bg-accent-soft", label: "Parcial", tone: "accent" },
+  paid: { icon: CheckCircle2, className: "text-success bg-muted", label: "Pago", tone: "success" },
+  partial: { icon: Clock, className: "text-foreground bg-muted", label: "Parcial", tone: "accent" },
   pending: { icon: Clock, className: "text-warning bg-warning-soft", label: "Pendente", tone: "warning" },
   overdue: { icon: AlertCircle, className: "text-destructive bg-danger-soft", label: "Atrasado", tone: "danger" },
 };
@@ -388,7 +388,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
                     Vencimento: {formatDate(inst.due_date)}
                     {inst.paid_date && ` · Pago em ${formatDate(inst.paid_date)}`}
                     {isPartial && paidAmt > 0 && (
-                      <span className="text-primary">{` · Pago parcial: ${formatCurrency(paidAmt)} de ${formatCurrency(inst.amount)}`}</span>
+                      <span className="text-foreground">{` · Pago parcial: ${formatCurrency(paidAmt)} de ${formatCurrency(inst.amount)}`}</span>
                     )}
                   </>
                 }

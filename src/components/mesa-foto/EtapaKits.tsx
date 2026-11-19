@@ -253,7 +253,7 @@ function CartaoDaProposta({ proposta, fotos, onUsar }: { proposta: PropostaDeKit
   // Com id, a função já gravou a proposta como kit rascunho.
   const salva = !!proposta.id;
   return (
-    <div className="min-w-0 space-y-2 rounded-lg border border-primary/30 p-3" data-proposta={salva ? "salva" : ""}>
+    <div className="min-w-0 space-y-2 rounded-lg border border-border p-3" data-proposta={salva ? "salva" : ""}>
       <div className="flex min-w-0 items-start">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold">{proposta.nome}</p>

@@ -191,7 +191,7 @@ export default function SeletorDeClientesDaMesa({
         >
           {soIcone ? (
             valor && nome ? (
-              <span aria-hidden="true" className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold uppercase text-primary">
+              <span aria-hidden="true" className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted text-[11px] font-semibold uppercase text-muted-foreground">
                 {iniciais(nome)}
               </span>
             ) : carregando ? (
@@ -204,7 +204,7 @@ export default function SeletorDeClientesDaMesa({
               {/* 16/10/2026 (dono: "cara de aplicativo"): abaixo de 640 px o cliente aberto vira o avatar com as
                   iniciais, como na Mesa do cliente; o nome continua no leitor de tela e volta a partir de 640 px. */}
               {valor && nome && (
-                <span aria-hidden="true" className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold uppercase text-primary sm:hidden">
+                <span aria-hidden="true" className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted text-[11px] font-semibold uppercase text-muted-foreground sm:hidden">
                   {iniciais(nome)}
                 </span>
               )}

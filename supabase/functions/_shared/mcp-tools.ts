@@ -67,6 +67,7 @@ import { FERRAMENTAS_DO_ESCRITORIO } from '../mcp-server/modulos/escritorio.ts';
 import { FERRAMENTAS_DAS_REGRAS } from '../mcp-server/modulos/regras-permanentes.ts';
 import { FERRAMENTAS_DAS_AUTOMACOES } from '../mcp-server/modulos/automacoes.ts';
 import { FERRAMENTA_DO_DONO_NO_ESCRITORIO } from '../mcp-server/modulos/escritorio-dono.ts';
+import { FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS } from '../mcp-server/modulos/auditoria-assinaturas.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
 import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
@@ -5144,6 +5145,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DAS_AUTOMACOES,
   // MCP 2.35: o dono no Escritório fora do painel (app do Hermes), com escopo próprio.
   ...FERRAMENTA_DO_DONO_NO_ESCRITORIO,
+  // MCP 2.37: auditoria das assinaturas dos agentes (quem assinou como quem; log e alerta, só leitura).
+  ...FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

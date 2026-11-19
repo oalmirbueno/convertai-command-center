@@ -128,7 +128,7 @@ export default function AbaLogos({
             </button>
           </div>
           {resultado.escolhida ? (
-            <p className={juntar(texto.corpo, "mb-3 flex min-w-0 items-start rounded-[20px] bg-accent-soft p-3")} data-motivo-do-jev="">
+            <p className={juntar(texto.corpo, "mb-3 flex min-w-0 items-start rounded-[20px] bg-muted p-3")} data-motivo-do-jev="">
               <span className="mr-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">
                 <Star className="h-4 w-4" />
               </span>

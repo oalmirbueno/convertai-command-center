@@ -17,8 +17,8 @@ export const SITUACOES: { valor: SituacaoDoCriativo; rotulo: string; tom: string
   { valor: "gerando", rotulo: "Gerando", tom: "bg-info/10 text-info" },
   { valor: "conferindo", rotulo: "Conferindo", tom: "bg-info/10 text-info" },
   { valor: "corrigindo", rotulo: "Corrigindo", tom: "bg-warning/15 text-warning" },
-  { valor: "pronto", rotulo: "Pronto", tom: "bg-success/10 text-success" },
-  { valor: "entregue", rotulo: "Entregue", tom: "bg-primary/15 text-primary" },
+  { valor: "pronto", rotulo: "Pronto", tom: "bg-muted text-success" },
+  { valor: "entregue", rotulo: "Entregue", tom: "bg-muted text-foreground" },
 ];
 
 export const situacaoDe = (v: SituacaoDoCriativo) => SITUACOES.find((s) => s.valor === v) || SITUACOES[0];

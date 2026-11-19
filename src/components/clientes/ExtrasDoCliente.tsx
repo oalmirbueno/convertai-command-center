@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
+import ProdutosNoPlano from "./ProdutosNoPlano";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lerValorBR } from "@/lib/paymentInstallments";
@@ -129,6 +130,8 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
       }
     >
       {dados.isError && <p className="text-[13px] text-destructive">Não foi possível ler os extras deste cliente.</p>}
+      {/* 19/11/2026: o E-mail e o CRM do produto aparecem aqui, no plano do cliente: como é cobrado e quem usa. */}
+      <ProdutosNoPlano clientId={clientId} crm={crm} />
       {extras.length > 0 && (
         <ul>
           {extras.map((e) => {
@@ -185,7 +188,7 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
 function LinhaDoCrm({ extra, crm, carregando, aoLigar }: { extra: Extra; crm: CrmDoCliente | null; carregando: boolean; aoLigar: () => void }) {
   if (carregando) return null;
   const s = situacaoDoCrm(crm, extra);
-  const cor = s.tom === "ok" ? "bg-success-soft text-success" : s.tom === "espera" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground";
+  const cor = s.tom === "ok" ? "bg-muted text-success" : s.tom === "espera" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground";
   return (
     <div className="mt-2 min-w-0" data-crm-do-extra="">
       <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">

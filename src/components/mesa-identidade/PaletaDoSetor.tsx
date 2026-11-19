@@ -188,7 +188,7 @@ export default function PaletaDoSetor({ cores }: { cores: Cor[] }) {
                   {a}
                 </p>
               ))}
-              {!apoio.avisos.length && <span className={juntar(etiqueta, "mt-2 inline-block bg-accent-soft text-primary")}>contraste conferido</span>}
+              {!apoio.avisos.length && <span className={juntar(etiqueta, "mt-2 inline-block bg-muted text-foreground")}>contraste conferido</span>}
             </div>
           )}
         </div>

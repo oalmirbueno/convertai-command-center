@@ -307,7 +307,7 @@ function PublicationProgress({
               className={cn(
                 "relative z-10 mx-auto flex h-6 w-6 items-center justify-center rounded-full border bg-background",
                 step.complete
-                  ? "border-success/40 text-success"
+                  ? "border-border text-success"
                   : "border-border text-muted-foreground",
               )}
             >
@@ -1326,7 +1326,7 @@ export default function EditorialDetailSheet({
                   variant="outline"
                   className={
                     isFilePublishable(post.primaryFile)
-                      ? "border-success/30 bg-success/10 text-success"
+                      ? "border-border bg-muted text-success"
                       : "border-warning/30 bg-warning/10 text-warning"
                   }
                 >
@@ -1500,7 +1500,7 @@ export default function EditorialDetailSheet({
                         variant="outline"
                         className={
                           isFilePublishable(effectiveFile)
-                            ? "border-success/30 bg-success/10 text-success"
+                            ? "border-border bg-muted text-success"
                             : "border-warning/30 bg-warning/10 text-warning"
                         }
                       >
@@ -1744,7 +1744,7 @@ export default function EditorialDetailSheet({
               })}
 
               {podeProgramarInline && (
-                <div className="rounded-md border border-dashed border-primary/40 bg-accent-soft p-4 sm:p-5">
+                <div className="rounded-md border border-dashed border-border bg-muted p-4 sm:p-5">
                   <div className="flex min-w-0 items-center">
                     <p className="min-w-0 truncate text-[13px] font-medium text-foreground">
                       {agendadaAtual ? "Remarcar publicação" : "Programar publicação"}

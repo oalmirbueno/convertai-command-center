@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ReviewReport } from "@/lib/centralReview";
-import { inicioDaSemana } from "@/lib/mensagensDaSemana";
+import { inicioDaSemana } from "@/lib/semanaDasMensagens";
 
 const CAMPOS = "id, client_id, project_id, title, summary, next_steps, highlights, metrics, status, review_version, created_at, period_start, period_end";
 

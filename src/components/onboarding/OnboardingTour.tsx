@@ -199,8 +199,8 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center bg-accent-soft">
-              <span className="text-[11px] font-semibold tabular-nums text-primary">{currentStep + 1}</span>
+            <div className="w-6 h-6 rounded-full flex items-center justify-center bg-muted">
+              <span className="text-[11px] font-semibold tabular-nums text-foreground">{currentStep + 1}</span>
             </div>
             <span className="text-[11px] text-muted-foreground">
               Passo {currentStep + 1} de {steps.length}

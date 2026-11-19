@@ -652,12 +652,12 @@ export default function EditorialAccountSetup({
         )}
 
         {canManage && (
-          <div className="mt-4 rounded-md bg-accent-soft p-4">
+          <div className="mt-4 rounded-md bg-muted p-4">
             {/* Dentro do agendamento o espaço é estreito: sem min-w-0 no texto
                 e shrink-0 no botão, o botão era espremido e saía do lugar. */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-start gap-3">
-                <div className="shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
+                <div className="shrink-0 rounded-lg bg-muted p-2 text-muted-foreground">
                   <Cable className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div className="flex min-w-0 items-center">
@@ -854,14 +854,14 @@ export default function EditorialAccountSetup({
               pertence ao cliente abaixo. Isso não ativa publicação automática.
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-md bg-accent-soft p-3">
+          <div className="rounded-md bg-muted p-3">
             <p className="text-[11px] font-semibold text-muted-foreground">
               Destino obrigatório do vínculo
             </p>
             <div className="mt-2 grid gap-2 text-[13px] leading-5 sm:grid-cols-2">
               <div className="flex min-w-0 items-center gap-2">
                 <Building2
-                  className="h-4 w-4 shrink-0 text-primary"
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
                   aria-hidden="true"
                 />
                 <span className="min-w-0">
@@ -875,7 +875,7 @@ export default function EditorialAccountSetup({
               </div>
               <div className="flex min-w-0 items-center gap-2">
                 <FolderKanban
-                  className="h-4 w-4 shrink-0 text-primary"
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
                   aria-hidden="true"
                 />
                 <span className="min-w-0">
@@ -945,7 +945,7 @@ export default function EditorialAccountSetup({
                         </span>
                       </span>
                       {connected ? (
-                        <span className="flex items-center gap-1 text-[12px] leading-4 font-medium text-emerald-700 dark:text-emerald-300">
+                        <span className="flex items-center gap-1 text-[12px] leading-4 font-medium text-success">
                           <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                           Conectada
                         </span>

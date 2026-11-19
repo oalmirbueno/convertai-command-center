@@ -113,7 +113,7 @@ export default function EtapaRevisao({ site, onIrPara, onPedirAoDiretor }: { sit
           </div>
         )}
         {ultimo && build && build.ok !== false && !qa.length && (
-          <p className={juntar(texto.corpo, "flex items-center text-primary")}>
+          <p className={juntar(texto.corpo, "flex items-center text-foreground")}>
             <CheckCircle2 className="mr-1.5 h-4 w-4" />
             Sem avisos
           </p>

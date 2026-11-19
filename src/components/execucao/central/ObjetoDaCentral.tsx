@@ -199,9 +199,9 @@ function useTitulo(informar: (t: string) => void, titulo: string | null | undefi
 const STATUS_DA_TAREFA: Record<string, { rotulo: string; classe: string }> = {
   backlog: { rotulo: "Backlog", classe: "bg-muted text-muted-foreground" },
   todo: { rotulo: "A fazer", classe: "bg-muted text-foreground" },
-  doing: { rotulo: "Em andamento", classe: "bg-primary/10 text-primary" },
+  doing: { rotulo: "Em andamento", classe: "bg-muted text-foreground" },
   review: { rotulo: "Em revisão", classe: "bg-warning/15 text-warning" },
-  done: { rotulo: "Concluída", classe: "bg-success/15 text-success" },
+  done: { rotulo: "Concluída", classe: "bg-muted text-success" },
 };
 /** Daqui só se move entre estes. Concluir é na revisão, com a prova da entrega. */
 const STATUS_EDITAVEIS = ["backlog", "todo", "doing", "review"] as const;
@@ -418,7 +418,7 @@ function VerMemoriaDoAgente({ id, informarTitulo }: PropsDaVista) {
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
         <Pilula classe="bg-muted text-foreground">{m.tipo}</Pilula>
-        <Pilula classe={m.ativa ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}>{m.ativa ? "Ativa" : "Desativada"}</Pilula>
+        <Pilula classe={m.ativa ? "bg-muted text-success" : "bg-muted text-muted-foreground"}>{m.ativa ? "Ativa" : "Desativada"}</Pilula>
       </div>
       <p className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{m.texto}</p>
       <div className="mt-2">
@@ -508,7 +508,7 @@ type Aprovacao = Record<string, any> & {
 const STATUS_DA_APROVACAO: Record<string, { rotulo: string; classe: string }> = {
   pendente: { rotulo: "Pendente", classe: "bg-warning/15 text-warning" },
   adiado: { rotulo: "Adiada", classe: "bg-muted text-muted-foreground" },
-  aprovado: { rotulo: "Aprovada", classe: "bg-success/15 text-success" },
+  aprovado: { rotulo: "Aprovada", classe: "bg-muted text-success" },
   rejeitado: { rotulo: "Rejeitada", classe: "bg-destructive/15 text-destructive" },
   alteracoes_pedidas: { rotulo: "Alterações pedidas", classe: "bg-muted text-foreground" },
   expirado: { rotulo: "Vencida", classe: "bg-muted text-muted-foreground" },
@@ -585,7 +585,7 @@ function VerAprovacao({ id, informarTitulo, aoAbrirDiario }: PropsDaVista) {
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
         <Pilula classe={st.classe}>{st.rotulo}</Pilula>
         <Pilula classe="bg-muted text-foreground">{ROTULO_DA_ACAO[a.action_kind] || a.action_kind}</Pilula>
-        {a.executed_at && <Pilula classe="bg-success/15 text-success">Enviado</Pilula>}
+        {a.executed_at && <Pilula classe="bg-muted text-success">Enviado</Pilula>}
       </div>
       <p className="mt-2 break-words text-[15px] font-semibold leading-[22px] [overflow-wrap:anywhere]">{a.o_que}</p>
       {a.por_que && <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-5 text-foreground/85 [overflow-wrap:anywhere]">{a.por_que}</p>}
@@ -635,7 +635,7 @@ function VerAprovacao({ id, informarTitulo, aoAbrirDiario }: PropsDaVista) {
             />
           </label>
           {confirmando ? (
-            <div className="mt-2 min-w-0 rounded-md bg-primary/10 px-3 py-2.5">
+            <div className="mt-2 min-w-0 rounded-md bg-muted px-3 py-2.5">
               <p className="text-[12px] leading-5 text-foreground">{AVISO_DO_ESCOPO}</p>
               <Acoes>
                 <button type="button" className={BOTAO_PRINCIPAL} disabled={decidir.isPending} onClick={() => decidir.mutate("aprovado")}>
@@ -973,7 +973,7 @@ function VerVinculo({ id, informarTitulo, aoAbrirDiario }: PropsDaVista) {
   return (
     <div className="min-w-0">
       <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
-        <Pilula classe={v.status === "blocked" || v.status === "failed" ? "bg-destructive/15 text-destructive" : v.status === "done" ? "bg-success/15 text-success" : "bg-muted text-foreground"}>{estadoDaExecucao(v.status)}</Pilula>
+        <Pilula classe={v.status === "blocked" || v.status === "failed" ? "bg-destructive/15 text-destructive" : v.status === "done" ? "bg-muted text-success" : "bg-muted text-foreground"}>{estadoDaExecucao(v.status)}</Pilula>
       </div>
       <div className="mt-2">
         <Linha rotulo="Agente">{agente}</Linha>

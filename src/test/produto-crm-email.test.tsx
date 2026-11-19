@@ -7,7 +7,7 @@ import { avisoDaConta, diasAte, mensalidadePrevista, type EstadoDoProduto, type 
 import EscolhaDePlano from "@/components/produto/EscolhaDePlano";
 import { precisaCriarSenha, senhaAceita } from "@/components/produto/CriarSenha";
 import { resumirCrm } from "@/components/produto/InicioDoProduto";
-import { CORES_DA_EMPRESA, lerAparencia, variaveisDaCor } from "@/lib/produto/aparencia";
+import { CORES_DA_EMPRESA, contrasteDaCor, lerAparencia, variaveisDaCor } from "@/lib/produto/aparencia";
 import { registrosParaPublicar } from "@/components/produto/casa/EmailDaCasa";
 import { nomeDoMes, resultadoDoMes, somarMeses } from "@/components/produto/casa/FaturamentoDoProduto";
 import { situacaoDaConta } from "@/components/produto/casa/ContasDaCasa";
@@ -352,7 +352,44 @@ describe("personalização da empresa", () => {
     expect(variaveisDaCor("azul", "light")["--primary"]).toBe(azul.claro);
     expect(variaveisDaCor("azul", "light")["--primary-foreground"]).toBe("0 0% 100%");
     expect(variaveisDaCor("laranja", "dark")["--primary-foreground"]).toBe("0 0% 5%");
+    // 19/11: no escuro o branco reprovava em azul, roxo e rosa; no claro, laranja e ciano levam texto escuro.
+    expect(variaveisDaCor("azul", "dark")["--primary-foreground"]).toBe("0 0% 5%");
+    expect(variaveisDaCor("rosa", "dark")["--on-accent"]).toBe("0 0% 5%");
+    expect(variaveisDaCor("laranja", "light")["--primary-foreground"]).toBe("0 0% 5%");
+    expect(variaveisDaCor("rosa", "light")["--primary-text"]).toBe("336 78% 40%");
+    expect(variaveisDaCor("roxo", "light")["--primary-text"]).toBe(CORES_DA_EMPRESA.filter((c) => c.id === "roxo")[0].claro);
     expect(CORES_DA_EMPRESA.map((c) => c.id)).toEqual(["verde", "azul", "roxo", "laranja", "rosa", "ciano"]);
+    // O cartão de tinta (.ds-ink) também troca o destaque: sem segundo verde ao lado da cor escolhida.
+    for (const c of CORES_DA_EMPRESA.slice(1)) {
+      for (const tema of ["dark", "light"] as const) {
+        const [h] = variaveisDaCor(c.id, tema)["--card-ink-accent"].split(" ");
+        expect(h).toBe((tema === "dark" ? c.tomDoTextoNoClaro || c.claro : c.escuro).split(" ")[0]);
+      }
+    }
+  });
+
+  it("toda cor passa a WCAG AA nos dois temas: texto no botão 4,5, botão 3 contra fundo e cartão, tom de texto 4,5", () => {
+    for (const tema of ["dark", "light"] as const) {
+      for (const c of CORES_DA_EMPRESA) {
+        const r = contrasteDaCor(c.id, tema);
+        expect(r.botao, `${c.id} ${tema} botão`).toBeGreaterThanOrEqual(4.5);
+        // Exceção do Almir (19/11, 15h14): o verde do claro é o do painel (145 80% 38%), 2,59:1 e 2,91:1.
+        const excecaoDoDono = c.id === "verde" && tema === "light";
+        expect(r.fundo, `${c.id} ${tema} fundo`).toBeGreaterThanOrEqual(excecaoDoDono ? 2.5 : 3);
+        expect(r.cartao, `${c.id} ${tema} cartão`).toBeGreaterThanOrEqual(excecaoDoDono ? 2.5 : 3);
+        expect(r.texto, `${c.id} ${tema} texto`).toBeGreaterThanOrEqual(4.5);
+        expect(["AA", "AAA"]).toContain(r.notaBotao);
+      }
+    }
+  });
+
+  it("contrasteDaCor mede o que a tela mostra", () => {
+    const verdeClaro = contrasteDaCor("verde", "light");
+    expect(verdeClaro.fundo).toBeCloseTo(2.59, 1);
+    expect(verdeClaro.cartao).toBeCloseTo(2.91, 1);
+    expect(verdeClaro.notaBotao).toBe("AA");
+    expect(contrasteDaCor(undefined, "dark")).toEqual(contrasteDaCor("verde", "dark"));
+    expect(contrasteDaCor("verde", "dark").notaBotao).toBe("AAA");
   });
 
   it("só entra cor da lista e logo que é imagem", () => {

@@ -97,10 +97,10 @@ export function NotesPreview({ src, clientId, clientName, onChange }: { src: str
       return;
     }
     // heading
-    if (raw.startsWith("### ")) { out.push(<div key={i} className="text-[12px] font-semibold text-primary mt-1">{raw.slice(4)}</div>); return; }
+    if (raw.startsWith("### ")) { out.push(<div key={i} className="text-[12px] font-semibold text-foreground mt-1">{raw.slice(4)}</div>); return; }
     if (raw.startsWith("## "))  { out.push(<div key={i} className="text-[13px] font-bold mt-1">{raw.slice(3)}</div>); return; }
     if (raw.startsWith("# "))   { out.push(<div key={i} className="text-[14px] font-bold mt-1">{raw.slice(2)}</div>); return; }
-    if (raw.startsWith("> "))   { out.push(<div key={i} className="border-l-2 border-primary/40 pl-2 text-[11px] text-muted-foreground italic">{raw.slice(2)}</div>); return; }
+    if (raw.startsWith("> "))   { out.push(<div key={i} className="border-l-2 border-border pl-2 text-[11px] text-muted-foreground italic">{raw.slice(2)}</div>); return; }
     if (raw.trim() === "")      { out.push(<div key={i} className="h-1" />); return; }
     // linha simples com wsfile mention
     const withMentions = raw.replace(/\[@([^\]]+)\]\(wsfile:[^)]+\)/g, "@$1");
@@ -116,10 +116,10 @@ function InlineHelpBlock() {
   // Um bloco só (28/09): lista com divisória, sem cartão por comando e sem rolagem
   // própria (quem rola é o Documento). A dica foi para o "?" do título.
   return (
-    <div className="my-2 rounded-lg border border-primary/30 bg-primary/5">
-      <div className="flex min-w-0 items-center border-b border-primary/20 px-2.5 py-1.5">
-        <Sparkles className="mr-1.5 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
-        <span className="min-w-0 truncate text-[12px] font-semibold text-primary">Guia de comandos</span>
+    <div className="my-2 rounded-lg border border-border bg-muted">
+      <div className="flex min-w-0 items-center border-b border-border px-2.5 py-1.5">
+        <Sparkles className="mr-1.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="min-w-0 truncate text-[12px] font-semibold text-foreground">Guia de comandos</span>
         <AjudaRecolhida rotulo="Dicas das notas" className="ml-1.5 mr-auto">
           Cole imagens (OCR automático) e links de vídeo (embed automático). Use Alt+↑/↓ para alternar conversas do agente.
         </AjudaRecolhida>
@@ -139,7 +139,7 @@ function InlineHelpBlock() {
         {items.map(it => (
           <li key={it.cmd} className="min-w-0 border-b border-border/50 py-1.5 last:border-b-0">
             <div className="flex min-w-0 items-baseline">
-              <code className="shrink-0 font-mono text-[11px] font-semibold text-primary">{it.cmd}</code>
+              <code className="shrink-0 font-mono text-[11px] font-semibold text-foreground">{it.cmd}</code>
               <span className="ml-1.5 min-w-0 truncate text-[11px] text-muted-foreground">{it.label}</span>
             </div>
             <p className="text-[12px] leading-snug text-muted-foreground">{it.desc}</p>
@@ -262,7 +262,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
     <div className="my-3 overflow-hidden rounded-lg border border-border bg-muted/20">
       {/* Cabeçalho numa linha: nome, cliente e projeto, o "?" com o como usar e recarregar. */}
       <div className="flex min-w-0 items-center border-b border-border bg-muted/40 px-3 py-2 text-[12px]">
-        <Columns3 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <Columns3 className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="shrink-0 font-semibold">Kanban</span>
         <span className="ml-1.5 min-w-0 truncate text-muted-foreground">· {clientName || "cliente"}</span>
         {projects.length > 1 ? (

@@ -33,7 +33,7 @@ export const rotuloDaSituacao = (m: Pick<EstadoDoMotor, "id" | "situacao">) => (
 
 /** Cor do ponto e do rótulo (tokens do sistema). */
 export const COR_DA_SITUACAO: Record<SituacaoDoMotor, { ponto: string; texto: string }> = {
-  ok: { ponto: "bg-primary", texto: "text-primary" },
+  ok: { ponto: "bg-primary", texto: "text-foreground" },
   atencao: { ponto: "bg-warning", texto: "text-warning" },
   parado: { ponto: "bg-destructive", texto: "text-destructive" },
   sem_uso: { ponto: "bg-muted-foreground", texto: "text-muted-foreground" },

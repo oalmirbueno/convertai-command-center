@@ -105,7 +105,7 @@ export default function AreaDoTrending({ consulta, onConsulta, assuntosExtras, j
         titulo={n.titulo}
         apoio={
           <>
-            {j && <span className={juntar("block truncate", j.cabe === "serve" ? "text-primary" : "")} data-motivo={j.cabe}>{j.motivo}</span>}
+            {j && <span className={juntar("block truncate", j.cabe === "serve" ? "text-foreground" : "")} data-motivo={j.cabe}>{j.motivo}</span>}
             <span className="block truncate">
               {n.fonte} · {quandoDaNoticia(n.data, agora)} ·{" "}
               <a href={n.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="toque-compacto inline-flex items-center text-primary hover:underline" aria-label={`Abrir a matéria: ${n.titulo}`} title="Abrir a matéria">

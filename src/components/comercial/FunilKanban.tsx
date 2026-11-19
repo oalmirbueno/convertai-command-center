@@ -593,7 +593,7 @@ function Cartao({
               {lead.name}
             </p>
             {lead.agente_slug === "mercurio" && (
-              <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-accent-soft px-1.5 text-[11px] font-medium leading-none text-primary" title="O Mercúrio atende este lead" data-selo-mercurio="">
+              <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-1.5 text-[11px] font-medium leading-none text-foreground" title="O Mercúrio atende este lead" data-selo-mercurio="">
                 <Bot className="mr-0.5 h-3 w-3" aria-hidden="true" />
                 Mercúrio
               </span>

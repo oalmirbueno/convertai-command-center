@@ -380,7 +380,7 @@ export default function PainelDeCustos({
           />
 
           {frase && (
-            <p className="rounded-lg bg-accent-soft px-5 py-4 text-[15px] font-medium leading-6 text-foreground sm:px-6 sm:py-5">{frase}</p>
+            <p className="rounded-lg bg-muted px-5 py-4 text-[15px] font-medium leading-6 text-foreground sm:px-6 sm:py-5">{frase}</p>
           )}
 
           <section aria-label="Custo médio por peça" className="min-w-0">

@@ -264,7 +264,7 @@ export default function ClientPlainSummary({
                     <span className="text-[32px] font-semibold leading-10 tracking-[-0.03em] tabular-nums text-foreground max-sm:text-[28px] max-sm:leading-9">{step.value}</span>
                     <span className="text-[13px] font-medium text-foreground">{step.label}</span>
                     {step.growth !== null && Math.abs(step.growth) >= 5 && (
-                      <span className={juntar(etiqueta, "h-[22px]", step.growth > 0 ? "bg-success-soft text-success" : "bg-muted text-muted-foreground")}>
+                      <span className={juntar(etiqueta, "h-[22px]", step.growth > 0 ? "bg-muted text-success" : "bg-muted text-muted-foreground")}>
                         {step.growth > 0 ? "+" : ""}
                         {Math.round(step.growth)}% vs. período anterior
                       </span>

@@ -20,4 +20,6 @@
 // 2.35.0 (18/11/2026): aceleriq_escritorio_dono (o dono lê e escreve no Escritório pelo app do Hermes) e o escopo escritorio:write, que nenhum outro escopo concede.
 // 2.35.1 (19/11/2026): falha passageira ao abrir a sessão do dono da chave sai com transitorio:true (o MCP repete esse passo até 2 vezes) e criar_publicacao_de_aprovado não a esconde mais como rpc_recusada.
 // 2.36.0 (19/11/2026): Central de Automações: aceleriq_automacoes_listar, _saude, _execucoes, _guia (só leitura, retrato do coletor do n8n) e _ligar_desligar (escopo automacoes:write, que nenhum outro escopo concede, com confirmar e motivo).
-export const MCP_VERSION = '2.36.0';
+// 2.36.1 (19/11/2026): Escritório: coordenador fala direto com o coordenador da área Coordenação (Fred), sem abrir para outras áreas.
+// 2.37.0 (19/11/2026): auditoria das assinaturas dos agentes: mcp_assinaturas_log guarda o operador declarado e o efetivo de cada chamada do Escritório e de escrita assinada (IP, user-agent, hash da sessão), alertas por hora em mcp_alertas_assinatura (fora_dos_vinculos, vinculos_indisponiveis, operadores_com_sinais_diferentes), aceleriq_auditoria_assinaturas_listar (só leitura) e falha da leitura dos vínculos deixa de liberar a assinatura (vinculos_indisponiveis, transitorio:true).
+export const MCP_VERSION = '2.37.0';

@@ -129,7 +129,7 @@ export default function SecondBrainPulseWidget() {
 
       {data?.configured && data.error === "bridge_unavailable" && (
         <div className={`${poco} flex items-start text-[12px] text-muted-foreground`}>
-          <AlertCircle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <AlertCircle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <div>
             <p className="text-foreground">Segundo Cérebro temporariamente indisponível.</p>
             <p className="mt-0.5">O painel continua ativo e tentará sincronizar novamente automaticamente.</p>

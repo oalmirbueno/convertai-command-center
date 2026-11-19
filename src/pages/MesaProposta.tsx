@@ -98,12 +98,12 @@ export function CaminhoDasPropostas() {
   return (
     <nav aria-label="Caminho" className="flex min-w-0 shrink-0 items-center" data-caminho-da-proposta="">
       <Link to="/clientes" className={juntar(elo, "max-sm:hidden")}>
-        <Users className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <Users className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         Clientes
       </Link>
       <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground max-sm:hidden" aria-hidden="true" />
       <Link to="/clientes?propostas=1" className={juntar(elo, "max-sm:px-1")}>
-        <Users className="mr-1.5 h-4 w-4 shrink-0 text-primary sm:hidden" aria-hidden="true" />
+        <Users className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground sm:hidden" aria-hidden="true" />
         Propostas
       </Link>
     </nav>

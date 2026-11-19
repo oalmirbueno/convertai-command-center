@@ -341,7 +341,7 @@ function ControlesTeste({
     <aside className="membros-teste" aria-label="Teste como cliente">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <strong className="flex items-center gap-2 text-[13px]">
-          <FlaskConical size={17} className="text-primary" />
+          <FlaskConical size={17} className="text-muted-foreground" />
           Teste como cliente
         </strong>
         <span className="text-[12px] text-muted-foreground">
@@ -830,7 +830,7 @@ function ConteudoAreaDeMembros() {
             )}
             {previa && (
               <aside
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-[13px]"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted p-4 text-[13px]"
                 aria-label="Visão do cliente"
               >
                 <div>
@@ -996,7 +996,7 @@ function ConteudoAreaDeMembros() {
               ) : !produtos.length ? (
                 <>
                 <section className="py-16 max-w-xl space-y-4">
-                  <BookOpen size={36} className="text-primary" />
+                  <BookOpen size={36} className="text-muted-foreground" />
                   <CabecalhoDePagina
                     titulo={<> Sua biblioteca começa aqui </>}
                   />

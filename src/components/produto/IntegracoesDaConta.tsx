@@ -83,8 +83,8 @@ const quando = (iso: string): string => {
   return d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
 
-const COR_DA_FAIXA: Record<Faixa, string> = { quente: "bg-accent-soft text-primary", morno: "bg-warning-soft text-warning", frio: "bg-muted text-muted-foreground" };
-const COR_DO_ENVIO: Record<string, string> = { enviado: "bg-accent-soft text-primary", simulado: "bg-info-soft text-info", pendente: "bg-muted text-muted-foreground", erro: "bg-danger-soft text-destructive" };
+const COR_DA_FAIXA: Record<Faixa, string> = { quente: "bg-muted text-foreground", morno: "bg-warning-soft text-warning", frio: "bg-muted text-muted-foreground" };
+const COR_DO_ENVIO: Record<string, string> = { enviado: "bg-muted text-foreground", simulado: "bg-info-soft text-info", pendente: "bg-muted text-muted-foreground", erro: "bg-danger-soft text-destructive" };
 const caixinha = "h-4 w-4 shrink-0 accent-[hsl(var(--primary))]";
 
 function BlocoDeCopia({ rotulo, valor, onde }: { rotulo: string; valor: string; onde?: string }) {
@@ -419,7 +419,7 @@ function ParteMeta({ i, guardar, salvando }: DaParte) {
         <ol className="min-w-0 space-y-2.5" data-passos-da-meta="">
           {PASSOS_DA_META.map((p, n) => (
             <li key={p} className="flex min-w-0 items-start">
-              <span className="mr-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">{n + 1}</span>
+              <span className="mr-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">{n + 1}</span>
               <span className={juntar(texto.corpo, "min-w-0")}>{p}</span>
             </li>
           ))}

@@ -902,7 +902,7 @@ export default function EditClientDrawer({
                     <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground max-sm:hidden" aria-hidden="true" />
                   </button>
                   <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais`)} className={AZULEJO}>
-                    <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-primary"><FolderOpen className="h-5 w-5" /></span>
+                    <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground"><FolderOpen className="h-5 w-5" /></span>
                     <span className="mt-3 text-[13px] font-medium leading-5 text-foreground">Ver entregas</span>
                     <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground max-sm:hidden" aria-hidden="true" />
                   </button>
@@ -932,7 +932,7 @@ export default function EditClientDrawer({
                   acao={
                     <>
                       <button type="button" onClick={() => setVincularAberto((v) => !v)} aria-expanded={vincularAberto} className={botao.secundario} aria-label="Vincular projeto existente">
-                        <Briefcase className="h-4 w-4 text-primary" aria-hidden="true" />
+                        <Briefcase className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                         <span className="ml-1.5 hidden sm:inline">Vincular existente</span>
                       </button>
                       <button type="button" onClick={() => setNovoProjetoAberto(true)} className={botao.primario} aria-label="Novo projeto">
@@ -1336,7 +1336,7 @@ export default function EditClientDrawer({
                                       const isOverdue = !isPaid && new Date(inst.due_date) < new Date();
                                       return (
                                         <li key={inst.id} className="flex min-w-0 items-center py-2.5">
-                                          <span className={`mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isPaid ? "bg-success-soft text-success" : isOverdue ? "bg-danger-soft text-destructive" : "bg-warning-soft text-warning"}`} aria-hidden="true">
+                                          <span className={`mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isPaid ? "bg-muted text-success" : isOverdue ? "bg-danger-soft text-destructive" : "bg-warning-soft text-warning"}`} aria-hidden="true">
                                             {isPaid ? <CheckCircle2 className="h-4 w-4" /> : isOverdue ? <AlertCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                                           </span>
                                           <div className="min-w-0 flex-1">

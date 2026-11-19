@@ -810,7 +810,7 @@ export default function EditorialScheduleDialog({
         <DialogHeader className="shrink-0 border-b border-border bg-background px-4 py-4 pr-12 text-left sm:px-6 sm:py-5">
           <div className="flex items-center">
             <DialogTitle className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                 <CalendarCheck2 className="h-4 w-4" aria-hidden="true" />
               </span>
               Agendar publicação
@@ -983,7 +983,7 @@ export default function EditorialScheduleDialog({
                         <AssetPreview asset={selectedAsset} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[11px] font-semibold text-primary">
+                        <span className="block text-[11px] font-semibold text-foreground">
                           Conteúdo escolhido
                         </span>
                         {/* Duas linhas em vez de corte: no celular o nome
@@ -1168,7 +1168,7 @@ export default function EditorialScheduleDialog({
                         {selectedClientName} · {selectedProjectName}
                       </p>
                     </div>
-                    <Share2 className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <Share2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   </div>
 
                   {(options?.accounts || []).length > 0 ? (
@@ -1242,7 +1242,7 @@ export default function EditorialScheduleDialog({
                               className={cn(
                                 "text-[11px]",
                                 account.connection_status === "connected"
-                                  ? "border-success/25 bg-success/10 text-success"
+                                  ? "border-border bg-muted text-success"
                                   : unavailable
                                     ? "border-destructive/25 bg-destructive/5 text-destructive"
                                   : "text-muted-foreground",

@@ -149,7 +149,7 @@ export default function JanelaDoGanho({ lead, clientes, onCancelar, onConcluido 
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center text-[15px]">
-            <Trophy className="mr-2 h-4 w-4 text-success" aria-hidden="true" />
+            <Trophy className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
             {resultado ? (resultado.vinculado ? "Ganho ligado ao cliente" : "Cliente criado") : `Fechou com ${lead.name}`}
           </DialogTitle>
         </DialogHeader>
@@ -157,7 +157,7 @@ export default function JanelaDoGanho({ lead, clientes, onCancelar, onConcluido 
         {resultado ? (
           <div className="min-w-0 space-y-4" data-ganho-pronto="">
             <div className="flex min-w-0 items-center">
-              <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success-soft text-success" aria-hidden="true">
+              <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-success" aria-hidden="true">
                 <Check className="h-5 w-5" />
               </span>
               <div className="min-w-0">

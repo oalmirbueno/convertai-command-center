@@ -283,7 +283,7 @@ export default function EspacoDaConta({ estado }: { estado: EstadoDoProduto }) {
                 className={juntar(superficie.painel, foco, "flex min-w-0 items-start p-4 text-left transition-colors hover:border-primary/50 disabled:opacity-60")}
                 data-modelo={m.id}
               >
-                <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-primary">{ICONE_DO_MODELO[m.id]}</span>
+                <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">{ICONE_DO_MODELO[m.id]}</span>
                 <span className="min-w-0 flex-1">
                   <span className={juntar(texto.tituloSecao, "block truncate")}>{m.titulo}</span>
                   <span className={juntar(texto.auxiliar, "mt-0.5 block leading-5")}>{m.resumo}</span>

@@ -2,7 +2,7 @@ import { createElement as h } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
  * 19/11/2026: tela /automacoes. Abre sem travar, lista por grupo, abre o fluxo com o desenho e as execuções,
@@ -22,7 +22,7 @@ const painel = {
 };
 const detalhe = {
   ...painel.fluxos[1],
-  desenho: { nos: [{ nome: "Segunda 07h20", tipo: "scheduleTrigger", x: 0, y: 0 }, { nome: "Escrever", tipo: "code", x: 220, y: 0 }], ligacoes: [{ de: "Segunda 07h20", para: "Escrever", saida: 0, tipo: "main" }] },
+  desenho: { nos: [{ nome: "Segunda 07h20", tipo: "scheduleTrigger", x: 0, y: 0, resumo: ["seg às 07h20"] }, { nome: "Escrever", tipo: "code", x: 220, y: 0, resumo: ["roda acq11Escrever()", "Escreve a mensagem da semana."], codigo: "return acq11Escrever();" }], ligacoes: [{ de: "Segunda 07h20", para: "Escrever", saida: 0, tipo: "main" }] },
   execucoes: [{ id: 8, modo: "trigger", status: "success", inicio: haMin(900), fim: haMin(899), caminho: [{ no: "Segunda 07h20", estado: "success", vezes: 1 }, { no: "Escrever", estado: "success", vezes: 1 }], parou_em: "Escrever" }],
   acoes: [],
 };
@@ -38,6 +38,12 @@ function montar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(h(QueryClientProvider, { client: qc }, h(MemoryRouter, null, h(CentralDeAutomacoes))));
 }
+
+beforeAll(() => {
+  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  if (!(globalThis as any).DOMMatrixReadOnly) (globalThis as any).DOMMatrixReadOnly = class { m22 = 1; };
+  (SVGElement.prototype as any).getBBox = () => ({ x: 0, y: 0, width: 0, height: 0 });
+});
 
 afterEach(() => { cleanup(); rpc.mockClear(); invoke.mockClear(); });
 
@@ -62,8 +68,13 @@ describe("Central de Automações (tela)", () => {
     montar();
     const lista = await abrirPasta("Clientes");
     fireEvent.click(within(lista).getByTitle(/Abrir Clientes: mensagem/));
-    expect(await screen.findByRole("img", { name: /Desenho do fluxo/ }, { timeout: 5000 })).toBeTruthy();
-    expect(screen.getByText(/Parou em "Escrever"/)).toBeTruthy();
+    expect(await screen.findByText(/Parou em "Escrever"/, undefined, { timeout: 5000 })).toBeTruthy();
+    expect(document.querySelector("[data-canvas-do-fluxo]")).toBeTruthy();
+    fireEvent.click(await screen.findByTitle("Escrever: clique para entender", undefined, { timeout: 5000 }));
+    const painel = await screen.findByRole("complementary", { name: "O que é o nó Escrever" });
+    expect(painel.textContent).toContain("Escreve a mensagem da semana.");
+    expect(painel.textContent).toContain("Código");
+    expect(painel.textContent).toContain("passo 2");
     expect(screen.getByRole("combobox", { name: "De quem é este fluxo" })).toBeTruthy();
   });
 

@@ -2141,7 +2141,7 @@ export default function EditorialCalendar() {
       <DragOverlay dropAnimation={null}>
         {dragSummary ? (
           <div className="flex max-w-[280px] items-center rounded-lg border border-primary/35 bg-popover px-3 py-2.5 text-[12px] font-medium text-popover-foreground shadow-sm">
-            <GripVertical className="mr-2 h-4 w-4 shrink-0 text-primary" />
+            <GripVertical className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="truncate">{dragSummary.label}</span>
           </div>
         ) : null}

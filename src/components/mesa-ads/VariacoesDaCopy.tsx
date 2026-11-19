@@ -118,7 +118,7 @@ export default function VariacoesDaCopy({
               <p className="mb-1.5 flex min-w-0 flex-wrap items-center text-[11px]">
                 {v.melhor && <span className="mb-0.5 mr-1.5 rounded-full bg-primary px-1.5 py-px font-medium text-primary-foreground">Melhor</span>}
                 {angulo && (
-                  <span className="mb-0.5 mr-1.5 rounded-full bg-primary/10 px-1.5 py-px font-medium text-primary" data-angulo-da-variacao={v.angulo_de_venda || ""}>
+                  <span className="mb-0.5 mr-1.5 rounded-full bg-muted px-1.5 py-px font-medium text-foreground" data-angulo-da-variacao={v.angulo_de_venda || ""}>
                     <span className="mr-1 font-normal opacity-80">Ângulo</span>
                     <span>{angulo}</span>
                   </span>

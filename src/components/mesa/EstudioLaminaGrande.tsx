@@ -122,7 +122,7 @@ export default function EstudioLaminaGrande({
           Lâmina {card.ordem}
           <span className="font-normal text-muted-foreground"> · {funcaoDaLamina(card)} · {card.ordem} de {total}</span>
           {desenhandoAreas && (
-            <span className="ml-2 inline-flex items-center text-[12px] font-normal text-primary">
+            <span className="ml-2 inline-flex items-center text-[12px] font-normal text-muted-foreground">
               <Crop className="mr-1 h-3 w-3" /> arraste para marcar a área
             </span>
           )}

@@ -8,6 +8,8 @@ import { useClients } from "@/hooks/useSupabaseData";
 import { ROTULO_DO_PAPEL, carregarEmail, casa, fraseDoErro, linkDeAcesso, listarContasDaCasa, type ContaNaCasa, type PapelNaConta } from "@/lib/produto/api";
 import { linkDeEntrada, linkDoWhatsApp, mensagemDeEntrada } from "@/lib/produto/acessos";
 import {
+  extrasDeCrmVivos,
+  opcoesDeEmpresaParaPessoa,
   caixasDaCentral,
   central,
   dominiosParaCaixaNova,
@@ -638,7 +640,17 @@ function JanelaAdicionar({
   aoPessoaCriada: (pessoa: Pick<PessoaNaCentral, "id" | "nome" | "email" | "empresa" | "estado">, link: string | null, extra: string | null) => void;
 }) {
   const [o_que, setOQue] = useState<"pessoa" | "caixa">(inicial);
-  const comCrm = contas.filter((c) => c.crm_ativo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  const clientes = useClients();
+  const extrasDeCrm = useQuery({ queryKey: ["produto", "casa", "extras-crm"], queryFn: extrasDeCrmVivos, staleTime: 60_000 });
+  const opcoes = useMemo(
+    () =>
+      opcoesDeEmpresaParaPessoa(
+        contas,
+        ((clientes.data || []) as Array<{ id: string; full_name?: string | null; company_name?: string | null }>).map((c) => ({ id: c.id, nome: (c.company_name || c.full_name || "").trim() })),
+        extrasDeCrm.data || [],
+      ),
+    [contas, clientes.data, extrasDeCrm.data],
+  );
   const paraCaixa = dominiosParaCaixaNova(dominios, nomes);
   // Pessoa
   const [contaId, setContaId] = useState("");
@@ -654,7 +666,10 @@ function JanelaAdicionar({
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
-  const conta = contas.filter((c) => c.id === contaId)[0] || null;
+  const opcao = opcoes.filter((o) => o.valor === contaId)[0] || null;
+  const idDaConta = opcao && (opcao.destino.tipo === "conta" || opcao.destino.tipo === "ativar") ? opcao.destino.conta_id : "";
+  const conta = contas.filter((c) => c.id === idDaConta)[0] || null;
+  const empresaNova = !!opcao && (opcao.destino.tipo === "plano" || opcao.destino.tipo === "nova");
   const dominio = paraCaixa.filter((d) => d.id === dominioId)[0] || null;
   const contaDaCaixa = dominio ? contas.filter((c) => c.id === dominio.conta_id)[0] || null : null;
   const endereco = dominio ? enderecoNoDominio(parte, dominio.dominio) : null;
@@ -666,14 +681,33 @@ function JanelaAdicionar({
   };
 
   const adicionarPessoa = async () => {
-    if (!conta) return setErro("Escolha a empresa.");
+    if (!opcao) return setErro("Escolha a empresa.");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailDaPessoa.trim())) return setErro("Diga o e-mail de login da pessoa.");
     setSalvando(true);
     setErro(null);
+    const email = emailDaPessoa.trim().toLowerCase();
+    const pessoa = (id: string) => ({ id, nome: nome.trim(), email, empresa: opcao.nome, estado: "convidado" as const });
     try {
-      const r = await central.convidar({ conta_id: conta.id, email: emailDaPessoa, nome, papel });
+      const d = opcao.destino;
+      if (d.tipo === "plano") {
+        // Cliente com o extra de CRM no plano: liga o CRM pelo plano (o Financeiro já cobra pelo extra).
+        const r = await casa.crmPeloPlano({ extra_id: d.extra_id, email, nome: nome.trim() || undefined });
+        aoMudar();
+        const link = r.membro_id ? await linkDeAcesso(r.membro_id).then((x) => x.link).catch(() => null) : null;
+        aoPessoaCriada(pessoa(r.membro_id || ""), link, null);
+        return;
+      }
+      if (d.tipo === "nova") {
+        // Cliente sem empresa no CRM: nasce a empresa ligada a ele, com esta pessoa administrando.
+        const r = await casa.criarConta({ nome: opcao.nome, email, nome_responsavel: nome.trim(), client_id: d.client_id, convidar: false, com_link: true });
+        aoMudar();
+        aoPessoaCriada(pessoa(r.membro_id || ""), r.link || null, null);
+        return;
+      }
+      if (d.tipo === "ativar") await casa.salvarConta(d.conta_id, { crm_ativo: true });
+      const r = await central.convidar({ conta_id: d.conta_id, email, nome, papel });
       aoMudar();
-      aoPessoaCriada({ id: r.membro_id, nome: nome.trim(), email: emailDaPessoa.trim().toLowerCase(), empresa: conta.nome, estado: "convidado" }, r.link, fraseDoExtra(r.extra, "crm"));
+      aoPessoaCriada(pessoa(r.membro_id), r.link, fraseDoExtra(r.extra, "crm"));
     } catch (e) {
       setErro(fraseDoErro(e, "Não foi possível adicionar agora."));
       setSalvando(false);
@@ -744,16 +778,27 @@ function JanelaAdicionar({
         </div>
       ) : o_que === "pessoa" ? (
         <div className="min-w-0 space-y-4" data-form-pessoa="">
-          {!comCrm.length ? (
-            <EmptyState compact title="Nenhuma empresa com CRM ligado." />
+          {!opcoes.length ? (
+            <EmptyState compact title={clientes.isLoading ? "Carregando os clientes..." : "Nenhum cliente no painel."} />
           ) : (
             <GrupoDeCampos colunas={2}>
               <CampoDeFormulario rotulo="Empresa">
                 <select className={campo} value={contaId} onChange={(e) => { setContaId(e.target.value); setErro(null); }} data-escolher-empresa="">
-                  <option value="">Escolha a empresa</option>
-                  {comCrm.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nome}</option>
-                  ))}
+                  <option value="">Escolha a empresa ou o cliente</option>
+                  {opcoes.some((o) => o.grupo === "crm") && (
+                    <optgroup label="Com CRM">
+                      {opcoes.filter((o) => o.grupo === "crm").map((o) => (
+                        <option key={o.valor} value={o.valor}>{o.rotulo}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {opcoes.some((o) => o.grupo === "clientes") && (
+                    <optgroup label="Outros clientes">
+                      {opcoes.filter((o) => o.grupo === "clientes").map((o) => (
+                        <option key={o.valor} value={o.valor}>{o.rotulo}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </CampoDeFormulario>
               <CampoDeFormulario rotulo="Papel">
@@ -770,6 +815,11 @@ function JanelaAdicionar({
                 <input className={campo} type="email" value={emailDaPessoa} onChange={(e) => { setEmailDaPessoa(e.target.value); setErro(null); }} autoComplete="off" data-email-da-pessoa="" />
               </CampoDeFormulario>
             </GrupoDeCampos>
+          )}
+          {empresaNova && opcao && (
+            <Chip tone="info" size="sm">
+              {opcao.destino.tipo === "plano" ? "Liga o CRM pelo plano do cliente; a pessoa entra administrando" : "Cria a empresa no CRM ligada ao cliente; a pessoa entra administrando"}
+            </Chip>
           )}
           {conta && conta.cobranca_por === "plano" && <Chip tone="info" size="sm">Cobrada no plano do cliente: o extra de CRM acompanha</Chip>}
           {conta && !conta.client_id && <LigarAoCliente conta={conta} aoLigar={aoMudar} />}

@@ -240,7 +240,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Visão geral", url: "/comercial", icon: Briefcase, soGestao: true, fimExato: true },
       // 18/11: "CRM de vendas" (o funil da Aceleriq), para não confundir com o CRM vendido em Produtos.
-      { title: "CRM de vendas", url: "/comercial/crm", icon: KanbanSquare, soGestao: true },
+      // 19/11: o CRM de vendas abre na casca nova (/vendas); o /comercial do painel fica de acompanhamento.
+      { title: "CRM de vendas", url: "/vendas/crm", icon: KanbanSquare, soGestao: true },
       { title: "Agenda", url: "/comercial/agenda", icon: CalendarClock, soGestao: true },
       { title: "Metas", url: "/comercial/metas", icon: Target, soGestao: true },
       { title: "Campanhas", url: "/comercial/campanhas", icon: Megaphone, soGestao: true },
@@ -1018,7 +1019,7 @@ className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-fu
           perfil={
             <div className="flex min-w-0 items-center">
               <Avatar className="h-9 w-9 shrink-0">
-                <AvatarFallback className="bg-primary/15 text-[12px] font-semibold text-primary">{iniciais}</AvatarFallback>
+                <AvatarFallback className="bg-muted text-[12px] font-semibold text-foreground">{iniciais}</AvatarFallback>
               </Avatar>
               <div className="ml-3 min-w-0 flex-1">
                 <p className="truncate text-[13px] font-medium leading-5 text-foreground">{profile?.full_name}</p>

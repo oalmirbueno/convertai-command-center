@@ -13,7 +13,8 @@
  */
 
 export type EscopoDoCrm =
-  | { modo: "casa" }
+  /** base: onde moram as abas (o painel usa /comercial; a casca nova da casa, /vendas). */
+  | { modo: "casa"; base?: string }
   | {
       modo: "conta";
       contaId: string;
@@ -70,6 +71,9 @@ let atual: EscopoDoCrm = CASA;
 
 export const escopoDoCrm = (): EscopoDoCrm => atual;
 export const naConta = (): boolean => atual.modo === "conta";
+
+/** Onde moram as abas do Comercial da casa agora (o painel ou a casca nova). */
+export const baseDaCasa = (): string => (atual.modo === "casa" && atual.base ? atual.base : "/comercial");
 
 export function definirEscopoDoCrm(escopo: EscopoDoCrm | null): void {
   atual = escopo || CASA;

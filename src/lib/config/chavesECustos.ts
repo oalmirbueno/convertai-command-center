@@ -21,7 +21,7 @@ export const ROTULO_DO_ESTADO: Record<EstadoDaChave, string> = {
 
 /** Cor da bolinha e do rótulo (tokens do sistema). */
 export const COR_DO_ESTADO: Record<EstadoDaChave, { ponto: string; texto: string }> = {
-  valida: { ponto: "bg-primary", texto: "text-primary" },
+  valida: { ponto: "bg-primary", texto: "text-foreground" },
   invalida: { ponto: "bg-destructive", texto: "text-destructive" },
   sem_chave: { ponto: "bg-muted-foreground/40", texto: "text-muted-foreground" },
   nao_testada: { ponto: "bg-warning", texto: "text-warning" },

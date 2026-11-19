@@ -77,7 +77,7 @@ export default function SeletorDeFotos({
   return (
     // Escolha aberta dentro da etapa: é uma janela no lugar (cartão com função). 28/09: sem rolagem
     // própria (uma por região); as ações ficam na linha do título, à vista mesmo com muitas fotos.
-    <section className={juntar(superficie.painel, "min-w-0 space-y-3 border-primary/40 p-4")} aria-label={titulo}>
+    <section className={juntar(superficie.painel, "min-w-0 space-y-3 border-border p-4")} aria-label={titulo}>
       <div className="flex min-w-0 items-center">
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{titulo}</p>
         {multiplas && (
