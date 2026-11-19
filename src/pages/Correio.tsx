@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { abrirPorta, carregarMinhasCaixas, correio, portaAberta, type CaixaDoCorreio } from "@/lib/produto/email-central";
 import { quemSouNoCorreio } from "@/lib/produto/correio-dia";
-import { MarcaAceleriq } from "@/components/publico/CascaPublica";
+import LogoDoCorreio from "@/components/correio/LogoDoCorreio";
 import { Carregando, EstadoDeErro, EstadoVazio, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
 import CaixaPorPrioridade from "@/components/correio/CaixaPorPrioridade";
 import "@/components/correio/correio-tema.css";
@@ -105,8 +105,7 @@ function Porta({ email, aoAbrir }: { email: string; aoAbrir: () => void }) {
         }}
       >
         <div className="mb-5 flex items-center">
-          <MarcaAceleriq altura={20} />
-          <span className={juntar(texto.corpo, "ml-3 font-medium")}>Correio</span>
+          <LogoDoCorreio tamanho={34} />
         </div>
         <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
           <Lock className="h-5 w-5" />
@@ -270,8 +269,7 @@ function CorreioAberto() {
         <header className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2 rounded-3xl bg-card p-2" data-topo-do-correio="">
           <Link to="/app/email" className={juntar("flex h-11 shrink-0 items-center rounded-2xl pl-2 pr-3 hover:bg-muted", foco)} aria-label="Voltar ao painel" title="Voltar ao painel">
             <ArrowLeft className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <MarcaAceleriq altura={22} className="logo-do-topo" />
-            <span className="ml-2.5 text-[15px] font-semibold">Correio</span>
+            <LogoDoCorreio tamanho={36} />
           </Link>
           <nav className="flex min-w-0 flex-1 [&>*]:mr-1 [&>*:last-child]:mr-0 overflow-x-auto" aria-label="Áreas do correio">
             {AREAS.map((a) => (

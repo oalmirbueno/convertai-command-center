@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { diasAteODia, enderecosColados, lerCliente, proximoVencimento, resumoDaCentral, saudeDoCliente, type ClienteNaCentral } from "@/lib/produto/email-central";
-import { agruparCaixa, colunaDaMensagem, fraseDoDia, grupoDaMensagem, horaDoCompromisso, iniciais, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
+import { agruparCaixa, colunaDaMensagem, fraseDoDia, grupoDaMensagem, horaDaMensagem, horaDoCompromisso, iniciais, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
 import { ADAPTADORES, adaptadorPara, CorreioDesligado, envioValido } from "../../supabase/functions/produto-correio/modulos/adaptador";
 
 /**
@@ -218,5 +218,30 @@ describe("campanhas e abas do correio (19/11/2026)", () => {
     expect(areas).toContain("<LeituraDaMensagem");
     expect(areas).toContain("correio.campanha(");
     for (const n of ["Documentos", "Copiloto", "Resposta automática", "Caixas compartilhadas", "Campanhas"]) expect(areas).toContain(`nome: "${n}"`);
+  });
+});
+
+describe("hora na lista, planos e contratar (19/11/2026)", () => {
+  it("mostra a hora de Brasília como no Gmail", () => {
+    const agora = new Date("2026-11-19T18:00:00Z");
+    expect(horaDaMensagem("2026-11-19T17:32:00Z", agora)).toBe("14:32");
+    expect(horaDaMensagem("2026-11-18T12:10:00Z", agora)).toBe("Ontem 09:10");
+    expect(horaDaMensagem("2026-11-10T12:10:00Z", agora)).toBe("10/11 09:10");
+    expect(horaDaMensagem("2025-11-10T12:10:00Z", agora)).toBe("10/11/2025");
+    expect(horaDaMensagem("2026-11-19T17:32:00Z", agora, true)).toBe("19/11/2026 às 14:32");
+    expect(horaDaMensagem(null, agora)).toBe("");
+  });
+
+  it("contratar pelo correio: preço do banco, histórico e CRM, só admin", () => {
+    const f = ler("supabase/functions/produto/index.ts");
+    expect(f).toContain("contratar_email_extras: contratarEmailExtras");
+    const corpo = f.slice(f.indexOf("async function contratarEmailExtras"), f.indexOf("function idsDasOfertas"));
+    expect(corpo).toContain("exigirAdminDaConta(ch)");
+    expect(corpo).toContain('from("produto_config").select("email_caixa_extra")');
+    expect(corpo).toContain('from("commercial_leads").insert');
+    expect(corpo).not.toMatch(/corpo\.(valor|preco|total)/);
+    const tela = ler("src/components/correio/AreasDoCorreio.tsx");
+    expect(tela).toContain("data-contratar=");
+    expect(tela).toContain("Planos e preços");
   });
 });
