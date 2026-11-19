@@ -165,3 +165,22 @@ export function fraseDoDia(p: { responder: number; compromissos: number; tarefas
   const texto = partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}`;
   return `${texto[0].toUpperCase()}${texto.slice(1)}.`;
 }
+
+/**
+ * A hora da mensagem como no Gmail, sempre em Brasília: hoje só a hora ("14:32"), ontem "Ontem 09:10",
+ * este ano "18/11 14:32" e antes disso "18/11/2025". `completo` traz dia, mês, ano e hora (a mensagem aberta).
+ */
+export function horaDaMensagem(iso: string | null | undefined, agora = new Date(), completo = false): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const fuso = { timeZone: "America/Sao_Paulo" } as const;
+  const dia = (x: Date) => x.toLocaleDateString("pt-BR", { ...fuso, day: "2-digit", month: "2-digit", year: "numeric" });
+  const hora = d.toLocaleTimeString("pt-BR", { ...fuso, hour: "2-digit", minute: "2-digit" });
+  if (completo) return `${dia(d)} às ${hora}`;
+  if (dia(d) === dia(agora)) return hora;
+  if (dia(d) === dia(new Date(agora.getTime() - 86400000))) return `Ontem ${hora}`;
+  const ano = (x: Date) => x.toLocaleDateString("pt-BR", { ...fuso, year: "numeric" });
+  if (ano(d) === ano(agora)) return `${d.toLocaleDateString("pt-BR", { ...fuso, day: "2-digit", month: "2-digit" })} ${hora}`;
+  return dia(d);
+}

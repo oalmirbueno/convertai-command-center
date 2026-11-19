@@ -162,7 +162,7 @@ describe("migração pelo cliente: a cópia", () => {
 
 describe("migração pelo cliente: o servidor", () => {
   const f = ler("supabase/functions/produto-migracao/index.ts");
-  const sql = ler("supabase/migrations/20261119180000_produto_email_migracao_pelo_cliente.sql");
+  const sql = ler("supabase/migrations/20261119200000_produto_email_migracao_pelo_cliente.sql");
   it("a senha de lá vai para o Vault e sai quando termina; a tela nunca recebe host nem senha", () => {
     expect(sql).toContain("vault.create_secret");
     expect(sql).not.toMatch(/add column if not exists \w*(senha|token|secret)/i);
