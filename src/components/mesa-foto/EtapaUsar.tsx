@@ -48,7 +48,7 @@ function EsperandoAprovacao() {
   if (!n) return null;
   return (
     <div className="flex min-w-0 flex-wrap items-center text-[13px]" data-esperando-aprovacao={n}>
-      <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+      <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="mr-2">
         {n} {n === 1 ? "foto gerada ainda espera" : "fotos geradas ainda esperam"} a aprovação da equipe.
       </span>

@@ -20,7 +20,7 @@ export default function AtalhoDoProduto({ className = "" }: { className?: string
   if (!estado) return null;
   if (!estado.conta && estado.crm_da_empresa) {
     return (
-      <div className={juntar("flex min-w-0 flex-wrap items-center rounded-lg bg-primary/[0.07] px-3 py-2", className)} data-atalho-do-produto="login-do-crm">
+      <div className={juntar("flex min-w-0 flex-wrap items-center rounded-lg bg-muted px-3 py-2", className)} data-atalho-do-produto="login-do-crm">
         <span className="mr-3 min-w-0 flex-1">
           <span className={juntar(texto.corpo, "block truncate font-medium")}>{estado.crm_da_empresa.nome} tem CRM</span>
           <span className={juntar(texto.auxiliar, "block truncate")}>Cada pessoa entra no CRM com o próprio usuário.</span>
@@ -36,7 +36,7 @@ export default function AtalhoDoProduto({ className = "" }: { className?: string
   if (!estado.conta) return null;
   const conta = estado.conta;
   return (
-    <div className={juntar("flex min-w-0 flex-wrap items-center rounded-lg bg-primary/[0.07] px-3 py-2", className)} data-atalho-do-produto="">
+    <div className={juntar("flex min-w-0 flex-wrap items-center rounded-lg bg-muted px-3 py-2", className)} data-atalho-do-produto="">
       <p className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>{conta.nome}</p>
       {conta.crm_ativo && (
         <Link to="/app/crm" className={juntar(botao.primario, "h-8")} data-atalho="crm">

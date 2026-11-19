@@ -767,7 +767,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
           {rascunho.blocos.map((b, i) => (
             <li key={b.id} className={juntar("min-w-0 py-3", i === 0 && "border-l-2 border-primary pl-3")} data-bloco={b.id}>
               <div className="flex min-w-0 items-center">
-                <span className="mr-2 shrink-0 text-[13px] font-bold tabular-nums text-primary">{String(i + 1).padStart(2, "0")}</span>
+                <span className="mr-2 shrink-0 text-[13px] font-bold tabular-nums text-foreground">{String(i + 1).padStart(2, "0")}</span>
                 <div className="mr-2 min-w-0 flex-1 sm:max-w-[200px]">
                   <input value={b.funcao} onChange={(e) => mudarBloco(i, { funcao: e.target.value })} disabled={desabilitado} aria-label={`Função do bloco ${i + 1}`} className={juntar(campo, "font-semibold")} />
                 </div>

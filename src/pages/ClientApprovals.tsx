@@ -536,7 +536,7 @@ export default function ClientApprovals() {
             <DialogTitle className="flex items-center gap-2 truncate pr-6 text-[15px]">
               {previewFile?.file_name}
               {previewFile && getCarouselImages(previewFile).length > 1 && (
-                <span className="shrink-0 rounded-full bg-accent-soft px-2 py-1 text-[11px] font-medium leading-none text-primary">
+                <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[11px] font-medium leading-none text-foreground">
                   Carrossel • {getCarouselImages(previewFile).length} itens
                 </span>
               )}
@@ -667,7 +667,7 @@ export default function ClientApprovals() {
                     className="space-y-3 border-t border-border pt-4"
                   >
                     <div>
-                      <p className="text-[12px] font-medium text-primary">
+                      <p className="text-[12px] font-medium text-muted-foreground">
                         Conteúdo editorial vinculado
                       </p>
                       <p className="mt-1 text-[13px] leading-5 font-semibold text-foreground">

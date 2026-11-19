@@ -245,7 +245,7 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
         >
           <div className="flex flex-wrap">
             {dna.atributos.map((a: { id: string; prob: number | null }) => (
-              <span key={a.id} className={juntar(etiqueta, "mb-1.5 mr-1.5 bg-accent-soft text-primary")}>
+              <span key={a.id} className={juntar(etiqueta, "mb-1.5 mr-1.5 bg-muted text-foreground")}>
                 {rotuloDoAtributo(a.id)}
                 {typeof a.prob === "number" ? ` ${Math.round(a.prob * 100)}%` : ""}
               </span>

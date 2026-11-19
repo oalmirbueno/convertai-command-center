@@ -105,7 +105,7 @@ function PropostaEmLinha({ x, confirmar, cancelar, desfazer }: { x: PropostaNaTe
     );
   }
   return (
-    <div className={juntar("mt-1.5 border-l-2 pl-3 text-[13px]", x.estado === "feita" ? "border-success" : x.estado === "desfeita" ? "border-border" : "border-primary")} data-proposta-da-skill={x.estado} role="status" aria-live="polite">
+    <div className={juntar("mt-1.5 border-l-2 pl-3 text-[13px]", x.estado === "feita" ? "border-success" : x.estado === "desfeita" ? "border-border" : "border-border")} data-proposta-da-skill={x.estado} role="status" aria-live="polite">
       <p className="[overflow-wrap:anywhere]">
         <span className="font-medium">
           {n} {n === 1 ? "mudança" : "mudanças"}
@@ -174,7 +174,7 @@ function PropostaEmLinha({ x, confirmar, cancelar, desfazer }: { x: PropostaNaTe
 const LinhaDaSkill = memo(function LinhaDaSkill({ s, semFala, abertoAjuste, alternarAjuste, aplicar }: { s: Skill; semFala: boolean; abertoAjuste: boolean; alternarAjuste: (id: string) => void; aplicar: (s: Skill) => void }) {
   return (
     <div className="flex min-w-0 items-center">
-      <Sparkles className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+      <Sparkles className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="min-w-0 flex-1" title={`${s.descricao} Base: ${s.referencia}.`}>
         <span className="block truncate text-[13px] font-medium">{s.rotulo}</span>
         <span className={juntar(texto.auxiliar, "block truncate")}>{linhaDaSkill(s.descricao)}</span>

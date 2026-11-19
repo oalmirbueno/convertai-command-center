@@ -1402,7 +1402,7 @@ export default function VoiceAssistant({
               {/* Cabeçalho: nome, estado, Cliente e Serviço (o pré-contexto) e os atalhos. */}
               <header className="shrink-0 border-b border-border px-3 pb-2 pt-3" data-cabecalho-aceleriq="">
                 <div className="flex min-w-0 items-center">
-                  <span className="relative mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+                  <span className="relative mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground" aria-hidden="true">
                     <Sparkles className="h-4 w-4" />
                     {(aiThinking || listening) && <span className="absolute inset-0 animate-pulse rounded-md ring-2 ring-primary/40" />}
                   </span>
@@ -1544,8 +1544,8 @@ export default function VoiceAssistant({
                     {aiNarrative && (
                       <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
                         <div className="flex items-center">
-                          <Sparkles className="mr-1.5 h-3 w-3 text-primary" />
-                          <p className="text-[11px] font-medium text-primary">Plano do agente</p>
+                          <Sparkles className="mr-1.5 h-3 w-3 text-muted-foreground" />
+                          <p className="text-[11px] font-medium text-muted-foreground">Plano do agente</p>
                           {aiConfidence !== null && (
                             <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">{Math.round(aiConfidence * 100)}% de certeza</span>
                           )}
@@ -1573,7 +1573,7 @@ export default function VoiceAssistant({
                       </div>
                     )}
                     {learnedCount > 0 && (
-                      <div className="flex items-center text-[11px] text-primary">
+                      <div className="flex items-center text-[11px] text-muted-foreground">
                         <Brain className="mr-2 h-3.5 w-3.5" />
                         Memorizei {learnedCount} correção(ões). Não vou repetir o erro.
                       </div>
@@ -1665,7 +1665,7 @@ export default function VoiceAssistant({
                     {(files.length > 0 || fileReading || systemDocsLoading || systemDocs.length > 0) && (
                       <div className="space-y-1.5">
                         {systemDocsLoading && (
-                          <div className="flex items-center rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-[12px] leading-4 text-primary">
+                          <div className="flex items-center rounded-lg border border-border bg-muted p-2.5 text-[12px] leading-4 text-foreground">
                             <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
                             <span>Lendo documentos do cliente…</span>
                           </div>
@@ -1673,7 +1673,7 @@ export default function VoiceAssistant({
                         {systemDocs.map((d, i) => (
                           <div key={`sys-${i}`} className="rounded-lg border border-border p-2.5 text-[12px] leading-4">
                             <div className="flex items-center text-foreground">
-                              <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" />
+                              <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                               <span className="flex-1 truncate">{d.fileName}</span>
                               <span className="ml-2 text-[11px] text-muted-foreground">{d.source}</span>
                             </div>
@@ -1688,7 +1688,7 @@ export default function VoiceAssistant({
                         {fileCtxs.map((ctx, i) => (
                           <div key={`att-${i}`} className="rounded-lg border border-border bg-muted/40 p-2.5 text-[12px] leading-4">
                             <div className="flex items-center text-foreground">
-                              <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" />
+                              <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                               <span className="flex-1 truncate">{describeContext(ctx)}</span>
                               <button type="button" onClick={() => removeAttachment(i)} className="ml-2 text-destructive">remover</button>
                             </div>
@@ -1707,7 +1707,7 @@ export default function VoiceAssistant({
                     {log.length > 0 && (
                       <div className="space-y-1.5 border-t border-border pt-2">
                         {log.map((l) => (
-                          <div key={l.id} className={`flex items-start whitespace-pre-line text-[12px] leading-4 ${l.kind === "error" ? "text-destructive" : l.kind === "ok" ? "text-primary" : "text-muted-foreground"}`}>
+                          <div key={l.id} className={`flex items-start whitespace-pre-line text-[12px] leading-4 ${l.kind === "error" ? "text-destructive" : l.kind === "ok" ? "text-foreground" : "text-muted-foreground"}`}>
                             {l.kind === "ok" ? <CheckCircle2 className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" /> : l.kind === "error" ? <AlertCircle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" /> : <FileText className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" />}
                             <span>{l.text}</span>
                           </div>
@@ -1908,8 +1908,8 @@ export default function VoiceAssistant({
                 {/* ---------- PREVIEW PHASE ---------- */}
                 {phase === "preview" && parsed?.kind === "create_project" && scopePreview && (
                   <div className="space-y-3">
-                    <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2">
-                      <p className="text-[11px] text-primary">{selectedExistingProject ? "Atualização do projeto" : "Escopo do projeto"}</p>
+                    <div className="rounded-xl border border-border bg-muted p-4 space-y-2">
+                      <p className="text-[11px] text-muted-foreground">{selectedExistingProject ? "Atualização do projeto" : "Escopo do projeto"}</p>
                       <h3 className="text-[15px] font-semibold text-foreground">{answers.project_name}</h3>
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
                         <div>
@@ -1948,7 +1948,7 @@ export default function VoiceAssistant({
                         <div className="rounded-xl border border-border bg-secondary/40 p-3">
                           <p className="text-[11px] text-muted-foreground mb-2">
                             Vai criar · {ms.length} milestones · {total} tarefas · checklists
-                            {aiPlan?.milestones?.length ? <span className="text-primary"> · derivado do contrato</span> : null}
+                            {aiPlan?.milestones?.length ? <span className="text-foreground"> · derivado do contrato</span> : null}
                           </p>
                           <ul className="space-y-1.5">
                             {ms.map((m: any) => (

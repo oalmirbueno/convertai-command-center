@@ -42,7 +42,7 @@ export default function MensagemPadrao({ m }: { m: MensagemPadraoDoEditor }) {
     return (
       <div className="min-w-0 space-y-1.5 pt-1" data-padrao-do-editor="amostra">
         <p className="flex items-center font-medium">
-          <Clapperboard className="mr-1.5 h-4 w-4 text-primary" />
+          <Clapperboard className="mr-1.5 h-4 w-4 text-muted-foreground" />
           Amostra pronta pra conferir
         </p>
         <p className={texto.auxiliar}>

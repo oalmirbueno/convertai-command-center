@@ -531,7 +531,7 @@ function CartaoDaTomada({
               <div className="h-full w-full" style={emGeracao ? { filter: "blur(10px)", WebkitFilter: "blur(10px)" } : undefined}>
                 <ImagemDaMesa caminho={mostrada.storage_path} alt={`${tomada.nome}, versão ${mostrada.versao}`} className="h-full w-full !object-contain" />
               </div>
-              <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
+              <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
                 gerada
               </span>
             </Moldura>
@@ -582,7 +582,7 @@ function CartaoDaTomada({
           <p className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]">Rejeitada: {ultima.motivo_rejeicao}</p>
         )}
         {angulo && !aprovada && (
-          <p className="text-[11px] leading-snug text-primary">Novo ângulo: partes que não aparecem nas fotos serão criadas. Fica marcada como gerada, sem garantia de fidelidade.</p>
+          <p className="text-[11px] leading-snug text-muted-foreground">Novo ângulo: partes que não aparecem nas fotos serão criadas. Fica marcada como gerada, sem garantia de fidelidade.</p>
         )}
         <div className="flex min-w-0 flex-wrap items-center">
           <button type="button" className="mr-3 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setDetalhes(!detalhes)} aria-expanded={detalhes}>

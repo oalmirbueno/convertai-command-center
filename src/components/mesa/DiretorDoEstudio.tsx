@@ -307,7 +307,7 @@ export default function DiretorDoEstudio({
     return (
       <div key={mud.id} className={`min-w-0 rounded-lg border bg-background p-2.5 ${aplicada ? "border-success/40" : "border-border"}`} data-mudanca={mud.id}>
         <div className="flex min-w-0 items-start">
-          <span className="mr-2 mt-px shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">{rotuloDoAlvo(mud)}</span>
+          <span className="mr-2 mt-px shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-foreground">{rotuloDoAlvo(mud)}</span>
           <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{mud.titulo}</p>
         </div>
         {mud.motivo && <p className="mt-1 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{mud.motivo}</p>}
@@ -563,7 +563,7 @@ export default function DiretorDoEstudio({
       <MensagensDoAgente ref={listaRef} rotulo="Conversa com o diretor de arte" className="px-4 py-3">
         {ordemEmFoco && onAbrirTemplate && <ImagensReaisDoDiretor key={`${trabalho.id}:${ordemEmFoco}`} trabalho={trabalho} ordem={ordemEmFoco} bloqueado={bloqueado || ocupado || !!envio || !!aplicando} onAtualizar={onAtualizar} onAbrirTemplate={onAbrirTemplate} onAbrirFotos={onAbrirFotos} />}
         {estiloPedido && (
-          <p className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[12px] leading-snug [overflow-wrap:anywhere]">
+          <p className="rounded-lg border border-border bg-muted px-2.5 py-1.5 text-[12px] leading-snug [overflow-wrap:anywhere]">
             <span className="font-medium">Estilo pedido para este trabalho:</span> <span className="text-muted-foreground">{estiloPedido}</span>
           </p>
         )}
@@ -579,7 +579,7 @@ export default function DiretorDoEstudio({
         {conversa.isError && <AvisoDeErro erro={conversa.error} />}
         {conversa.data && mensagens.length === 0 && !envio && (
           <div className="px-1 py-6 text-center">
-            <MessageSquare className="mx-auto h-5 w-5 text-primary" />
+            <MessageSquare className="mx-auto h-5 w-5 text-muted-foreground" />
             <p className="mt-2 inline-flex items-center text-[13px] font-medium">
               Converse com o diretor de arte
               <AjudaRecolhida className="ml-1.5" rotulo="O que o diretor faz">

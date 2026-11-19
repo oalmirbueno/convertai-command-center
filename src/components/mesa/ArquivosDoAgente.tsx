@@ -142,7 +142,7 @@ export function ListaDeArquivos({ arquivos }: { arquivos: ControleDeArquivos }) 
         aria-expanded={aberta}
         className="flex w-full min-w-0 items-center rounded-md bg-muted px-2 py-1 text-left text-[12px]"
       >
-        <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">{partes.join(" · ")}</span>
         <ChevronDown className={`ml-1 h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 ${aberta ? "rotate-180" : ""}`} />
       </button>

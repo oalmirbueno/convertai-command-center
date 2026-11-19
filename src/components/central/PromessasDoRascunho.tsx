@@ -15,7 +15,7 @@ export default function PromessasDoRascunho({ metricas }: { metricas: unknown })
       <ul className="mt-0.5 space-y-0.5">
         {lista.map((p, i) => (
           <li key={i} className="text-[12px] leading-snug text-foreground/85">
-            <span className={p.situacao === "cumprida" ? "font-medium text-primary" : "font-medium text-warning"}>{p.situacao === "cumprida" ? "Cumprido" : "Em andamento"}</span>
+            <span className={p.situacao === "cumprida" ? "font-medium text-foreground" : "font-medium text-warning"}>{p.situacao === "cumprida" ? "Cumprido" : "Em andamento"}</span>
             {": "}{p.texto}{p.prova ? ` (prova: ${p.prova})` : ""}
           </li>
         ))}

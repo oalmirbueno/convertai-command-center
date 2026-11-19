@@ -195,7 +195,7 @@ export default function GravarDoCriativo({ criativo, plano, angulo }: { criativo
           <p role="alert" className="text-[13px] leading-5">Não foi possível ler o roteiro. <button type="button" className="text-primary underline" onClick={() => void roteiro.refetch()}>Tentar novamente</button></p>
         ) : !atual || !linha ? (
           <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border p-6 text-center">
-            <Video className="h-9 w-9 text-primary" aria-hidden="true" />
+            <Video className="h-9 w-9 text-muted-foreground" aria-hidden="true" />
             <p className="text-[14px] font-medium leading-5">Roteiro para a equipe gravar</p>
             <p className="max-w-md text-[13px] leading-5 text-muted-foreground">Escolha o que gravar, o formato e a duração.</p>
           </div>
@@ -217,7 +217,7 @@ export default function GravarDoCriativo({ criativo, plano, angulo }: { criativo
             <ol className="min-w-0 divide-y divide-border border-y border-border">
               {atual.roteiro.blocos.map((b, i) => (
                 <li key={b.id || i} className="grid min-w-0 grid-cols-[28px_minmax(0,1fr)] gap-x-2 py-2.5">
-                  <span className="text-[13px] font-medium tabular-nums text-primary">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="text-[13px] font-medium tabular-nums text-foreground">{String(i + 1).padStart(2, "0")}</span>
                   <div className="min-w-0 space-y-1">
                     <p className="text-[12px] leading-4 text-muted-foreground">{[b.funcao, `${b.segundos} s`].filter(Boolean).join(" · ")}</p>
                     <p className="break-words text-[13px] leading-5">{b.fala || "(sem fala)"}</p>

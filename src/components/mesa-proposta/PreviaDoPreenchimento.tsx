@@ -57,7 +57,7 @@ export default function PreviaDoPreenchimento({
   const marcar = (chave: string, sim: boolean) => setEscolhidas((l) => (sim ? l.concat([chave]) : l.filter((k) => k !== chave)));
 
   return (
-    <div className="min-w-0 space-y-3 border-l-2 border-primary pl-3" data-previa-do-preenchimento="">
+    <div className="min-w-0 space-y-3 border-l-2 border-border pl-3" data-previa-do-preenchimento="">
       <div className="flex min-w-0 flex-wrap items-center justify-between">
         <p className={juntar(texto.tituloSecao, "mr-3")}>{titulo}</p>
         <span className={texto.auxiliar}>

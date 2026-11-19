@@ -33,15 +33,15 @@ const formVazio = {
 const corDoStatus: Record<string, string> = {
   kickoff: "bg-info-soft text-info",
   em_andamento: "bg-warning-soft text-warning",
-  entrega: "bg-accent-soft text-primary",
-  pago: "bg-success-soft text-success",
+  entrega: "bg-muted text-foreground",
+  pago: "bg-muted text-success",
   arquivado: "bg-muted text-muted-foreground",
 };
 
 const corDaParcela: Record<string, string> = {
   aberta: "bg-warning-soft text-warning",
   atrasada: "bg-danger-soft text-destructive",
-  paga: "bg-success-soft text-success",
+  paga: "bg-muted text-success",
   cancelada: "bg-muted text-muted-foreground",
 };
 

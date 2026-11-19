@@ -273,7 +273,7 @@ interface Acento {
 }
 
 const ACENTOS: Acento[] = [
-  { numero: "bg-primary/10 text-primary", marcador: "[&_li]:marker:text-primary/70" },
+  { numero: "bg-muted text-foreground", marcador: "[&_li]:marker:text-primary/70" },
   { numero: "bg-info/10 text-info", marcador: "[&_li]:marker:text-info/70" },
   { numero: "bg-warning/10 text-warning", marcador: "[&_li]:marker:text-warning/80" },
 ];

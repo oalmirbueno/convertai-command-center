@@ -100,7 +100,7 @@ export default function OQueFoiFeito({ clientId }: { clientId?: string }) {
                 <span className={juntar(
                   etiqueta,
                   "mr-1.5",
-                  autonoma ? "bg-info/15 text-info" : "bg-success/15 text-success",
+                  autonoma ? "bg-info/15 text-info" : "bg-muted text-success",
                 )}>
                   {autonoma ? <Sparkles className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> : <ShieldCheck className="mr-1 h-2.5 w-2.5" aria-hidden="true" />}
                   {autonoma ? "por conta" : "sua ordem"}

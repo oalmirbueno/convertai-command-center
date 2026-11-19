@@ -85,8 +85,8 @@ type Contract = {
 const STATUS_META: Record<string, { label: string; cls: string; tom: Tone }> = {
   draft: { label: "Rascunho", cls: "bg-muted text-muted-foreground", tom: "neutral" },
   sent: { label: "Aguardando cliente", cls: "bg-warning-soft text-warning", tom: "warning" },
-  signed: { label: "Em revisão", cls: "bg-accent-soft text-primary", tom: "accent" },
-  completed: { label: "Assinado", cls: "bg-success-soft text-success", tom: "success" },
+  signed: { label: "Em revisão", cls: "bg-muted text-foreground", tom: "accent" },
+  completed: { label: "Assinado", cls: "bg-muted text-success", tom: "success" },
   cancelled: { label: "Cancelado", cls: "bg-muted text-muted-foreground", tom: "neutral" },
   substituido: { label: "Substituído", cls: "bg-muted text-muted-foreground", tom: "neutral" },
 };
@@ -394,7 +394,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                   {!modelo && (
                     <span className="-mb-1 mt-2 flex min-w-0 flex-wrap items-center text-[12px] [&>*]:mb-1 [&>*]:mr-2 [&>*]:h-6 [&>*]:rounded-full [&>*]:px-2.5">
                       {c.admin_signed_at ? (
-                        <span className="inline-flex items-center bg-success-soft text-success">
+                        <span className="inline-flex items-center bg-muted text-success">
                           <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Admin assinou
                         </span>
                       ) : (
@@ -403,7 +403,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                         </span>
                       )}
                       {c.client_signed_at ? (
-                        <span className="inline-flex items-center bg-success-soft text-success">
+                        <span className="inline-flex items-center bg-muted text-success">
                           <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Cliente assinou
                         </span>
                       ) : c.sent_at ? (

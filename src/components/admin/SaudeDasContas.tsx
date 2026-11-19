@@ -122,7 +122,7 @@ export default function SaudeDasContas() {
         {quebradas.length > 0 ? (
           <span className={juntar(etiqueta, "ml-2 shrink-0 bg-warning/15 text-warning")}>{quebradas.length} não está medindo</span>
         ) : (
-          <span className={juntar(etiqueta, "ml-2 shrink-0 bg-success/15 text-success")}>todas medindo</span>
+          <span className={juntar(etiqueta, "ml-2 shrink-0 bg-muted text-success")}>todas medindo</span>
         )}
       </p>
       <Painel semEspaco className="overflow-hidden">

@@ -423,7 +423,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
           <>
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
               <div className="flex min-w-0 items-center">
-                <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success" aria-hidden="true">
+                <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-success" aria-hidden="true">
                   <Check className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">

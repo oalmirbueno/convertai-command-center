@@ -144,7 +144,7 @@ export default function ErrosDoEstudio() {
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <p className="min-w-0 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{e.titulo || "Peça sem título"}</p>
                     {e.resolvido_depois ? (
-                      <span className={juntar(etiqueta, "bg-primary/10 text-primary")} title={e.resolvido_em ? `Outra rodada terminou certo em ${quando(e.resolvido_em)}` : undefined}>Já resolvido</span>
+                      <span className={juntar(etiqueta, "bg-muted text-foreground")} title={e.resolvido_em ? `Outra rodada terminou certo em ${quando(e.resolvido_em)}` : undefined}>Já resolvido</span>
                     ) : (
                       <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>Pendente</span>
                     )}

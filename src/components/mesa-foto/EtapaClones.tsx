@@ -131,7 +131,7 @@ function ErroNaRegiao({ titulo, erro, onTentar, className = "" }: { titulo: stri
 
 function SeloGerada({ texto = "gerada" }: { texto?: string }) {
   return (
-    <span className="pointer-events-none absolute left-1 top-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
+    <span className="pointer-events-none absolute left-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-foreground" data-selo="gerada">
       <Sparkles className="mr-0.5 h-2.5 w-2.5" /> {texto}
     </span>
   );
@@ -594,7 +594,7 @@ function EditorDeFotosDeOrigem({
                 </button>
               </>
             )}
-            {eh && !compacta && <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary">principal</span>}
+            {eh && !compacta && <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-foreground">principal</span>}
           </li>
         );
       })}
@@ -1555,7 +1555,7 @@ function Variacoes({ aberto, qualidade, setQualidade }: { aberto: CloneAberto; q
           {modo === "uniforme" && (
             <div className="min-w-0" data-uniforme-da-marca="">
               <p className="flex items-start text-[13px] leading-5">
-                <Shirt className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                <Shirt className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="min-w-0">
                   Com a <strong>logo oficial do kit da marca</strong>, aplicada sem redesenhar.
                 </span>
@@ -1781,7 +1781,7 @@ function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneA
           ) : (
             <ul className={LISTA_DA_GALERIA} aria-label="Variações do clone" data-lista-de-variacoes="">
               {Array.from({ length: gerando }, (_x, i) => (
-                <li key={`gerando-${i}`} className={juntar(ITEM_DA_GALERIA, "border border-dashed border-primary/40")} data-variacao-gerando="">
+                <li key={`gerando-${i}`} className={juntar(ITEM_DA_GALERIA, "border border-dashed border-border")} data-variacao-gerando="">
                   <Moldura proporcao={1} className="animate-pulse">
                     <span className="flex h-full w-full flex-col items-center justify-center text-[11px] text-muted-foreground">
                       <Loader2 className="mb-1 h-4 w-4 animate-spin text-primary" /> gerando
@@ -1801,7 +1801,7 @@ function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneA
                       <input type="checkbox" checked={marcada} onChange={() => marcar(f.id)} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Marcar ${f.nome}`} />
                     </label>
                     {f.aprovada && (
-                      <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-success/50 bg-card text-success" title="Aprovada">
+                      <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-success" title="Aprovada">
                         <Check className="h-3 w-3" aria-hidden="true" />
                         <span className="sr-only">aprovada</span>
                       </span>
@@ -1831,7 +1831,7 @@ function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneA
                       </Moldura>
                     </button>
                     {img.aprovada === true && (
-                      <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-success/50 bg-card text-success" title="Aprovada">
+                      <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-success" title="Aprovada">
                         <Check className="h-3 w-3" aria-hidden="true" />
                       </span>
                     )}
@@ -2020,7 +2020,7 @@ function FaixaDeFotosDeOrigem({ aberto }: { aberto: CloneAberto }) {
       </div>
       {!recolhido && <EditorDeFotosDeOrigem modo="faixa" ids={r.ids} principal={r.principal} onMudar={(ids, principal) => setR({ ids, principal })} bloqueado={bloqueado || salvando} conhecidas={aberto.reais} />}
       {m.alguma && (
-        <div className="mt-2 flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 p-2.5" role="status" data-fotos-mudadas="">
+        <div className="mt-2 flex min-w-0 flex-wrap items-center rounded-lg border border-border bg-muted p-2.5" role="status" data-fotos-mudadas="">
           <p className="mb-1 mr-auto min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]">
             {[m.entraram.length ? `${m.entraram.length} ${m.entraram.length === 1 ? "entra" : "entram"}` : "", m.sairam.length ? `${m.sairam.length} ${m.sairam.length === 1 ? "sai" : "saem"}` : "", m.principal ? "principal nova" : ""].filter(Boolean).join(", ")}.
             {m.entraram.length || m.sairam.length ? " A folha fica guardada; as vistas feitas com as fotos antigas ficam marcadas." : ""}
@@ -2183,7 +2183,7 @@ function CabecalhoDoClone({ aberto, onAbrir, onApagado }: { aberto: CloneAberto;
           <div className="flex min-w-0 flex-wrap items-center">
             <h2 className={juntar(texto.tituloSecao, "mr-2 min-w-0 truncate")}>{c.nome}</h2>
             <span className={`mr-1.5 rounded-full px-1.5 py-px text-[11px] font-medium ${st.cor}`}>{st.rotulo}</span>
-            <span className="inline-flex items-center rounded-full border border-primary/30 px-1.5 py-px text-[11px] font-semibold text-primary">
+            <span className="inline-flex items-center rounded-full border border-border px-1.5 py-px text-[11px] font-semibold text-foreground">
               <ShieldCheck className="mr-0.5 h-2.5 w-2.5" aria-hidden="true" /> pessoa real autorizada
             </span>
             <AjudaRecolhida className="ml-1" titulo="Pessoa real, com autorização">

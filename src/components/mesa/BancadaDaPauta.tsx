@@ -46,7 +46,7 @@ export default function BancadaDaPauta({ tipo, titulo, acoes, prancheta, previa,
   const [selecaoAberta, setSelecaoAberta] = useState(false);
   return <SelecaoContexto.Provider value={{ destino: destinoSelecao, abrir: setSelecaoAberta }}><AcoesContexto.Provider value={destino}><PainelContexto.Provider value={ativa}><section className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden")} data-bancada-da-pauta={tipo}>
     <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-      <Icone className="h-4 w-4 shrink-0 text-primary" /><p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{titulo}</p>
+      <Icone className="h-4 w-4 shrink-0 text-muted-foreground" /><p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{titulo}</p>
       {controles}{acoes}<div ref={setDestino} className="flex min-w-0 flex-wrap items-center" />
     </header>
     <div className={`grid min-h-0 flex-1 grid-cols-1 lg:overflow-hidden ${escolhendo || selecaoAberta ? 'lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)_minmax(290px,360px)]' : 'lg:grid-cols-[144px_minmax(0,1fr)_minmax(290px,400px)]'}`}>

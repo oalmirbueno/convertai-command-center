@@ -30,8 +30,8 @@ const statusBadgeBase: Record<string, { cls: string; label: string }> = {
   new: { cls: "bg-info/10 text-info", label: "Aberto" },
   open: { cls: "bg-info/10 text-info", label: "Aberto" },
   in_progress: { cls: "bg-warning/10 text-warning", label: "Em Andamento" },
-  done: { cls: "bg-success/10 text-success", label: "Concluído" },
-  completed: { cls: "bg-success/10 text-success", label: "Concluído" },
+  done: { cls: "bg-muted text-success", label: "Concluído" },
+  completed: { cls: "bg-muted text-success", label: "Concluído" },
 };
 
 /** O tom da pílula de estado de cada situação (a aparência; o rótulo vem do mapa acima). */

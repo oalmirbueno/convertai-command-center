@@ -75,7 +75,7 @@ function ListaDePaginas({ paginas }: { paginas: PaginaVista[] }) {
         <li key={p.page_id} className="flex min-w-0 flex-wrap items-center py-2">
           <span className={juntar(texto.corpo, "mr-3 min-w-0 truncate font-medium")}>{p.nome}</span>
           <span className={juntar(texto.auxiliar, "mr-3")}>{p.instagram ? `@${p.instagram.username || p.instagram.id}` : "sem Instagram"}</span>
-          <span className={juntar(etiqueta, p.tem_token_de_pagina ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
+          <span className={juntar(etiqueta, p.tem_token_de_pagina ? "bg-muted text-success" : "bg-warning-soft text-warning")}>
             {p.tem_token_de_pagina ? "token de página" : "sem token de página"}
           </span>
         </li>

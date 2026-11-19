@@ -2433,7 +2433,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             titulo="Central"
             ajuda={<>Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente. Hoje: {todayRitual.why}.</>}
             // 16/10/2026 (dono, celular: "muito poluído"): abaixo de 640 px a saudação some e fica só o ritual do dia.
-            descricao={<span data-faixa-da-central=""><span className="hidden sm:inline">{greeting}, {(profile?.full_name || "").split(" ")[0] || "time"} · {weekday}, dia</span><span className="sm:hidden">Dia</span> de <span className="font-medium text-primary">{todayRitual.label}</span></span>}
+            descricao={<span data-faixa-da-central=""><span className="hidden sm:inline">{greeting}, {(profile?.full_name || "").split(" ")[0] || "time"} · {weekday}, dia</span><span className="sm:hidden">Dia</span> de <span className="font-medium text-foreground">{todayRitual.label}</span></span>}
             acoes={
               /* v4 (15/11, passada estrutural): UMA ação principal (gerar as mensagens do dia), o agente, e o resto no "…". */
               <>
@@ -2498,7 +2498,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           { chave: "atencao", valor: attention, rotulo: "clientes em atenção", icone: <AlertTriangle className="h-3.5 w-3.5" />, cor: "text-warning", tab: "carteira" },
           { chave: "aprovacoes", valor: stuckApprovals, rotulo: stuckApprovals === 1 ? "aprovação parada" : "aprovações paradas", icone: <Clock className="h-3.5 w-3.5" />, cor: "text-warning", tab: "carteira" },
           { chave: "pagamentos", valor: financialAlerts, rotulo: financialAlerts === 1 ? "pagamento vencido" : "pagamentos vencidos", icone: <BadgeDollarSign className="h-3.5 w-3.5" />, cor: "text-destructive", tab: "carteira" },
-          { chave: "rascunhos", valor: draftReports.length, rotulo: draftReports.length === 1 ? "rascunho na fila" : "rascunhos na fila", icone: <FileText className="h-3.5 w-3.5" />, cor: "text-primary", tab: "fila" },
+          { chave: "rascunhos", valor: draftReports.length, rotulo: draftReports.length === 1 ? "rascunho na fila" : "rascunhos na fila", icone: <FileText className="h-3.5 w-3.5" />, cor: "text-foreground", tab: "fila" },
           { chave: "oportunidades", valor: opportunities.length, rotulo: opportunities.length === 1 ? "oportunidade" : "oportunidades", icone: <Lightbulb className="h-3.5 w-3.5" />, cor: "text-info", tab: "radar" },
         // v4 (15/11, passada estrutural): a ficha some na aba que já mostra aquele número (achados, saúde, fila, radar); só aponta para as OUTRAS abas.
         // Rascunhos e oportunidades já são o contador da própria aba (Fila, Radar): não repetem aqui.
@@ -2685,11 +2685,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             // Marcado a mao no Ciclo nesta semana: vale como feito.
             const chaveCiclo = RITUAL_DA_CENTRAL[ritual];
             const noCiclo = chaveCiclo ? rituaisDoCiclo.find((r) => r.client_id === client.id && r.ritual_key === chaveCiclo) : undefined;
-            if (!latest && noCiclo) return { label: `Feito no Ciclo (${noCiclo.source === "central" ? "daqui" : "à mão"})`, cls: "bg-success/10 text-success", curto: "✓", selo: "bg-success text-background" };
+            if (!latest && noCiclo) return { label: `Feito no Ciclo (${noCiclo.source === "central" ? "daqui" : "à mão"})`, cls: "bg-muted text-success", curto: "✓", selo: "bg-success text-background" };
             if (!latest) return { label: "Ainda não gerado", cls: "bg-muted text-muted-foreground", curto: "", selo: "" };
             const age = daysSince(latest.created_at) ?? 0;
             if (latest.status !== "published") return { label: `Rascunho na fila (${age}d)`, cls: "bg-warning/10 text-warning", curto: `${age}d`, selo: "bg-warning text-background" };
-            return { label: `Publicado há ${age}d`, cls: "bg-success/10 text-success", curto: `${age}d`, selo: age > 10 ? "bg-muted-foreground/80 text-background" : "bg-success text-background" };
+            return { label: `Publicado há ${age}d`, cls: "bg-muted text-success", curto: `${age}d`, selo: age > 10 ? "bg-muted-foreground/80 text-background" : "bg-success text-background" };
           };
           const d = dossieDe(client.id);
           const p = planoDe(client.id);
@@ -2725,7 +2725,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       <span className="min-w-0 truncate">{[servicos.length ? servicos.join(" + ") : "sem frente marcada", client.plan_name || null].filter(Boolean).join(" · ")}</span>
                       <span className="ml-2 flex shrink-0 items-center [&>*+*]:ml-2">
                         {selected.pulse && <span className="inline-flex items-center text-info" title={`Pulso ${selected.pulse.score}/5`}><HeartPulse className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{selected.pulse.score}</span>}
-                        <span className="inline-flex items-center text-primary" title={rotuloDoDossie(d, nowTick)}><BookOpen className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">{rotuloDoDossie(d, nowTick)}</span></span>
+                        <span className="inline-flex items-center text-foreground" title={rotuloDoDossie(d, nowTick)}><BookOpen className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">{rotuloDoDossie(d, nowTick)}</span></span>
                         {v30.total > 0 && <span className="inline-flex items-center text-success" title={`${v30.total} venda${v30.total === 1 ? "" : "s"} em 30 dias${v30.receita > 0 ? ` · R$ ${Math.round(v30.receita).toLocaleString("pt-BR")}` : ""}`}><BadgeDollarSign className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{v30.total}</span>}
                         {dias !== null && <span title={`${dias} dias na casa`} className="tabular-nums">{dias}d</span>}
                       </span>
@@ -2885,10 +2885,10 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               )}
                             </div>
                             <div className="mt-3 max-w-[62ch] min-w-0">
-                              <div className="rounded-lg rounded-tl-sm bg-accent-soft px-4 pb-1.5 pt-3">
+                              <div className="rounded-lg rounded-tl-sm bg-muted px-4 pb-1.5 pt-3">
                                 <p className="whitespace-pre-line text-[13px] leading-relaxed text-foreground">{textoParaCopiar}</p>
                                 <div className="-mr-2 mt-1 flex items-center justify-end">
-                                  {escrita && <span className="mr-auto flex items-center text-[11px] text-primary" title={`Escrita pela IA${escrita.model ? ` (${escrita.model})` : ""}`}><Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />IA</span>}
+                                  {escrita && <span className="mr-auto flex items-center text-[11px] text-muted-foreground" title={`Escrita pela IA${escrita.model ? ` (${escrita.model})` : ""}`}><Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />IA</span>}
                                   <button type="button" onClick={() => void escreverMomentoComIA(client, aberto.moment)} disabled={aiMomentLoading !== null} aria-label={escrita ? "Reescrever com IA" : "Escrever com IA"} title={escrita ? "Reescrever com IA" : "Escrever com IA a partir do dossiê, da esteira, dos números e das vendas de agora"} className={juntar(botao.icone, "h-8 w-8 text-primary disabled:opacity-50")}>
                                     <Sparkles className={`h-4 w-4 ${aiMomentLoading === chaveIA ? "animate-pulse" : ""}`} aria-hidden="true" />
                                   </button>
@@ -3300,7 +3300,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             .sort((a, b) => (a.at < b.at ? 1 : -1))
             .slice(0, 160);
           const iconMap = { report: CheckCircle2, publication: ArrowUpRight, approval: HeartPulse, file: CheckCircle2, dossie: BookOpen, plano: Sparkles, venda: BadgeDollarSign } as const;
-          const corDoEvento = { report: "text-success", publication: "text-muted-foreground", approval: "text-warning", file: "text-muted-foreground", dossie: "text-primary", plano: "text-primary", venda: "text-success" } as const;
+          const corDoEvento = { report: "text-success", publication: "text-muted-foreground", approval: "text-warning", file: "text-muted-foreground", dossie: "text-foreground", plano: "text-foreground", venda: "text-success" } as const;
           return (
             <RegiaoRolavel modo="lg" rotulo="Histórico" memoria="central:historico" className="lg:pb-4 lg:pr-1">
               <div className={espaco.pagina}>
@@ -3434,7 +3434,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               <span className="mr-3 min-w-0 flex-1">
                                 <span className="flex min-w-0 items-center">
                                   <span className="min-w-0 truncate text-[13px] text-foreground">{r.title}</span>
-                                  {meta && <span className={juntar(etiqueta, "ml-2 hidden bg-success/10 text-success sm:inline-flex")}>{meta.label}</span>}
+                                  {meta && <span className={juntar(etiqueta, "ml-2 hidden bg-muted text-success sm:inline-flex")}>{meta.label}</span>}
                                 </span>
                                 <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
                                   {r.client?.company_name || r.client?.full_name} · {new Date(r.created_at).toLocaleDateString("pt-BR")}
@@ -3540,7 +3540,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar para o grupo
                       </button>
                     </div>
-                    <p className="text-[12px] font-medium text-primary">{preview.draft.title}{preview.draft.metrics?.written_by === "ai" ? <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">IA · {rotuloDoModelo(preview.draft.metrics?.model) || "modelo"}</span> : <span className="ml-1.5 text-[11px] font-normal text-warning">texto de reserva (IA não respondeu)</span>}</p>
+                    <p className="text-[12px] font-medium text-muted-foreground">{preview.draft.title}{preview.draft.metrics?.written_by === "ai" ? <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">IA · {rotuloDoModelo(preview.draft.metrics?.model) || "modelo"}</span> : <span className="ml-1.5 text-[11px] font-normal text-warning">texto de reserva (IA não respondeu)</span>}</p>
                     {Array.isArray(preview.draft.metrics?.alertas) && preview.draft.metrics.alertas.length > 0 && (
                       <div className="rounded-md bg-warning/10 px-3 py-2">
                         <p className="flex items-center text-[12px] font-medium text-warning">

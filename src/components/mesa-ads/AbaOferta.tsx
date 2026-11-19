@@ -176,7 +176,7 @@ function BotaoAdicionar({ onClick, children }: { onClick: () => void; children: 
 
 /** Linha de aviso fina (sem caixa com borda): o que aconteceu e a ação à direita. */
 function Aviso({ children, acao, tom = "neutro", rotulo }: { children: ReactNode; acao?: ReactNode; tom?: "neutro" | "destaque" | "atencao"; rotulo?: string }) {
-  const cor = tom === "destaque" ? "bg-primary/5" : tom === "atencao" ? "bg-warning/5" : superficie.poco;
+  const cor = tom === "destaque" ? "bg-muted" : tom === "atencao" ? "bg-warning/5" : superficie.poco;
   return (
     <div className={juntar("flex min-w-0 flex-wrap items-center rounded-md px-3 py-2", cor)} role="note" aria-label={rotulo}>
       <div className="mr-3 min-w-0 flex-1 py-0.5 text-[13px] leading-snug [overflow-wrap:anywhere]">{children}</div>
@@ -193,7 +193,7 @@ function Ideias({ ideias, onLevar }: { ideias: Ideia[]; onLevar: (i: Ideia) => v
   return (
     <section className="min-w-0" aria-label="Ideias de criativo">
       <h3 className={juntar(texto.rotulo, "flex items-center")}>
-        <Lightbulb className="mr-1.5 h-3.5 w-3.5 text-primary" /> Ideias de criativo da última resposta
+        <Lightbulb className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" /> Ideias de criativo da última resposta
       </h3>
       <ul className="mt-1 min-w-0 divide-y divide-border">
         {ideias.map((i, k) => (

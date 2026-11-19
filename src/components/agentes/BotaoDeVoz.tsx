@@ -69,7 +69,7 @@ export function PilulaDeGravacao({ voz, className }: { voz: VozDoChat; className
 export function EstadoDaVoz({ voz, className }: { voz: VozDoChat; className?: string }) {
   if (voz.estado === "transcrevendo") {
     return (
-      <div className={juntar("inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-[12px] text-primary", className)} role="status">
+      <div className={juntar("inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] text-foreground", className)} role="status">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />Transcrevendo o áudio{voz.segundos ? ` de ${tempoDaVoz(voz.segundos)}` : ""}…
         <button type="button" onClick={() => voz.cancelar()} className="ml-1 rounded-full px-1.5 hover:bg-primary/10" aria-label="Cancelar a transcrição">Cancelar</button>
       </div>

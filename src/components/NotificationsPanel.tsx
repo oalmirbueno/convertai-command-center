@@ -19,21 +19,21 @@ import { AjudaRecolhida, JanelaCentral, SeletorCompacto, botao, juntar, texto } 
 
 function getNotifIcon(type: string) {
   switch (categoriaDoAviso(type)) {
-    case "decisao": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
+    case "decisao": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-muted text-foreground" };
     case "pedido": return { icon: <Package className="w-4 h-4" />, bg: "bg-info-soft text-info" };
-    case "projeto": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-success-soft text-success" };
+    case "projeto": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-muted text-success" };
     case "cobranca": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning-soft text-warning" };
     case "tarefa": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info-soft text-info" };
     case "relatorio": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-muted text-foreground" };
     // Post no ar: o aviso que leva para fora do painel merece cara própria.
-    case "publicacao": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-success-soft text-success" };
-    case "entrega": return { icon: <FileArchive className="w-4 h-4" />, bg: "bg-success-soft text-success" };
+    case "publicacao": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-muted text-success" };
+    case "entrega": return { icon: <FileArchive className="w-4 h-4" />, bg: "bg-muted text-success" };
     case "alerta": return { icon: <AlertTriangle className="w-4 h-4" />, bg: "bg-warning-soft text-warning" };
     case "agente": return { icon: <Bot className="w-4 h-4" />, bg: "bg-muted text-muted-foreground" };
     case "comercial": return { icon: <Briefcase className="w-4 h-4" />, bg: "bg-info-soft text-info" };
-    case "anuncios": return { icon: <Megaphone className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
+    case "anuncios": return { icon: <Megaphone className="w-4 h-4" />, bg: "bg-muted text-foreground" };
     // 26/10: o resumo do dia (um por dia) leva à tela Hoje.
-    case "resumo": return { icon: <Sunrise className="w-4 h-4" />, bg: "bg-accent-soft text-primary" };
+    case "resumo": return { icon: <Sunrise className="w-4 h-4" />, bg: "bg-muted text-foreground" };
     default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-muted text-muted-foreground" };
   }
 }

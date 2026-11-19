@@ -85,7 +85,7 @@ export function tomDaNota(nota: number): "bom" | "atencao" | "perigo" {
 }
 
 const COR_DA_NOTA = {
-  bom: "bg-success-soft text-success",
+  bom: "bg-muted text-success",
   atencao: "bg-warning-soft text-warning",
   perigo: "bg-danger-soft text-destructive",
 } as const;
@@ -111,7 +111,7 @@ const AJUDA =
 
 const TOM = {
   neutro: "bg-muted text-muted-foreground",
-  bom: "bg-accent-soft text-primary",
+  bom: "bg-muted text-foreground",
   atencao: "bg-warning-soft text-warning",
   perigo: "bg-danger-soft text-destructive",
 } as const;
@@ -402,7 +402,7 @@ export default function DiaPrioritarioNaCentral({
 
                     {r.registro && r.registro.proximosPassos && (
                       <p className="mt-2 flex min-w-0 items-center text-[12px] leading-4 text-muted-foreground" title={`Próximos passos: ${r.registro.proximosPassos}`}>
-                        <ArrowRight className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                        <ArrowRight className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                         <span className="sr-only">Próximos passos: </span>
                         <span className="min-w-0 truncate text-foreground">{r.registro.proximosPassos}</span>
                       </p>

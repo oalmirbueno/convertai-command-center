@@ -169,7 +169,7 @@ export default function CaixaPorPrioridade({ caixa, eu }: { caixa: CaixaDoCorrei
         <div className="border-b border-border p-4">
           <div className="flex min-w-0 items-center">
             <h1 className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>{pastaAtual.nome}</h1>
-            {naoLidasAqui > 0 && <span className={juntar(etiqueta, "mr-1 bg-accent-soft text-primary")}>{naoLidasAqui} não lidas</span>}
+            {naoLidasAqui > 0 && <span className={juntar(etiqueta, "mr-1 bg-muted text-foreground")}>{naoLidasAqui} não lidas</span>}
             <button type="button" className={botao.icone} onClick={() => { void mensagens.refetch(); void pastas.refetch(); }} aria-label="Atualizar" title="Atualizar" data-atualizar-caixa="">
               <RefreshCw className={juntar("h-4 w-4", mensagens.isFetching && "animate-spin")} aria-hidden="true" />
             </button>

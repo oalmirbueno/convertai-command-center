@@ -283,9 +283,9 @@ function PainelDaAnalise({
     { titulo: "Renovar", tom: "text-warning", itens: analise.renovar },
   ];
   return (
-    <section className="min-w-0 space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Análise do estrategista">
+    <section className="min-w-0 space-y-3 rounded-lg border border-border bg-muted p-4" aria-label="Análise do estrategista">
       <div className="flex min-w-0 items-start">
-        <Sparkles className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <Sparkles className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-semibold">Leitura do estrategista</h3>
           {quando && <p className="truncate text-[11px] text-muted-foreground" title="Os números vêm da conta; a leitura, do estrategista.">Feita {dataEHora(quando)}</p>}
@@ -337,7 +337,7 @@ function PainelDaAnalise({
                 {t.hipotese && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{t.hipotese}</p>}
                 <div className="mt-auto flex min-w-0 flex-wrap items-center pt-2">
                   {t.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[11px]">{humanizar(t.estilo_visual)}</span>}
-                  {t.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(t.objetivo)}</span>}
+                  {t.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-foreground">{rotuloDoObjetivo(t.objetivo)}</span>}
                   <span className="mb-1 ml-auto">
                     <BotaoComCusto
                       rotulo="Criar plano deste teste"
@@ -610,7 +610,7 @@ export default function AbaConta({
           />
           {relatorio && (
             <p className="flex min-w-0 flex-wrap items-center rounded-md bg-success/10 px-3 py-2 text-[13px] leading-snug" role="status" data-relatorio={relatorio.id}>
-              <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" />
+              <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="mr-2 min-w-0 [overflow-wrap:anywhere]">
                 {relatorio.atualizado ? "Relatório atualizado" : "Relatório criado"} em Relatórios, como rascunho{relatorio.projeto ? ` (projeto ${relatorio.projeto})` : ""}: {relatorio.titulo}
               </span>

@@ -85,7 +85,7 @@ function CartaoDoHype({
         {hype.formato ? ` · ${hype.formato === "estatico" ? "estático" : hype.formato}` : ""}
       </p>
       {hype.tipo === "nicho" && hype.sinal && (
-        <p title={hype.sinal} className="mt-1 flex min-w-0 items-start text-[12px] font-medium text-primary [overflow-wrap:anywhere]">
+        <p title={hype.sinal} className="mt-1 flex min-w-0 items-start text-[12px] font-medium text-muted-foreground [overflow-wrap:anywhere]">
           <TrendingUp className="mr-1 mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
           <span className="line-clamp-2">{hype.sinal}</span>
         </p>

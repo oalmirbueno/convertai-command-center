@@ -43,9 +43,9 @@ describe("texto dos agentes", () => {
     const usuario = container.querySelector('[data-balao="usuario"]') as HTMLElement;
     const agente = container.querySelector('[data-balao="agente"]') as HTMLElement;
     expect(usuario.className).toContain("text-[14px]");
-    expect(usuario.className).toContain("bg-primary/10");
+    expect(usuario.className).toContain("bg-muted");
     expect(agente.className).toContain("text-[14px]");
-    expect(agente.className).not.toContain("bg-primary/10");
+    expect(agente.className).not.toContain("bg-muted");
   });
 
   it("o campo de digitar de qualquer agente fica em 14 px pelo compositor comum", () => {

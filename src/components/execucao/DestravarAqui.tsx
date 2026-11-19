@@ -77,13 +77,13 @@ export default function DestravarAqui({ runId, motivo, revisao = false, aoResolv
   };
 
   if (feito) {
-    return <p role="status" className="flex items-center rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-[13px] text-success"><CheckCircle2 className="mr-1.5 h-4 w-4 shrink-0" aria-hidden="true" />{feito}</p>;
+    return <p role="status" className="flex items-center rounded-lg border border-border bg-muted px-3 py-2 text-[13px] text-success"><CheckCircle2 className="mr-1.5 h-4 w-4 shrink-0" aria-hidden="true" />{feito}</p>;
   }
 
   const giro = (acao: AcaoDeDestrave) => rodando === acao ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : null;
   return (
-    <section aria-label="Destravar aqui" className="rounded-lg border border-primary/40 bg-primary/5 p-3">
-      <h4 className="flex items-center text-[13px] font-semibold text-foreground"><Unlock className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />Destravar aqui</h4>
+    <section aria-label="Destravar aqui" className="rounded-lg border border-border bg-muted p-3">
+      <h4 className="flex items-center text-[13px] font-semibold text-foreground"><Unlock className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />Destravar aqui</h4>
       <p className="mt-0.5 text-[12px] text-muted-foreground">Responda ou decida aqui mesmo: o agente recebe na hora.</p>
 
       {meta && (

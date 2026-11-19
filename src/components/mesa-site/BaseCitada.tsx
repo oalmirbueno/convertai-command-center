@@ -21,7 +21,7 @@ export default function BaseCitada({ anexos }: { anexos: unknown[] | null | unde
   if (!itens.length) return null;
   return (
     <p className={juntar("mt-1 flex min-w-0 items-start text-[12px] leading-snug text-muted-foreground")} data-base-citada={itens.length}>
-      <Ruler className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-primary" aria-hidden />
+      <Ruler className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
       <span className="min-w-0 whitespace-normal">
         <span className="font-medium text-foreground">Base:</span> {itens.map((i) => i.rotulo).join("; ")}
       </span>

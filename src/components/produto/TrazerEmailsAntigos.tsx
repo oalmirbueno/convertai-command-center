@@ -60,7 +60,7 @@ function LinhaDaCaixa({ caixa, aoComecar }: { caixa: CaixaDeEmail; aoComecar: ()
             {atual && atual.estado === "erro" ? "Tentar de novo" : "Trazer"}
           </button>
         )}
-        {atual && atual.estado === "concluida" && <span className={juntar(etiqueta, "ml-3 bg-accent-soft text-primary")}><Check className="mr-1 h-3 w-3" aria-hidden="true" />Pronto</span>}
+        {atual && atual.estado === "concluida" && <span className={juntar(etiqueta, "ml-3 bg-muted text-foreground")}><Check className="mr-1 h-3 w-3" aria-hidden="true" />Pronto</span>}
       </div>
       {atual && (atual.estado === "copiando" || atual.estado === "pausada" || atual.estado === "erro") && <Andamento m={atual} aoPausar={() => void mudar(() => migracaoDoCliente.pausar(atual.id))} aoContinuar={() => void mudar(() => migracaoDoCliente.continuar(atual.id))} />}
     </li>
@@ -172,7 +172,7 @@ function Assistente({ caixa, onFechar }: { caixa: CaixaDeEmail; onFechar: () => 
       {passo === 2 && prov && (
         <div className="space-y-4">
           {prov.senha_de_app && (
-            <div className="rounded-2xl bg-accent-soft p-4" data-ajuda-senha-de-app="">
+            <div className="rounded-2xl bg-muted p-4" data-ajuda-senha-de-app="">
               <p className={juntar(texto.corpo, "font-semibold")}>O {prov.nome} pede uma senha de app</p>
               <p className={juntar(texto.auxiliar, "mt-1")}>É uma senha só para isto, diferente da sua senha normal. Leva um minuto:</p>
               <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px] leading-5">

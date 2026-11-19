@@ -284,7 +284,7 @@ export default function AgenteDoRoteiroDaPeca({ roteiroId, titulo, sugestoes, ac
                   onClick={() => pedir(s)}
                   title="Usar como pedido ao agente"
                 >
-                  <Lightbulb className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                  <Lightbulb className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="min-w-0 [overflow-wrap:anywhere]">{s}</span>
                 </button>
               ))}

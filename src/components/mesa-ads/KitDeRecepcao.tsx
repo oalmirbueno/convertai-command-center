@@ -43,7 +43,7 @@ async function copiar(texto: string, rotulo: string) {
 
 function Nota({ rotulo, nota }: { rotulo: string; nota: number | null }) {
   if (nota === null) return null;
-  const tom = nota >= 7 ? "bg-success-soft text-success" : nota >= 5 ? "bg-warning/15 text-warning" : "bg-danger-soft text-destructive";
+  const tom = nota >= 7 ? "bg-muted text-success" : nota >= 5 ? "bg-warning/15 text-warning" : "bg-danger-soft text-destructive";
   return <span className={`mb-1 mr-1.5 rounded-full px-2.5 py-1 text-[11px] ${tom}`}>{rotulo} {nota.toFixed(1).replace(".", ",")}</span>;
 }
 
@@ -121,7 +121,7 @@ function PostNaAgenda({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo
     );
   }
   return (
-    <div className="mt-1 w-full min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-2 text-[12px]" role="group" aria-label="Confirmar o post na agenda">
+    <div className="mt-1 w-full min-w-0 rounded-lg border border-border bg-muted p-2 text-[12px]" role="group" aria-label="Confirmar o post na agenda">
       <p className="[overflow-wrap:anywhere]">
         Vai entrar na agenda da Mesa: <span className="font-medium">{kit.post.titulo || `Recepção: ${angulo.nome}`}</span> ({kit.post.formato === "estatico" ? "post estático" : kit.post.formato === "reels" ? "reels" : "carrossel"}, {kit.post.roteiro.length} {kit.post.roteiro.length === 1 ? "card" : "cards"}), com a legenda e o roteiro.
       </p>
@@ -169,7 +169,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
 
       <Bloco
         titulo="Post de recepção"
-        icone={<CalendarPlus className="mr-1 h-3.5 w-3.5 text-primary" />}
+        icone={<CalendarPlus className="mr-1 h-3.5 w-3.5 text-muted-foreground" />}
         acao={<PostNaAgenda plano={plano} angulo={angulo} kit={kit} onPlano={onPlano} />}
       >
         <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{kit.post.titulo}</p>
@@ -203,7 +203,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
 
       <Bloco
         titulo={`Atendimento e vendas (${c.canal})`}
-        icone={<MessageCircle className="mr-1 h-3.5 w-3.5 text-primary" />}
+        icone={<MessageCircle className="mr-1 h-3.5 w-3.5 text-muted-foreground" />}
         acao={
           <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" onClick={() => void copiar(roteiroComercialEmTexto(kit), "Roteiro de atendimento")} aria-label="Copiar roteiro" title="Copiar roteiro">
             <ClipboardList className="h-4 w-4" aria-hidden="true" />
@@ -229,7 +229,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
                 {c.objecoes.map((o, k) => (
                   <li key={k} className="min-w-0 rounded-md bg-muted/60 px-2 py-1 [overflow-wrap:anywhere]">
                     <span className="font-medium">{o.objecao}</span>
-                    {o.fonte === "briefing" && <span className="ml-1.5 rounded-full bg-primary/10 px-2 text-[11px] text-primary">do briefing</span>}
+                    {o.fonte === "briefing" && <span className="ml-1.5 rounded-full bg-muted px-2 text-[11px] text-foreground">do briefing</span>}
                     <span className="block text-muted-foreground">{o.resposta}</span>
                   </li>
                 ))}

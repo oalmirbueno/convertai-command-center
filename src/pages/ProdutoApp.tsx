@@ -124,7 +124,7 @@ function CrmDaEmpresa({ estado }: { estado: EstadoDoProduto }) {
   );
 }
 
-const COR_DO_AVISO = { info: "bg-accent-soft text-primary", alerta: "bg-warning-soft text-warning", perigo: "bg-danger-soft text-destructive" } as const;
+const COR_DO_AVISO = { info: "bg-muted text-foreground", alerta: "bg-warning-soft text-warning", perigo: "bg-danger-soft text-destructive" } as const;
 
 const haQuanto = (iso: string) => {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));

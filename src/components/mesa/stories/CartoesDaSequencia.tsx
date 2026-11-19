@@ -27,10 +27,10 @@ const MINIATURA = 54;
 
 /** O estado curto do cartão: a imagem manda enquanto não há arte registrada. */
 export function estadoDoCartao(s: Story, laminas: Record<string, LaminasDoTrabalho> | undefined, emAndamento?: boolean): { rotulo: string; tom: string } {
-  if (emAndamento) return { rotulo: "Gerando", tom: "bg-accent-soft text-primary" };
+  if (emAndamento) return { rotulo: "Gerando", tom: "bg-muted text-foreground" };
   if (s.fundo.tipo === "natural" && !s.fundo.caminho && s.situacao === "rascunho") return { rotulo: "Sem foto", tom: SITUACOES.rascunho.tom };
   const fila = filaDoStory(s, laminas);
-  if (fila === "fila" || fila === "rodando") return { rotulo: fila === "fila" ? "Na fila" : "Gerando", tom: "bg-accent-soft text-primary" };
+  if (fila === "fila" || fila === "rodando") return { rotulo: fila === "fila" ? "Na fila" : "Gerando", tom: "bg-muted text-foreground" };
   if (fila === "erro" && !s.file_id) return { rotulo: "Imagem falhou", tom: SITUACOES.falhou.tom };
   if (imagemDesatualizada(s) && !s.publicacao_id) return { rotulo: "Texto mudou", tom: "bg-warning/15 text-warning" };
   if (s.fundo.tipo === "gerada" && !imagemDoStory(s, laminas) && s.situacao === "rascunho") return { rotulo: "Sem imagem", tom: SITUACOES.rascunho.tom };

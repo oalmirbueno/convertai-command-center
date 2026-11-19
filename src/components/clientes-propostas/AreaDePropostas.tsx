@@ -27,9 +27,9 @@ import {
 /** Cor da etiqueta do status (o status do dia: validade vencida já vem como expirada). */
 export const COR_DO_STATUS: Record<string, string> = {
   rascunho: "bg-muted text-muted-foreground",
-  enviada: "bg-accent-soft text-primary",
+  enviada: "bg-muted text-foreground",
   vista: "bg-warning-soft text-warning",
-  aceita: "bg-success-soft text-success",
+  aceita: "bg-muted text-success",
   recusada: "bg-danger-soft text-destructive",
   expirada: "bg-muted text-muted-foreground",
 };

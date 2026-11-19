@@ -174,10 +174,10 @@ function CartaoDaVersao({
       </button>
       <div className="mt-1.5 flex min-w-0 flex-wrap items-center text-[12px]">
         <span className="mr-1.5 font-semibold">v{versao.versao}</span>
-        <span className="mr-1.5 rounded-full border border-primary/30 px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
+        <span className="mr-1.5 rounded-full border border-border px-1.5 py-px text-[11px] font-semibold text-foreground" data-selo="gerada">
           gerada
         </span>
-        {versao.aprovada && <span className="mr-1.5 rounded-full bg-success/15 px-1.5 py-px text-[11px] font-medium text-success">aprovada</span>}
+        {versao.aprovada && <span className="mr-1.5 rounded-full bg-muted px-1.5 py-px text-[11px] font-medium text-success">aprovada</span>}
         {versao.rejeitada && <span className="mr-1.5 rounded-full bg-destructive/10 px-1.5 py-px text-[11px] font-medium text-destructive">rejeitada</span>}
         {versao.custo_usd !== null && <span className="text-muted-foreground">{usd(versao.custo_usd)}</span>}
       </div>
@@ -364,7 +364,7 @@ function Comparar({
           <div className="min-w-0">
             <p className="mb-1 text-[12px] font-medium text-muted-foreground">
               {tomada ? tomada.nome : "Versão"}
-              {versao ? `, v${versao.versao}` : ""} <span className="text-primary">(gerada)</span>
+              {versao ? `, v${versao.versao}` : ""} <span className="text-foreground">(gerada)</span>
             </p>
             {versao && versao.storage_path && (
               <Moldura proporcao={proporcaoDoFormato(tomada ? tomada.formato : "1:1")} className="border border-border">

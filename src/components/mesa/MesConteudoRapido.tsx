@@ -132,7 +132,7 @@ export default function MesConteudoRapido({
         {/* 16/10 (dono: "tem muito texto; só conteúdo rápido, só ícone"): a explicação foi para o "?" e as ações ficaram só no ícone. */}
         <div className="flex min-w-0 items-center pr-6">
           <DialogTitle className="flex items-center text-[15px]">
-            <Zap className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" /> Conteúdo rápido
+            <Zap className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Conteúdo rápido
           </DialogTitle>
           <AjudaRecolhida className="ml-1" rotulo="Como funciona o conteúdo rápido">
             Escreva ou dite o pedido. O agente prepara o roteiro, grava no dia e deixa a direção pronta no Estúdio.
@@ -160,7 +160,7 @@ export default function MesConteudoRapido({
               </div>
             ) : (
               <p className="flex items-center text-[12px] text-muted-foreground">
-                <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" />
+                <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 No calendário em {diaCurto(resultado.data)}, com a direção pronta no Estúdio.
               </p>
             )}

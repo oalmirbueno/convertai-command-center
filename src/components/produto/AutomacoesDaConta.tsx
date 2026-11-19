@@ -71,7 +71,7 @@ function Passo({ numero, titulo, children }: { numero: number; titulo: string; c
   return (
     <section className="min-w-0" data-passo={titulo}>
       <h3 className="mb-3 flex min-w-0 items-center">
-        <span className="mr-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary" aria-hidden="true">{numero}</span>
+        <span className="mr-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground" aria-hidden="true">{numero}</span>
         <span className={texto.tituloSecao}>{titulo}</span>
       </h3>
       <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
@@ -277,7 +277,7 @@ export default function AutomacoesDaConta({ estado }: { estado: EstadoDoProduto 
           <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1" data-receitas="">
             {receitas.map((receita) => (
               <li key={receita.id} className={juntar(superficie.painel, "flex min-w-0 items-center p-4 sm:p-5")} data-receita={receita.id}>
-                <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-primary">{ICONE_DA_ACAO[receita.acao]}</span>
+                <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">{ICONE_DA_ACAO[receita.acao]}</span>
                 <span className="min-w-0 flex-1">
                   <span className={juntar(texto.corpo, "block truncate font-medium")}>{receita.nome}</span>
                   <span className={juntar(texto.auxiliar, "block")} title={receita.linha}>{fraseDaAutomacao(receita, nomes, equipe)}</span>

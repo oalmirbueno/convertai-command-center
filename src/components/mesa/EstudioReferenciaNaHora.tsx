@@ -282,7 +282,7 @@ export default function EstudioReferenciaNaHora({
       ) : (
         <>
           <p className="flex items-center text-[13px] font-medium">
-            <ClipboardPaste className="mr-1.5 h-4 w-4 text-primary" /> Referência na hora ({alvoRotulo})
+            <ClipboardPaste className="mr-1.5 h-4 w-4 text-muted-foreground" /> Referência na hora ({alvoRotulo})
             <AjudaRecolhida className="ml-1.5" rotulo="Como mandar a referência">Arraste a imagem para cá, escolha o arquivo, cole a imagem (Ctrl+V) ou cole o link. Entra na hora como escolhida (até 2; a mais antiga sai).</AjudaRecolhida>
           </p>
           <div className="mt-2 flex min-w-0 items-center">

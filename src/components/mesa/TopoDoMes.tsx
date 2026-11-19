@@ -203,7 +203,7 @@ export default function TopoDoMes({
         <section className="min-w-0" aria-label="O que fazer agora" data-o-que-fazer="">
           <div className="flex h-6 min-w-0 items-center">
             <h3 className={juntar(texto.tituloSecao, "flex items-center")}>
-              <Lightbulb className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />
+              <Lightbulb className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
               O que fazer agora
             </h3>
             <AjudaRecolhida rotulo="De onde vêm as sugestões?">

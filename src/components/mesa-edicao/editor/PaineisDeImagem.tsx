@@ -94,7 +94,7 @@ export function PainelDeFormato({ ctx }: { ctx: ContextoDoPainel }) {
           const r = (p.rostos || {})[k];
           return (
             <li key={k} className="flex min-w-0 items-center py-1.5 text-[13px]">
-              <ScanFace className={juntar("mr-2 h-3.5 w-3.5 shrink-0", r ? "text-success" : "text-muted-foreground")} aria-hidden="true" />
+              <ScanFace className={juntar("mr-2 h-3.5 w-3.5 shrink-0", r ? "text-muted-foreground" : "text-muted-foreground")} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">{p.fontes[k].nome}</span>
               <span className={juntar(etiqueta, "ml-1 bg-muted text-muted-foreground")}>{r ? `${r.pontos.length} leituras` : "sem rastro"}</span>
               {r && (

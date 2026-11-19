@@ -85,7 +85,7 @@ const typeLabels: Record<string, string> = {
 };
 
 const statusBadge: Record<string, string> = {
-  active: "bg-success/10 text-success",
+  active: "bg-muted text-success",
   planning: "bg-warning/10 text-warning",
   review: "bg-accent/10 text-accent",
   completed: "bg-muted text-muted-foreground",
@@ -465,7 +465,7 @@ export default function TimelinePage() {
   const seletorDaLinha = juntar(campo, "h-7 w-auto cursor-pointer px-2 text-[12px]");
   const tomDoStatusDoMarco = (status: string): Tone => (status === "completed" ? "success" : status === "in_progress" ? "info" : "neutral");
   const corDoStatusDoMarco = (status: string) =>
-    status === "completed" ? "bg-success/10 text-success" : status === "in_progress" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground";
+    status === "completed" ? "bg-muted text-success" : status === "in_progress" ? "bg-muted text-foreground" : "bg-muted text-muted-foreground";
   const existingMilestones = addMilestoneProject ? (allMilestones || []).filter((m: any) => m.project_id === addMilestoneProject) : [];
 
   // Números da tela: só o que já foi lido para desenhar os projetos abaixo.

@@ -661,7 +661,7 @@ export default function ArteDoCriativo({
             const e = andamentoIrmaos[i.criativo.id];
             const rotulo =
               e === "fila" ? "na fila" : e === "ajustando" ? "ajustando" : e === "conferindo" ? "conferindo" : e === "feito" ? "feito" : e === "sem_arte" ? "sem arte ainda" : "falhou";
-            const tom = e === "feito" ? "bg-success-soft text-success" : e === "erro" ? "bg-danger-soft text-destructive" : e === "sem_arte" ? "bg-muted text-muted-foreground" : "bg-accent-soft text-primary";
+            const tom = e === "feito" ? "bg-muted text-success" : e === "erro" ? "bg-danger-soft text-destructive" : e === "sem_arte" ? "bg-muted text-muted-foreground" : "bg-muted text-foreground";
             return (
               <span key={i.criativo.id} data-irmao={e} className={`mb-1 mr-1.5 mt-1 inline-flex h-6 items-center rounded-full px-2 text-[11px] ${tom}`}>
                 {formatoDe(i.criativo.formato).rotulo}: {rotulo}

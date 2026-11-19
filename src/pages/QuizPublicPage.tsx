@@ -440,7 +440,7 @@ function Progresso({ categoria, passo, total }: { categoria: string; passo: numb
   return (
     <div className="mb-6 min-w-0">
       <div className="mb-2 flex min-w-0 items-center justify-between">
-        <span className={juntar(texto.rotulo, "truncate text-primary")}>{categoria}</span>
+        <span className={juntar(texto.rotulo, "truncate text-foreground")}>{categoria}</span>
         <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{passo + 1} de {total}</span>
       </div>
       <div
@@ -696,7 +696,7 @@ function ResultScreen({ score, plan, leadName }: { score: number; plan: string; 
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[24px] font-semibold leading-8 tabular-nums text-primary">{Math.round(score)}</span>
+            <span className="text-[24px] font-semibold leading-8 tabular-nums text-foreground">{Math.round(score)}</span>
             <span className={texto.auxiliar}>ICP Score</span>
           </div>
         </div>

@@ -256,7 +256,7 @@ export default function CampanhaNova({
             <div className="min-w-0 pt-4" data-passo-da-nova="oque">
               {hype && (
                 <div className="mb-3 flex min-w-0 items-center rounded-md bg-muted px-3 py-2 text-[12px]">
-                  <Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                  <Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate">Do hype: <strong className="font-medium">{hype.titulo}</strong></span>
                   {onLimparHype && (
                     <button type="button" onClick={onLimparHype} aria-label="Tirar o hype" title="Tirar o hype" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
@@ -267,7 +267,7 @@ export default function CampanhaNova({
               )}
               {molde && (
                 <div className="mb-3 flex min-w-0 items-center rounded-md bg-muted px-3 py-2 text-[12px]" data-molde={molde.origemId}>
-                  <Copy className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                  <Copy className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate">A partir de: <strong className="font-medium">{molde.origemNome}</strong> (estrutura; o tema é novo)</span>
                   {onLimparMolde && (
                     <button type="button" onClick={onLimparMolde} aria-label="Tirar a campanha de origem" title="Tirar a campanha de origem" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
@@ -279,7 +279,7 @@ export default function CampanhaNova({
               {daSemente && (
                 <div className="mb-3 rounded-md bg-muted px-3 py-2 text-[12px]" data-semente="">
                   <div className="flex min-w-0 items-center">
-                    <Lightbulb className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                    <Lightbulb className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="min-w-0 flex-1 truncate">Do Mês: <strong className="font-medium">{daSemente.titulo}</strong></span>
                     {onLimparSemente && (
                       <button type="button" onClick={onLimparSemente} aria-label="Tirar o que veio do Mês" title="Tirar o que veio do Mês" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
@@ -300,7 +300,7 @@ export default function CampanhaNova({
               </Campo>
 
               {/* O campo grande, como uma conversa: texto, microfone e imagens. */}
-              <div className="mt-3 rounded-md bg-muted/50 p-2.5 ring-primary/60 focus-within:ring-1">
+              <div className="mt-3 rounded-md bg-muted/50 p-2.5 ring-ring focus-within:ring-1">
                 <label htmlFor="pedido-da-campanha" className="block px-1 pb-1 text-[12px] font-medium text-muted-foreground">
                   O que é a campanha?
                 </label>

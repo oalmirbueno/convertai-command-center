@@ -1006,7 +1006,7 @@ export default function AbaMes({
 
       <div className="min-w-0 space-y-4" data-area-do-mes="propostas">
         <h2 className={juntar(estiloDeTexto.tituloSecao, "flex items-center")}>
-          <MessagesSquare className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />
+          <MessagesSquare className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
           Propostas e agente
         </h2>
         <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} semAcoes />

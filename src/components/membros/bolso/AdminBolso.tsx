@@ -112,7 +112,7 @@ export default function AdminBolso({ pessoas }: { pessoas: Pessoa[] }) {
 
   return (
     <section className="space-y-6" aria-label="Aceleriq de Bolso">
-      <TituloMembros titulo="Aceleriq de Bolso" icone={<Megaphone size={20} className="text-primary" aria-hidden="true" />}>
+      <TituloMembros titulo="Aceleriq de Bolso" icone={<Megaphone size={20} className="text-muted-foreground" aria-hidden="true" />}>
         Acessos, créditos e operação do estúdio.
       </TituloMembros>
       {erro && !erroNoAcesso && <p role="alert" className="text-[13px] text-destructive">{erro}</p>}

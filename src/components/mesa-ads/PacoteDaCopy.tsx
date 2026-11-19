@@ -312,7 +312,7 @@ export default function PacoteDaCopy({
               {pacote.textos_principais.map((t, i) => (
                 <li key={i} className="min-w-0 rounded-lg border border-border bg-background p-2.5">
                   <div className="flex min-w-0 items-center">
-                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-primary">{rotuloDoEstilo(t.estilo) || `Texto ${i + 1}`}</span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">{rotuloDoEstilo(t.estilo) || `Texto ${i + 1}`}</span>
                     <span className="mr-1 text-[11px] tabular-nums text-muted-foreground">{t.texto.length}</span>
                     <BotaoUsar onClick={() => onUsar(t.texto.length > 300 ? { texto_principal_longo: t.texto } : { texto_principal: t.texto })} />
                     <BotaoCopiar texto={t.texto} rotulo="Copiar texto" />
@@ -375,7 +375,7 @@ export default function PacoteDaCopy({
           </Grupo>
 
           {pacote.gestor && (
-            <div className="min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <div className="min-w-0 rounded-lg border border-border bg-muted p-3">
               <button
                 type="button"
                 onClick={() => alternar("gestor")}

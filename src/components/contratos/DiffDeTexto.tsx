@@ -18,7 +18,7 @@ export function PartesDoDiff({ partes, className }: { partes: ParteDoDiff[]; cla
             {p.texto}
           </del>
         ) : (
-          <ins key={i} className="rounded-sm bg-success-soft text-success no-underline" data-entrou="">
+          <ins key={i} className="rounded-sm bg-muted text-success no-underline" data-entrou="">
             {p.texto}
           </ins>
         ),

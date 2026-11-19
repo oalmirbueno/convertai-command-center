@@ -43,7 +43,7 @@ export default function RespostasEmLeitura({
     <div className="min-w-0 space-y-7">
       {blocos.map((b) => (
         <section key={b.id} className="min-w-0" aria-label={b.titulo}>
-          <h3 className={juntar(texto.etiqueta, "mb-3 tracking-wide text-primary")}>{b.titulo}</h3>
+          <h3 className={juntar(texto.etiqueta, "mb-3 tracking-wide text-foreground")}>{b.titulo}</h3>
           <dl className="min-w-0 space-y-4">
             {b.itens.map((i) => (
               <div key={i.key} className="min-w-0">

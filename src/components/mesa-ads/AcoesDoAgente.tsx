@@ -119,7 +119,7 @@ function AntesDepois({ i }: { i: ItemDaAcao }) {
     <span className="mt-0.5 flex min-w-0 flex-wrap items-center text-[12px]">
       <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground [overflow-wrap:anywhere]">{antes}</span>
       <ArrowRight className="mx-1 h-3 w-3 shrink-0 text-muted-foreground" />
-      <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary [overflow-wrap:anywhere]">{depois}</span>
+      <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground [overflow-wrap:anywhere]">{depois}</span>
       {i.limitado && <span className="ml-1.5 text-[11px] text-muted-foreground">limitado a 30% por vez</span>}
     </span>
   );
@@ -308,9 +308,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
     // Depois da escolha, só o item escolhido fica (os outros não foram tocados).
     const visiveis = estado === "aberta" ? atual.itens : atual.itens.filter((i) => !(i.resultado && !i.resultado.ok && i.resultado.motivo === "Não marcado nesta confirmação."));
     return (
-      <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-4")} aria-label="Qual delas?" data-escolher-um={estado}>
+      <section className={juntar(superficie.painel, "min-w-0 border-border p-4")} aria-label="Qual delas?" data-escolher-um={estado}>
         <p className="flex min-w-0 items-center text-[13px] font-semibold">
-          <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
+          <Zap className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
           {estado === "aberta" ? `Qual delas? (${atual.itens.length} com o mesmo nome)` : "Escolhido"}
         </p>
         <ul className="mt-2 divide-y divide-border border-y border-border">
@@ -361,9 +361,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   }
 
   return (
-    <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-4")} aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
+    <section className={juntar(superficie.painel, "min-w-0 border-border p-4")} aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
       <p className="flex min-w-0 flex-wrap items-center text-[13px] font-semibold">
-        <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
+        <Zap className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
         {feitosSozinho.length && estado === "aberta" ? `Já fiz ${feitosSozinho.length} · o resto espera você` : `Ações propostas · ${atual.itens.length}`}
         {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning">Modo ensaio</span>}
       </p>
@@ -405,7 +405,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   {i.alvo ? <span className="font-normal text-muted-foreground">{` · ${nomeDoNivel(i.alvo.nivel)} `}</span> : null}
                   {i.alvo ? i.alvo.nome : i.tipo === "tarefa_equipe" && i.texto ? `: ${i.texto}` : ""}
                   {i.criativo ? <span className="font-normal text-muted-foreground">{` com ${i.criativo.nome}`}</span> : null}
-                  {sozinho && r && r.ok && !r.desfeito && <span className="ml-1.5 rounded-sm bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">Já fiz</span>}
+                  {sozinho && r && r.ok && !r.desfeito && <span className="ml-1.5 rounded-sm bg-muted px-1.5 py-0.5 text-[11px] font-medium text-success">Já fiz</span>}
                 </span>
                 <AntesDepois i={i} />
                 {i.troca && <ResumoDaTroca i={i} />}
@@ -452,7 +452,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
         })}
       </ul>
       {fazendo === "confirmar" && (
-        <p className="mt-2 flex items-center rounded-md bg-primary/5 px-2.5 py-1.5 text-[12px] leading-snug" role="status" data-fazendo-na-meta="">
+        <p className="mt-2 flex items-center rounded-md bg-muted px-2.5 py-1.5 text-[12px] leading-snug" role="status" data-fazendo-na-meta="">
           <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
           Fazendo na Meta, um item por vez: relê o item, faz e relê de novo para provar.
         </p>

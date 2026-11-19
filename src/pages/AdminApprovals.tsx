@@ -50,13 +50,13 @@ import {
 
 const clientApprovalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning-soft text-warning border-transparent", label: "Aguardando cliente" },
-  approved: { cls: "bg-success-soft text-success border-transparent", label: "Aprovado pelo cliente" },
+  approved: { cls: "bg-muted text-success border-transparent", label: "Aprovado pelo cliente" },
   rejected: { cls: "bg-danger-soft text-destructive border-transparent", label: "Cliente pediu ajustes" },
 };
 
 const agencyApprovalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning-soft text-warning border-transparent", label: "Aguardando revisão interna" },
-  approved: { cls: "bg-success-soft text-success border-transparent", label: "Aprovado internamente" },
+  approved: { cls: "bg-muted text-success border-transparent", label: "Aprovado internamente" },
   rejected: { cls: "bg-danger-soft text-destructive border-transparent", label: "Ajustes internos pedidos" },
   not_requested: { cls: "bg-muted text-muted-foreground border-transparent", label: "Rascunho interno" },
 };
@@ -724,7 +724,7 @@ export default function AdminApprovals() {
                         <div className="flex min-w-0 items-center">
                           <p className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-5 text-foreground">{f.file_name || "Sem nome"}</p>
                           {isCarousel && (
-                            <span className={juntar(etiqueta, "ml-2 bg-accent-soft text-primary")}>
+                            <span className={juntar(etiqueta, "ml-2 bg-muted text-foreground")}>
                               Carrossel · {images.length}
                             </span>
                           )}
@@ -789,7 +789,7 @@ export default function AdminApprovals() {
             <DialogTitle className={juntar(texto.tituloSecao, "flex min-w-0 flex-wrap items-center pr-6 text-left")}>
               <span className="mr-2 min-w-0 [overflow-wrap:anywhere]">{previewFile?.file_name}</span>
               {previewFile && getCarouselImages(previewFile).length > 1 && (
-                <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>
+                <span className={juntar(etiqueta, "bg-muted text-foreground")}>
                   Carrossel · {getCarouselImages(previewFile).length} imagens
                 </span>
               )}
@@ -829,7 +829,7 @@ export default function AdminApprovals() {
                 && (editorialPreview.data || []).map((snapshot) => (
                   <section key={snapshot.post_id} className={juntar(superficie.poco, "space-y-3 p-3.5")}>
                     <div>
-                      <p className="text-[12px] font-medium text-primary">Conteúdo editorial vinculado</p>
+                      <p className="text-[12px] font-medium text-muted-foreground">Conteúdo editorial vinculado</p>
                       <p className="mt-1 text-[14px] font-semibold text-foreground">{snapshot.title}</p>
                       <p className={juntar(texto.auxiliar, "mt-0.5")}>Formato: {snapshot.content_type}</p>
                     </div>

@@ -283,7 +283,7 @@ function StatusBadge({ status }: { status: string }) {
   }[normalized] || status;
   const className =
     normalized === "settled" || normalized === "paid" || normalized === "active" || normalized === "current"
-      ? "border-transparent bg-success-soft text-success"
+      ? "border-transparent bg-muted text-success"
       : normalized === "overdue"
         ? "border-transparent bg-danger-soft text-destructive"
         : normalized === "pending" || normalized === "partial" || normalized === "review_required" || normalized === "scheduled" || normalized === "draft"
@@ -385,7 +385,7 @@ function OverviewTab({
               ["Pago", data.settledExpense, "text-foreground"],
               ["A receber", data.pendingIncome, "text-warning"],
               ["A pagar", data.pendingExpense, "text-destructive"],
-              ["Receita recorrente", data.recurringRevenue, "text-primary"],
+              ["Receita recorrente", data.recurringRevenue, "text-foreground"],
               ["Saldo projetado", data.openingBalance + data.net, "text-foreground"],
             ].map(([label, value, color]) => (
               <div key={String(label)} className="rounded-md bg-muted/60 p-4 sm:p-5">
@@ -458,7 +458,7 @@ function EntryCard({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             {entry.direction === "income" ? (
-              <ArrowDownToLine className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+              <ArrowDownToLine className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             ) : (
               <ArrowUpFromLine className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
             )}
@@ -578,7 +578,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
                   <tr key={entry.id} className="transition-colors hover:bg-muted/30">
                     <td className="px-4 py-4">
                       <div className="flex items-start gap-3">
-                        <span className={cn("mt-0.5 rounded-md p-1.5", entry.direction === "income" ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")}>
+                        <span className={cn("mt-0.5 rounded-md p-1.5", entry.direction === "income" ? "bg-muted text-success" : "bg-danger-soft text-destructive")}>
                           {entry.direction === "income" ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />}
                         </span>
                         <div><p className="font-medium text-foreground">{entry.description}</p><p className="mt-0.5 text-[12px] text-muted-foreground">{entry.clientName || entry.category || "Sem vínculo"}</p></div>
@@ -710,7 +710,7 @@ function ClientRow({
           {hasConfiguredTerm ? `${summary.planName || "Plano personalizado"} · próximo vencimento ${dateLabel(summary.nextDueDate)}` : "Sem termo financeiro vigente"}
         </p>
         {summary?.upcomingStartsOn && (
-          <p className="mt-1 text-[12px] font-medium text-primary">
+          <p className="mt-1 text-[12px] font-medium text-muted-foreground">
             Programado: {summary.upcomingPlanName || "nova condição"} a partir de {dateLabel(summary.upcomingStartsOn)}
           </p>
         )}
@@ -924,7 +924,7 @@ function SubscriptionsTab({ readOnly }: { readOnly: boolean }) {
               </>}
             </fieldset>
 
-            <section className="rounded-md bg-accent-soft p-4" aria-labelledby="assignment-preview-title" aria-live="polite">
+            <section className="rounded-md bg-muted p-4" aria-labelledby="assignment-preview-title" aria-live="polite">
               <h3 id="assignment-preview-title" className="text-[13px] font-semibold text-foreground">Preview do novo termo</h3>
               <div className="mt-3 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
                 <div><p className="text-[12px] text-muted-foreground">Operacional</p><p className="mt-1 font-semibold tabular-nums">{currency(previewOperational)}</p></div>
@@ -1133,10 +1133,10 @@ function PlanCard({ plan, readOnly, onEdit, onVersion, onArchive }: { plan: Fina
           <div className="mt-4 rounded-md border bg-muted/20 p-3 text-[12px] text-muted-foreground">Crie a primeira versão de preço para ativar a contratação.</div>
         ) : null}
         {upcoming && (
-          <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-[12px]">
+          <div className="mt-3 rounded-md border border-border bg-muted p-3 text-[12px]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold text-foreground">V{upcoming.version} programada para {dateLabel(upcoming.effectiveFrom)}</span>
-              <span className="font-semibold tabular-nums text-primary">{currency(upcoming.finalAmount)}</span>
+              <span className="font-semibold tabular-nums text-foreground">{currency(upcoming.finalAmount)}</span>
             </div>
             <p className="mt-1 text-muted-foreground">Ainda não é o preço vigente.</p>
           </div>
@@ -1352,7 +1352,7 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
       {!readOnly && <Dialog open={!!versionPlan} onOpenChange={(open) => !open && setVersionPlan(null)}>
         <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader><DialogTitle>Nova versão de preço</DialogTitle><DialogDescription>{versionPlan?.name}. A versão vigente será encerrada na véspera da nova vigência.</DialogDescription></DialogHeader>
-          <Alert className="bg-primary/5"><ShieldCheck className="h-4 w-4" /><AlertTitle>Histórico protegido</AlertTitle><AlertDescription>Uma nova versão não altera competências nem contratos anteriores.</AlertDescription></Alert>
+          <Alert className="bg-muted"><ShieldCheck className="h-4 w-4" /><AlertTitle>Histórico protegido</AlertTitle><AlertDescription>Uma nova versão não altera competências nem contratos anteriores.</AlertDescription></Alert>
           <fieldset className="grid gap-4 sm:grid-cols-2">
             <legend className="sr-only">Composição da nova versão de preço</legend>
             <div className="space-y-2">
@@ -1392,10 +1392,10 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="version-description">Motivo ou observação</Label><Textarea id="version-description" value={versionDraft.description} onChange={(event) => setVersionDraft((draft) => ({ ...draft, description: event.target.value }))} /></div>
           </fieldset>
 
-          <section className="rounded-md bg-accent-soft p-4" aria-labelledby="version-preview-title" aria-live="polite">
+          <section className="rounded-md bg-muted p-4" aria-labelledby="version-preview-title" aria-live="polite">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div><h3 id="version-preview-title" className="text-[13px] font-semibold text-foreground">Preview com gross-up</h3><p className="mt-1 text-[12px] leading-5 text-muted-foreground">O servidor recalcula estes valores ao criar a versão.</p></div>
-              <div className="text-left sm:text-right"><p className={texto.rotulo}>Valor final</p><p className="mt-1 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-primary">{currency(previewFinalAmount)}</p></div>
+              <div className="text-left sm:text-right"><p className={texto.rotulo}>Valor final</p><p className="mt-1 text-[24px] font-semibold leading-8 tracking-[-0.02em] tabular-nums text-foreground">{currency(previewFinalAmount)}</p></div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
               <div><p className="text-[12px] text-muted-foreground">Operacional</p><p className="mt-1 font-medium tabular-nums">{currency(previewOperationalAmount)}</p></div>
@@ -1487,7 +1487,7 @@ export default function FinanceV2({
       {/* 18/10: cabeçalho do sistema (h1 com texto.tituloPagina); a explicação foi para o "?". */}
       <CabecalhoDePagina
         titulo={<span id="finance-v2-title">Financeiro V2</span>}
-        descricao={<span className="inline-flex items-center"><Landmark className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />Controle financeiro</span>}
+        descricao={<span className="inline-flex items-center"><Landmark className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />Controle financeiro</span>}
         ajuda="Uma leitura por competência, caixa ou previsão, com planos versionados e liquidações sem reescrever o histórico."
         acoes={<>
           <div className="flex min-w-0 items-center"><Label htmlFor="finance-competence" className="mr-2 shrink-0">Competência</Label><Input id="finance-competence" type="month" className="h-11 w-[180px] bg-background" value={competence} onChange={(event) => setCompetence(event.target.value || currentCompetence())} /></div>
@@ -1502,7 +1502,7 @@ export default function FinanceV2({
       />
 
       {readOnly && (
-        <Alert className="border-primary/20 bg-primary/5">
+        <Alert className="border-border bg-muted">
           <ShieldCheck className="h-4 w-4" />
           <AlertTitle>Acesso gerencial somente leitura</AlertTitle>
           <AlertDescription>Você pode consultar todos os modos e cadastros disponíveis, sem gerar competências ou alterar dados financeiros.</AlertDescription>

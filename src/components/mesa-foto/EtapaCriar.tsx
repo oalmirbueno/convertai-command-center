@@ -117,7 +117,7 @@ export default function EtapaCriar() {
       {/* v4: o aviso do que espera aprovação vem DEPOIS dos azulejos (ele chega com a leitura das fotos e empurrava a grade no celular). */}
       {esperando > 0 && (
         <div className="flex min-w-0 flex-wrap items-center text-[13px]" data-esperando-aprovacao={esperando}>
-          <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="mr-2 min-w-0">
             {esperando} {esperando === 1 ? "foto gerada espera" : "fotos geradas esperam"} a sua aprovação.
           </span>
@@ -152,7 +152,7 @@ export default function EtapaCriar() {
 
       {doMes && (
         <div className="flex min-w-0 items-center text-[12px] text-muted-foreground" data-campanha-do-mes={doMes.id}>
-          <CalendarDays className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <CalendarDays className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="mr-1 shrink-0">Campanha do mês:</span>
           <span className="mr-1 min-w-0 truncate font-medium text-foreground">{doMes.nome}</span>
           <span className="shrink-0 tabular-nums">({periodoDaCampanha(doMes)})</span>
@@ -181,7 +181,7 @@ export default function EtapaCriar() {
                   title={a.texto}
                   data-avancada={a.etapa}
                 >
-                  <Icone className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                  <Icone className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="block min-w-0 truncate text-[13px] font-medium">{a.rotulo}</span>
                 </button>
               </li>
@@ -192,7 +192,7 @@ export default function EtapaCriar() {
 
       {pedirAoDiretor && (
         <div className="flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground" data-pedir-ao-diretor="">
-          <Aperture className="mr-1.5 h-3.5 w-3.5 text-primary" />
+          <Aperture className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
           <span className="mr-2">Ou peça ao diretor, que faz e deixa o caminho:</span>
           {kit && (
             <button type="button" className="mr-3 font-medium text-primary hover:underline" onClick={() => pedirAoDiretor("Monte um plano de 8 variações para este produto, com tipos bem diferentes.")}>

@@ -82,7 +82,7 @@ function FeedInstagram({ copy, caminho, formato, nome }: Props) {
         <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
       </div>
       <Arte caminho={caminho} proporcao={proporcao} />
-      <div className="flex items-center justify-between bg-primary/10 px-2.5 py-1.5">
+      <div className="flex items-center justify-between bg-muted px-2.5 py-1.5">
         <span className="truncate text-[11px] font-semibold">{rotuloDoCta(copy.cta_meta) || "CTA"}</span>
         <ChevronUp className="h-3 w-3 rotate-90 text-muted-foreground" />
       </div>

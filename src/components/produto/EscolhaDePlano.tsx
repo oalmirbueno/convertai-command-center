@@ -79,7 +79,7 @@ export default function EscolhaDePlano({
                 </span>
                 <span className="ml-2.5 min-w-0 flex-1 truncate text-[17px] font-semibold leading-6 text-foreground">{p.nome}</span>
                 {atual === p.id && <span className="ml-2 shrink-0 rounded bg-muted px-1.5 text-[11px] font-medium leading-5 text-muted-foreground">Plano atual</span>}
-                {p.destaque && atual !== p.id && <span className="ml-2 shrink-0 rounded bg-primary/10 px-1.5 text-[11px] font-medium leading-5 text-primary">Mais completo</span>}
+                {p.destaque && atual !== p.id && <span className="ml-2 shrink-0 rounded bg-muted px-1.5 text-[11px] font-medium leading-5 text-foreground">Mais completo</span>}
               </span>
               {p.resumo && <span className={juntar(texto.auxiliar, "mt-1.5 block")}>{p.resumo}</span>}
               <span className="mt-4 flex min-w-0 items-baseline">

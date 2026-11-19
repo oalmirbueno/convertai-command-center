@@ -58,8 +58,8 @@ function agruparPorAngulo(criativos: CriativoAds[], planos: PlanoAds[]): GrupoDo
 }
 
 function SeloDaConta({ c }: { c: CriativoAds }) {
-  if (c.status === "no_ar") return <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-success/10 px-2 text-[11px] font-medium text-success">No ar</span>;
-  if (estaNaConta(c)) return <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[11px] font-medium text-primary">Na conta</span>;
+  if (c.status === "no_ar") return <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 text-[11px] font-medium text-success">No ar</span>;
+  if (estaNaConta(c)) return <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 text-[11px] font-medium text-foreground">Na conta</span>;
   return null;
 }
 
@@ -163,7 +163,7 @@ export default function AcervoDoEstudio({
                       <span className="flex min-w-0 items-center text-[12px] font-medium">
                         <span className="min-w-0 truncate">{f.rotulo}</span>
                         <SeloDaVersao criativo={c} className="ml-1" />
-                        {ehOMelhor(c) && <span className="ml-1 shrink-0 text-[11px] text-primary">melhor</span>}
+                        {ehOMelhor(c) && <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">melhor</span>}
                         {nota && <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
                       </span>
                       <span className="mt-0.5 flex min-w-0 flex-wrap items-center">

@@ -37,7 +37,7 @@ export default function CarrosselDaPauta({ fotos, onOrdem, onTrocar, entrega, so
         <div className="relative">
           <button type="button" aria-label={`Lâmina ${i + 1}: ${f.nome}`} aria-pressed={escolhida === f.id} onClick={() => setEscolhida(escolhida === f.id ? null : f.id)} className={juntar("block w-full overflow-hidden rounded-md border-2", foco, escolhida === f.id ? "border-primary" : "border-transparent")}><MiniaturaDaFoto foto={f} /></button>
           <span className="pointer-events-none absolute left-1 top-1 rounded-full bg-card/90 px-1.5 text-[11px] font-semibold">{i === 0 ? "Capa" : i + 1}</span>
-          {emAlta(f) === false && <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-card/90 px-1 text-[11px] text-primary">baixa</span>}
+          {emAlta(f) === false && <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-card/90 px-1 text-[11px] text-muted-foreground">baixa</span>}
           {!somenteLeitura && <GripVertical className="pointer-events-none absolute right-1 top-1 h-4 w-4 text-muted-foreground" aria-hidden="true" />}
         </div>
         {!somenteLeitura && <div className="mt-1 flex items-center justify-between">

@@ -331,7 +331,7 @@ export function ClausulasDoContrato({ p, editavel, aoMudar }: { p: PayloadDoCont
                   {c.numero} {c.titulo}
                 </p>
               )}
-              {c.alterada && <span className="ml-2 shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">alterada</span>}
+              {c.alterada && <span className="ml-2 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground">alterada</span>}
               {editavel && !aberta && (
                 <div className="ml-1 flex shrink-0 items-center [&>*+*]:ml-1">
                   {/* Sugestão da IA nunca grava: abre a edição com a diferença e pede Confirmar. */}
@@ -364,7 +364,7 @@ export function ClausulasDoContrato({ p, editavel, aoMudar }: { p: PayloadDoCont
             {!aberta && <p className={juntar(texto.auxiliar, "mt-1 line-clamp-2 whitespace-normal")}>{c.texto}</p>}
             {aberta && (
               <div className="mt-2 min-w-0 space-y-3">
-                {daIA && <p className={juntar(texto.auxiliar, "text-primary")}>Sugestão da IA. Nada foi gravado: confira a diferença.</p>}
+                {daIA && <p className={juntar(texto.auxiliar, "text-foreground")}>Sugestão da IA. Nada foi gravado: confira a diferença.</p>}
                 <textarea value={rascunho} onChange={(e) => setRascunho(e.target.value)} rows={6} className={campoTexto} aria-label={`Texto da cláusula ${c.numero}`} />
                 {mudou && (
                   <div className="min-w-0 rounded-md bg-muted/50 p-3" data-diff-da-clausula="">

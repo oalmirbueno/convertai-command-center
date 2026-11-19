@@ -743,7 +743,7 @@ function PedidoDaArteRapida({
   const previa = (
     <aside className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-col overflow-hidden")} aria-label="Como vai sair" data-previa-da-arte-rapida="">
       <div className="flex shrink-0 items-center px-4 pb-1 pt-4">
-        <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary"><Eye className="h-4 w-4" /></span>
+        <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Eye className="h-4 w-4" /></span>
         <p className="min-w-0 truncate text-[15px] font-medium tracking-[-0.01em]">Como vai sair</p>
       </div>
       <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="space-y-4 p-4" sobre="cartao">
@@ -1104,7 +1104,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
           </div>
         </div>
       ) : taskFeito ? (
-        <div className="space-y-2 rounded-lg border border-success/40 bg-success/5 px-3 py-3" role="status">
+        <div className="space-y-2 rounded-lg border border-border bg-success/5 px-3 py-3" role="status">
           <p className="flex items-center text-[13px] font-semibold">
             Na Agenda{dataFeita ? ` em ${dataCurta(dataFeita)}` : ""}
             <AjudaRecolhida className="ml-1.5" rotulo="O que acontece agora">

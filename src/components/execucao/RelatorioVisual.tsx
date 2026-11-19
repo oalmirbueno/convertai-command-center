@@ -78,7 +78,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
                         {prova && c.id !== "fila" && <EvidenciaVisual url={prova} nome={titulo} compacto />}
                         <button type="button" className="block w-full p-3 text-left hover:bg-muted/40" onClick={() => aoAbrir(v.id, titulo)}>
                           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                            {tipo && <span className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary">{tipo}</span>}
+                            {tipo && <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-foreground">{tipo}</span>}
                             <span className="min-w-0 truncate">{cliente || "Operação interna"}</span>
                           </span>
                           <span className="mt-1.5 line-clamp-2 block text-[13px] font-medium leading-snug">{titulo}</span>

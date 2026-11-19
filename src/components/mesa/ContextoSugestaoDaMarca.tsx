@@ -244,7 +244,7 @@ export default function SugestaoDoKitDaMarca({
   return (
     <div className={juntar(superficie.poco, "min-w-0 p-2.5")} data-sugestao-da-marca={marca.id}>
       <div className="flex min-w-0 items-center">
-        <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <p className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>Kit da {marca.nome} achado no que já existe</p>
         <AjudaRecolhida className="ml-1" rotulo="De onde veio">
           {logo ? `Logo: ${logo.caminho}${logo.como === "jev" ? " (escolhida pelo Jev entre os arquivos com logo)" : ""}. ` : ""}

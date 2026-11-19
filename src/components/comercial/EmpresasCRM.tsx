@@ -305,7 +305,7 @@ export default function EmpresasCRM({
                                         etiqueta,
                                         "h-6 px-2.5",
                                         negocio.stage === "ganho"
-                                          ? "bg-success-soft text-success"
+                                          ? "bg-muted text-success"
                                           : negocio.stage === "perdido"
                                             ? "bg-danger-soft text-destructive"
                                             : "bg-card text-muted-foreground",

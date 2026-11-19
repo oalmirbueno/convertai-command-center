@@ -134,7 +134,7 @@ function Cartao({ proposta: p, contato, virouProjeto, onAbrir, onTransformar, on
     >
       <div className="flex items-start max-sm:items-center">
         <GripVertical className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50 max-sm:hidden" aria-hidden="true" />
-        <span aria-hidden="true" className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[14px] font-semibold text-primary sm:hidden">
+        <span aria-hidden="true" className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-[14px] font-semibold text-muted-foreground sm:hidden">
           {(nome.trim().charAt(0) || "?").toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
@@ -171,7 +171,7 @@ function Cartao({ proposta: p, contato, virouProjeto, onAbrir, onTransformar, on
                   Só projeto, sem cliente
                 </button>
               ) : (
-                <span className={juntar(etiqueta, "bg-accent-soft text-primary")}>Virou projeto</span>
+                <span className={juntar(etiqueta, "bg-muted text-foreground")}>Virou projeto</span>
               )}
             </>
           )}

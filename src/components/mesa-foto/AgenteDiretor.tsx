@@ -240,7 +240,7 @@ function CartaoDaSugestao({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente
     }
   };
   return (
-    <li className="min-w-0 rounded-md border border-primary/30 p-2.5" data-sugestao={sugestao.chave}>
+    <li className="min-w-0 rounded-md border border-border p-2.5" data-sugestao={sugestao.chave}>
       <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       <div className="mt-2 flex items-center">
@@ -304,7 +304,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao, mensagemId }: { sugestao: Sugestao
   };
 
   return (
-    <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-plano-de-variacoes="">
+    <li className="min-w-0 space-y-2 rounded-md border border-border p-2.5" data-sugestao={sugestao.chave} data-plano-de-variacoes="">
       <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       {variacoes.length > 0 && (
@@ -412,7 +412,7 @@ function CartaoDaCampanha({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente
     }
   };
   return (
-    <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-campanha="">
+    <li className="min-w-0 space-y-2 rounded-md border border-border p-2.5" data-sugestao={sugestao.chave} data-campanha="">
       <div className="flex min-w-0 items-start">
         <p className="min-w-0 text-[14px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
         {/* 28/09 (dono: "explicação no ?"): a regra da modelo sintética fica no "?" ao lado do título. */}
@@ -483,7 +483,7 @@ function CartaoIdentificar({ sugestao, anexos }: { sugestao: SugestaoDoAgente; a
   const ids = indicadas.length ? indicadas : anexos;
   const [resultado, setResultado] = useState<IdentificacaoDoProduto | null>(null);
   return (
-    <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-identificar-produto="">
+    <li className="min-w-0 space-y-2 rounded-md border border-border p-2.5" data-sugestao={sugestao.chave} data-identificar-produto="">
       <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       {resultado ? (
@@ -589,7 +589,7 @@ function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDire
   if (m.papel === "usuario") {
     return (
       <div className="ml-8 min-w-0">
-        <div className={juntar(conversa.balao, "whitespace-pre-wrap bg-primary/10")}>
+        <div className={juntar(conversa.balao, "whitespace-pre-wrap bg-muted")}>
           {m.texto}
           {m.anexos > 0 && (
             <span className="mt-1 block text-[12px] text-muted-foreground">
@@ -613,8 +613,8 @@ function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDire
         {/* Núcleo comum: balões, quadros conferidos e fontes clicáveis (o texto antigo sem quadro sai igual). */}
         <TextoDoAgente texto={m.entendi || m.proximo_passo ? semBlocos(m.texto) : m.texto} clientId={clientId} />
         {m.proximo_passo && (
-          <p className="rounded-md border border-primary/30 px-2.5 py-1.5 text-[13px]" data-proximo-do-diretor="">
-            <span className="font-semibold text-primary">Próximo passo: </span>
+          <p className="rounded-md border border-border px-2.5 py-1.5 text-[13px]" data-proximo-do-diretor="">
+            <span className="font-semibold text-foreground">Próximo passo: </span>
             {m.proximo_passo}
           </p>
         )}

@@ -72,7 +72,7 @@ function autorLegivel(actor: string, nomes: Map<string, string>): string {
 }
 
 const COR_DO_RESULTADO: Record<ResultadoVerificado, string> = {
-  concluida_com_prova: "border-success/40 text-success",
+  concluida_com_prova: "border-border text-success",
   execucao_concluida_entrega_em_revisao: "border-info/40 text-info",
   em_revisao: "border-info/40 text-info",
   em_andamento: "border-border text-muted-foreground",
@@ -196,7 +196,7 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { d:
             {pessoas.map((p) => (
               <li key={p.agente}>
                 <button type="button" onClick={() => setVerTodos(true)} className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left hover:bg-muted/60">
-                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[12px] font-semibold text-primary" aria-hidden="true">{p.agente.trim()[0]?.toUpperCase()}<span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-background bg-success" /></span>
+                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold text-muted-foreground" aria-hidden="true">{p.agente.trim()[0]?.toUpperCase()}<span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-background bg-success" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium">{p.agente}</span>
                     <span className="block truncate text-[12px] text-muted-foreground">{p.titulo}{p.cliente ? ` · ${p.cliente}` : ""}</span>

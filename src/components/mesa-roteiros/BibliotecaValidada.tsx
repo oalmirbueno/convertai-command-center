@@ -211,7 +211,7 @@ export default function BibliotecaValidada({ onUsarBase }: { onUsarBase: (id: st
               <span className="block truncate text-[12px] text-muted-foreground">{m.quando_usar}</span>
             </span>
           </button>
-          <span className={juntar(etiqueta, "mr-1 hidden bg-accent-soft text-primary sm:inline-flex")}>{ROTULO_DO_OBJETIVO[m.objetivo]}</span>
+          <span className={juntar(etiqueta, "mr-1 hidden bg-muted text-foreground sm:inline-flex")}>{ROTULO_DO_OBJETIVO[m.objetivo]}</span>
           {m.origem !== "roteiros_magicos" && <span className={juntar(etiqueta, "mr-1 hidden bg-muted text-muted-foreground md:inline-flex")}>{ROTULO_DA_ORIGEM[m.origem]}</span>}
           <button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => onUsarBase(m.id)} aria-label={`Usar ${m.nome} num roteiro novo`}>
             Usar

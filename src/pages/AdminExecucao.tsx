@@ -1297,7 +1297,7 @@ export default function AdminExecucao() {
     done: "bg-success", blocked: "bg-destructive", review: "bg-warning", awaiting_input: "bg-warning", in_progress: "bg-info", queued: "bg-muted-foreground/60",
   };
   const PASTEL_DO_ESTADO: Record<string, string> = {
-    done: "bg-success-soft text-success", blocked: "bg-danger-soft text-destructive", review: "bg-warning-soft text-warning", awaiting_input: "bg-warning-soft text-warning", in_progress: "bg-info-soft text-info",
+    done: "bg-muted text-success", blocked: "bg-danger-soft text-destructive", review: "bg-warning-soft text-warning", awaiting_input: "bg-warning-soft text-warning", in_progress: "bg-info-soft text-info",
   };
   const Cartao = ({ v }: { v: Vinculo }) => {
     const t = tarefaDoVinculo(v, tarefas);
@@ -1362,7 +1362,7 @@ export default function AdminExecucao() {
 
         <div className="mt-auto flex min-w-0 items-center gap-2 pt-4 text-[12px] text-muted-foreground">
           <span className="inline-flex min-w-0 items-center gap-2" title={`humano: ${t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}`}>
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-semibold text-primary" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
             <span className="truncate">{op?.display_name || "?"}</span>
           </span>
           {t?.due_date && (
@@ -1580,7 +1580,7 @@ export default function AdminExecucao() {
           <DonoDaTarefa linkId={v.id} agente={op?.display_name || "Agente sem nome"} />
           {/* Para que serve: o quê, por quê e o resultado, da descrição da tarefa. */}
           <div>
-            <p className="text-[12px] font-semibold text-primary">Sobre esta tarefa</p>
+            <p className="text-[12px] font-semibold text-foreground">Sobre esta tarefa</p>
             {(t as any)?.description
               ? <p className="mt-1 line-clamp-4 whitespace-pre-line text-[13px] leading-6 text-foreground/90" title={leituraSimples(String((t as any).description)).resumo}>{leituraSimples(String((t as any).description)).resumo}</p>
               : <p className="mt-1 text-[13px] text-muted-foreground">O agente não explicou o quê, o porquê e o resultado esperado. <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => void pedirAoAgente(v, "explicacao")}>Pedir explicação</button></p>}
@@ -1847,12 +1847,12 @@ export default function AdminExecucao() {
                           onClick={() => setAgenteAberto(o)}
                           className="flex w-full min-w-0 items-start px-3.5 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                         >
-                          <Bot className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                          <Bot className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                           <span className="min-w-0 flex-1">
                             <span className="flex min-w-0 items-center">
                               <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{o.display_name}</span>
                               {o.is_coordinator && (
-                                <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>coordenador</span>
+                                <span className={juntar(etiqueta, "ml-1.5 bg-muted text-foreground")}>coordenador</span>
                               )}
                             </span>
                             <span className="block truncate text-[12px] text-muted-foreground">

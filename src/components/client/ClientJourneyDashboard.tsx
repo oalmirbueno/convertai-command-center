@@ -272,7 +272,7 @@ export default function ClientJourneyDashboard({
           apoio: latestReport.highlights ? semAsterisco(latestReport.highlights) : undefined,
           para: "/onde-estamos",
           icone: Newspaper,
-          tomDoIcone: "bg-accent-soft text-primary",
+          tomDoIcone: "bg-muted text-foreground",
         }
       : {
           chave: "novidade",
@@ -283,7 +283,7 @@ export default function ClientJourneyDashboard({
           apoio: "Ver o retrato completo",
           para: "/onde-estamos",
           icone: Newspaper,
-          tomDoIcone: "bg-accent-soft text-primary",
+          tomDoIcone: "bg-muted text-foreground",
         };
   const proximaEtapa = upcomingMilestones[0] || null;
   const cartaoProximo: CartaoDoCelular | null = nextPublication
@@ -494,7 +494,7 @@ export default function ClientJourneyDashboard({
                 onClick={() => navigate(cartao.para)}
                 className={juntar(superficie.painel, cartao.chave === "novidade" && superficie.tinta, "flex w-full min-w-0 items-center p-5 text-left transition-transform duration-200 active:scale-[0.99]", foco)}
               >
-                <span className={juntar("mr-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-full", cartao.chave === "novidade" ? "bg-muted text-primary" : cartao.tomDoIcone)}>
+                <span className={juntar("mr-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-full", cartao.chave === "novidade" ? "bg-muted text-muted-foreground" : cartao.tomDoIcone)}>
                   <cartao.icone className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <span className="min-w-0 flex-1">

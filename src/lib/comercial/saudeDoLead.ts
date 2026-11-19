@@ -13,7 +13,7 @@ const ROTULO: Record<NivelDaSaude, string> = { saudavel: "Saudável", atencao: "
 
 /** Cores de cada nível: verde, âmbar e vermelho, as mesmas na saúde, na nota e na lista. */
 export const COR_DO_NIVEL: Record<NivelDaSaude, string> = {
-  saudavel: "bg-success/15 text-success",
+  saudavel: "bg-muted text-success",
   atencao: "bg-warning/15 text-warning",
   fraco: "bg-destructive/15 text-destructive",
 };

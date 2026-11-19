@@ -103,10 +103,17 @@ e "Botão no fundo" com a nota. Ids, nomes e ordem não mudaram (o banco valida 
 cores) e sai com código 1 se algo reprovar. A CI barra regressão em `src/test/contraste-tokens.test.ts`, que usa
 as mesmas verificações (`src/lib/design/verificacoes.ts`). A conta fica em `src/lib/design/contraste.ts`.
 
-**Fica para depois (registrado, não corrigido).** O destaque ainda aparece fora do CTA em muitos lugares:
-cerca de 1.300 `text-primary`, 460 `border-primary`, 190 `bg-accent-soft` e 370 `bg-primary/N` em `src/`
-(contagem de 19/11). Isso passa do 10% em várias telas. Reduzir é o próximo passo, **por área** (um lote por
-tela), trocando o que não é ação por neutro (`text-foreground`, `border-border`, `bg-muted`).
+**Verde só em ação principal e estado ativo (19/11/2026, pedido do dono).** O verde (`primary`, e `accent`/`success`
+quando só enfeitam) é a única cor forte e fica só em: botão/CTA preenchido, link e botão de texto, estado
+ativo/selecionado (aba, menu aberto, item escolhido, switch/checkbox ligado, `data-[state=*]`, `aria-*`), progresso,
+carregando e foco. Virou neutro, nos dois temas: ícone decorativo (`text-muted-foreground`; o "marcado" `Check*`
+fica), chip/etiqueta de tipo e status "ok" (`bg-muted text-foreground`), caixa de ícone (`bg-muted
+text-muted-foreground`), título/número/texto verde (`text-foreground` ou `text-muted-foreground` no pequeno), borda e
+anel de destaque (`border-border`, `ring-border`), fundo `bg-primary/N` e `bg-accent-soft` decorativos (`bg-muted`),
+balão de quem pediu na conversa. `success` de estado real (pago, aprovado, no ar) mantém **um** dos três: texto verde
+sobre `bg-muted`, sem fundo e borda verdes juntos. Ficam: paleta de categorias (redes, editorial), seta de tendência
+verde/vermelha, menção `@`, marca sobre imagem e o quadro escuro do canvas da Mesa Foto. Catraca: `iconeVerdeDecorativo`
+(seção 16) barra ícone novo com `text-primary` fixo fora de botão/link.
 
 ## 1. Tokens
 
@@ -560,8 +567,8 @@ um número caiu). Nunca suba um teto: use o token ou o componente do sistema. N�
 fonte com nome do Tailwind, translúcido em bloco, rolagem presa no celular, rolagem dentro de rolagem, altura
 fixa pela janela, cartão feito à mão, seção em cartão, cartão dentro de cartão, parágrafo explicativo fixo
 (90 ou mais caracteres fora de janela), descrição explicativa (texto de `descricao` com mais de 60 caracteres
-ou frase), canto fora do token (`rounded-2xl`/`3xl`), título que quebra, sombra forte, caixa alta e `<h1>` feito
-à mão. Prioridade dos lotes: parágrafo e descrição explicativos, cartão à mão e rolagem; fonte fica por último.
+ou frase), canto fora do token (`rounded-2xl`/`3xl`), título que quebra, sombra forte, caixa alta, `<h1>` feito
+à mão e ícone verde decorativo (ícone do lucide com `text-primary` fixo fora de botão/link; ver 0.1). Prioridade dos lotes: parágrafo e descrição explicativos, cartão à mão e rolagem; fonte fica por último.
 
 Como conferir sem o Supabase real (harness da D1, fora do repositório):
 1. Subir o Vite pela API (`createServer`, `configFile: false`, `root` no repositório, `process.chdir` para

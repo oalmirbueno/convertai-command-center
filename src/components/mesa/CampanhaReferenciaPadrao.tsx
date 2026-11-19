@@ -97,7 +97,7 @@ export default function CampanhaReferenciaPadrao({ campanha, pecas = [], compact
     return (
       <div className="min-w-0" data-padrao-da-campanha="">
         <div className="flex min-w-0 items-start">
-          <Palette className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <Palette className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium">Padrão visual da campanha</p>
             <p className={juntar(texto.auxiliar, "mt-0.5 [overflow-wrap:anywhere]")}>{padrao.resumo}</p>

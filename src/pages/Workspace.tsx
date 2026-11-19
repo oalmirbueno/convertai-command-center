@@ -1874,11 +1874,11 @@ export default function Workspace() {
               {!n.__virtual && (
                 <>
                   <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(suggestFolderName(n)); }}>
-                    <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
+                    <FolderPlus className="w-3.5 h-3.5 mr-2 text-muted-foreground" /> Nova pasta na raiz…
                   </DropdownMenuItem>
                   {parent && (
                     <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(suggestFolderName(n)); }}>
-                      <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
+                      <FolderPlus className="w-3.5 h-3.5 mr-2 text-muted-foreground" /> Nova pasta em “{parent.name}”…
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
@@ -1893,7 +1893,7 @@ export default function Workspace() {
                 .sort((a, b) => (folderPaths.get(a.id) || "").localeCompare(folderPaths.get(b.id) || ""))
                 .map(f => (
                   <DropdownMenuItem key={f.id} onSelect={() => moveNode(n, f.id)}>
-                    <Folder className="w-3.5 h-3.5 mr-2 text-primary" />
+                    <Folder className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
                     <span className="truncate">{folderPaths.get(f.id) || f.name}</span>
                   </DropdownMenuItem>
                 ))}
@@ -2054,11 +2054,11 @@ export default function Workspace() {
               {!n.__virtual && (
                 <>
                   <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(suggestFolderName(n)); }}>
-                    <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
+                    <FolderPlus className="w-3.5 h-3.5 mr-2 text-muted-foreground" /> Nova pasta na raiz…
                   </ContextMenuItem>
                   {parent && (
                     <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(suggestFolderName(n)); }}>
-                      <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
+                      <FolderPlus className="w-3.5 h-3.5 mr-2 text-muted-foreground" /> Nova pasta em “{parent.name}”…
                     </ContextMenuItem>
                   )}
                   <ContextMenuSeparator />
@@ -2073,7 +2073,7 @@ export default function Workspace() {
                 .sort((a, b) => (folderPaths.get(a.id) || "").localeCompare(folderPaths.get(b.id) || ""))
                 .map(f => (
                   <ContextMenuItem key={f.id} onSelect={() => moveNode(n, f.id)}>
-                    <Folder className="w-3.5 h-3.5 mr-2 text-primary" />
+                    <Folder className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
                     <span className="truncate">{folderPaths.get(f.id) || f.name}</span>
                   </ContextMenuItem>
                 ))}
@@ -2247,8 +2247,8 @@ export default function Workspace() {
             className={juntar("flex h-8 min-w-0 flex-1 items-center rounded px-2 text-left", foco)}
           >
             {scope === "global"
-              ? <Globe2 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-              : <UsersIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
+              ? <Globe2 className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              : <UsersIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
             <span className="min-w-0 flex-1 truncate">{nomeDaRaiz}</span>
           </button>
         </div>
@@ -2308,8 +2308,8 @@ export default function Workspace() {
           )}
         >
           {scope === "global"
-            ? <Globe2 className="h-4 w-4 shrink-0 text-primary sm:mr-1.5" aria-hidden="true" />
-            : <Folder className="h-4 w-4 shrink-0 text-primary sm:mr-1.5" aria-hidden="true" />}
+            ? <Globe2 className="h-4 w-4 shrink-0 text-muted-foreground sm:mr-1.5" aria-hidden="true" />
+            : <Folder className="h-4 w-4 shrink-0 text-muted-foreground sm:mr-1.5" aria-hidden="true" />}
           <span className="hidden min-w-0 truncate sm:inline">{contextLabel}</span>
           <ChevronDown className="ml-1.5 hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:inline-block" aria-hidden="true" />
         </button>
@@ -2355,7 +2355,7 @@ export default function Workspace() {
               foco,
             )}
           >
-            <Globe2 className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <Globe2 className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate text-left">Global (Agência)</span>
             {scope === "global" && <Check className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
           </button>
@@ -2677,7 +2677,7 @@ export default function Workspace() {
 
             {rootDropActive && (
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/50 bg-primary/10">
-                <p className="text-[13px] font-medium text-primary">Solte para enviar aqui</p>
+                <p className="text-[13px] font-medium text-foreground">Solte para enviar aqui</p>
               </div>
             )}
 
@@ -2842,7 +2842,7 @@ export default function Workspace() {
                       </span>
                       <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{n.name}</span>
                       {isInboxQuarantined(n) && <span className={juntar(etiqueta, "ml-2 bg-amber-500/15 text-amber-500")}>Quarentena</span>}
-                      {isWorkspaceFileLinked(n) && <span className={juntar(etiqueta, "ml-2 bg-success/15 text-success")}>Em Arquivos</span>}
+                      {isWorkspaceFileLinked(n) && <span className={juntar(etiqueta, "ml-2 bg-muted text-success")}>Em Arquivos</span>}
                       {!isFolder && n.size_bytes ? (
                         <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{fmtSize(n.size_bytes)}</span>
                       ) : null}
