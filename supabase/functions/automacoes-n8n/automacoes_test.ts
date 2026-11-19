@@ -67,3 +67,12 @@ Deno.test('automações: a chave do coletor confere pelo sha256, nunca pelo text
   assertEquals(await chaveConfere('', sha), false);
   assertEquals(await chaveConfere('123', ''), false, 'sem segredo configurado ninguém entra');
 });
+
+Deno.test('automações: o nó leva o que faz e o trecho de código, sem segredo', () => {
+  const r = validarRetrato({ ...RETRATO, fluxos: [{ id: 'X1', nome: 'x', ativo: true, desenho: { nos: [{ nome: 'Conferir', tipo: 'code', x: 0, y: 0, resumo: ['roda acq07Lote()', 'token=abc123'], codigo: 'const k = "sk-or-v1-0123456789abcdef0123456789abcdef";\nreturn acq07Lote();' }], ligacoes: [] } }] });
+  const no = (r.fluxos[0].desenho as any).nos[0];
+  assertEquals(no.resumo[0], 'roda acq07Lote()');
+  assert(!no.resumo[1].includes('abc123'));
+  assert(no.codigo.includes('\n'), 'mantém as linhas');
+  assert(!no.codigo.includes('0123456789abcdef0123456789abcdef'));
+});

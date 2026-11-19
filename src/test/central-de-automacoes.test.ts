@@ -9,7 +9,10 @@ import {
   normalizarPainel,
   numerosDoPainel,
   ORDEM_DOS_GRUPOS,
+  normalizarDetalhe,
   fluxosDoCliente,
+  categoriaDoNo,
+  CATEGORIAS,
   pastasDaAceleriq,
   pastasDeClientes,
 } from "@/lib/centralDeAutomacoes";
@@ -154,5 +157,27 @@ describe("central de automações: pastas da Aceleriq e de clientes", () => {
   it("a ficha do cliente vê só os fluxos dele, ligados primeiro", () => {
     expect(fluxosDoCliente(p.fluxos, "c-dk").map((f) => f.id)).toEqual(["dk1", "dk2"]);
     expect(fluxosDoCliente(p.fluxos, "c-nada")).toEqual([]);
+  });
+});
+
+describe("central de automações: o que é cada nó", () => {
+  it("traduz o tipo do n8n para uma categoria em português", () => {
+    expect(categoriaDoNo("scheduleTrigger")).toBe("gatilho");
+    expect(categoriaDoNo("webhook")).toBe("gatilho");
+    expect(categoriaDoNo("code")).toBe("codigo");
+    expect(categoriaDoNo("httpRequest")).toBe("chamada");
+    expect(categoriaDoNo("postgres")).toBe("banco");
+    expect(categoriaDoNo("if")).toBe("decisao");
+    expect(categoriaDoNo("executeWorkflow")).toBe("subfluxo");
+    expect(categoriaDoNo("respondToWebhook")).toBe("resposta");
+    expect(categoriaDoNo("noOp")).toBe("passagem");
+    expect(categoriaDoNo("lmChatOpenRouter")).toBe("ia");
+    expect(categoriaDoNo("algumaCoisaNova")).toBe("outro");
+    for (const c of Object.values(CATEGORIAS)) expect(c.explica.length).toBeGreaterThan(10);
+  });
+
+  it("o nó guarda o que faz e o código vindos do coletor", () => {
+    const d = normalizarDetalhe({ id: "x", nome: "x", desenho: { nos: [{ nome: "A", tipo: "code", x: 0, y: 0, resumo: ["roda acq07Lote()"], codigo: "return 1;" }], ligacoes: [] } })!;
+    expect(d.desenho.nos[0]).toMatchObject({ resumo: ["roda acq07Lote()"], codigo: "return 1;" });
   });
 });
