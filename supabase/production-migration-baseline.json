@@ -3235,14 +3235,6 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261119160841",
-      "path": "supabase/migrations/20261119160841_produto_central_de_acessos.sql",
-      "local_sha256": "d7190cbe81fdaa2e1018b9443d8397870589dd9269c1b7180b043db41fce5da1",
-      "remote_name": "produto_central_de_acessos",
-      "remote_statements_sha256": "94c6f3727a69868801eeab872824a0dcd76a943efc9b884fa62ecf8dd4521403",
-      "remote_hash_mode": "supabase_cli_split"
-    },
-    {
       "version": "20261119180000",
       "path": "supabase/migrations/20261119180000_central_de_automacoes.sql",
       "local_sha256": "0bee5565013715c1b754a41ef676a40996b23c962924be84e89994be1e3cd0d1",

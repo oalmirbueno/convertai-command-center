@@ -219,6 +219,8 @@ export async function carregarMinhasCaixas(): Promise<MinhasCaixas> {
 export interface ResumoDaMensagem {
   id: string;
   mensagem_id?: string | null;
+  /** A aba, como no Gmail: principal, atualizações, promoções ou social. */
+  categoria?: "principal" | "atualizacoes" | "promocoes" | "social";
   de: string;
   para: string;
   assunto: string;
@@ -271,6 +273,10 @@ async function chamarCorreio<T>(pedido: Record<string, unknown>): Promise<T> {
 }
 
 export const correio = {
+  /** Abrir a caixa: pastas e a primeira página numa conexão só (metade da espera). */
+  inicio: (caixaId: string, pasta = "INBOX") => chamarCorreio<{ pastas: Array<{ id: string; nome: string; nao_lidas: number }>; mensagens: ResumoDaMensagem[] }>({ acao: "inicio", caixa_id: caixaId, pasta }),
+  campanhas: (caixaId: string) => chamarCorreio<{ campanhas: Array<{ quando: string; assunto: string; enviados: number; falhas: number }>; usados_hoje: number; limite_do_dia: number }>({ acao: "campanhas", caixa_id: caixaId }),
+  campanha: (caixaId: string, p: { para: string[]; assunto: string; texto: string }) => chamarCorreio<{ enviados: number; falhas: string[]; ficaram: string[]; usados_hoje: number; limite_do_dia: number }>({ acao: "campanha", caixa_id: caixaId, ...p }),
   pastas: (caixaId: string) => chamarCorreio<{ pastas: Array<{ id: string; nome: string; nao_lidas: number }> }>({ acao: "pastas", caixa_id: caixaId }).then((r) => r.pastas),
   listar: (caixaId: string, pasta: string, busca?: string, pagina = 1) => chamarCorreio<{ mensagens: ResumoDaMensagem[] }>({ acao: "listar", caixa_id: caixaId, pasta, busca, pagina }).then((r) => r.mensagens),
   ler: (caixaId: string, pasta: string, id: string) => chamarCorreio<{ mensagem: MensagemAberta }>({ acao: "ler", caixa_id: caixaId, pasta, id }).then((r) => r.mensagem),
@@ -296,4 +302,13 @@ export function abrirPorta(usuarioId: string, agora = Date.now()): void {
   } catch {
     /* sem armazenamento: vale só nesta tela */
   }
+}
+
+const EMAIL_DA_LISTA = /^[^@\s<>"]+@[^@\s<>"]+\.[^@\s<>"]+$/;
+/** Os endereços colados (um por linha, vírgula ou ponto e vírgula), sem repetir e sem os inválidos. */
+export function enderecosColados(bruto: string): { validos: string[]; invalidos: string[] } {
+  const partes = bruto.split(/[\s,;]+/).map((x) => x.replace(/^<|>$/g, "").trim().toLowerCase()).filter(Boolean);
+  const validos = Array.from(new Set(partes.filter((x) => EMAIL_DA_LISTA.test(x))));
+  const invalidos = Array.from(new Set(partes.filter((x) => !EMAIL_DA_LISTA.test(x))));
+  return { validos, invalidos };
 }

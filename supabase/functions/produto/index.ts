@@ -456,6 +456,49 @@ async function pedirEmail(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ ok: true, pedido_id: r.pedido.id, novo: true });
 }
 
+/**
+ * Contratar mais pelo correio (19/11/2026): caixas a mais e extras do catálogo, para a empresa que já tem o
+ * e-mail. Os preços saem do banco (nada do que a tela manda vale como preço). Vira pedido no histórico e
+ * oportunidade no CRM da Aceleriq, que confirma e manda o link; a cobrança automática entra quando os
+ * pagamentos online forem ligados depois do teste no sandbox.
+ */
+async function contratarEmailExtras(ch: Chamador, corpo: Record<string, unknown>) {
+  const contaId = exigirAdminDaConta(ch);
+  const conta = await lerConta(contaId);
+  const caixas = Math.max(0, Math.min(100, Math.floor(Number(corpo.caixas_a_mais) || 0)));
+  const pedidas = idsDasOfertas(corpo.ofertas) || [];
+  if (!caixas && !pedidas.length) throw new ErroHttp(400, "nada_escolhido", "Escolha mais caixas ou um extra.");
+  const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const [{ count }, { data: config }, { data: catalogo }] = await Promise.all([
+    servico().from("produto_historico").select("id", { count: "exact", head: true }).eq("conta_id", contaId).eq("acao", "email_contratar_extras").gte("criado_em", desde),
+    servico().from("produto_config").select("email_caixa_extra").maybeSingle(),
+    pedidas.length ? servico().from("produto_ofertas").select("id, nome, cobranca, valor, ativo").in("id", pedidas) : Promise.resolve({ data: [] as unknown[] }),
+  ]);
+  if ((count || 0) >= 5) throw new ErroHttp(429, "muitos_pedidos", "O pedido já chegou. A Aceleriq vai falar com você.");
+  const ofertas = ((catalogo || []) as Array<{ id: string; nome: string; cobranca: string; valor: number; ativo: boolean }>).filter((o) => o.ativo && Number(o.valor) > 0);
+  if (pedidas.length && ofertas.length !== pedidas.length) throw new ErroHttp(400, "oferta_indisponivel", "Um dos extras não está mais disponível. Atualize a página.");
+  const precoCaixa = Number((config as { email_caixa_extra?: number } | null)?.email_caixa_extra) || 0;
+  const centavos = (v: number) => Math.round(v * 100) / 100;
+  const mensal = centavos(caixas * precoCaixa + ofertas.filter((o) => o.cobranca !== "unica").reduce((s, o) => s + Number(o.valor), 0));
+  const unico = centavos(ofertas.filter((o) => o.cobranca === "unica").reduce((s, o) => s + Number(o.valor), 0));
+  const itens = [caixas ? `${caixas} ${caixas === 1 ? "caixa a mais" : "caixas a mais"}` : "", ...ofertas.map((o) => o.nome)].filter(Boolean);
+  await registrar(contaId, ch.userId, "email_contratar_extras", { caixas_a_mais: caixas, ofertas: ofertas.map((o) => o.id), mensal_a_mais: mensal, unico });
+  const { error } = await servico().from("commercial_leads").insert({
+    name: conta.nome,
+    company: conta.nome,
+    email: conta.email_cobranca,
+    whatsapp: conta.telefone,
+    origin: "site",
+    stage: "novo",
+    classe: "upsell",
+    next_action: "Confirmar a contratação pelo correio e mandar o link",
+    notes: [`Contratou pelo correio (${conta.nome}): ${itens.join(", ")}.`, mensal ? `A mais por mês: R$ ${mensal.toFixed(2).replace(".", ",")}` : "", unico ? `Uma vez: R$ ${unico.toFixed(2).replace(".", ",")}` : ""].filter(Boolean).join("\n"),
+    qualificacao: { fonte: "produto_correio", produto_conta_id: contaId, oferta: "E-mail profissional", caixas_a_mais: caixas, ofertas: ofertas.map((o) => o.id) },
+  });
+  if (error) console.error("[produto] lead da contratação não criado", error.message.slice(0, 160));
+  return json({ ok: true, itens, mensal_a_mais: mensal, unico });
+}
+
 /** Os códigos das ofertas que vieram do pedido: lista curta, só no formato do catálogo. Sem lista, null. */
 function idsDasOfertas(bruto: unknown): string[] | null {
   if (!Array.isArray(bruto)) return null;
@@ -893,6 +936,7 @@ const ACOES: Record<string, Acao> = {
   cancelar: (ch) => cancelar(ch),
   pedir_email: pedirEmail,
   pagar_email: pagarEmail,
+  contratar_email_extras: contratarEmailExtras,
   dns,
   admin_criar_conta: adminCriarConta,
   admin_convidar: adminConvidar,
