@@ -113,6 +113,8 @@ const SettingsPage = rotas.lazy(() => import("@/pages/SettingsPage"));
 const BaseDosAgentes = rotas.lazy(() => import("@/pages/BaseDosAgentes"));
 const CentralDeSkills = rotas.lazy(() => import("@/pages/CentralDeSkills"));
 const CentralDeAutomacoes = rotas.lazy(() => import("@/pages/CentralDeAutomacoes"));
+// Ateliê de Cor (19/11/2026): paletas com motivo, laboratório e entrega; grava no kit que o Estúdio usa.
+const AtelieDeCor = rotas.lazy(() => import("@/pages/AtelieDeCor"));
 const GruposAoVivo = rotas.lazy(() => import("@/pages/GruposAoVivo"));
 const AdminViewAsClient = rotas.lazy(() => import("@/pages/AdminViewAsClient"));
 const ApiDocs = rotas.lazy(() => import("@/pages/ApiDocs"));
@@ -509,6 +511,7 @@ export function AppRoutes() {
         <Route path="/mesa-motion" element={<Navigate to="/mesas" replace />} />
         {/* Laboratório (19/10/2026): projetos em canvas, estúdio livre, logos e arquivos livres (supabase/functions/laboratorio). Mesmos papéis das mesas de criação. */}
         <Route path="/laboratorio" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><Laboratorio /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        <Route path="/cores" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><AtelieDeCor /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/mesas" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Mesas /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/central" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</>} />
         {/* 26/10: as mensagens dos rituais da semana numa tela só (só o admin aprova). */}

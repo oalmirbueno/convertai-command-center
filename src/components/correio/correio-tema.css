@@ -94,3 +94,11 @@
   background: hsl(var(--correio-menta-forte));
   border-radius: 999px;
 }
+
+/* O cartão do plano em Ferramentas: o bloco forte da tela, como a coluna das pastas. */
+.correio-tema .correio-plano {
+  background:
+    radial-gradient(500px 220px at 100% 0%, hsl(var(--correio-neon) / 0.22), transparent 70%),
+    linear-gradient(160deg, hsl(var(--correio-floresta)), hsl(var(--correio-floresta-2)));
+  color: #fff;
+}

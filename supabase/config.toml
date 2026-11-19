@@ -232,6 +232,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.produto-migracao]
     verify_jwt = true
+  [functions.produto-logo]
+    verify_jwt = false
   [functions.casa-dominios]
     verify_jwt = true
   [functions.produto-asaas-webhook]

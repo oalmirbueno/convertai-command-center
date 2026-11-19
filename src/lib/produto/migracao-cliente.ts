@@ -45,7 +45,7 @@ async function chamar<T>(corpo: Record<string, unknown>): Promise<T> {
 
 export const migracaoDoCliente = {
   provedores: () => chamar<{ provedores: ProvedorDaMigracao[] }>({ acao: "provedores" }).then((r) => r.provedores),
-  estado: (caixaId: string) => chamar<{ migracao: MigracaoDoCliente | null }>({ acao: "estado", caixa_id: caixaId }).then((r) => r.migracao),
+  estado: (caixaId: string) => chamar<{ migracao: MigracaoDoCliente | null }>({ acao: "estado", caixa_id: caixaId }).then((r) => r.migracao || null),
   iniciar: (p: { caixa_id: string; provedor: string; usuario: string; senha: string; host?: string; senha_destino?: string }) => chamar<{ migracao: MigracaoDoCliente }>({ acao: "iniciar", ...p }).then((r) => r.migracao),
   pausar: (id: string) => chamar<{ migracao: MigracaoDoCliente }>({ acao: "pausar", migracao_id: id }).then((r) => r.migracao),
   continuar: (id: string) => chamar<{ migracao: MigracaoDoCliente }>({ acao: "continuar", migracao_id: id }).then((r) => r.migracao),
