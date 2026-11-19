@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Cloud, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, Archive, CalendarClock, Cloud, ExternalLink, Globe, MonitorSmartphone, Plus, RefreshCw, Wallet, WifiOff } from "lucide-react";
 import { diaLegivel, fraseDoErro, reais, ROTULO_DO_ESTADO_DO_DOMINIO, ROTULO_DO_PROVEDOR, type EstadoDoDominio, type ProvedorDeEmail } from "@/lib/produto/api";
 import {
   ROTULO_DA_SAUDE,
@@ -27,36 +27,18 @@ import {
   type CentralDeDominios as Central,
   type DominioDaCasa,
   type Filtro,
-  type Gravidade,
   type Periodo,
   type Saude,
   type SiteDaCasa,
 } from "@/lib/produto/dominios-sites";
 import { quando } from "./CentralDeEmail";
-import {
-  BotaoComIcone,
-  CampoDeBusca,
-  CampoDeFormulario,
-  Carregando,
-  EstadoDeErro,
-  EstadoVazio,
-  FaixaDeNumeros,
-  GrupoDeCampos,
-  JanelaCentral,
-  Secao,
-  SeletorCompacto,
-  botao,
-  campo,
-  etiqueta,
-  juntar,
-  lista,
-  texto,
-} from "@/components/sistema";
+import { Card, Chip, HelpTooltip, List, ListRow, OverflowMenu, SearchField, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
+import { CampoDeFormulario, EstadoVazio, GrupoDeCampos, JanelaCentral, SeletorCompacto, botao, campo, juntar, texto } from "@/components/sistema";
+import { ErroDaTela, EsqueletoDaTela, FichaDeDados, ListaDeAvisos, TituloDoBloco } from "./pecasDaCasa";
 
 export const chaveDosDominios = ["produto", "casa", "dominios"] as const;
 
-const COR_DA_SAUDE: Record<Saude, string> = { ok: "bg-accent-soft text-primary", atencao: "bg-warning-soft text-warning", critico: "bg-destructive/10 text-destructive" };
-const COR_DO_AVISO: Record<Gravidade, string> = { critico: "bg-destructive", atencao: "bg-warning", info: "bg-muted-foreground" };
+const TOM_DA_SAUDE: Record<Saude, Tone> = { ok: "success", atencao: "warning", critico: "danger" };
 const ROTULO_DA_ORIGEM: Record<string, string> = { manual: "Cadastro manual", cloudflare: "Cloudflare", email: "E-mail" };
 const ordemDaSaude: Record<Saude, number> = { critico: 0, atencao: 1, ok: 2 };
 
@@ -70,6 +52,8 @@ const VAZIA: Central = { dominios: [], sites: [], clientes: [], leitura: { domin
  * Central de domínios e sites da casa: os domínios dos clientes (registrador, DNS, vencimento, e-mail)
  * e os sites publicados (resposta, SSL, publicação), com quanto custam e quanto a casa cobra.
  * A Cloudflare é lida só por GET pela função casa-dominios; sem o token, a tela usa o que está no banco.
+ * 19/11/2026 (redesenho): números em StatCard, a lista em cartão com estado em pílula, filtros num
+ * seletor, um botão principal (Cadastrar) com o resto no "..." e a ficha na janela do centro.
  */
 export default function CentralDeDominios({ parte }: { parte: Parte }) {
   const qc = useQueryClient();
@@ -105,8 +89,8 @@ export default function CentralDeDominios({ parte }: { parte: Parte }) {
   const dados: Central = central.data || VAZIA;
   const resumo = useMemo(() => resumoDaCentralDeDominios(dados, hoje), [dados, hoje]);
 
-  if (central.isLoading) return <Carregando linhas={6} rotulo="Carregando a central" />;
-  if (central.isError) return <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void central.refetch()}>Tentar de novo</button>} />;
+  if (central.isLoading) return <EsqueletoDaTela rotulo="Carregando a central" />;
+  if (central.isError) return <ErroDaTela titulo="Não foi possível carregar a central." aoTentar={() => void central.refetch()} />;
 
   const termo = busca.trim().toLowerCase();
   const doCliente = (c: string | null) => cliente === "todos" || (cliente === "sem" ? !c : c === cliente);
@@ -121,89 +105,102 @@ export default function CentralDeDominios({ parte }: { parte: Parte }) {
     .map((s) => ({ s, avisos: avisosDoSite(s) }))
     .sort((a, b) => ordemDaSaude[saudeDosAvisos(a.avisos)] - ordemDaSaude[saudeDosAvisos(b.avisos)] || a.s.nome.localeCompare(b.s.nome));
 
-  const filtros: Array<{ valor: Filtro; rotulo: string }> = parte === "dominios"
-    ? [{ valor: "todos", rotulo: "Todos" }, { valor: "problema", rotulo: "Com aviso" }, { valor: "vence30", rotulo: `Vence em 30 dias ${resumo.vencendo}` }, { valor: "dns", rotulo: `DNS com falta ${resumo.dnsComFalta}` }, { valor: "sem_cliente", rotulo: "Sem cliente" }]
-    : [{ valor: "todos", rotulo: "Todos" }, { valor: "problema", rotulo: "Com aviso" }, { valor: "fora", rotulo: `Fora do ar ${resumo.foraDoAr}` }, { valor: "sem_cliente", rotulo: "Sem cliente" }];
+  const filtros: Array<{ valor: Filtro; rotulo: string; contador?: number }> = parte === "dominios"
+    ? [{ valor: "todos", rotulo: "Todos" }, { valor: "problema", rotulo: "Com aviso" }, { valor: "vence30", rotulo: "Vence em 30 dias", contador: resumo.vencendo }, { valor: "dns", rotulo: "DNS com falta", contador: resumo.dnsComFalta }, { valor: "sem_cliente", rotulo: "Sem cliente" }]
+    : [{ valor: "todos", rotulo: "Todos" }, { valor: "problema", rotulo: "Com aviso" }, { valor: "fora", rotulo: "Fora do ar", contador: resumo.foraDoAr }, { valor: "sem_cliente", rotulo: "Sem cliente" }];
   const filtroValido = filtros.some((f) => f.valor === filtro) ? filtro : "todos";
   const ligado = leitura.data ? leitura.data.cloudflare : false;
+  const publicada = !!(leitura.data && leitura.data.publicada);
   const ultima = parte === "dominios" ? dados.leitura.dominios_em : dados.leitura.sites_em;
   const total = parte === "dominios" ? dados.dominios.filter((d) => !d.arquivado).length : dados.sites.filter((s) => !s.arquivado).length;
   const visiveis = parte === "dominios" ? dominios.length : sites.length;
   const dominioAberto = parte === "dominios" ? dados.dominios.filter((d) => (d.id || `email:${d.dominio}`) === aberto)[0] || null : null;
   const siteAberto = parte === "sites" ? dados.sites.filter((s) => s.id === aberto)[0] || null : null;
+  const comFiltro = filtroValido !== "todos" || cliente !== "todos" || !!termo;
+  const limpar = () => {
+    setFiltro("todos");
+    setCliente("todos");
+    setBusca("");
+  };
 
   return (
-    <div className="min-w-0 space-y-6" data-central-de-dominios={parte}>
-      <FaixaDeNumeros
-        rotulo="Resumo dos domínios e sites"
-        colunas={4}
-        itens={[
-          { rotulo: "Domínios", valor: resumo.dominios, apoio: `${resumo.naCasa} na Cloudflare da casa` },
-          { rotulo: "Sites", valor: resumo.sites, apoio: resumo.foraDoAr ? `${resumo.foraDoAr} fora do ar` : "todos no ar", ponto: resumo.foraDoAr ? "perigo" : "neutro" },
-          { rotulo: "Precisam de você", valor: resumo.precisam, apoio: `${resumo.vencendo} vencem em 30 dias`, ponto: resumo.precisam ? "alerta" : "verde", aoClicar: () => setFiltro("problema") },
-          { rotulo: "Receita por mês", valor: reais(resumo.receita), apoio: `custo ${reais(resumo.custo)} · margem ${reais(resumo.margem)}` },
-        ]}
-      />
+    <div className="min-w-0 space-y-4 sm:space-y-6" data-central-de-dominios={parte}>
+      <StatGrid label="Resumo dos domínios e sites">
+        {parte === "dominios" ? (
+          <StatCard icon={<Globe className="h-4 w-4" />} label="Domínios" value={resumo.dominios} hint={`${resumo.naCasa} na Cloudflare da casa`} />
+        ) : (
+          <StatCard icon={<MonitorSmartphone className="h-4 w-4" />} label="Sites" value={resumo.sites} hint={`${resumo.dominios} ${resumo.dominios === 1 ? "domínio" : "domínios"}`} />
+        )}
+        <StatCard icon={<AlertTriangle className="h-4 w-4" />} label="Precisam de você" value={resumo.precisam} hint={resumo.precisam ? "com aviso" : "tudo em dia"} onClick={resumo.precisam ? () => setFiltro("problema") : undefined} />
+        {parte === "dominios" ? (
+          <StatCard icon={<CalendarClock className="h-4 w-4" />} label="Vencem em 30 dias" value={resumo.vencendo} hint={resumo.dnsComFalta ? `${resumo.dnsComFalta} com DNS faltando` : "DNS em ordem"} onClick={resumo.vencendo ? () => setFiltro("vence30") : undefined} />
+        ) : (
+          <StatCard icon={<WifiOff className="h-4 w-4" />} label="Fora do ar" value={resumo.foraDoAr} hint={resumo.foraDoAr ? "não abriram" : "todos no ar"} onClick={resumo.foraDoAr ? () => setFiltro("fora") : undefined} />
+        )}
+        <StatCard icon={<Wallet className="h-4 w-4" />} label="Receita por mês" value={reais(resumo.receita)} hint={`margem ${reais(resumo.margem)}`} help={`Custo para a casa: ${reais(resumo.custo)} por mês.`} />
+      </StatGrid>
 
-      {!ligado && !leitura.isLoading && (
-        <div className="flex min-w-0 flex-wrap items-start rounded-lg border border-border bg-muted/40 p-3" data-ligar-cloudflare="">
-          <Cloud className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <p className={juntar(texto.auxiliar, "min-w-0 flex-1")}>
-            <span className="font-medium text-foreground">Ligar Cloudflare. </span>
-            {leitura.data && !leitura.data.publicada
-              ? "A função casa-dominios ainda não foi publicada. Até lá a tela mostra o que está no banco e o que foi cadastrado à mão."
-              : "Cole um token só de leitura da conta da Aceleriq no segredo CLOUDFLARE_API_TOKEN da função casa-dominios. Sem ele, a conferência de vencimento, DNS e sites funciona igual; só a lista de zonas e sites da Cloudflare não é lida."}
-          </p>
-        </div>
-      )}
-
-      <Secao
-        titulo={parte === "dominios" ? "Domínios" : "Sites"}
-        descricao={`${visiveis} de ${total}${ultima ? ` · conferido ${quando(ultima.slice(0, 10), hoje)}` : " · nunca conferido"}`}
-        ajuda={parte === "dominios"
-          ? "Todos os domínios dos clientes: o cadastrado à mão, o que está na Cloudflare da casa e o do e-mail. Conferir agora lê o vencimento no RDAP (Registro.br para .br) e o DNS do e-mail (MX, SPF, DKIM, DMARC). Clique no domínio para ligar a um cliente e anotar custo e preço."
-          : "Os sites publicados na Cloudflare da casa (Workers e Pages) e os cadastrados à mão. Conferir agora abre cada endereço por HTTPS: código da resposta, tempo e certificado. Clique no site para ligar a um cliente e anotar custo e preço."}
-        acao={
-          <span className="-m-1 flex items-center">
-            <button type="button" className={juntar(botao.icone, "m-1")} onClick={() => cloudflare.mutate()} disabled={!ligado || cloudflare.isPending} aria-label="Ler a Cloudflare" title={ligado ? "Ler zonas e sites da Cloudflare" : "Ligue a Cloudflare para ler"} data-ler-cloudflare="">
-              <Cloud className={juntar("h-4 w-4", cloudflare.isPending && "animate-pulse")} aria-hidden="true" />
-            </button>
-            <button type="button" className={juntar(botao.icone, "m-1")} onClick={() => conferir.mutate()} disabled={conferir.isPending || !(leitura.data && leitura.data.publicada)} aria-label="Conferir agora" title="Conferir agora" data-conferir-agora="">
+      <Card
+        title={parte === "dominios" ? "Domínios" : "Sites"}
+        subtitle={`${visiveis} de ${total}${ultima ? ` · conferido ${quando(ultima.slice(0, 10), hoje)}` : " · nunca conferido"}${verArquivados ? " · arquivados" : ""}`}
+        help={parte === "dominios"
+          ? "Todos os domínios dos clientes: o cadastrado à mão, o que está na Cloudflare da casa e o do e-mail. Conferir agora lê o vencimento no RDAP (Registro.br para .br) e o DNS do e-mail (MX, SPF, DKIM, DMARC). Abra o domínio para ligar a um cliente e anotar custo e preço."
+          : "Os sites publicados na Cloudflare da casa (Workers e Pages) e os cadastrados à mão. Conferir agora abre cada endereço por HTTPS: código da resposta, tempo e certificado. Abra o site para ligar a um cliente e anotar custo e preço."}
+        action={
+          <span className="flex items-center [&>*+*]:ml-1">
+            <button type="button" className={botao.icone} onClick={() => conferir.mutate()} disabled={conferir.isPending || !publicada} aria-label="Conferir agora" title="Conferir agora" data-conferir-agora="">
               <RefreshCw className={juntar("h-4 w-4", conferir.isPending && "animate-spin")} aria-hidden="true" />
             </button>
-            <BotaoComIcone className="m-1 h-8" icone={<Plus className="h-4 w-4" aria-hidden="true" />} rotulo="Cadastrar" onClick={() => setNovo(true)} data-cadastrar="" />
+            <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setNovo(true)} aria-label="Cadastrar" data-cadastrar="">
+              <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Cadastrar</span>
+            </button>
           </span>
         }
+        menu={[
+          { label: ligado ? "Ler zonas e sites da Cloudflare" : "Ler a Cloudflare (desligada)", icon: <Cloud className="h-4 w-4" />, onSelect: () => cloudflare.mutate(), disabled: !ligado || cloudflare.isPending },
+          { label: verArquivados ? "Voltar aos ativos" : "Ver arquivados", icon: <Archive className="h-4 w-4" />, onSelect: () => setVerArquivados(!verArquivados), separatorBefore: true },
+        ]}
+        menuLabel="Mais ações da central"
+        data-lista-da-central=""
       >
-        <div className="-m-1 mb-2 flex min-w-0 flex-wrap items-center">
-          <span className="m-1 min-w-0">
-            <SeletorCompacto rotulo="Saúde" opcoes={filtros} valor={filtroValido} onEscolher={(v) => setFiltro(v as Filtro)} listaQuandoNaoCabe />
-          </span>
-          <select value={cliente} onChange={(e) => setCliente(e.target.value)} className={juntar(campo, "m-1 h-8 w-auto max-w-[14rem]")} aria-label="Cliente" data-filtro-cliente="">
+        {!ligado && !leitura.isLoading && (
+          <div className="mb-3 flex min-w-0 items-center" data-ligar-cloudflare="">
+            <Chip tone="warning" dot icon={<Cloud className="h-3 w-3" />}>{publicada ? "Cloudflare não ligada" : "Função casa-dominios fora do ar"}</Chip>
+            <HelpTooltip className="ml-1" label="Como ligar a Cloudflare">
+              {publicada
+                ? "Cole um token só de leitura da conta da Aceleriq no segredo CLOUDFLARE_API_TOKEN da função casa-dominios. Sem ele, a conferência de vencimento, DNS e sites funciona igual; só a lista de zonas e sites da Cloudflare não é lida."
+                : "A função casa-dominios ainda não foi publicada. Até lá a tela mostra o que está no banco e o que foi cadastrado à mão."}
+            </HelpTooltip>
+          </div>
+        )}
+        <div className="mb-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-[auto_auto_minmax(0,1fr)] sm:items-center">
+          <SeletorCompacto rotulo="Mostrar" modo="lista" opcoes={filtros} valor={filtroValido} onEscolher={(v) => setFiltro(v as Filtro)} />
+          <select value={cliente} onChange={(e) => setCliente(e.target.value)} className={juntar(campo, "h-9 w-full rounded-full sm:w-auto sm:max-w-[14rem]")} aria-label="Cliente" data-filtro-cliente="">
             <option value="todos">Todos os clientes</option>
             <option value="sem">Sem cliente</option>
             {dados.clientes.map((c) => <option key={c.valor} value={c.valor}>{c.nome}</option>)}
           </select>
-          <span className="m-1 ml-auto min-w-0">
-            <CampoDeBusca valor={busca} onMudar={setBusca} placeholder={parte === "dominios" ? "Domínio ou cliente" : "Site ou cliente"} rotulo="Buscar" />
-          </span>
+          <SearchField value={busca} onChange={setBusca} placeholder={parte === "dominios" ? "Domínio ou cliente" : "Site ou cliente"} label="Buscar" className="col-span-2 sm:col-span-1 sm:ml-auto sm:w-full sm:max-w-[280px]" />
         </div>
 
         {visiveis === 0 ? (
-          <EstadoVazio compacto titulo={total ? "Nada neste filtro." : parte === "dominios" ? "Nenhum domínio ainda." : "Nenhum site ainda."} descricao={total ? undefined : ligado ? "Leia a Cloudflare ou cadastre à mão." : "Cadastre à mão ou ligue a Cloudflare."} />
+          <EstadoVazio
+            icone={parte === "dominios" ? <Globe className="h-5 w-5" aria-hidden="true" /> : <MonitorSmartphone className="h-5 w-5" aria-hidden="true" />}
+            titulo={total && comFiltro ? "Nada neste filtro" : verArquivados ? "Nada arquivado" : parte === "dominios" ? "Nenhum domínio ainda" : "Nenhum site ainda"}
+            descricao={total ? undefined : ligado ? "Leia a Cloudflare ou cadastre à mão." : "Cadastre à mão ou ligue a Cloudflare."}
+            acao={total && comFiltro ? <button type="button" className={juntar(botao.secundario, "h-8")} onClick={limpar}>Limpar filtros</button> : !verArquivados ? <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setNovo(true)}>Cadastrar</button> : undefined}
+          />
         ) : parte === "dominios" ? (
-          <ul className={juntar(lista.aberta, lista.divisoria)} data-lista-de-dominios="">
+          <List label="Domínios">
             {dominios.map(({ d, avisos }) => <LinhaDoDominio key={d.id || d.dominio} d={d} avisos={avisos} hoje={hoje} onAbrir={() => setAberto(d.id || `email:${d.dominio}`)} />)}
-          </ul>
+          </List>
         ) : (
-          <ul className={juntar(lista.aberta, lista.divisoria)} data-lista-de-sites="">
+          <List label="Sites">
             {sites.map(({ s, avisos }) => <LinhaDoSite key={s.id} s={s} avisos={avisos} hoje={hoje} onAbrir={() => setAberto(s.id)} />)}
-          </ul>
+          </List>
         )}
-        <div className="mt-3 flex justify-end">
-          <button type="button" className={juntar(texto.auxiliar, "underline-offset-2 hover:underline")} onClick={() => setVerArquivados(!verArquivados)}>{verArquivados ? "Voltar aos ativos" : "Ver arquivados"}</button>
-        </div>
-      </Secao>
+      </Card>
 
       {dominioAberto && <FichaDoDominio d={dominioAberto} central={dados} hoje={hoje} onFechar={() => setAberto(null)} aoSalvar={recarregar} />}
       {siteAberto && <FichaDoSite s={siteAberto} central={dados} hoje={hoje} onFechar={() => setAberto(null)} aoSalvar={recarregar} />}
@@ -212,96 +209,50 @@ export default function CentralDeDominios({ parte }: { parte: Parte }) {
   );
 }
 
-function PrimeiroAviso({ avisos }: { avisos: Aviso[] }) {
-  if (!avisos[0]) return null;
-  return (
-    <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center")}>
-      <i className={juntar("mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full", COR_DO_AVISO[avisos[0].gravidade])} aria-hidden="true" />
-      <span className="truncate">{avisos[0].texto}{avisos.length > 1 ? ` (+${avisos.length - 1})` : ""}</span>
-    </span>
-  );
-}
+const Icone = ({ tom, children }: { tom: Tone; children: ReactNode }) => (
+  <span aria-hidden="true" className={juntar("inline-flex h-10 w-10 items-center justify-center rounded-full", tom === "danger" ? "bg-danger-soft text-destructive" : tom === "warning" ? "bg-warning-soft text-warning" : "bg-muted text-foreground")}>{children}</span>
+);
 
 function LinhaDoDominio({ d, avisos, hoje, onAbrir }: { d: DominioDaCasa; avisos: Aviso[]; hoje: string; onAbrir: () => void }) {
   const saude = saudeDosAvisos(avisos);
   const dns = ondeEstaODns(d.nameservers);
   const faltas = faltasNoDns(d);
+  const detalhe = [
+    d.cliente_nome || "sem cliente",
+    d.na_cloudflare_da_casa ? "Cloudflare da casa" : dns ? `DNS em ${dns}` : "",
+    temEmail(d) ? (faltas === null ? "e-mail sem conferência" : faltas ? `e-mail com ${faltas} ${faltas === 1 ? "falta" : "faltas"}` : "e-mail certo") : "",
+  ].filter(Boolean).join(" · ");
   return (
-    <li>
-      <button type="button" className={juntar(lista.linha, "w-full flex-wrap items-start text-left")} onClick={onAbrir} data-dominio={saude}>
-        <span className="min-w-0 flex-1 basis-full sm:basis-0">
-          <span className={juntar(texto.corpo, "block truncate font-medium")}>
-            {d.dominio}
-            <span className="font-normal text-muted-foreground"> · {d.cliente_nome || "sem cliente"}</span>
-          </span>
-          <span className={juntar(texto.auxiliar, "block truncate")}>
-            {[
-              d.registrador || "registrador não lido",
-              dns ? `DNS ${d.na_cloudflare_da_casa ? "na Cloudflare da casa" : `em ${dns}`}` : "",
-              d.vence_em ? `vence ${quando(d.vence_em, hoje)}` : "",
-              temEmail(d) ? (faltas === null ? "e-mail sem conferência" : faltas ? `e-mail com ${faltas} ${faltas === 1 ? "falta" : "faltas"}` : "e-mail certo") : "",
-              d.preco_valor !== null ? porPeriodo(d.preco_valor, d.preco_periodo) : "",
-            ].filter(Boolean).join(" · ")}
-          </span>
-          <PrimeiroAviso avisos={avisos} />
-        </span>
-        <span className={juntar(etiqueta, "mt-1.5 sm:ml-2 sm:mt-0", COR_DA_SAUDE[saude])}>{ROTULO_DA_SAUDE[saude]}</span>
-      </button>
-    </li>
+    <ListRow
+      leading={<Icone tom={TOM_DA_SAUDE[saude]}><Globe className="h-4 w-4" /></Icone>}
+      title={d.dominio}
+      subtitle={avisos[0] ? `${avisos[0].texto}${avisos.length > 1 ? ` (+${avisos.length - 1})` : ""}` : detalhe}
+      status={<StatusPill tone={TOM_DA_SAUDE[saude]}>{ROTULO_DA_SAUDE[saude]}</StatusPill>}
+      value={d.vence_em ? quando(d.vence_em, hoje) : "sem data"}
+      valueHint={d.vence_em ? "vence" : d.registrador || undefined}
+      onClick={onAbrir}
+    />
   );
 }
 
 function LinhaDoSite({ s, avisos, hoje, onAbrir }: { s: SiteDaCasa; avisos: Aviso[]; hoje: string; onAbrir: () => void }) {
   const saude = saudeDosAvisos(avisos);
+  const detalhe = [
+    s.cliente_nome || "sem cliente",
+    s.hospedagem || ROTULO_DA_ORIGEM[s.origem],
+    s.ssl_ok === true ? "SSL certo" : s.ssl_ok === false ? "SSL com problema" : "",
+    s.ultima_publicacao ? `publicado ${quando(s.ultima_publicacao.slice(0, 10), hoje)}` : "",
+  ].filter(Boolean).join(" · ");
   return (
-    <li>
-      <button type="button" className={juntar(lista.linha, "w-full flex-wrap items-start text-left")} onClick={onAbrir} data-site={saude}>
-        <span className="min-w-0 flex-1 basis-full sm:basis-0">
-          <span className={juntar(texto.corpo, "block truncate font-medium")}>
-            {s.endereco || s.nome}
-            <span className="font-normal text-muted-foreground"> · {s.cliente_nome || "sem cliente"}</span>
-          </span>
-          <span className={juntar(texto.auxiliar, "block truncate")}>
-            {[
-              s.hospedagem || ROTULO_DA_ORIGEM[s.origem],
-              s.conferido_em ? (s.http_status ? `respondeu ${s.http_status}${s.resposta_ms !== null ? ` em ${s.resposta_ms} ms` : ""}` : "não abriu") : "",
-              s.ssl_ok === true ? "SSL certo" : s.ssl_ok === false ? "SSL com problema" : "",
-              s.ultima_publicacao ? `publicado ${quando(s.ultima_publicacao.slice(0, 10), hoje)}` : "",
-              s.preco_valor !== null ? porPeriodo(s.preco_valor, s.preco_periodo) : "",
-            ].filter(Boolean).join(" · ")}
-          </span>
-          <PrimeiroAviso avisos={avisos} />
-        </span>
-        <span className={juntar(etiqueta, "mt-1.5 sm:ml-2 sm:mt-0", COR_DA_SAUDE[saude])}>{ROTULO_DA_SAUDE[saude]}</span>
-      </button>
-    </li>
-  );
-}
-
-function ListaDeAvisos({ avisos }: { avisos: Aviso[] }) {
-  if (!avisos.length) return <p className={texto.corpo}>Tudo em dia.</p>;
-  return (
-    <ul className="space-y-1.5" data-avisos="">
-      {avisos.map((a) => (
-        <li key={a.texto} className="flex min-w-0 items-start">
-          <i className={juntar("mr-2 mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", COR_DO_AVISO[a.gravidade])} aria-hidden="true" />
-          <span className={juntar(texto.corpo, "min-w-0")}>{a.texto}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function Linhas({ itens }: { itens: Array<[string, string]> }) {
-  return (
-    <ul className={juntar(lista.aberta, lista.divisoria)}>
-      {itens.filter((i) => i[1]).map(([rotulo, valor]) => (
-        <li key={rotulo} className={lista.linha}>
-          <span className={juntar(texto.auxiliar, "min-w-0 flex-1")}>{rotulo}</span>
-          <span className={juntar(texto.corpo, "ml-3 min-w-0 break-words text-right")}>{valor}</span>
-        </li>
-      ))}
-    </ul>
+    <ListRow
+      leading={<Icone tom={TOM_DA_SAUDE[saude]}><MonitorSmartphone className="h-4 w-4" /></Icone>}
+      title={s.endereco || s.nome}
+      subtitle={avisos[0] ? `${avisos[0].texto}${avisos.length > 1 ? ` (+${avisos.length - 1})` : ""}` : detalhe}
+      status={<StatusPill tone={TOM_DA_SAUDE[saude]}>{ROTULO_DA_SAUDE[saude]}</StatusPill>}
+      value={s.conferido_em ? (s.http_status ? String(s.http_status) : "não abriu") : "..."}
+      valueHint={s.conferido_em && s.http_status && s.resposta_ms !== null ? `${s.resposta_ms} ms` : s.conferido_em ? undefined : "sem conferência"}
+      onClick={onAbrir}
+    />
   );
 }
 
@@ -332,12 +283,21 @@ function CamposDeDinheiro({ f, setF, custoPadrao }: { f: Record<string, string>;
 
 const paraCampo = (v: number | null) => (v === null ? "" : String(v).replace(".", ","));
 
+/** Receita, custo e sobra por mês, em pílulas (só quando há valor). */
 function Margem({ f }: { f: Record<string, string> }) {
   const n = (v: string) => (v.trim() ? Number(v.replace(",", ".")) : null);
   const receita = porMes(n(f.preco_valor), f.preco_periodo as Periodo);
   const custo = porMes(n(f.custo_valor), f.custo_periodo as Periodo);
   if (!receita && !custo) return null;
-  return <p className={juntar(texto.auxiliar, "mt-2")} data-margem="">Por mês: recebe {reais(receita)}, custa {reais(custo)}, sobra {reais(receita - custo)}.</p>;
+  const sobra = receita - custo;
+  return (
+    <div className="mt-3 flex min-w-0 flex-wrap items-center [&>*]:mb-1.5 [&>*]:mr-1.5" data-margem="">
+      <span className={juntar(texto.rotulo, "mr-1")}>Por mês</span>
+      <Chip tone="neutral">recebe {reais(receita)}</Chip>
+      <Chip tone="neutral">custa {reais(custo)}</Chip>
+      <Chip tone={sobra > 0 ? "success" : sobra < 0 ? "danger" : "neutral"}>sobra {reais(sobra)}</Chip>
+    </div>
+  );
 }
 
 function FichaDoDominio({ d, central, hoje, onFechar, aoSalvar }: { d: DominioDaCasa; central: Central; hoje: string; onFechar: () => void; aoSalvar: () => Promise<unknown> }) {
@@ -354,6 +314,7 @@ function FichaDoDominio({ d, central, hoje, onFechar, aoSalvar }: { d: DominioDa
   });
   const [salvando, setSalvando] = useState(false);
   const avisos = avisosDoDominio(d, hoje);
+  const saude = saudeDosAvisos(avisos);
   const sitesDoDominio = central.sites.filter((s) => s.dominio_id && s.dominio_id === d.id);
   const salvar = async () => {
     setSalvando(true);
@@ -391,38 +352,45 @@ function FichaDoDominio({ d, central, hoje, onFechar, aoSalvar }: { d: DominioDa
       aberta
       onFechar={onFechar}
       largura="lg"
+      icone={<Globe className="h-4 w-4" />}
       titulo={d.dominio}
-      descricao={`${ROTULO_DA_SAUDE[saudeDosAvisos(avisos)]} · ${ROTULO_DA_ORIGEM[d.origem] || d.origem}`}
+      descricao={`${d.cliente_nome || "Sem cliente"} · ${ROTULO_DA_ORIGEM[d.origem] || d.origem}`}
+      acoes={
+        <>
+          <StatusPill tone={TOM_DA_SAUDE[saude]}>{ROTULO_DA_SAUDE[saude]}</StatusPill>
+          {d.id && <OverflowMenu label="Mais ações do domínio" items={[{ label: d.arquivado ? "Desarquivar" : "Arquivar", icon: <Archive className="h-4 w-4" />, onSelect: () => void tirar() }]} />}
+        </>
+      }
       rodape={
         <>
-          {d.id && <button type="button" className={juntar(botao.secundario, "mr-auto h-9")} onClick={() => void tirar()}>{d.arquivado ? "Desarquivar" : "Arquivar"}</button>}
-          {d.email && <Link to="/produto/email/entradas" className={juntar(botao.secundario, "mr-2 h-9")}>Abrir o e-mail</Link>}
+          {d.email && <Link to="/produto/email/entradas" className={juntar(botao.secundario, "mr-auto h-9")}>Abrir o e-mail</Link>}
           <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void salvar()} disabled={salvando} data-salvar-dominio="">{salvando ? "Salvando..." : "Salvar"}</button>
         </>
       }
     >
-      <div className="min-w-0 space-y-5" data-ficha-do-dominio="">
+      <div className="min-w-0 space-y-6" data-ficha-do-dominio="">
         <ListaDeAvisos avisos={avisos} />
-        <Linhas
+        <FichaDeDados
           itens={[
             ["Registrador", d.registrador || "não lido"],
             ["Titular", d.titular || ""],
-            ["Nameservers", d.nameservers.join(", ") || "não lidos"],
+            ["Vencimento", d.vence_em ? `${diaLegivel(d.vence_em, true)} (${quando(d.vence_em, hoje)})${d.vencimento_fonte === "rdap" ? " · RDAP" : " · anotado"}` : "não lido"],
             ["DNS", d.na_cloudflare_da_casa ? `Cloudflare da casa${d.cloudflare_status ? ` (${d.cloudflare_status === "active" ? "ativa" : d.cloudflare_status})` : ""}` : ondeEstaODns(d.nameservers) || ""],
-            ["Vencimento", d.vence_em ? `${diaLegivel(d.vence_em, true)} (${quando(d.vence_em, hoje)})${d.vencimento_fonte === "rdap" ? " · lido no RDAP" : " · anotado"}` : "não lido"],
+            ["Nameservers", d.nameservers.join(", ") || "não lidos"],
             ["E-mail", d.email ? `${ROTULO_DO_PROVEDOR[d.email.provedor as ProvedorDeEmail] || d.email.provedor} · ${ROTULO_DO_ESTADO_DO_DOMINIO[d.email.estado as EstadoDoDominio] || d.email.estado}` : temEmail(d) ? "MX de outro provedor" : "sem e-mail"],
             ["Sites", sitesDoDominio.map((s) => s.endereco || s.nome).join(", ")],
           ]}
         />
         {dnsItens.length > 0 && (
-          <div className="-m-1 flex flex-wrap" data-dns-do-email="">
+          <div className="flex min-w-0 flex-wrap [&>*]:mb-1.5 [&>*]:mr-1.5" data-dns-do-email="">
             {dnsItens.map((i) => {
               const s = i.estado || (i.situacao === "ok" ? "certo" : i.situacao === "alerta" ? "atencao" : "falta");
-              return <span key={i.chave} className={juntar(etiqueta, "m-1", s === "certo" ? COR_DA_SAUDE.ok : s === "atencao" ? COR_DA_SAUDE.atencao : COR_DA_SAUDE.critico)}>{i.chave.toUpperCase()} {s === "certo" ? "certo" : s === "atencao" ? "atenção" : "falta"}</span>;
+              return <Chip key={i.chave} dot tone={s === "certo" ? "success" : s === "atencao" ? "warning" : "danger"}>{i.chave.toUpperCase()} {s === "certo" ? "certo" : s === "atencao" ? "atenção" : "falta"}</Chip>;
             })}
           </div>
         )}
-        <Secao titulo="Da casa" ajuda="Quem é o cliente, quanto custa e quanto a casa cobra. A leitura da Cloudflare e do RDAP nunca muda estes campos. O vencimento anotado vale até o RDAP responder.">
+        <section className="min-w-0 border-t border-border/60 pt-5">
+          <TituloDoBloco aoLado={<HelpTooltip label="Sobre os dados da casa">Quem é o cliente, quanto custa e quanto a casa cobra. A leitura da Cloudflare e do RDAP nunca muda estes campos. O vencimento anotado vale até o RDAP responder.</HelpTooltip>}>Da casa</TituloDoBloco>
           <GrupoDeCampos>
             <CampoDeFormulario rotulo="Cliente" largo>
               <select value={f.cliente} onChange={(e) => setF({ ...f, cliente: e.target.value })} className={campo} data-campo="cliente">
@@ -442,7 +410,7 @@ function FichaDoDominio({ d, central, hoje, onFechar, aoSalvar }: { d: DominioDa
             </CampoDeFormulario>
           </GrupoDeCampos>
           <Margem f={f} />
-        </Secao>
+        </section>
       </div>
     </JanelaCentral>
   );
@@ -463,6 +431,7 @@ function FichaDoSite({ s, central, hoje, onFechar, aoSalvar }: { s: SiteDaCasa; 
   });
   const [salvando, setSalvando] = useState(false);
   const avisos = avisosDoSite(s);
+  const saude = saudeDosAvisos(avisos);
   const daCloudflare = s.origem === "cloudflare";
   const salvar = async () => {
     setSalvando(true);
@@ -494,30 +463,38 @@ function FichaDoSite({ s, central, hoje, onFechar, aoSalvar }: { s: SiteDaCasa; 
       aberta
       onFechar={onFechar}
       largura="lg"
+      icone={<MonitorSmartphone className="h-4 w-4" />}
       titulo={s.endereco || s.nome}
-      descricao={`${ROTULO_DA_SAUDE[saudeDosAvisos(avisos)]} · ${s.hospedagem || ROTULO_DA_ORIGEM[s.origem]}`}
-      rodape={
+      descricao={`${s.cliente_nome || "Sem cliente"} · ${s.hospedagem || ROTULO_DA_ORIGEM[s.origem]}`}
+      acoes={
         <>
-          <button type="button" className={juntar(botao.secundario, "mr-auto h-9")} onClick={() => void tirar()}>{s.arquivado ? "Desarquivar" : "Arquivar"}</button>
-          {s.endereco && <a href={`https://${s.endereco}`} target="_blank" rel="noreferrer" className={juntar(botao.secundario, "mr-2 h-9")}>Abrir o site</a>}
-          <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void salvar()} disabled={salvando} data-salvar-site="">{salvando ? "Salvando..." : "Salvar"}</button>
+          <StatusPill tone={TOM_DA_SAUDE[saude]}>{ROTULO_DA_SAUDE[saude]}</StatusPill>
+          <OverflowMenu
+            label="Mais ações do site"
+            items={[
+              s.endereco ? { label: "Abrir o site", icon: <ExternalLink className="h-4 w-4" />, onSelect: () => window.open(`https://${s.endereco}`, "_blank", "noopener") } : null,
+              { label: s.arquivado ? "Desarquivar" : "Arquivar", icon: <Archive className="h-4 w-4" />, onSelect: () => void tirar(), separatorBefore: !!s.endereco },
+            ]}
+          />
         </>
       }
+      rodape={<button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void salvar()} disabled={salvando} data-salvar-site="">{salvando ? "Salvando..." : "Salvar"}</button>}
     >
-      <div className="min-w-0 space-y-5" data-ficha-do-site="">
+      <div className="min-w-0 space-y-6" data-ficha-do-site="">
         <ListaDeAvisos avisos={avisos} />
-        <Linhas
+        <FichaDeDados
           itens={[
-            ["Na Cloudflare", s.cf_tipo ? `${s.cf_tipo === "pages" ? "Pages" : "Worker"} ${s.cf_nome}` : "não"],
-            ["Domínios próprios", s.dominios_personalizados.join(", ")],
             ["Resposta", s.conferido_em ? (s.http_status ? `${s.http_status}${s.resposta_ms !== null ? ` em ${s.resposta_ms} ms` : ""}` : s.erro || "não abriu") : "ainda não conferido"],
             ["SSL", s.ssl_ok === true ? "certo" : s.ssl_ok === false ? "com problema" : ""],
+            ["Na Cloudflare", s.cf_tipo ? `${s.cf_tipo === "pages" ? "Pages" : "Worker"} ${s.cf_nome}` : "não"],
+            ["Domínios próprios", s.dominios_personalizados.join(", ")],
             ["Última publicação", s.ultima_publicacao ? `${diaLegivel(s.ultima_publicacao, true)} (${quando(s.ultima_publicacao.slice(0, 10), hoje)})` : ""],
             ["Conferido", s.conferido_em ? quando(s.conferido_em.slice(0, 10), hoje) : ""],
             ["Cliente pelo domínio", s.cliente_herdado ? s.cliente_nome || "" : ""],
           ]}
         />
-        <Secao titulo="Da casa" ajuda="Quem é o cliente, o domínio ligado, quanto custa e quanto a casa cobra. Sem cliente escolhido, o site herda o cliente do domínio. A leitura da Cloudflare nunca muda estes campos.">
+        <section className="min-w-0 border-t border-border/60 pt-5">
+          <TituloDoBloco aoLado={<HelpTooltip label="Sobre os dados da casa">Quem é o cliente, o domínio ligado, quanto custa e quanto a casa cobra. Sem cliente escolhido, o site herda o cliente do domínio. A leitura da Cloudflare nunca muda estes campos.</HelpTooltip>}>Da casa</TituloDoBloco>
           <GrupoDeCampos>
             <CampoDeFormulario rotulo="Nome">
               <input value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} className={campo} />
@@ -546,7 +523,7 @@ function FichaDoSite({ s, central, hoje, onFechar, aoSalvar }: { s: SiteDaCasa; 
             </CampoDeFormulario>
           </GrupoDeCampos>
           <Margem f={f} />
-        </Secao>
+        </section>
       </div>
     </JanelaCentral>
   );
@@ -578,7 +555,7 @@ function Cadastro({ parte, central, onFechar, aoSalvar }: { parte: Parte; centra
       onFechar={onFechar}
       largura="md"
       titulo={parte === "dominios" ? "Cadastrar domínio" : "Cadastrar site"}
-      descricao={parte === "dominios" ? "Para o domínio que não está na Cloudflare da casa." : "Para o site hospedado fora da Cloudflare da casa."}
+      ajuda={parte === "dominios" ? "Para o domínio que não está na Cloudflare da casa." : "Para o site hospedado fora da Cloudflare da casa."}
       rodape={<button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void salvar()} disabled={salvando} data-confirmar-cadastro="">{salvando ? "Salvando..." : "Cadastrar"}</button>}
     >
       <GrupoDeCampos>
