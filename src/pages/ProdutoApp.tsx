@@ -3,14 +3,14 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from "react-route
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, MessagesSquare, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
+import { CHAVE_DO_TEMA_DO_CRM, useTemaDoCorreio } from "@/components/correio/TemaDoCorreio";
 import { useProduto, useRelerProduto } from "@/hooks/useProduto";
 import { variaveisDaCor } from "@/lib/produto/aparencia";
 import "@/components/produto/produto.css";
 import { definirEscopoDoCrm, type EscopoDoCrm } from "@/lib/comercial/escopo";
 import { ROTULO_DO_PAPEL, avisoDaConta, ehGestor, listarAvisos, marcarAvisosLidos, type EstadoDoProduto } from "@/lib/produto/api";
 import { Carregando, EstadoDeErro, MenuMais, botao, foco, juntar, texto } from "@/components/sistema";
-import { MarcaAceleriq } from "@/components/publico/CascaPublica";
+import LogoDoCrm from "@/components/produto/LogoDoCrm";
 import { Foto } from "@/components/produto/pecas";
 import InicioDoProduto from "@/components/produto/InicioDoProduto";
 import PrimeirosPassos from "@/components/produto/PrimeirosPassos";
@@ -189,7 +189,11 @@ export default function ProdutoApp() {
   const navigate = useNavigate();
   const local = useLocation();
   const { user, profile, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  // 19/11/2026: o CRM tem tema próprio, claro por padrão (o branco com a cor da empresa) e escuro no botão,
+  // guardado à parte do painel, como o Correio.
+  const temaDoCrm = useTemaDoCorreio(CHAVE_DO_TEMA_DO_CRM);
+  const theme = temaDoCrm.tema === "escuro" ? "dark" : "light";
+  const toggleTheme = temaDoCrm.alternar;
   const produto = useProduto();
   const estado = produto.data;
   const [gaveta, setGaveta] = useState(false);
@@ -361,7 +365,7 @@ export default function ProdutoApp() {
             {aparencia.logo ? (
               <img src={aparencia.logo} alt={nomeNoTopo} className="h-7 w-auto max-w-[140px] object-contain" data-logo-da-empresa="" />
             ) : (
-              <MarcaAceleriq altura={20} className="logo-do-topo" />
+              <LogoDoCrm tamanho={28} rotulo="" />
             )}
           </Link>
           {troca}

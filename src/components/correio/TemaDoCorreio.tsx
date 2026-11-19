@@ -10,16 +10,19 @@ import { foco, juntar } from "@/components/sistema";
 export type TemaDoCorreio = "claro" | "escuro";
 const CHAVE = "aceleriq:correio:tema";
 
-function temaGuardado(): TemaDoCorreio {
+/** As chaves de cada lugar: o Correio e o CRM guardam a escolha em separado. */
+export const CHAVE_DO_TEMA_DO_CRM = "aceleriq:crm:tema";
+
+function temaGuardado(chave: string): TemaDoCorreio {
   try {
-    return localStorage.getItem(CHAVE) === "escuro" ? "escuro" : "claro";
+    return localStorage.getItem(chave) === "escuro" ? "escuro" : "claro";
   } catch {
     return "claro";
   }
 }
 
-export function useTemaDoCorreio() {
-  const [tema, setTema] = useState<TemaDoCorreio>(temaGuardado);
+export function useTemaDoCorreio(chave: string = CHAVE) {
+  const [tema, setTema] = useState<TemaDoCorreio>(() => temaGuardado(chave));
 
   useEffect(() => {
     const raiz = document.documentElement;
@@ -39,11 +42,11 @@ export function useTemaDoCorreio() {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", tema === "escuro" ? "#0A1A14" : "#F4F6F8");
     try {
-      localStorage.setItem(CHAVE, tema);
+      localStorage.setItem(chave, tema);
     } catch {
       /* sem armazenamento: vale só nesta visita */
     }
-  }, [tema]);
+  }, [tema, chave]);
 
   return { tema, alternar: () => setTema((t) => (t === "escuro" ? "claro" : "escuro")) };
 }
