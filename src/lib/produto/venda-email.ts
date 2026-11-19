@@ -69,12 +69,73 @@ export const dominioPessoal = (dominio: string) => DOMINIOS_PESSOAIS.indexOf(dom
 export interface RascunhoDoPedido {
   dominio: string;
   semDominio: boolean;
+  /** O domínio existe, mas ainda não tem e-mail: é e-mail novo, sem migração. */
+  semEmail: boolean;
   caixas: number;
   observacao: string;
   empresa: string;
+  /** As ofertas marcadas. null: ainda não mexeu, valem as que já vêm marcadas. */
+  ofertas: string[] | null;
 }
 
-export const RASCUNHO_VAZIO: RascunhoDoPedido = { dominio: "", semDominio: false, caixas: 5, observacao: "", empresa: "" };
+export const RASCUNHO_VAZIO: RascunhoDoPedido = { dominio: "", semDominio: false, semEmail: false, caixas: 5, observacao: "", empresa: "", ofertas: null };
+
+/** Migração quando há e-mail para trazer; e-mail novo quando não há domínio ou o domínio não tem e-mail. */
+export const tipoDoRascunho = (r: RascunhoDoPedido): "novo" | "migracao" => (r.semDominio || r.semEmail ? "novo" : "migracao");
+
+export interface OfertaParaMostrar {
+  id: string;
+  nome: string;
+  descricao: string;
+  cobranca: "mensal" | "unica";
+  valor: number;
+  mostra_em: "novo" | "migracao" | "ambos";
+  marcada: boolean;
+}
+
+/** As ofertas que cabem neste pedido (a oferta só da migração não aparece no e-mail novo). */
+export const ofertasDoTipo = <T extends OfertaParaMostrar>(ofertas: T[], tipo: "novo" | "migracao") =>
+  ofertas.filter((o) => o.mostra_em === "ambos" || o.mostra_em === tipo);
+
+/** As marcadas agora: a escolha da pessoa, ou as que já vêm marcadas. Só as que cabem no pedido. */
+export function ofertasEscolhidas(ofertas: OfertaParaMostrar[], r: RascunhoDoPedido): string[] {
+  const cabem = ofertasDoTipo(ofertas, tipoDoRascunho(r));
+  const ids = cabem.map((o) => o.id);
+  if (r.ofertas === null) return cabem.filter((o) => o.marcada).map((o) => o.id);
+  return r.ofertas.filter((id) => ids.indexOf(id) >= 0);
+}
+
+export interface ContaDoPedido {
+  /** O que se paga hoje: migração, 1º mês do e-mail e das ofertas mensais, e as ofertas de uma vez. */
+  hoje: number;
+  /** A mensalidade a partir do mês que vem: e-mail e ofertas mensais. */
+  mensal: number;
+  linhas: Array<{ nome: string; valor: number; quando: "hoje" | "mensal" | "hoje_e_mensal" }>;
+}
+
+/** A mesma conta do banco (produto_email_cobranca_do_pedido), para a tela mostrar antes de pagar. */
+export function contaDoPedido(conta: ContaDoEmail, ofertas: OfertaParaMostrar[], escolhidas: string[], tipo: "novo" | "migracao"): ContaDoPedido {
+  const linhas: ContaDoPedido["linhas"] = [];
+  const migracao = tipo === "migracao" ? conta.migracao : 0;
+  if (migracao > 0) linhas.push({ nome: "Migração, uma vez", valor: migracao, quando: "hoje" });
+  if (conta.mensal > 0) linhas.push({ nome: "E-mail profissional", valor: conta.mensal, quando: "hoje_e_mensal" });
+  let mensais = 0;
+  let unicas = 0;
+  for (const o of ofertasDoTipo(ofertas, tipo)) {
+    if (escolhidas.indexOf(o.id) < 0) continue;
+    if (o.cobranca === "mensal") mensais += o.valor;
+    else unicas += o.valor;
+    linhas.push({ nome: o.nome, valor: o.valor, quando: o.cobranca === "mensal" ? "hoje_e_mensal" : "hoje" });
+  }
+  const mensal = dinheiro(conta.mensal + mensais);
+  return { hoje: dinheiro(migracao + mensal + unicas), mensal, linhas };
+}
+
+/** CPF ou CNPJ só com números, no tamanho certo (o servidor confere de novo). */
+export function documentoDoPagador(texto: string): string | null {
+  const d = String(texto || "").replace(/\D/g, "");
+  return d.length === 11 || d.length === 14 ? d : null;
+}
 const CHAVE = "aceleriq:email:pedido";
 
 export function lerRascunho(): RascunhoDoPedido | null {
@@ -84,9 +145,11 @@ export function lerRascunho(): RascunhoDoPedido | null {
     return {
       dominio: typeof bruto.dominio === "string" ? bruto.dominio.slice(0, 120) : "",
       semDominio: !!bruto.semDominio,
+      semEmail: !!bruto.semEmail,
       caixas: caixasValidas(bruto.caixas, RASCUNHO_VAZIO.caixas),
       observacao: typeof bruto.observacao === "string" ? bruto.observacao.slice(0, 600) : "",
       empresa: typeof bruto.empresa === "string" ? bruto.empresa.slice(0, 120) : "",
+      ofertas: Array.isArray(bruto.ofertas) ? bruto.ofertas.filter((x: unknown) => typeof x === "string" && /^[a-z][a-z0-9_]{1,39}$/.test(x)).slice(0, 12) : null,
     };
   } catch {
     return null;
@@ -102,9 +165,9 @@ export function guardarRascunho(r: RascunhoDoPedido | null): void {
   }
 }
 
-/** O que vai para a ação `pedir_email`: domínio limpo, caixas e o que a pessoa contou. */
-export function corpoDoPedido(r: RascunhoDoPedido): { dominio: string; caixas: number; observacao: string } {
+/** O que vai para a ação `pedir_email`: domínio limpo, caixas, o tipo, as ofertas e o que a pessoa contou. */
+export function corpoDoPedido(r: RascunhoDoPedido, ofertas?: string[]): { dominio: string; caixas: number; observacao: string; tipo: "novo" | "migracao"; ofertas?: string[] } {
   const dominio = r.semDominio ? "" : dominioLimpo(r.dominio);
-  const notas = [r.semDominio ? "Ainda não tem domínio." : "", r.observacao.trim(), "Pedido feito pela página /email."].filter(Boolean);
-  return { dominio, caixas: caixasValidas(r.caixas), observacao: notas.join(" ").slice(0, 600) };
+  const notas = [r.semDominio ? "Ainda não tem domínio." : r.semEmail ? "O domínio ainda não tem e-mail." : "", r.observacao.trim(), "Pedido feito pela página /email."].filter(Boolean);
+  return { dominio, caixas: caixasValidas(r.caixas), observacao: notas.join(" ").slice(0, 600), tipo: tipoDoRascunho(r), ...(ofertas ? { ofertas } : {}) };
 }

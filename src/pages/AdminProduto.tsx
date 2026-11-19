@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Activity, Building2, ExternalLink, HeartPulse, Inbox, Mail, Tags, Wallet } from "lucide-react";
+import { Activity, Building2, ExternalLink, Globe, HeartPulse, Inbox, Mail, MonitorSmartphone, Tags, Wallet } from "lucide-react";
 import { CabecalhoDePagina, Carregando, Etapas, botao, juntar } from "@/components/sistema";
 import ContasDaCasa from "@/components/produto/casa/ContasDaCasa";
 
@@ -10,6 +10,7 @@ const PrecosDoProduto = lazy(() => import("@/components/produto/casa/PrecosDoPro
 const FaturamentoDoProduto = lazy(() => import("@/components/produto/casa/FaturamentoDoProduto"));
 const CentralDeEmail = lazy(() => import("@/components/produto/casa/CentralDeEmail"));
 const CaixaDaAceleriq = lazy(() => import("@/components/produto/casa/CaixaDaAceleriq"));
+const CentralDeDominios = lazy(() => import("@/components/produto/casa/CentralDeDominios"));
 
 /**
  * A gestão dos produtos vendidos, dentro do painel da casa (só admin).
@@ -17,10 +18,11 @@ const CaixaDaAceleriq = lazy(() => import("@/components/produto/casa/CaixaDaAcel
  * duas telas, cada uma com as suas abas e a sua rota:
  *   /produto/crm[/empresas|/precos|/faturamento]       visão geral, empresas, planos e faturamento
  *   /produto/email[/entradas|/caixa|/precos]           central, entradas e migrações, caixa e preços
+ *   /produto/dominios[/sites]                          central de domínios e sites dos clientes (19/11/2026)
  * Os endereços antigos (/produto, ?area=, /produto/central...) caem na tela certa.
  */
 
-export type Produto = "crm" | "email";
+export type Produto = "crm" | "email" | "dominios";
 type Aba = { valor: string; rotulo: string; icone: ReactNode; ajuda: string };
 
 const ABAS: Record<Produto, Aba[]> = {
@@ -36,13 +38,17 @@ const ABAS: Record<Produto, Aba[]> = {
     { valor: "caixa", rotulo: "Caixa da Aceleriq", icone: <Inbox className="h-4 w-4" />, ajuda: "A caixa de e-mail oficial da Aceleriq dentro do painel, com o Zoho por trás. Desligada até o dono decidir: ligar pede o plano pago do Zoho." },
     { valor: "precos", rotulo: "Preços", icone: <Tags className="h-4 w-4" />, ajuda: "Quanto custa o e-mail profissional: migração, mensalidade, caixas incluídas e caixa adicional, e quanto cada caixa extra custa para a casa." },
   ],
+  dominios: [
+    { valor: "inicio", rotulo: "Domínios", icone: <Globe className="h-4 w-4" />, ajuda: "Todos os domínios dos clientes num lugar só: registrador, onde está o DNS, quando vence, se o e-mail está certo, quanto custa e quanto a casa cobra." },
+    { valor: "sites", rotulo: "Sites", icone: <MonitorSmartphone className="h-4 w-4" />, ajuda: "Os sites publicados na Cloudflare da casa e os de fora: se abrem, SSL, última publicação, domínio ligado, custo e preço." },
+  ],
 };
 
-const TITULO: Record<Produto, string> = { crm: "CRM", email: "E-mail" };
+const TITULO: Record<Produto, string> = { crm: "CRM", email: "E-mail", dominios: "Domínios e sites" };
 
 /** Endereço antigo (antes da separação) para o novo. Devolve null quando o endereço já é o novo. */
 export function enderecoNovo(segmento: string | undefined, consulta: string | null): string | null {
-  if (segmento === "crm" || segmento === "email") return null;
+  if (segmento === "crm" || segmento === "email" || segmento === "dominios") return null;
   const antigo = segmento || consulta || "";
   const mapa: Record<string, string> = {
     "": "/produto/crm",
@@ -69,7 +75,7 @@ export default function AdminProduto() {
   const navegar = useNavigate();
   const novo = enderecoNovo(p, busca.get("area"));
   if (novo && novo !== local.pathname) return <Navigate to={novo} replace />;
-  const produto: Produto = p === "email" ? "email" : "crm";
+  const produto: Produto = p === "email" ? "email" : p === "dominios" ? "dominios" : "crm";
   const aba = abaDaRota(produto, a);
   const abas = ABAS[produto];
   const atual = abas.find((x) => x.valor === aba) || abas[0];
@@ -97,6 +103,7 @@ export default function AdminProduto() {
         {produto === "email" && aba === "entradas" && <EmailDaCasa />}
         {produto === "email" && aba === "caixa" && <CaixaDaAceleriq />}
         {produto === "email" && aba === "precos" && <PrecosDoProduto parte="email" />}
+        {produto === "dominios" && <CentralDeDominios key={aba} parte={aba === "sites" ? "sites" : "dominios"} />}
       </Suspense>
     </div>
   );

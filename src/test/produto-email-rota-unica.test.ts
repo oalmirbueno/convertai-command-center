@@ -186,3 +186,17 @@ describe("rota única e convenções", () => {
     }
   });
 });
+
+describe("SPF do Zoho", () => {
+  it("aceita o pedido de hoje (include:zohomail.com) e o antigo (include:zoho.com)", async () => {
+    const { avaliar } = await import("../../supabase/functions/produto/modulos/dns");
+    const base = { dominio: "prix.com.br", provedor: "zoho" as const, seletor: "zmail", mx: ["10 mx.zoho.com"], dkim: [], dmarc: [], agora: new Date("2026-11-18T12:00:00Z") };
+    const spf = (txt: string) => avaliar({ ...base, txt: [txt] }).itens.find((i) => i.chave === "spf")!.estado;
+    expect(spf("v=spf1 include:zohomail.com include:spf.whservidor.com ?all")).toBe("certo");
+    expect(spf("v=spf1 include:zoho.com ~all")).toBe("certo");
+    expect(spf("v=spf1 include:_spf.google.com ~all")).toBe("atencao");
+    const zona = { id: "z", name: "prix.com.br", status: "active", name_servers: [] };
+    const r = resumirZona(zona, [{ type: "TXT", name: "prix.com.br", content: "v=spf1 include:zohomail.com ~all" }], { dominio: "prix.com.br", provedor: "zoho" });
+    expect(r.itens.find((i) => i.chave === "spf")!.situacao).toBe("ok");
+  });
+});

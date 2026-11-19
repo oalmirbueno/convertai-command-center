@@ -179,6 +179,28 @@ const tarefasDoCorreio = [["Colher a assinatura do fiador", "Do e-mail de cartor
 const hojeSP = new Date(agora - 3 * 3600000).toISOString().slice(0, 10);
 const compromissosDoCorreio = [["Visita ao apartamento 302", "Com Marcos Andrade", "13:30"], ["Alinhamento do time", "Sala de reunião", "17:00"]].map((c, i) => ({ id: `cp${i}`, titulo: c[0], detalhe: c[1], inicio: `${hojeSP}T${c[2]}:00Z`, fim: null }));
 
+// Central de domínios e sites (19/11/2026).
+const dnsCerto = { pronto: true, itens: ["mx", "spf", "dkim", "dmarc"].map((chave) => ({ chave, estado: "certo", achado: chave === "mx" ? ["10 mx.zoho.com"] : [] })) };
+const dominioDaCasa = (parte) => ({ id: "cd1", dominio: "imobiliariaexemplo.com.br", origem: "email", cliente: `p:${CONTA}`, cliente_nome: "Imobiliária Exemplo", registrador: "Registro.br", titular: "Imobiliária Exemplo Ltda", nameservers: ["ada.ns.cloudflare.com", "bob.ns.cloudflare.com"], cloudflare_zona_id: "z1", cloudflare_status: "active", na_cloudflare_da_casa: true, vence_em: dia(240).slice(0, 10), vencimento_fonte: "rdap", rdap_lido_em: dia(0), rdap_erro: null, dns_email: dnsCerto, dns_conferido_em: dia(0), email: { dominio_id: "d1", provedor: "zoho", estado: "concluido" }, custo_valor: 40, custo_periodo: "anual", preco_valor: 9.9, preco_periodo: "mensal", observacao: null, arquivado: false, criado_em: dia(-20), ...parte });
+const siteDaCasa = (parte) => ({ id: "s1", nome: "site-imobiliaria", endereco: "imobiliariaexemplo.com.br", origem: "cloudflare", cf_tipo: "worker", cf_nome: "site-imobiliaria", hospedagem: "Cloudflare Workers", dominios_personalizados: ["imobiliariaexemplo.com.br", "www.imobiliariaexemplo.com.br"], cliente: `p:${CONTA}`, cliente_nome: "Imobiliária Exemplo", cliente_herdado: true, dominio_id: "cd1", dominio: "imobiliariaexemplo.com.br", ultima_publicacao: dia(-3), http_status: 200, ssl_ok: true, resposta_ms: 212, erro: null, conferido_em: dia(0), custo_valor: 0, custo_periodo: "mensal", preco_valor: 89.9, preco_periodo: "mensal", observacao: null, arquivado: false, criado_em: dia(-30), ...parte });
+const centralDeDominios = {
+  dominios: [
+    dominioDaCasa({}),
+    dominioDaCasa({ id: "cd2", dominio: "clinicavida.com.br", origem: "cloudflare", cliente: "c:cl2", cliente_nome: "Clínica Vida", vence_em: dia(6).slice(0, 10), dns_email: { pronto: false, itens: [{ chave: "mx", estado: "certo", achado: ["10 mx.zoho.com"] }, { chave: "spf", estado: "certo" }, { chave: "dkim", estado: "falta" }, { chave: "dmarc", estado: "atencao" }] }, email: { dominio_id: "d2", provedor: "zoho", estado: "concluido" }, preco_valor: 120, preco_periodo: "anual" }),
+    dominioDaCasa({ id: "cd3", dominio: "autocenterrota.com.br", origem: "manual", cliente: "c:cl3", cliente_nome: "Auto Center Rota", registrador: "Registro.br", nameservers: ["ns1.dns-parking.com", "ns2.dns-parking.com"], cloudflare_zona_id: null, cloudflare_status: null, na_cloudflare_da_casa: false, vence_em: dia(24).slice(0, 10), dns_email: null, email: null, custo_valor: 40, preco_valor: null }),
+    dominioDaCasa({ id: "cd4", dominio: "pilatesleve.com", origem: "cloudflare", cliente: null, cliente_nome: null, registrador: "Hostinger operations, UAB", cloudflare_status: "pending", vence_em: dia(310).slice(0, 10), dns_email: null, email: null, custo_valor: 70, preco_valor: null }),
+    dominioDaCasa({ id: null, dominio: "padariasol.com.br", origem: "email", cliente: "c:cl5", cliente_nome: "Padaria Sol Nascente", registrador: null, nameservers: [], cloudflare_zona_id: null, na_cloudflare_da_casa: false, vence_em: null, vencimento_fonte: null, rdap_lido_em: null, dns_email: null, email: { dominio_id: "d5", provedor: "zoho", estado: "preparando" }, custo_valor: null, preco_valor: null }),
+  ],
+  sites: [
+    siteDaCasa({}),
+    siteDaCasa({ id: "s2", nome: "clinica-vida", endereco: "www.clinicavida.com.br", cf_nome: "clinica-vida", cliente: "c:cl2", cliente_nome: "Clínica Vida", dominio_id: "cd2", dominio: "clinicavida.com.br", http_status: null, ssl_ok: null, resposta_ms: null, erro: "Não respondeu em 8 segundos.", preco_valor: 149.9 }),
+    siteDaCasa({ id: "s3", nome: "loja-rota", endereco: "loja-rota.pages.dev", cf_tipo: "pages", cf_nome: "loja-rota", hospedagem: "Cloudflare Pages", dominios_personalizados: [], cliente: "c:cl3", cliente_nome: "Auto Center Rota", cliente_herdado: false, dominio_id: null, dominio: null, resposta_ms: 3900, ultima_publicacao: dia(-40), preco_valor: 69.9, custo_valor: 5 }),
+    siteDaCasa({ id: "s4", nome: "pilatesleve.com", endereco: "pilatesleve.com", origem: "manual", cf_tipo: null, cf_nome: null, hospedagem: "Hostinger", dominios_personalizados: [], cliente: null, cliente_nome: null, cliente_herdado: false, dominio_id: "cd4", http_status: 200, conferido_em: null, ultima_publicacao: null, preco_valor: null, custo_valor: 19.9 }),
+  ],
+  clientes: [{ valor: "c:cl3", nome: "Auto Center Rota" }, { valor: "c:cl2", nome: "Clínica Vida" }, { valor: `p:${CONTA}`, nome: "Imobiliária Exemplo (produto)" }, { valor: "c:cl5", nome: "Padaria Sol Nascente" }],
+  leitura: { dominios_em: dia(0), cloudflare_em: dia(0), sites_em: dia(0) },
+};
+
 const tabelas = {
   crm_campos: camposDaEmpresa, crm_automacoes: automacoes, crm_avisos: avisos, crm_paginas: [], crm_formularios: [], crm_conversoes: [], crm_automacao_execucoes: [],
   crm_leads: leads, crm_organizations: organizacoes, crm_contacts: [], crm_activities: atividades, crm_lead_events: eventos, crm_campaigns: campanhas, crm_goals: metas, crm_lead_messages: [],
@@ -224,6 +246,7 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
       if (rpc[1] === "produto_email_da_conta") return json(estado.__email || emailDoCliente());
       if (rpc[1] === "produto_email_pedidos_da_casa") return json(pedidosDaCasa);
       if (rpc[1] === "produto_email_central") return json(central);
+      if (rpc[1] === "casa_dominios_sites_central") return json(centralDeDominios);
       if (rpc[1] === "produto_correio_eu") return json({ membro_id: "m1", conta_id: CONTA, nome: "Priscila Souza" });
       if (rpc[1] === "produto_email_minhas_caixas") return json(estado.__caixas || minhasCaixas);
       if (rpc[1] === "produto_admin_contas") return json(contasDaCasa);
@@ -262,11 +285,12 @@ Marcos`, anexos: [] } });
     }
     if (/\/auth\/v1\/token/.test(url.pathname)) return json({ access_token: "sintetico", token_type: "bearer", expires_in: 3600, refresh_token: "sintetico", user: { id: EU, email: "priscila@imobiliariaexemplo.com.br" } });
     if (/\/functions\/v1\/produto-email/.test(url.pathname)) return json({ estado: { ligada: false, motivo: "A caixa está desligada. Ligar é decisão do dono: veja o custo abaixo.", plano_necessario: "Zoho Mail Lite (ou superior) na conta da Aceleriq", custo: { por_usuario_mes: "R$ 6,25 por usuário por mês (Mail Lite, cobrança anual)", cobranca: "Só anual, sem plano mensal", fonte: "zoho.com/mail/zohomail-pricing.html" } }, dominio: null });
+    if (/\/functions\/v1\/casa-dominios/.test(url.pathname)) return json({ cloudflare: false });
     if (/\/functions\/v1\//.test(url.pathname)) return json({ ok: true });
     if (/\/auth\/v1\/user/.test(url.pathname)) return json({ id: EU, email: "priscila@imobiliariaexemplo.com.br" });
     return rota.abort();
   });
-  await pagina.goto(`${origem}${caminho}`, { waitUntil: "domcontentloaded", timeout: 180000 });
+  await pagina.goto(`${origem}${caminho}`, { waitUntil: "domcontentloaded", timeout: Number(process.env.PRODUTO_ESPERA) || 180000 });
   try {
     await pagina.waitForSelector(espera, { timeout: 30000 });
   } catch {
@@ -286,6 +310,13 @@ Marcos`, anexos: [] } });
   resultados.push(`${nome}@${largura}`);
   await contexto.close();
 }
+
+// O tour de boas-vindas reabre a cada tela com o perfil sintético, e clicar em "Pular" fecha a janela
+// aberta por baixo: aqui ele só some da frente.
+const pularTour = async (p) => {
+  await p.addStyleTag({ content: 'div[class="fixed inset-0 z-[9999]"]{display:none !important}' });
+  await p.waitForTimeout(400);
+};
 
 const telas = [
   { nome: "01-inicio", caminho: "/app", espera: "[data-inicio-do-produto]" },
@@ -335,6 +366,11 @@ const telas = [
   { nome: "22e-casa-caixa", caminho: "/produto?area=caixa", papel: "admin", espera: "[data-caixa-desligada]" },
   { nome: "26-central", caminho: "/produto?area=central", papel: "admin", espera: "[data-clientes-da-central]" },
   { nome: "26b-central-ficha", caminho: "/produto?area=central", papel: "admin", espera: "[data-clientes-da-central]", depois: async (p) => { await p.locator('[data-cliente="critico"]').first().click(); await p.waitForSelector("[data-ficha-do-email]"); await p.waitForTimeout(400); } },
+  { nome: "27-dominios", caminho: "/produto/dominios", papel: "admin", espera: "[data-lista-de-dominios]", depois: pularTour },
+  { nome: "27b-dominios-ficha", caminho: "/produto/dominios", papel: "admin", espera: "[data-lista-de-dominios]", depois: async (p) => { await pularTour(p); await p.locator('[data-dominio="critico"]').first().click(); await p.waitForSelector("[data-ficha-do-dominio]"); await pularTour(p); } },
+  { nome: "27c-sites", caminho: "/produto/dominios/sites", papel: "admin", espera: "[data-lista-de-sites]", depois: pularTour },
+  { nome: "27d-sites-claro", caminho: "/produto/dominios/sites", papel: "admin", tema: "light", espera: "[data-lista-de-sites]", depois: pularTour },
+  { nome: "27e-cadastro", caminho: "/produto/dominios/sites", papel: "admin", espera: "[data-lista-de-sites]", depois: async (p) => { await pularTour(p); await p.locator("[data-cadastrar]").click(); await p.waitForSelector("[data-confirmar-cadastro]"); await p.fill('[data-campo="endereco"]', "loja.exemplo.com.br"); await p.fill('[data-campo="preco"]', "99,90"); await p.waitForTimeout(300); } },
   { nome: "50-correio-porta", caminho: "/correio", espera: "[data-porta-do-correio]" },
   { nome: "51-correio", caminho: "/correio", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },
   { nome: "51b-correio-claro", caminho: "/correio", tema: "light", espera: "[data-porta-do-correio]", depois: async (p) => { await p.fill('[data-campo="senha-do-correio"]', "senha-sintetica"); await p.keyboard.press("Enter"); await p.waitForSelector("[data-grupo-da-caixa]"); await p.waitForTimeout(700); } },

@@ -57,7 +57,7 @@ describe("venda do e-mail: o domínio e o pedido", () => {
 
   it("o corpo do pedido leva domínio limpo, caixas e de onde veio", () => {
     const corpo = corpoDoPedido({ ...RASCUNHO_VAZIO, dominio: "WWW.SuaEmpresa.com.br", caixas: 8, observacao: "Hoje está na Locaweb." });
-    expect(corpo).toEqual({ dominio: "suaempresa.com.br", caixas: 8, observacao: "Hoje está na Locaweb. Pedido feito pela página /email." });
+    expect(corpo).toEqual({ dominio: "suaempresa.com.br", caixas: 8, observacao: "Hoje está na Locaweb. Pedido feito pela página /email.", tipo: "migracao" });
     const semDominio = corpoDoPedido({ ...RASCUNHO_VAZIO, dominio: "qualquer.com", semDominio: true });
     expect(semDominio.dominio).toBe("");
     expect(semDominio.observacao).toContain("Ainda não tem domínio.");
@@ -85,10 +85,12 @@ describe("venda do e-mail: convenções da página", () => {
     expect(pedido).not.toMatch(/[—–]/);
   });
 
-  it("o pedido usa as ações que já existem e não fala com a cobrança", () => {
+  it("o pedido usa as ações que já existem e só cobra pela fatura única, com a cobrança geral ligada", () => {
     expect(pedido).toContain("pedirEmail");
     expect(pedido).toContain("criarConta");
-    expect(pedido).not.toMatch(/assinar\(|asaas|checkout|cobrarMigracao/i);
+    // 19/11/2026: a venda automática paga pelo `pagar_email` (o servidor confere preço e cobrança ligada).
+    expect(pedido).not.toMatch(/assinar\(|checkout|cobrarMigracao/i);
+    expect(pedido).toContain("const pagaAgora = !!(p && p.pagamentos_ativos)");
   });
 
   it("CSS que roda em navegador antigo: sem clamp, sem inset, sem aspect-ratio", () => {

@@ -269,6 +269,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_escritorio_automacao',
     'aceleriq_escritorio_caixa',
     'aceleriq_escritorio_diretorio',
+    'aceleriq_escritorio_dono',
     'aceleriq_escritorio_entrar',
     'aceleriq_escritorio_enviar',
     'aceleriq_escritorio_grupos',
@@ -1927,7 +1928,6 @@ Deno.test('2.33: versão, as cinco ferramentas de e-mail no catálogo, no guia e
 
 Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no guia, leitura e escrita separadas', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.34.0');
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
   const leitura = ['aceleriq_escritorio_entrar', 'aceleriq_escritorio_diretorio', 'aceleriq_escritorio_caixa', 'aceleriq_escritorio_grupos'];
@@ -1952,5 +1952,23 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
   // Regras permanentes do dono: uma ferramenta de leitura; a decisão mora no banco.
   assert(TOOL_MAP.get('aceleriq_regras_permanentes') && FERRAMENTAS_POR_AREA.execucao.includes('aceleriq_regras_permanentes'));
   assert(canInvoke(readCtx, TOOL_MAP.get('aceleriq_regras_permanentes')!));
-  assertEquals(TOOLS.length, 219);
+});
+
+// ─── MCP 2.35.0 (18/11/2026): o dono no Escritório pelo app do Hermes ───
+
+Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nenhum outro escopo concede', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  assertEquals(MCP_VERSION, '2.35.0');
+  const t = TOOL_MAP.get('aceleriq_escritorio_dono')!;
+  assertEquals([...t.scopes], ['escritorio:write']);
+  assert(ALL_SCOPES.includes('escritorio:write') && SCOPE_DESCRIPTIONS['escritorio:write'].sensitive);
+  for (const escopos of [['aceleriq:read'], ['aceleriq:write'], ['aceleriq:read', 'aceleriq:write', 'aceleriq:finance', 'memory:read', 'memory:propose', 'memory:write', 'mesas:write']]) {
+    assert(!canInvoke({ ...readCtx, scopes: escopos }, t), `${escopos.join(',')} não pode falar como dono`);
+    assert(!expandScopes(escopos).has('escritorio:write'));
+  }
+  assert(canInvoke({ ...readCtx, scopes: ['escritorio:write'] }, t));
+  assert(!canUseToolWithDataScope(restrictedCtx, t), 'chave restrita a cliente não fala como dono');
+  const { STAFF_OAUTH_SCOPES } = await import('../_shared/mcp-security.ts').then((m) => ({ STAFF_OAUTH_SCOPES: JSON.stringify(m) }));
+  assert(!STAFF_OAUTH_SCOPES.includes('escritorio:write'), 'o OAuth da equipe não recebe este escopo');
+  assertEquals(TOOLS.length, 220);
 });

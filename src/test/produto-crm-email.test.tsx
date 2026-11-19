@@ -291,7 +291,7 @@ describe("saúde do domínio de e-mail", () => {
   it("os registros para publicar seguem o provedor e o domínio", () => {
     const zoho = registrosParaPublicar({ dominio: "exemplo.com.br", provedor: "zoho", dkim_seletor: null });
     expect(zoho).toContain("mx.zoho.com.");
-    expect(zoho).toContain("include:zoho.com");
+    expect(zoho).toContain("include:zohomail.com");
     expect(zoho).toContain("zmail._domainkey.exemplo.com.br.");
     expect(zoho).toContain("_dmarc.exemplo.com.br.");
     expect(registrosParaPublicar({ dominio: "exemplo.com.br", provedor: "google", dkim_seletor: "s1" })).toContain("s1._domainkey.exemplo.com.br.");

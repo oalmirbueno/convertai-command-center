@@ -17,4 +17,5 @@
 // 2.32.0 (18/11/2026): Central de Skills (aceleriq_central_skills, _skill, _instalar, _publicar_skill) e segundo cérebro em tempo real (aceleriq_cerebro_arvore, aceleriq_cerebro_salvar_nota), escopo memory:write.
 // 2.33.0 (18/11/2026): e-mail profissional pelo agente: aceleriq_email_entradas, _migracao, _registrar (pedido, domínio e integração, caixa, etapa, andamento), _marcar_pago (um livro só) e _conferir (DNS público, Cloudflare, Zoho). Só credencial da casa.
 // 2.34.0 (18/11/2026): Escritório da Aceleriq: aceleriq_escritorio_entrar (porta de entrada de qualquer agente), _diretorio (quem é quem em todas as plataformas, função repetida e automações), _enviar, _caixa e _marcar_lida (mensagem de agente para agente e para sala, com grau, limite de 2 entre bots por tarefa e recusa de segredo), _grupos (salas por área), _presenca (batimento) e _automacao (workflow avisa que rodou). Origem openbot e grau no cadastro dos operadores. Regras permanentes do dono: aceleriq_regras_permanentes (leitura) e aceleriq_operator_request_approval volta aprovado quando a ação cabe numa regra ligada.
-export const MCP_VERSION = '2.34.0';
+// 2.35.0 (18/11/2026): aceleriq_escritorio_dono (o dono lê e escreve no Escritório pelo app do Hermes) e o escopo escritorio:write, que nenhum outro escopo concede.
+export const MCP_VERSION = '2.35.0';

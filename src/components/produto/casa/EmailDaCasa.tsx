@@ -38,18 +38,25 @@ import ChecagemDoDominio from "../ChecagemDoDominio";
 import { chaveDasContas } from "./ContasDaCasa";
 import EntradasDeEmail from "./EntradasDeEmail";
 import IntegracaoDoDominio from "./IntegracaoDoDominio";
+import MigaduDoDominio from "./MigaduDoDominio";
 import { atribuirCaixa, type DominioComIntegracao } from "@/lib/produto/email-pedidos";
 
 const ESTADOS: EstadoDoDominio[] = ["levantamento", "preparando", "virada", "concluido", "pausado"];
-const PROVEDORES: ProvedorDeEmail[] = ["zoho", "google", "microsoft", "outro"];
+const PROVEDORES: ProvedorDeEmail[] = ["migadu", "zoho", "google", "microsoft", "outro"];
 const ESTADOS_DA_CAIXA: CaixaDeEmail["estado"][] = ["pedida", "criada", "copiando", "ativa", "removida"];
 const ROTULO_DA_CAIXA: Record<CaixaDeEmail["estado"], string> = { pedida: "Pedida", criada: "Criada", copiando: "Copiando", ativa: "Ativa", removida: "Removida" };
 
 /** Os registros de DNS que o provedor pede, prontos para colar no painel de DNS. */
 export function registrosParaPublicar(d: Pick<DominioDeEmail, "dominio" | "provedor" | "dkim_seletor">): string {
   const linhas: string[] = [];
+  if (d.provedor === "migadu") {
+    linhas.push(`${d.dominio}.  MX  10  aspmx1.migadu.com.`, `${d.dominio}.  MX  20  aspmx2.migadu.com.`, `${d.dominio}.  TXT  "v=spf1 include:spf.migadu.com -all"`);
+    for (const k of ["key1", "key2", "key3"]) linhas.push(`${k}._domainkey.${d.dominio}.  CNAME  ${k}.${d.dominio}._domainkey.migadu.com.`);
+    linhas.push(`_dmarc.${d.dominio}.  TXT  "v=DMARC1; p=quarantine;"`);
+    return linhas.join("\n");
+  }
   if (d.provedor === "zoho") {
-    linhas.push(`${d.dominio}.  MX  10  mx.zoho.com.`, `${d.dominio}.  MX  20  mx2.zoho.com.`, `${d.dominio}.  MX  50  mx3.zoho.com.`, `${d.dominio}.  TXT  "v=spf1 include:zoho.com ~all"`);
+    linhas.push(`${d.dominio}.  MX  10  mx.zoho.com.`, `${d.dominio}.  MX  20  mx2.zoho.com.`, `${d.dominio}.  MX  50  mx3.zoho.com.`, `${d.dominio}.  TXT  "v=spf1 include:zohomail.com ~all"`);
   } else if (d.provedor === "google") {
     linhas.push(`${d.dominio}.  MX  1  smtp.google.com.`, `${d.dominio}.  TXT  "v=spf1 include:_spf.google.com ~all"`);
   } else if (d.provedor === "microsoft") {
@@ -146,6 +153,7 @@ export default function EmailDaCasa() {
           </Secao>
           <PassoAPasso etapas={etapas.filter((e) => e.dominio_id === dominio.id)} aoMudar={reler} />
           <CaixasDaCasa dominio={dominio} caixas={caixas.filter((c) => c.dominio_id === dominio.id)} equipe={((contas.data || []).filter((c) => c.id === dominio.conta_id)[0] || { equipe: [] }).equipe} aoMudar={reler} />
+          {dominio.provedor === "migadu" && <MigaduDoDominio key={`migadu-${dominio.id}`} dominio={dominio as DominioComIntegracao} aoMudar={reler} />}
           <IntegracaoDoDominio key={`integracao-${dominio.id}`} dominio={dominio as DominioComIntegracao} aoMudar={reler} />
           <Registros dominio={dominio} />
           <ChecagemDoDominio dominio={dominio} detalhado aoConferir={() => void reler()} />
@@ -241,15 +249,22 @@ function CaixasDaCasa({ dominio, caixas, equipe, aoMudar }: { dominio: DominioDe
       toast.error(fraseDoErro(e));
     }
   };
-  const [nova, setNova] = useState({ usuario: "", pessoa: "", tipo: "caixa" as CaixaDeEmail["tipo"], tamanho: "" });
+  const [nova, setNova] = useState({ usuario: "", pessoa: "", tipo: "caixa" as CaixaDeEmail["tipo"], tamanho: "", convite: "", destinos: "" });
+  const noMigadu = dominio.provedor === "migadu";
   const [salvando, setSalvando] = useState(false);
   const criar = async () => {
     const nome = nova.usuario.trim().toLowerCase().replace(/@.*$/, "");
     if (!/^[a-z0-9._-]{1,60}$/.test(nome)) return void toast.error("Use letras, números, ponto ou traço no endereço.");
+    const convite = nova.convite.trim().toLowerCase();
+    if (convite && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(convite) || convite.endsWith(`@${dominio.dominio}`))) {
+      return void toast.error("O convite vai para o e-mail de hoje da pessoa, de fora deste domínio.");
+    }
+    const destinos = nova.destinos.split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean).map((x) => (x.indexOf("@") >= 0 ? x : `${x}@${dominio.dominio}`));
     setSalvando(true);
     try {
-      await casa.salvarCaixa({ dominio_id: dominio.id, conta_id: dominio.conta_id, endereco: `${nome}@${dominio.dominio}`, pessoa: nova.pessoa.trim(), tipo: nova.tipo, tamanho_origem: nova.tamanho.trim() || null, estado: "criada" });
-      setNova({ usuario: "", pessoa: "", tipo: "caixa", tamanho: "" });
+      // No Migadu a caixa nasce "pedida": o botão Montar cria e manda o convite.
+      await casa.salvarCaixa({ dominio_id: dominio.id, conta_id: dominio.conta_id, endereco: `${nome}@${dominio.dominio}`, pessoa: nova.pessoa.trim(), tipo: nova.tipo, tamanho_origem: nova.tamanho.trim() || null, estado: noMigadu ? "pedida" : "criada", ...(noMigadu ? { email_convite: convite || null, destinos: nova.tipo === "caixa" ? null : destinos } : {}) });
+      setNova({ usuario: "", pessoa: "", tipo: "caixa", tamanho: "", convite: "", destinos: "" });
       await aoMudar();
     } catch (e) {
       toast.error(fraseDoErro(e, "Não foi possível cadastrar a caixa."));
@@ -299,6 +314,15 @@ function CaixasDaCasa({ dominio, caixas, equipe, aoMudar }: { dominio: DominioDe
         <input value={nova.tamanho} onChange={(e) => setNova({ ...nova, tamanho: e.target.value })} className={campo} placeholder="Tamanho" aria-label="Tamanho hoje" />
         <button type="button" className={botao.secundario} onClick={() => void criar()} disabled={salvando || !nova.usuario.trim()}>Adicionar</button>
       </div>
+      {noMigadu && (
+        <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2" data-convite-da-caixa="">
+          {nova.tipo === "caixa" ? (
+            <input value={nova.convite} onChange={(e) => setNova({ ...nova, convite: e.target.value })} className={campo} placeholder="E-mail de hoje da pessoa (recebe o convite)" aria-label="E-mail de hoje da pessoa, para o convite" autoCapitalize="none" inputMode="email" />
+          ) : (
+            <input value={nova.destinos} onChange={(e) => setNova({ ...nova, destinos: e.target.value })} className={campo} placeholder={`Entrega em (ex.: joao, maria)`} aria-label="Caixas que recebem o apelido" autoCapitalize="none" />
+          )}
+        </div>
+      )}
     </Secao>
   );
 }
