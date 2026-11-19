@@ -42,7 +42,7 @@
 
 ## Para publicar (só com o ok do Almir)
 
-1. Aplicar a migration `20261119150000_produto_email_venda_automatica.sql`.
+1. Aplicar a migration `20261119150000_produto_email_venda_automatica.sql`. Depois de aplicada, registrar no manifesto (`node scripts/registrar-migrations-no-manifesto.mjs`) e ajustar os totais em `src/test/production-migration-view.test.ts`. Até lá, esse teste acusa a migration nova como pendente.
 2. Publicar as funções `produto` e `produto-asaas-webhook`:
 
    ```
