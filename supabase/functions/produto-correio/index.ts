@@ -120,6 +120,56 @@ async function registrarPelaCasa(contaId: string, ator: string, acao: string, de
 type Acao = (usuario: string, corpo: Record<string, unknown>) => Promise<Response>;
 const ACOES: Record<string, Acao> = {
   pastas: async (u, c) => json({ pastas: await comAdaptador(u, c, (a, caixa) => a.pastas(caixa)) }),
+  // Abrir a caixa: pastas e a primeira página numa conexão só.
+  inicio: async (u, c) =>
+    json(await comAdaptador(u, c, async (a, caixa) => (a.inicio ? a.inicio(caixa, { pasta: pasta(c.pasta) }) : { pastas: await a.pastas(caixa), mensagens: await a.listar(caixa, { pasta: pasta(c.pasta), pagina: 1 }) }))),
+  // As campanhas enviadas desta caixa (o histórico da empresa) e quanto ainda cabe hoje.
+  campanhas: async (u, c) => {
+    const caixaId = idDaCaixa(c.caixa_id);
+    const { data: pode } = await servico().rpc("produto_email_pode_abrir", { _caixa: caixaId, _usuario: u });
+    if (pode !== true) throw new ErroHttp(404, "caixa_inexistente", "Essa caixa não está disponível para você.");
+    const { data: linha } = await servico().from("produto_email_caixas").select("conta_id").eq("id", caixaId).maybeSingle();
+    const contaId = linha ? String((linha as { conta_id: string }).conta_id) : "";
+    const { data } = await servico().from("produto_historico").select("criado_em, detalhe").eq("conta_id", contaId).eq("acao", "correio_campanha").order("criado_em", { ascending: false }).limit(60);
+    const linhas = ((data || []) as Array<{ criado_em: string; detalhe: Record<string, unknown> }>).filter((x) => x.detalhe && x.detalhe.caixa === caixaId);
+    const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+    const usados = ((data || []) as Array<{ criado_em: string; detalhe: { enviados?: number } }>).filter((x) => x.criado_em >= `${hoje}T03:00:00`).reduce((s, x) => s + Number((x.detalhe && x.detalhe.enviados) || 0), 0);
+    return json({ campanhas: linhas.map((x) => ({ quando: x.criado_em, assunto: String(x.detalhe.assunto || ""), enviados: Number(x.detalhe.enviados || 0), falhas: Number(x.detalhe.falhas || 0) })), usados_hoje: usados, limite_do_dia: 150 });
+  },
+  // Campanhas (19/11/2026): a mesma mensagem para uma lista, uma por uma, com o limite do dia e o rodapé de
+  // descadastro. Quem responde SAIR sai da lista (a tela tira quem pediu). Até 25 por pedido.
+  campanha: async (u, c) => {
+    const lista = (Array.isArray(c.para) ? c.para : []).map((x) => String(x).trim().toLowerCase()).filter((x) => /^[^@\s<>"]+@[^@\s<>"]+\.[^@\s<>"]+$/.test(x));
+    const para = Array.from(new Set(lista)).slice(0, 25);
+    const assunto = typeof c.assunto === "string" ? c.assunto.replace(/[\r\n]+/g, " ").trim().slice(0, 200) : "";
+    const corpoTexto = typeof c.texto === "string" ? c.texto.slice(0, 20_000) : "";
+    if (!para.length || !assunto || !corpoTexto.trim()) throw new ErroHttp(400, "campanha_invalida", "Diga para quem, o assunto e a mensagem.");
+    const caixaId = idDaCaixa(c.caixa_id);
+    const { data: linha } = await servico().from("produto_email_caixas").select("conta_id").eq("id", caixaId).maybeSingle();
+    const contaId = linha ? String((linha as { conta_id: string }).conta_id) : "";
+    const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+    const { data: doDia } = await servico().from("produto_historico").select("detalhe").eq("conta_id", contaId).eq("acao", "correio_campanha").gte("criado_em", `${hoje}T03:00:00Z`);
+    const jaForam = ((doDia || []) as Array<{ detalhe: { enviados?: number } }>).reduce((s, x) => s + Number((x.detalhe && x.detalhe.enviados) || 0), 0);
+    const LIMITE_DO_DIA = 150;
+    const cabe = Math.max(0, LIMITE_DO_DIA - jaForam);
+    if (!cabe) throw new ErroHttp(429, "limite_do_dia", `Hoje já saíram ${jaForam} e-mails de campanha (o limite é ${LIMITE_DO_DIA} por dia, para não cair no spam). Continue amanhã.`);
+    const rodape = "\n\n--\nVocê recebeu este e-mail porque tem contato com a nossa empresa. Para não receber mais, responda SAIR.";
+    const resultado = await comAdaptador(u, c, async (a, caixa) => {
+      const ok: string[] = [];
+      const falhas: string[] = [];
+      for (const destinatario of para.slice(0, cabe)) {
+        try {
+          await a.enviar(caixa, { para: [destinatario], assunto, texto: corpoTexto + rodape, em_resposta_a: null });
+          ok.push(destinatario);
+        } catch {
+          falhas.push(destinatario);
+        }
+      }
+      return { enviados: ok.length, falhas, ficaram: para.slice(cabe) };
+    });
+    if (contaId) await servico().from("produto_historico").insert({ conta_id: contaId, ator: u, acao: "correio_campanha", detalhe: { caixa: caixaId, assunto, enviados: resultado.enviados, falhas: resultado.falhas.length } });
+    return json({ ...resultado, limite_do_dia: LIMITE_DO_DIA, usados_hoje: jaForam + resultado.enviados });
+  },
   listar: async (u, c) =>
     json({ mensagens: await comAdaptador(u, c, (a, caixa) => a.listar(caixa, { pasta: pasta(c.pasta), pagina: Math.max(1, Math.min(200, Math.floor(Number(c.pagina) || 1))), busca: typeof c.busca === "string" ? c.busca.slice(0, 120) : undefined })) }),
   ler: async (u, c) => {

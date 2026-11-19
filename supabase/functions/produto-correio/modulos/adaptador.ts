@@ -29,6 +29,8 @@ export interface Pasta {
 
 export interface ResumoDaMensagem {
   id: string;
+  /** A aba, como no Gmail: principal, atualizações, promoções ou social. */
+  categoria?: "principal" | "atualizacoes" | "promocoes" | "social";
   /** O Message-ID do cabeçalho: é ele que a resposta cita (In-Reply-To) para a conversa ficar junta. */
   mensagem_id?: string | null;
   de: string;
@@ -65,6 +67,8 @@ export interface AdaptadorDeCorreio {
   listar(caixa: CaixaAberta, p: { pasta: string; pagina: number; busca?: string }): Promise<ResumoDaMensagem[]>;
   ler(caixa: CaixaAberta, p: { pasta: string; id: string }): Promise<Mensagem>;
   enviar(caixa: CaixaAberta, envio: Envio): Promise<{ id: string }>;
+  /** Pastas e a primeira página juntas, numa conexão (opcional: quem não tem, a tela pede separado). */
+  inicio?(caixa: CaixaAberta, p: { pasta: string }): Promise<{ pastas: Pasta[]; mensagens: ResumoDaMensagem[] }>;
 }
 
 export class CorreioDesligado extends Error {

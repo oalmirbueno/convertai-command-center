@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { diasAteODia, lerCliente, proximoVencimento, resumoDaCentral, saudeDoCliente, type ClienteNaCentral } from "@/lib/produto/email-central";
+import { diasAteODia, enderecosColados, lerCliente, proximoVencimento, resumoDaCentral, saudeDoCliente, type ClienteNaCentral } from "@/lib/produto/email-central";
 import { agruparCaixa, colunaDaMensagem, fraseDoDia, grupoDaMensagem, horaDoCompromisso, iniciais, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
 import { ADAPTADORES, adaptadorPara, CorreioDesligado, envioValido } from "../../supabase/functions/produto-correio/modulos/adaptador";
 
@@ -198,5 +198,25 @@ describe("caixa por prioridade e quadro", () => {
     expect(sql).toContain('"correio da propria pessoa"');
     expect(sql).toContain("produto_correio_sou(membro_id, conta_id)");
     for (const p of ["src/components/correio/CaixaPorPrioridade.tsx", "src/components/correio/AreasDoCorreio.tsx"]) expect(ler(p)).not.toMatch(/exemplo\.com/);
+  });
+});
+
+describe("campanhas e abas do correio (19/11/2026)", () => {
+  it("a lista colada vira endereços únicos e separa os inválidos", () => {
+    const r = enderecosColados(["Ana@Loja.com.br, bia@x.com; <ana@loja.com.br>", "nao-e-email", "", "caio@y.com.br"].join("\n"));
+    expect(r.validos).toEqual(["ana@loja.com.br", "bia@x.com", "caio@y.com.br"]);
+    expect(r.invalidos).toEqual(["nao-e-email"]);
+  });
+
+  it("a Entrada tem as quatro abas do Gmail e o quadro abre a mensagem ao clicar", () => {
+    const caixa = ler("src/components/correio/CaixaPorPrioridade.tsx");
+    for (const a of ["principal", "atualizacoes", "promocoes", "social"]) expect(caixa).toContain(`id: "${a}"`);
+    expect(caixa).toContain("correio.inicio(");
+    expect(caixa).toContain("prefetchQuery");
+    const areas = ler("src/components/correio/AreasDoCorreio.tsx");
+    expect(areas).toContain("data-cartao=");
+    expect(areas).toContain("<LeituraDaMensagem");
+    expect(areas).toContain("correio.campanha(");
+    for (const n of ["Documentos", "Copiloto", "Resposta automática", "Caixas compartilhadas", "Campanhas"]) expect(areas).toContain(`nome: "${n}"`);
   });
 });

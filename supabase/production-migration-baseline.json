@@ -3233,6 +3233,14 @@
       "remote_name": "produto_email_venda_automatica",
       "remote_statements_sha256": "ae8202738ec984c2d9f65624570ca50ad903e42632b85d771a100d6208dfdbdd",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261119200000",
+      "path": "supabase/migrations/20261119200000_produto_email_migracao_pelo_cliente.sql",
+      "local_sha256": "ede2a015a0f47fafe5a33c9d8196ab5cc7937be085617b7b91c09cf573eebe99",
+      "remote_name": "produto_email_migracao_pelo_cliente",
+      "remote_statements_sha256": "96bbf87d56540d0f28e644273062e11f298c0df48ce612dd3794f332c62f031a",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

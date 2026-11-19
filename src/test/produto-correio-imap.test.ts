@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adaptadorImap, authPlain, lerList, type Conexao } from "../../supabase/functions/produto-correio/modulos/imap";
+import { adaptadorImap, authPlain, categoriaDe, lerList, type Conexao } from "../../supabase/functions/produto-correio/modulos/imap";
 import { cabecalhoLegivel, htmlParaTexto, lerCorpo } from "../../supabase/functions/produto-correio/modulos/mime";
 import type { CaixaAberta } from "../../supabase/functions/produto-correio/modulos/adaptador";
 
@@ -183,5 +183,14 @@ describe("MIME", () => {
 
   it("LIST com nome entre aspas e com espaço", () => {
     expect(lerList([{ texto: '* LIST (\\HasNoChildren) "." "Itens Enviados"', literais: [] }])).toEqual([{ nome: "Itens Enviados", marcas: ["\\HasNoChildren"] }]);
+  });
+});
+
+describe("abas como no Gmail (categoriaDe)", () => {
+  it("separa gente, avisos, promoções e redes sociais", () => {
+    expect(categoriaDe({ from: "Marcos <marcos@cliente.com.br>", subject: "Proposta para amanhã" })).toBe("principal");
+    expect(categoriaDe({ from: "Instagram <security@mail.instagram.com>", subject: "Novo login" })).toBe("social");
+    expect(categoriaDe({ from: "Loja <news@email.loja.com.br>", subject: "Só hoje: 40% de desconto", "list-unsubscribe": "<mailto:x@loja.com.br>" })).toBe("promocoes");
+    expect(categoriaDe({ from: "Banco <no-reply@banco.com.br>", subject: "Seu boleto vence amanhã", "auto-submitted": "auto-generated" })).toBe("atualizacoes");
   });
 });

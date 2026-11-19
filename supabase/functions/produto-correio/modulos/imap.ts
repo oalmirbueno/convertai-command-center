@@ -226,12 +226,37 @@ export function automatica(c: Record<string, string>): boolean {
   return !!c["list-id"] || !!c["list-unsubscribe"] || (!!auto && auto !== "no") || /bulk|list|junk/.test(prec) || /no-?reply|nao-?responda|naoresponda|mailer-daemon|postmaster|notifica|notify|notificat|alert|newsletter|news@|marketing@|bounce|info@.*(mail|news)/.test(de);
 }
 
+export type Categoria = "principal" | "atualizacoes" | "promocoes" | "social";
+
+const SOCIAL = /@([a-z0-9-]+\.)*(facebookmail\.com|facebook\.com|instagram\.com|linkedin\.com|twitter\.com|x\.com|tiktok\.com|youtube\.com|pinterest\.com|whatsapp\.com|threads\.net|reddit\.com|discord\.com|telegram\.org|kwai\.com)>?\s*$/i;
+const TRANSACIONAL = /(pedido|compra|fatura|recibo|nota fiscal|nf-?e|boleto|pagamento|pix|cobran[cç]a|vencimento|entrega|rastreio|enviado|senha|c[oó]digo|verifica[cç][aã]o|confirm|seguran[cç]a|login|acesso|alerta|aviso|lembrete|agendamento|reserva|ticket|chamado|order|invoice|receipt|payment|shipped|password|verify|security|alert|reminder|notification)/i;
+const PROMO = /(promo|oferta|desconto|cupom|liquida|black friday|frete gr[aá]tis|newsletter|novidades|lan[cç]amento|% off|sale|deal|webinar|convite especial|[uú]ltimas vagas|s[oó] hoje|imperd[ií]vel)/i;
+
+/**
+ * Em que aba a mensagem cai, como no Gmail e no Outlook: regras fixas pelos cabeçalhos.
+ *   Social: rede social (Instagram, LinkedIn, Facebook...).
+ *   Promoções: lista de envio (List-Unsubscribe, bulk) que não é transação.
+ *   Atualizações: aviso de sistema, recibo, pedido, senha, alerta.
+ *   Principal: gente escrevendo para você.
+ */
+export function categoriaDe(c: Record<string, string>): Categoria {
+  const de = String(c["from"] || "").toLowerCase();
+  const assunto = cabecalhoLegivel(c["subject"] || "");
+  if (SOCIAL.test(de)) return "social";
+  const lista = !!c["list-unsubscribe"] || !!c["list-id"] || /bulk|list/.test(String(c["precedence"] || "").toLowerCase());
+  const sistema = automatica(c);
+  if (lista && !TRANSACIONAL.test(assunto) && (PROMO.test(assunto) || PROMO.test(de) || /marketing|news|mkt|email\.|mail\.|ofertas|promo/.test(de))) return "promocoes";
+  if (sistema || TRANSACIONAL.test(assunto) && /no-?reply|nao-?responda|notify|notifica|alert|sistema|system|bot@/.test(de)) return lista && !TRANSACIONAL.test(assunto) ? "promocoes" : "atualizacoes";
+  return "principal";
+}
+
 export function resumoDoFetch(f: FetchLido, pasta: string, enviados: boolean): ResumoDaMensagem {
   const c = lerCabecalhos(utf8DeLatin1(f.literal));
   const lida = f.flags.some((x) => /\\Seen/i.test(x));
   const auto = automatica(c);
   const tipo = String(c["content-type"] || "").toLowerCase();
   return {
+    categoria: enviados ? "principal" : categoriaDe(c),
     id: f.uid,
     mensagem_id: /^<[^<>\s]{3,250}>$/.test(String(c["message-id"] || "").trim()) ? String(c["message-id"]).trim() : null,
     de: remetenteLegivel(c["from"] || ""),
@@ -280,58 +305,68 @@ export function adaptadorImap(servidores: ServidoresDoCorreio, conectar: Conecta
     const sent = lista.find((p) => p.marcas.some((m) => /\\Sent/i.test(m))) || lista.find((p) => /^(sent|enviad)/i.test(p.nome));
     return sent ? sent.nome : "Sent";
   };
+  const pastasCom = async (imap: Imap): Promise<Pasta[]> => {
+    const lista = lerList(await imap.comando(`LIST "" "*"`)).slice(0, 30);
+    const saida: Pasta[] = [];
+    for (const p of lista) {
+      let nao = 0;
+      try {
+        const st = await imap.comando(`STATUS ${aspas(p.nome)} (UNSEEN)`);
+        nao = Number((/UNSEEN (\d+)/i.exec(st.map((x) => x.texto).join(" ")) || [])[1] || 0);
+      } catch {
+        nao = 0;
+      }
+      saida.push({ id: p.nome, nome: p.nome === "INBOX" ? "Entrada" : p.nome, nao_lidas: nao });
+    }
+    return saida;
+  };
+  const listarCom = async (imap: Imap, p: { pasta: string; pagina: number; busca?: string }): Promise<ResumoDaMensagem[]> => {
+    await imap.comando(`EXAMINE ${aspas(p.pasta)}`);
+    const busca = p.busca ? semAcento(p.busca) : "";
+    const achados = await imap.comando(busca ? `UID SEARCH TEXT ${aspas(busca)}` : "UID SEARCH ALL");
+    const uids = achados
+      .map((x) => /^\* SEARCH ?(.*)$/i.exec(x.texto))
+      .filter(Boolean)
+      .flatMap((m) => String((m as RegExpExecArray)[1]).trim().split(/\s+/))
+      .filter((x) => /^\d+$/.test(x))
+      .map(Number)
+      .sort((a, b) => b - a);
+    const pagina = uids.slice((p.pagina - 1) * POR_PAGINA, p.pagina * POR_PAGINA);
+    if (!pagina.length) return [];
+    const campos = "(UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID CONTENT-TYPE LIST-ID LIST-UNSUBSCRIBE AUTO-SUBMITTED PRECEDENCE)])";
+    let itens: Item[];
+    try {
+      itens = await imap.comando(`UID FETCH ${pagina.join(",")} ${campos}`);
+    } catch {
+      // Uma mensagem que o servidor não entrega agora (chegando, sendo copiada) derruba o lote todo:
+      // pede uma por uma e mostra as que vierem.
+      itens = [];
+      for (const uid of pagina) {
+        try {
+          itens.push(...(await imap.comando(`UID FETCH ${uid} ${campos}`)));
+        } catch {
+          /* esta fica para a próxima vez */
+        }
+      }
+    }
+    const enviados = /sent|enviad/i.test(p.pasta);
+    return lerFetch(itens)
+      .map((f) => resumoDoFetch(f, p.pasta, enviados))
+      .sort((a, b) => Number(b.id) - Number(a.id));
+  };
   return {
     async pastas(caixa): Promise<Pasta[]> {
-      return com(caixa, async (imap) => {
-        const lista = lerList(await imap.comando(`LIST "" "*"`)).slice(0, 30);
-        const saida: Pasta[] = [];
-        for (const p of lista) {
-          let nao = 0;
-          try {
-            const st = await imap.comando(`STATUS ${aspas(p.nome)} (UNSEEN)`);
-            nao = Number((/UNSEEN (\d+)/i.exec(st.map((x) => x.texto).join(" ")) || [])[1] || 0);
-          } catch {
-            nao = 0;
-          }
-          saida.push({ id: p.nome, nome: p.nome === "INBOX" ? "Entrada" : p.nome, nao_lidas: nao });
-        }
-        return saida;
-      });
+      return com(caixa, pastasCom);
     },
     async listar(caixa, p): Promise<ResumoDaMensagem[]> {
+      return com(caixa, (imap) => listarCom(imap, p));
+    },
+    /** Abrir a caixa numa conexão só: as pastas e a primeira página da Entrada juntas (metade da espera). */
+    async inicio(caixa, p): Promise<{ pastas: Pasta[]; mensagens: ResumoDaMensagem[] }> {
       return com(caixa, async (imap) => {
-        await imap.comando(`EXAMINE ${aspas(p.pasta)}`);
-        const busca = p.busca ? semAcento(p.busca) : "";
-        const achados = await imap.comando(busca ? `UID SEARCH TEXT ${aspas(busca)}` : "UID SEARCH ALL");
-        const uids = achados
-          .map((x) => /^\* SEARCH ?(.*)$/i.exec(x.texto))
-          .filter(Boolean)
-          .flatMap((m) => String((m as RegExpExecArray)[1]).trim().split(/\s+/))
-          .filter((x) => /^\d+$/.test(x))
-          .map(Number)
-          .sort((a, b) => b - a);
-        const pagina = uids.slice((p.pagina - 1) * POR_PAGINA, p.pagina * POR_PAGINA);
-        if (!pagina.length) return [];
-        const campos = "(UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID CONTENT-TYPE LIST-ID LIST-UNSUBSCRIBE AUTO-SUBMITTED PRECEDENCE)])";
-        let itens: Item[];
-        try {
-          itens = await imap.comando(`UID FETCH ${pagina.join(",")} ${campos}`);
-        } catch {
-          // Uma mensagem que o servidor não entrega agora (chegando, sendo copiada) derruba o lote todo:
-          // pede uma por uma e mostra as que vierem.
-          itens = [];
-          for (const uid of pagina) {
-            try {
-              itens.push(...(await imap.comando(`UID FETCH ${uid} ${campos}`)));
-            } catch {
-              /* esta fica para a próxima vez */
-            }
-          }
-        }
-        const enviados = /sent|enviad/i.test(p.pasta);
-        return lerFetch(itens)
-          .map((f) => resumoDoFetch(f, p.pasta, enviados))
-          .sort((a, b) => Number(b.id) - Number(a.id));
+        const mensagens = await listarCom(imap, { pasta: p.pasta, pagina: 1 });
+        const pastas = await pastasCom(imap);
+        return { pastas, mensagens };
       });
     },
     async ler(caixa, p): Promise<Mensagem> {

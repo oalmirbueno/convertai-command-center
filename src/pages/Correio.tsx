@@ -256,12 +256,12 @@ function CorreioAberto() {
   else if (minhas.isError || !d) corpo = <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void minhas.refetch()}>Tentar de novo</button>} />;
   else if (!d.conta) corpo = <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Você ainda não tem uma caixa" descricao="O correio é das empresas com e-mail profissional na Aceleriq." acao={<Link to="/email" className={botao.primario}>Conhecer o e-mail profissional</Link>} />;
   else if (!d.liberado) corpo = <EstadoVazio icone={<Lock className="h-5 w-5" aria-hidden="true" />} titulo="O e-mail da empresa não está liberado" descricao="Fale com quem administra a empresa." />;
-  else if (area === "campanhas") corpo = <CampanhasDoCorreio />;
-  else if (area === "ferramentas") corpo = <FerramentasDoCorreio />;
+  else if (area === "campanhas") corpo = <CampanhasDoCorreio key={caixa ? caixa.id : ""} caixa={caixa} />;
+  else if (area === "ferramentas") corpo = <FerramentasDoCorreio caixas={d.caixas} master={d.master} aoIr={(x) => irPara(x as Area)} />;
   else if (area === "dia") corpo = euNoCorreio ? <MeuDia caixa={caixa} eu={euNoCorreio} nome={euNoCorreio.nome} /> : <EstadoVazio titulo="Seu acesso ainda não está ligado a esta empresa." />;
   else if (!caixa) corpo = <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Nenhuma caixa ligada a você" descricao={d.master ? "As caixas aparecem aqui quando a migração criar as primeiras." : "Peça para quem administra a empresa ligar a sua caixa ao seu acesso."} />;
   else if (!caixa.ligado && d.master) corpo = <ConectarCaixa key={caixa.id} caixa={caixa} aoConectar={() => void minhas.refetch()} />;
-  else if (area === "quadro") corpo = <QuadroDaCaixa key={caixa.id} caixa={caixa} />;
+  else if (area === "quadro") corpo = <QuadroDaCaixa key={caixa.id} caixa={caixa} eu={euNoCorreio} />;
   else corpo = <CaixaPorPrioridade key={caixa.id} caixa={caixa} eu={euNoCorreio} />;
 
   return (
