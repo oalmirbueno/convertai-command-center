@@ -7,6 +7,12 @@
  *   ler      { caixa_id, pasta?, id }            -> { mensagem }
  *   enviar   { caixa_id, para, assunto, texto }  -> { id }
  *   guardar_segredo { caixa_id, segredo }        -> { guardado }   (quem administra a empresa, ou a casa)
+ *   entrar_pela_casa { caixa_id, senha_da_casa } -> { ok, endereco }  (só a casa: confere a senha no provedor)
+ *
+ * Minha caixa (19/11/2026): a casa (admin do painel) abre qualquer caixa com a senha que digitou, para
+ * ver o correio como o cliente vê. Com `senha_da_casa` no pedido, as ações acima usam essa senha só
+ * naquele pedido, no lugar da do Vault; ela nunca é guardada nem vai para o log. Cada entrada e cada
+ * envio pela casa ficam no histórico da empresa (sem a senha).
  *
  * Toda ação confere no banco se a pessoa pode abrir aquela caixa (produto_email_pode_abrir) antes de
  * tocar no provedor. A senha de aplicativo de cada caixa mora no Vault e nunca volta para a tela.
@@ -14,7 +20,7 @@
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
-import { ADAPTADORES, adaptadorPara, CorreioDesligado, envioValido, type CaixaAberta, type ProvedorDeCorreio } from "./modulos/adaptador.ts";
+import { ADAPTADORES, adaptadorPara, CorreioDesligado, envioValido, provedorPelaCasa, SENHA_DA_CASA_RECUSADA, senhaDaCasa, type CaixaAberta, type ProvedorDeCorreio } from "./modulos/adaptador.ts";
 import { adaptadorImap, ErroDoCorreio } from "./modulos/imap.ts";
 
 // Migadu (19/11/2026): IMAP para ler e SMTP para enviar, com a senha de cada caixa guardada no Vault.
@@ -51,6 +57,23 @@ const idDaCaixa = (v: unknown) => {
   return v;
 };
 
+async function ehDaCasa(usuario: string): Promise<boolean> {
+  const { data } = await servico().from("user_roles").select("role").eq("user_id", usuario);
+  return ((data || []) as Array<{ role: string }>).some((p) => p.role === "admin");
+}
+
+/** A casa abre a caixa com a senha que digitou (só neste pedido). Caixa de verdade, já criada. */
+async function abrirPelaCasa(usuario: string, caixaId: string, senha: string): Promise<{ caixa: CaixaAberta; ligado: boolean; temSegredo: boolean; contaId: string }> {
+  if (!(await ehDaCasa(usuario))) throw new ErroHttp(403, "sem_permissao", "Só a administração da Aceleriq entra nas caixas por aqui.");
+  const { data } = await servico().from("produto_email_caixas").select("id, endereco, conta_id, dominio_id, tipo, estado").eq("id", caixaId).maybeSingle();
+  const c = data as { id: string; endereco: string; conta_id: string; dominio_id: string; tipo: string; estado: string } | null;
+  if (!c || c.tipo !== "caixa" || ["criada", "copiando", "ativa"].indexOf(c.estado) < 0) throw new ErroHttp(404, "caixa_inexistente", "Essa caixa não está disponível.");
+  const { data: d } = await servico().from("produto_email_dominios").select("dominio, provedor, correio_provedor").eq("id", c.dominio_id).maybeSingle();
+  const dom = (d || { dominio: "", provedor: "", correio_provedor: "nenhum" }) as { dominio: string; provedor: string; correio_provedor: string };
+  const provedor = provedorPelaCasa(dom.correio_provedor, dom.provedor);
+  return { caixa: { id: c.id, endereco: c.endereco, dominio: dom.dominio, provedor, segredo: senha }, ligado: provedor !== "nenhum", temSegredo: true, contaId: c.conta_id };
+}
+
 /** Confere a permissão e abre a caixa com o segredo do Vault. */
 async function abrir(usuario: string, caixaId: string): Promise<{ caixa: CaixaAberta; ligado: boolean; temSegredo: boolean }> {
   const { data: pode } = await servico().rpc("produto_email_pode_abrir", { _caixa: caixaId, _usuario: usuario });
@@ -69,13 +92,16 @@ async function abrir(usuario: string, caixaId: string): Promise<{ caixa: CaixaAb
   return { caixa: { id: c.id, endereco: c.endereco, dominio: dom.dominio, provedor: dom.correio_provedor, segredo }, ligado: dom.correio_ligado, temSegredo: !!segredo };
 }
 
-async function comAdaptador<T>(usuario: string, corpo: Record<string, unknown>, fazer: (a: ReturnType<typeof adaptadorPara>, caixa: CaixaAberta) => Promise<T>): Promise<T> {
-  const { caixa, ligado, temSegredo } = await abrir(usuario, idDaCaixa(corpo.caixa_id));
+async function comAdaptador<T>(usuario: string, corpo: Record<string, unknown>, fazer: (a: ReturnType<typeof adaptadorPara>, caixa: CaixaAberta, contaDaCasa: string | null) => Promise<T>): Promise<T> {
+  const senha = senhaDaCasa(corpo.senha_da_casa);
+  const aberta: { caixa: CaixaAberta; ligado: boolean; temSegredo: boolean; contaId?: string } = senha ? await abrirPelaCasa(usuario, idDaCaixa(corpo.caixa_id), senha) : await abrir(usuario, idDaCaixa(corpo.caixa_id));
+  const { caixa, ligado, temSegredo } = aberta;
   try {
-    return await fazer(adaptadorPara(caixa.provedor, ligado, temSegredo), caixa);
+    return await fazer(adaptadorPara(caixa.provedor, ligado, temSegredo), caixa, senha && aberta.contaId ? aberta.contaId : null);
   } catch (e) {
     if (e instanceof CorreioDesligado) throw new ErroHttp(409, "correio_desligado", e.message);
     if (e instanceof ErroHttp) throw e;
+    if (senha && e instanceof ErroDoCorreio && /recusou a senha/i.test(e.message)) throw new ErroHttp(401, "senha_recusada", SENHA_DA_CASA_RECUSADA);
     // Erro que a pessoa entende (senha recusada, mensagem que sumiu): vai como está.
     if (e instanceof ErroDoCorreio) throw new ErroHttp(502, "provedor", e.message);
     console.error("[produto-correio] provedor", e instanceof Error ? e.message.slice(0, 200) : "");
@@ -84,6 +110,12 @@ async function comAdaptador<T>(usuario: string, corpo: Record<string, unknown>, 
 }
 
 const pasta = (v: unknown) => (typeof v === "string" && /^[\w .\-/]{1,80}$/.test(v) ? v : "INBOX");
+
+/** O histórico da empresa: a casa entrou ou enviou pela caixa dela. Nunca leva a senha. */
+async function registrarPelaCasa(contaId: string, ator: string, acao: string, detalhe: Record<string, unknown>) {
+  const { error } = await servico().from("produto_historico").insert({ conta_id: contaId, ator, acao, detalhe });
+  if (error) console.error("[produto-correio] histórico não gravado", error.message.slice(0, 160));
+}
 
 type Acao = (usuario: string, corpo: Record<string, unknown>) => Promise<Response>;
 const ACOES: Record<string, Acao> = {
@@ -97,7 +129,23 @@ const ACOES: Record<string, Acao> = {
   enviar: async (u, c) => {
     const envio = envioValido(c);
     if ("erro" in envio) throw new ErroHttp(400, "envio_invalido", envio.erro);
-    return json(await comAdaptador(u, c, (a, caixa) => a.enviar(caixa, envio)));
+    return json(
+      await comAdaptador(u, c, async (a, caixa, contaDaCasa) => {
+        const r = await a.enviar(caixa, envio);
+        if (contaDaCasa) await registrarPelaCasa(contaDaCasa, u, "correio_enviado_pela_casa", { caixa: caixa.id, para: envio.para.length });
+        return r;
+      }),
+    );
+  },
+  entrar_pela_casa: async (u, c) => {
+    if (!senhaDaCasa(c.senha_da_casa)) throw new ErroHttp(400, "senha_vazia", "Digite a senha da caixa.");
+    const r = await comAdaptador(u, c, async (a, caixa, contaDaCasa) => {
+      // Abrir as pastas confere a senha no provedor sem ler nenhuma mensagem.
+      await a.pastas(caixa);
+      if (contaDaCasa) await registrarPelaCasa(contaDaCasa, u, "correio_aberto_pela_casa", { caixa: caixa.id });
+      return { ok: true, endereco: caixa.endereco };
+    });
+    return json(r);
   },
   guardar_segredo: async (u, c) => {
     const caixaId = idDaCaixa(c.caixa_id);
