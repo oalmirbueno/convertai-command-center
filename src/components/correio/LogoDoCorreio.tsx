@@ -33,11 +33,11 @@ export default function LogoDoCorreio({ tamanho = 34, className = "", compacto =
       {!compacto && (
         <>
           <MarcaAceleriq altura={Math.round(tamanho * 0.6)} className="logo-do-topo" />
-          <i className="mx-3 h-6 w-px shrink-0 bg-[#07291E]/15" aria-hidden="true" />
+          <i className="mx-3 h-6 w-px shrink-0 bg-[#07291E]/15 dark:bg-white/20" aria-hidden="true" />
         </>
       )}
       <IconeDoCorreio tamanho={tamanho} className="mr-2 shrink-0" />
-      <span className="text-[17px] font-semibold tracking-[-0.03em] text-[#07291E]">Correio</span>
+      <span className="text-[17px] font-semibold tracking-[-0.03em] text-[#07291E] dark:text-white">Correio</span>
     </span>
   );
 }

@@ -9,6 +9,7 @@ import { abrirPorta, carregarMinhasCaixas, correio, portaAberta, type CaixaDoCor
 import { quemSouNoCorreio } from "@/lib/produto/correio-dia";
 import LogoDoCorreio from "@/components/correio/LogoDoCorreio";
 import { BotaoInstalarCorreio, SaidaDoCorreio } from "@/components/correio/NavegacaoDoCorreio";
+import { BotaoDoTema, useTemaDoCorreio, type TemaDoCorreio } from "@/components/correio/TemaDoCorreio";
 import { useTrocaDeAcesso } from "@/components/produto/TrocaDeAcesso";
 import { useProduto } from "@/hooks/useProduto";
 import { usePwaProfile } from "@/hooks/usePwaProfile";
@@ -46,24 +47,8 @@ export default function Correio() {
     };
   }, []);
 
-  // O correio é sempre claro (19/11/2026, pedido do dono: no escuro a leitura cansava). Ao sair, o
-  // painel volta ao tema que a pessoa escolheu.
-  useEffect(() => {
-    const raiz = document.documentElement;
-    const tinhaEscuro = raiz.classList.contains("dark");
-    raiz.classList.remove("dark");
-    raiz.classList.add("light");
-    const meta = document.querySelector('meta[name="theme-color"]');
-    const corAntes = meta ? meta.getAttribute("content") : null;
-    if (meta) meta.setAttribute("content", "#f4f6f8");
-    return () => {
-      if (tinhaEscuro) {
-        raiz.classList.remove("light");
-        raiz.classList.add("dark");
-      }
-      if (meta && corAntes) meta.setAttribute("content", corAntes);
-    };
-  }, []);
+  // Claro por padrão e escuro no botão do topo (TemaDoCorreio); a escolha do painel não muda o Correio.
+  const tema = useTemaDoCorreio();
 
   if (!user) return null;
   if (!liberado) {
@@ -79,7 +64,7 @@ export default function Correio() {
       </div>
     );
   }
-  return <CorreioAberto />;
+  return <CorreioAberto tema={tema.tema} aoAlternarTema={tema.alternar} />;
 }
 
 /** A senha de novo, mesmo já logado: o e-mail não abre só porque o painel ficou aberto no computador. */
@@ -238,7 +223,7 @@ function SeletorDeCaixa({ caixas, atual, master, aoEscolher }: { caixas: CaixaDo
   );
 }
 
-function CorreioAberto() {
+function CorreioAberto({ tema, aoAlternarTema }: { tema: TemaDoCorreio; aoAlternarTema: () => void }) {
   const [busca, setBusca] = useSearchParams();
   const pedida = busca.get("area") || "";
   const area: Area = AREAS.some((a) => a.id === pedida) ? (pedida as Area) : "caixa";
@@ -286,6 +271,7 @@ function CorreioAberto() {
             ))}
           </nav>
           <BotaoInstalarCorreio />
+          <BotaoDoTema tema={tema} aoAlternar={aoAlternarTema} />
           {d && d.caixas.length > 0 && caixa && <SeletorDeCaixa caixas={d.caixas} atual={caixa} master={d.master} aoEscolher={setEscolhida} />}
         </header>
         {corpo}
