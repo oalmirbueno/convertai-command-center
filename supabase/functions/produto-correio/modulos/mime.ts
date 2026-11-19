@@ -130,7 +130,23 @@ function bytesDoCorpo(p: Parte): Uint8Array {
 export interface MensagemLida {
   texto: string;
   html: boolean;
+  /** O HTML original, limpo de script e evento, com as imagens embutidas (cid:) já resolvidas. */
+  conteudo_html: string | null;
   anexos: Array<{ nome: string; tamanho: number }>;
+}
+
+/**
+ * HTML do remetente sem o que executa: script, evento (onclick...), javascript:, iframe, object,
+ * embed e meta refresh. A tela ainda mostra dentro de um iframe sandbox sem script: duas travas.
+ */
+export function htmlSeguro(html: string): string {
+  return String(html || "")
+    .replace(/<(script|iframe|object|embed|applet|frame|frameset|noscript)[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<\/?(script|iframe|object|embed|applet|frame|frameset|base)\b[^>]*>/gi, "")
+    .replace(/<meta[^>]+http-equiv\s*=\s*["']?refresh[^>]*>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/(href|src|action|formaction|xlink:href)\s*=\s*("|')\s*(javascript|vbscript|data:text\/html)[^"']*\2/gi, '$1=$2#$2')
+    .replace(/(href|src)\s*=\s*(javascript|vbscript):[^\s>]*/gi, '$1="#"');
 }
 
 /** Percorre as partes e devolve o texto (preferindo text/plain) e a lista de anexos. */
@@ -138,6 +154,9 @@ export function lerCorpo(bruto: string): MensagemLida {
   let plano = "";
   let html = "";
   const anexos: MensagemLida["anexos"] = [];
+  // Imagens embutidas (src="cid:..."): viram data: no HTML, até 3 MB no total.
+  const embutidas: Record<string, string> = {};
+  let bytesEmbutidos = 0;
   const andar = (p: Parte, profundidade: number) => {
     if (profundidade > 8) return;
     const tipo = String(p.cabecalhos["content-type"] || "text/plain").toLowerCase();
@@ -150,6 +169,17 @@ export function lerCorpo(bruto: string): MensagemLida {
       return;
     }
     const nome = parametro(disposicao, "filename") || parametro(p.cabecalhos["content-type"] || "", "name");
+    const cid = String(p.cabecalhos["content-id"] || "").replace(/^<|>$/g, "").trim();
+    if (cid && tipo.startsWith("image/") && !/^attachment/i.test(disposicao)) {
+      const bytes = bytesDoCorpo(p);
+      if (bytesEmbutidos + bytes.length <= 3_000_000) {
+        bytesEmbutidos += bytes.length;
+        let bin = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        embutidas[cid.toLowerCase()] = `data:${tipo.split(";")[0]};base64,${btoa(bin)}`;
+      }
+      return;
+    }
     if (nome || /^attachment/i.test(disposicao)) {
       anexos.push({ nome: nome || "anexo", tamanho: bytesDoCorpo(p).length });
       return;
@@ -160,7 +190,14 @@ export function lerCorpo(bruto: string): MensagemLida {
   };
   andar(separar(bruto), 0);
   const texto = plano ? plano.replace(/\r\n/g, "\n").trim() : htmlParaTexto(html);
-  return { texto: texto.slice(0, 200_000), html: !plano && !!html, anexos };
+  let conteudo_html: string | null = null;
+  if (html && html.length <= 2_000_000) {
+    conteudo_html = htmlSeguro(html).replace(/(src\s*=\s*["']?)cid:([^"'\s>]+)/gi, (m, ini: string, id: string) => {
+      const d = embutidas[decodeURIComponent(id).toLowerCase()];
+      return d ? `${ini}${d}` : m;
+    });
+  }
+  return { texto: texto.slice(0, 200_000), html: !plano && !!html, conteudo_html, anexos };
 }
 
 /** "Fulano <fulano@x.com>" ou só o endereço, legível. */

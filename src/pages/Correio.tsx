@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Inbox, KeyRound, Lock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown, Inbox, KeyRound, Lock, ShieldCheck } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { abrirPorta, carregarMinhasCaixas, correio, portaAberta, type CaixaDoCorreio } from "@/lib/produto/email-central";
@@ -9,6 +10,7 @@ import { quemSouNoCorreio } from "@/lib/produto/correio-dia";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import { Carregando, EstadoDeErro, EstadoVazio, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
 import CaixaPorPrioridade from "@/components/correio/CaixaPorPrioridade";
+import "@/components/correio/correio-tema.css";
 import { CampanhasDoCorreio, FerramentasDoCorreio, MeuDia, QuadroDaCaixa } from "@/components/correio/AreasDoCorreio";
 
 /**
@@ -60,7 +62,7 @@ export default function Correio() {
   if (!user) return null;
   if (!liberado) {
     return (
-      <div className="flex min-h-[100dvh] min-w-0 flex-col bg-muted/40 text-foreground" data-correio="">
+      <div className="correio-tema flex min-h-[100dvh] min-w-0 flex-col text-foreground" data-correio="">
         <Porta
           email={user.email || ""}
           aoAbrir={() => {
@@ -171,6 +173,66 @@ function ConectarCaixa({ caixa, aoConectar }: { caixa: CaixaDoCorreio; aoConecta
   );
 }
 
+/** A caixa aberta e a troca de caixa: um menu com cada endereço, de quem é e se já está ligada. */
+function SeletorDeCaixa({ caixas, atual, master, aoEscolher }: { caixas: CaixaDoCorreio[]; atual: CaixaDoCorreio; master: boolean; aoEscolher: (id: string) => void }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <Popover open={aberto} onOpenChange={setAberto}>
+      <PopoverTrigger asChild>
+        <button type="button" className={juntar("flex h-11 min-w-0 max-w-full items-center rounded-2xl bg-muted pl-2 pr-3 hover:bg-muted/70 sm:w-[300px]", foco)} aria-label={`Caixa aberta: ${atual.endereco}. Trocar de caixa`} data-caixas-do-correio="">
+          <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-foreground text-[12px] font-semibold uppercase text-background" aria-hidden="true">{atual.endereco.slice(0, 1)}</span>
+          <span className="min-w-0 flex-1 text-left">
+            <span className="block truncate text-[14px] font-semibold leading-5">{atual.endereco}</span>
+            <span className="block truncate text-[12px] leading-4 text-muted-foreground">{atual.ligado ? (atual.minha ? "Sua caixa" : atual.dono ? `De ${atual.dono}` : "Caixa da empresa") : "Falta conectar"}</span>
+          </span>
+          {caixas.length > 1 && <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[340px] rounded-3xl p-2">
+        <div className="flex items-center px-3 pb-2 pt-1.5">
+          <span className={juntar(texto.auxiliar, "flex-1 font-semibold uppercase tracking-wide")}>Caixas</span>
+          {master && (
+            <span className={juntar(etiqueta, "bg-accent-soft text-primary")} title="Você administra a empresa e vê todas as caixas">
+              <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />
+              Você vê todas
+            </span>
+          )}
+        </div>
+        <ul className="space-y-1" role="listbox" aria-label="Escolher a caixa">
+          {caixas.map((c) => {
+            const ativa = c.id === atual.id;
+            return (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={ativa}
+                  onClick={() => {
+                    aoEscolher(c.id);
+                    setAberto(false);
+                  }}
+                  className={juntar("flex w-full min-w-0 items-center rounded-2xl p-2.5 text-left", foco, ativa ? "bg-muted" : "hover:bg-muted/60")}
+                  data-caixa-opcao={c.endereco}
+                >
+                  <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[13px] font-semibold uppercase", ativa ? "bg-foreground text-background" : "bg-muted text-foreground")} aria-hidden="true">{c.endereco.slice(0, 1)}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium">{c.endereco}</span>
+                    <span className="flex items-center text-[12px] text-muted-foreground">
+                      <i className={juntar("mr-1.5 h-1.5 w-1.5 rounded-full", c.ligado ? "bg-success" : "bg-warning")} aria-hidden="true" />
+                      {c.ligado ? (c.minha ? "Sua caixa" : c.dono ? `De ${c.dono}` : "Da empresa") : "Falta conectar"}
+                    </span>
+                  </span>
+                  {ativa && <Check className="ml-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function CorreioAberto() {
   const [busca, setBusca] = useSearchParams();
   const pedida = busca.get("area") || "";
@@ -203,40 +265,22 @@ function CorreioAberto() {
   else corpo = <CaixaPorPrioridade key={caixa.id} caixa={caixa} eu={euNoCorreio} />;
 
   return (
-    <div className="min-h-[100dvh] min-w-0 bg-muted/40 text-foreground" data-correio={area}>
-      <div className="mx-auto min-w-0 max-w-[1600px] space-y-4 p-4 sm:p-5">
-        <header className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-3">
-          <div className="flex h-12 items-center rounded-full bg-card pl-4 pr-5">
-            <MarcaAceleriq altura={18} />
-            <span className={juntar(texto.corpo, "ml-2.5 font-semibold")}>Correio</span>
-          </div>
-          <nav className="flex min-w-0 flex-wrap rounded-full bg-card p-1" aria-label="Áreas do correio">
+    <div className="correio-tema min-h-[100dvh] min-w-0 text-foreground" data-correio={area}>
+      <div className="mx-auto min-w-0 max-w-[1680px] space-y-4 p-3 sm:p-4">
+        <header className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2 rounded-3xl bg-card p-2" data-topo-do-correio="">
+          <Link to="/app/email" className={juntar("flex h-11 shrink-0 items-center rounded-2xl pl-2 pr-3 hover:bg-muted", foco)} aria-label="Voltar ao painel" title="Voltar ao painel">
+            <ArrowLeft className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <MarcaAceleriq altura={22} className="logo-do-topo" />
+            <span className="ml-2.5 text-[15px] font-semibold">Correio</span>
+          </Link>
+          <nav className="flex min-w-0 flex-1 [&>*]:mr-1 [&>*:last-child]:mr-0 overflow-x-auto" aria-label="Áreas do correio">
             {AREAS.map((a) => (
-              <button key={a.id} type="button" onClick={() => irPara(a.id)} aria-current={a.id === area ? "page" : undefined} className={juntar("h-10 rounded-full px-4 text-[14px] font-medium", foco, a.id === area ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")} data-area-do-correio={a.id}>
+              <button key={a.id} type="button" onClick={() => irPara(a.id)} aria-current={a.id === area ? "page" : undefined} className={juntar("h-10 shrink-0 rounded-2xl px-4 text-[14px] font-medium", foco, a.id === area ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")} data-area-do-correio={a.id}>
                 {a.nome}
               </button>
             ))}
           </nav>
-          {d && d.caixas.length > 0 && (
-            <label className="flex h-12 min-w-0 flex-1 basis-[220px] items-center rounded-full bg-card px-4">
-              <Inbox className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span className="sr-only">Caixa</span>
-              <select value={caixa ? caixa.id : ""} onChange={(e) => setEscolhida(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" data-caixas-do-correio="">
-                {d.caixas.map((c) => (
-                  <option key={c.id} value={c.id}>{c.endereco}{c.minha ? "" : c.dono ? ` (${c.dono})` : ""}{c.ligado ? "" : " · em preparação"}</option>
-                ))}
-              </select>
-              {d.master && (
-                <span className={juntar(etiqueta, "ml-2 shrink-0 bg-accent-soft text-primary")} title="Você vê todas as caixas da empresa">
-                  <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />
-                  Master
-                </span>
-              )}
-            </label>
-          )}
-          <Link to="/app/email" className={juntar("flex h-12 w-12 items-center justify-center rounded-full bg-card hover:bg-muted", foco)} aria-label="Voltar ao painel" title="Voltar ao painel">
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          </Link>
+          {d && d.caixas.length > 0 && caixa && <SeletorDeCaixa caixas={d.caixas} atual={caixa} master={d.master} aoEscolher={setEscolhida} />}
         </header>
         {corpo}
       </div>

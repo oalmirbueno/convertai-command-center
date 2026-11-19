@@ -104,14 +104,15 @@ afterEach(() => {
 });
 
 describe("Escritório: aba Regras", () => {
-  it("mostra a frase de abertura, cada regra com área, quem usa, os usos da semana, os últimos usos e a lista do que sempre sobe", async () => {
+  it("cada regra com área, quem usa, os usos da semana, os últimos usos e a lista do que sempre sobe; explicação só no \"?\"", async () => {
     montar();
     await abrirRegras();
-    expect(screen.getByText("Dentro da regra, o agente faz sozinho e fica registrado. Fora dela, sobe para você.")).toBeTruthy();
+    // 19/11: a frase de abertura e a descrição da regra foram para o "?" (dono: "muito texto").
+    expect(screen.queryByText("Dentro da regra, o agente faz sozinho e fica registrado. Fora dela, sobe para você.")).toBeNull();
 
     const trafego = bloco("trafego_ate_o_teto");
     expect(trafego.textContent).toContain("Tráfego · usada 1 vez nesta semana");
-    expect(trafego.textContent).toContain("Ajusta a verba dos anúncios até o teto da semana.");
+    expect(trafego.textContent).not.toContain("Ajusta a verba dos anúncios até o teto da semana.");
     expect(trafego.querySelector("[data-quem]")?.textContent).toBe("Quem usa: Trafe");
     expect(bloco("conteudo_revisado").querySelector("[data-quem]")?.textContent).toBe("Quem usa: qualquer agente");
     expect(bloco("conteudo_revisado").textContent).toContain("Conteúdo · usada 0 vezes nesta semana");

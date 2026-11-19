@@ -1,10 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
-import EditarAgente from "@/components/execucao/EditarAgente";
 import { juntar, superficie, texto } from "@/components/sistema";
 import { SEM_AREA, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
 import { funcoesRepetidas } from "@/lib/escritorio/funcaoRepetida";
@@ -23,15 +22,19 @@ export default function AbaOrganograma({
   agora,
   admin,
   nomeDoDono,
+  aoAbrirAgente,
+  aoEditar,
 }: {
   agentes: AgenteDoEscritorio[];
   presencas: Presenca[];
   agora: number;
   admin: boolean;
   nomeDoDono: string;
+  /** Abre a ficha do agente no centro. */
+  aoAbrirAgente: (slug: string) => void;
+  aoEditar: (agente: AgenteDoEscritorio) => void;
 }) {
   const qc = useQueryClient();
-  const [emEdicao, setEmEdicao] = useState<AgenteDoEscritorio | null>(null);
   const repetidas = useMemo(() => funcoesRepetidas(agentes), [agentes]);
   const presenca = useMemo(() => presencaPorSlug(presencas), [presencas]);
 
@@ -73,8 +76,7 @@ export default function AbaOrganograma({
   };
   const abrir = (no: NoDoOrganograma) => {
     const agente = agentes.find((o) => o.id === no.id);
-    if (agente && admin) setEmEdicao(agente);
-    else if (agente) toast.info(`${agente.display_name}: ${agente.role}`);
+    if (agente) aoAbrirAgente(agente.slug);
     else toast.info(no.nivel === "gateway" ? "O Hermes é a porta de entrada: a conversa acontece no grupo dele." : "Você está no topo: aprova, decide e recebe os relatórios.");
   };
 
@@ -100,11 +102,9 @@ export default function AbaOrganograma({
         nomeDoDono={nomeDoDono}
         podeOrganizar={admin}
         aoAbrir={abrir}
-        aoEditar={(no) => { const agente = agentes.find((o) => o.id === no.id); if (agente) setEmEdicao(agente); }}
+        aoEditar={(no) => { const agente = agentes.find((o) => o.id === no.id); if (agente) aoEditar(agente); }}
         aoMover={(itens) => void mover(itens)}
       />
-
-      <EditarAgente agente={emEdicao} todos={agentes} aoFechar={() => setEmEdicao(null)} aoMudar={reler} />
     </div>
   );
 }

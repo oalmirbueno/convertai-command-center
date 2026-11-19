@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, Copy, Pencil } from "lucide-react";
+import { Check, Copy, Globe, Inbox, ListChecks, Mail, Pencil, Plus, Server, Wallet } from "lucide-react";
 import {
   carregarEmail,
   casa,
@@ -10,41 +10,43 @@ import {
   listarContasDaCasa,
   ROTULO_DO_ESTADO_DO_DOMINIO,
   ROTULO_DO_PROVEDOR,
+  WEBMAIL_DO_PROVEDOR,
   type CaixaDeEmail,
   type DominioDeEmail,
   type EstadoDoDominio,
   type EtapaDaMigracao,
   type ProvedorDeEmail,
 } from "@/lib/produto/api";
+import { Avatar, Card, Chip, HelpTooltip, List, ListRow, OverflowMenu, ProgressBar, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
 import {
   CampoDeFormulario,
-  Carregando,
-  EstadoDeErro,
   EstadoVazio,
   GrupoDeCampos,
   JanelaCentral,
-  Secao,
   SeletorCompacto,
   botao,
   campo,
   campoTexto,
-  etiqueta,
   foco,
   juntar,
-  lista,
   texto,
+  useEstadoDaTela,
 } from "@/components/sistema";
 import ChecagemDoDominio from "../ChecagemDoDominio";
 import { chaveDasContas } from "./ContasDaCasa";
-import EntradasDeEmail from "./EntradasDeEmail";
+import EntradasDeEmail, { chaveDasEntradas } from "./EntradasDeEmail";
 import IntegracaoDoDominio from "./IntegracaoDoDominio";
 import MigaduDoDominio from "./MigaduDoDominio";
-import { atribuirCaixa, type DominioComIntegracao } from "@/lib/produto/email-pedidos";
+import { ErroDaTela, EsqueletoDaTela, TituloDoBloco } from "./pecasDaCasa";
+import { atribuirCaixa, esperaPagamento, listarPedidos, type DominioComIntegracao } from "@/lib/produto/email-pedidos";
 
 const ESTADOS: EstadoDoDominio[] = ["levantamento", "preparando", "virada", "concluido", "pausado"];
 const PROVEDORES: ProvedorDeEmail[] = ["migadu", "zoho", "google", "microsoft", "outro"];
 const ESTADOS_DA_CAIXA: CaixaDeEmail["estado"][] = ["pedida", "criada", "copiando", "ativa", "removida"];
 const ROTULO_DA_CAIXA: Record<CaixaDeEmail["estado"], string> = { pedida: "Pedida", criada: "Criada", copiando: "Copiando", ativa: "Ativa", removida: "Removida" };
+const TOM_DA_CAIXA: Record<CaixaDeEmail["estado"], Tone> = { pedida: "warning", criada: "info", copiando: "info", ativa: "success", removida: "neutral" };
+export const TOM_DO_DOMINIO: Record<EstadoDoDominio, Tone> = { levantamento: "neutral", preparando: "info", virada: "warning", concluido: "success", pausado: "neutral" };
+const NOME_CURTO_DO_PROVEDOR: Record<ProvedorDeEmail, string> = { migadu: "Migadu", zoho: "Zoho", google: "Google", microsoft: "Microsoft", outro: "Outro" };
 
 /** Os registros de DNS que o provedor pede, prontos para colar no painel de DNS. */
 export function registrosParaPublicar(d: Pick<DominioDeEmail, "dominio" | "provedor" | "dkim_seletor">): string {
@@ -70,104 +72,127 @@ export function registrosParaPublicar(d: Pick<DominioDeEmail, "dominio" | "prove
   return linhas.join("\n");
 }
 
+type Vista = "entradas" | "migracoes";
+type Parte = "passos" | "caixas" | "dns";
+
 /**
- * O e-mail profissional numa rota só: as entradas (pedidos) no topo e, embaixo, a migração de cada
- * empresa (domínio, passo a passo, caixas, integração e conferência do DNS). O domínio nasce quando a
- * entrada é marcada como paga, já com o passo a passo; aqui a casa marca o que fez e anota.
+ * O e-mail profissional numa rota só, em duas partes bem separadas: as entradas (pedidos a pagar e
+ * pagos) e a migração de cada empresa. O domínio nasce quando a entrada é marcada como paga, já com
+ * o passo a passo; a migração abre na janela do centro, com as etapas, as caixas e o DNS.
+ * 19/11/2026 (redesenho): números no topo, as duas partes num seletor e o passo a passo como etapas
+ * visuais com progresso.
  */
 export default function EmailDaCasa() {
   const qc = useQueryClient();
   const contas = useQuery({ queryKey: chaveDasContas, queryFn: listarContasDaCasa });
   const email = useQuery({ queryKey: ["produto", "casa", "email"], queryFn: () => carregarEmail() });
-  const [escolhido, setEscolhido] = useState<string | null>(null);
-  const [editando, setEditando] = useState<DominioDeEmail | "novo" | null>(null);
+  // Mesma chave da lista de entradas abertas: os números do topo e a lista leem o mesmo dado.
+  const abertas = useQuery({ queryKey: [...chaveDasEntradas, "abertos"], queryFn: () => listarPedidos("abertos") });
+  const [vista, setVista] = useEstadoDaTela<Vista>("produto:email:vista", "entradas", { validar: (v) => v === "entradas" || v === "migracoes" });
+  const [aberto, setAberto] = useState<string | null>(null);
+  const [editando, setEditando] = useState<DominioDeEmail | null>(null);
   const reler = () => qc.invalidateQueries({ queryKey: ["produto", "casa", "email"] });
 
-  if (email.isLoading || contas.isLoading) return <Carregando linhas={5} rotulo="Carregando o e-mail" />;
-  if (email.isError || !email.data) return <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void email.refetch()}>Tentar de novo</button>} />;
+  if (email.isLoading || contas.isLoading) return <EsqueletoDaTela rotulo="Carregando o e-mail" />;
+  if (email.isError || !email.data) return <ErroDaTela titulo="Não foi possível carregar o e-mail." aoTentar={() => void email.refetch()} />;
 
   const { dominios, caixas, etapas } = email.data;
   const nomeDaConta = (id: string) => ((contas.data || []).filter((c) => c.id === id)[0] || { nome: "Empresa" }).nome;
   const pedidas = caixas.filter((c) => c.estado === "pedida").length;
-  const dominio = dominios.filter((d) => d.id === escolhido)[0] || dominios[0] || null;
-  const abrirDominio = (id: string) => {
-    setEscolhido(id);
-    window.setTimeout(() => {
-      try {
-        document.querySelector("[data-migracao-aberta]")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      } catch {
-        /* sem rolagem programada */
-      }
-    }, 300);
+  const emAndamento = dominios.filter((d) => d.estado !== "concluido" && d.estado !== "pausado").length;
+  const noAr = dominios.filter((d) => d.estado === "concluido").length;
+  const esperando = (abertas.data || []).filter(esperaPagamento).length;
+  const dominio = dominios.filter((d) => d.id === aberto)[0] || null;
+  const abrirMigracao = (id: string) => {
+    setVista("migracoes");
+    setAberto(id);
   };
 
   return (
-    <div className="min-w-0 space-y-6" data-email-da-casa="">
-      <EntradasDeEmail aoAbrirDominio={abrirDominio} />
-      <Secao
-        titulo="Migrações"
-        descricao={`${dominios.length}${pedidas ? ` · ${pedidas} ${pedidas === 1 ? "caixa pedida" : "caixas pedidas"}` : ""}`}
-        ajuda="Um domínio por empresa. O domínio nasce quando a entrada é marcada como paga, já com o passo a passo. Domínio que já existia antes das entradas continua aqui para editar."
-      >
-        {dominios.length === 0 ? (
-          <EstadoVazio compacto titulo="Nenhuma migração ainda." descricao="Marque uma entrada como paga e a migração aparece aqui." />
-        ) : (
-          <ul className={juntar(lista.aberta, lista.divisoria)} data-lista-de-dominios="">
-            {dominios.map((d) => {
-              const feitas = etapas.filter((e) => e.dominio_id === d.id && e.feito_em).length;
-              const total = etapas.filter((e) => e.dominio_id === d.id).length;
-              const pedidasAqui = caixas.filter((c) => c.dominio_id === d.id && c.estado === "pedida").length;
-              return (
-                <li key={d.id}>
-                  <button type="button" className={juntar(lista.linha, "w-full text-left", dominio && dominio.id === d.id && lista.destaque)} onClick={() => setEscolhido(d.id)} aria-pressed={!!dominio && dominio.id === d.id}>
-                    <span className="min-w-0 flex-1">
-                      <span className={juntar(texto.corpo, "block truncate font-medium")}>{d.dominio}</span>
-                      <span className={juntar(texto.auxiliar, "block truncate")}>{nomeDaConta(d.conta_id)} · {ROTULO_DO_PROVEDOR[d.provedor]} · {feitas} de {total} etapas</span>
-                    </span>
-                    {pedidasAqui > 0 && <span className={juntar(etiqueta, "ml-2 bg-warning-soft text-warning")}>{pedidasAqui} pedida{pedidasAqui === 1 ? "" : "s"}</span>}
-                    <span className={juntar(etiqueta, "ml-2", d.estado === "concluido" ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")}>{ROTULO_DO_ESTADO_DO_DOMINIO[d.estado]}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Secao>
+    <div className="min-w-0 space-y-4 sm:space-y-6" data-email-da-casa="">
+      <StatGrid label="Resumo das entradas e migrações">
+        <StatCard icon={<Wallet className="h-4 w-4" />} label="Esperando pagamento" value={abertas.data ? esperando : "..."} hint={abertas.data ? `${abertas.data.length} ${abertas.data.length === 1 ? "entrada aberta" : "entradas abertas"}` : undefined} onClick={() => setVista("entradas")} />
+        <StatCard icon={<ListChecks className="h-4 w-4" />} label="Migrando" value={emAndamento} hint={`${dominios.length} ${dominios.length === 1 ? "domínio" : "domínios"}`} onClick={() => setVista("migracoes")} />
+        <StatCard icon={<Inbox className="h-4 w-4" />} label="Caixas pedidas" value={pedidas} hint={pedidas ? "esperando criar" : "nenhuma esperando"} />
+        <StatCard icon={<Globe className="h-4 w-4" />} label="No ar" value={noAr} hint="migrações concluídas" />
+      </StatGrid>
+
+      <SeletorCompacto
+        rotulo="Parte"
+        opcoes={[
+          { valor: "entradas", rotulo: "Entradas", contador: abertas.data ? abertas.data.length : null },
+          { valor: "migracoes", rotulo: "Migrações", contador: dominios.length },
+        ]}
+        valor={vista}
+        onEscolher={(v) => setVista(v as Vista)}
+      />
+
+      {vista === "entradas" ? (
+        <EntradasDeEmail aoAbrirDominio={abrirMigracao} />
+      ) : (
+        <Card
+          title="Migrações"
+          subtitle={`${dominios.length}${pedidas ? ` · ${pedidas} ${pedidas === 1 ? "caixa pedida" : "caixas pedidas"}` : ""}`}
+          help="Um domínio por empresa. Ele nasce quando a entrada é marcada como paga, já com o passo a passo. Abra a migração para marcar as etapas, cadastrar as caixas e conferir o DNS."
+          data-migracoes=""
+        >
+          {dominios.length === 0 ? (
+            <EstadoVazio
+              icone={<Mail className="h-5 w-5" aria-hidden="true" />}
+              titulo="Nenhuma migração ainda"
+              descricao="Marque uma entrada como paga e ela aparece aqui."
+              acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setVista("entradas")}>Ver entradas</button>}
+            />
+          ) : (
+            <List label="Migrações">
+              {dominios.map((d) => {
+                const daqui = etapas.filter((e) => e.dominio_id === d.id);
+                const feitas = daqui.filter((e) => e.feito_em).length;
+                const pedidasAqui = caixas.filter((c) => c.dominio_id === d.id && c.estado === "pedida").length;
+                return (
+                  <ListRow
+                    key={d.id}
+                    leading={<Avatar name={nomeDaConta(d.conta_id)} tone={d.estado === "concluido" ? "accent" : "neutral"} />}
+                    title={d.dominio}
+                    subtitle={`${nomeDaConta(d.conta_id)} · ${NOME_CURTO_DO_PROVEDOR[d.provedor]}${pedidasAqui ? ` · ${pedidasAqui} ${pedidasAqui === 1 ? "caixa pedida" : "caixas pedidas"}` : ""}`}
+                    status={<StatusPill tone={TOM_DO_DOMINIO[d.estado]}>{ROTULO_DO_ESTADO_DO_DOMINIO[d.estado]}</StatusPill>}
+                    value={
+                      <span className="flex w-[72px] flex-col items-end sm:w-[96px]">
+                        <span>{feitas}/{daqui.length}</span>
+                        <ProgressBar value={feitas} max={Math.max(1, daqui.length)} height={4} tone={1} className="mt-1" label={`${feitas} de ${daqui.length} etapas`} />
+                      </span>
+                    }
+                    onClick={() => setAberto(d.id)}
+                  />
+                );
+              })}
+            </List>
+          )}
+        </Card>
+      )}
 
       {dominio && (
-        <>
-          <div data-migracao-aberta="" className="min-w-0 scroll-mt-4" />
-          <Secao
-            titulo={dominio.dominio}
-            descricao={`${nomeDaConta(dominio.conta_id)} · ${ROTULO_DO_ESTADO_DO_DOMINIO[dominio.estado]}`}
-            acao={
-              <button type="button" className={botao.icone} onClick={() => setEditando(dominio)} aria-label="Editar o domínio" title="Editar o domínio">
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-              </button>
-            }
-          >
-            <p className={texto.auxiliar}>
-              {[dominio.provedor_antigo ? `Sai de ${dominio.provedor_antigo}` : "", `vai para ${ROTULO_DO_PROVEDOR[dominio.provedor]}`, dominio.dns_em ? `DNS em ${dominio.dns_em}` : "", dominio.registro_em ? `registro em ${dominio.registro_em}` : ""].filter(Boolean).join(" · ")}
-            </p>
-            {dominio.observacao && <p className={juntar(texto.corpo, "mt-2 whitespace-pre-wrap")}>{dominio.observacao}</p>}
-          </Secao>
-          <PassoAPasso etapas={etapas.filter((e) => e.dominio_id === dominio.id)} aoMudar={reler} />
-          <CaixasDaCasa dominio={dominio} caixas={caixas.filter((c) => c.dominio_id === dominio.id)} equipe={((contas.data || []).filter((c) => c.id === dominio.conta_id)[0] || { equipe: [] }).equipe} aoMudar={reler} />
-          {dominio.provedor === "migadu" && <MigaduDoDominio key={`migadu-${dominio.id}`} dominio={dominio as DominioComIntegracao} aoMudar={reler} />}
-          <IntegracaoDoDominio key={`integracao-${dominio.id}`} dominio={dominio as DominioComIntegracao} aoMudar={reler} />
-          <Registros dominio={dominio} />
-          <ChecagemDoDominio dominio={dominio} detalhado aoConferir={() => void reler()} />
-        </>
+        <JanelaDaMigracao
+          key={dominio.id}
+          dominio={dominio as DominioComIntegracao}
+          empresa={nomeDaConta(dominio.conta_id)}
+          etapas={etapas.filter((e) => e.dominio_id === dominio.id)}
+          caixas={caixas.filter((c) => c.dominio_id === dominio.id)}
+          equipe={((contas.data || []).filter((c) => c.id === dominio.conta_id)[0] || { equipe: [] }).equipe}
+          aoMudar={reler}
+          aoEditar={() => setEditando(dominio)}
+          onFechar={() => setAberto(null)}
+        />
       )}
 
       {editando && (
         <EditorDeDominio
-          dominio={editando === "novo" ? null : editando}
+          dominio={editando}
           contas={(contas.data || []).map((c) => ({ id: c.id, nome: c.nome }))}
           onFechar={() => setEditando(null)}
           onSalvo={(id) => {
             void reler();
-            setEscolhido(id);
+            setAberto(id);
             setEditando(null);
           }}
         />
@@ -176,44 +201,146 @@ export default function EmailDaCasa() {
   );
 }
 
+/** A migração de uma empresa: as etapas, as caixas e o DNS (provedor, integração e registros). */
+function JanelaDaMigracao({
+  dominio,
+  empresa,
+  etapas,
+  caixas,
+  equipe,
+  aoMudar,
+  aoEditar,
+  onFechar,
+}: {
+  dominio: DominioComIntegracao;
+  empresa: string;
+  etapas: EtapaDaMigracao[];
+  caixas: CaixaDeEmail[];
+  equipe: Array<{ id: string; nome: string; email: string }>;
+  aoMudar: () => Promise<unknown>;
+  aoEditar: () => void;
+  onFechar: () => void;
+}) {
+  const [parte, setParte] = useState<Parte>("passos");
+  const feitas = etapas.filter((e) => e.feito_em).length;
+  const webmail = dominio.webmail_url || WEBMAIL_DO_PROVEDOR[dominio.provedor];
+  const caminho = [dominio.provedor_antigo ? `De ${dominio.provedor_antigo}` : "", `para ${NOME_CURTO_DO_PROVEDOR[dominio.provedor]}`, dominio.dns_em ? `DNS em ${dominio.dns_em}` : ""].filter(Boolean).join(" · ");
+  return (
+    <JanelaCentral
+      aberta
+      onFechar={onFechar}
+      largura="xl"
+      titulo={dominio.dominio}
+      descricao={`${empresa} · ${caminho}`}
+      ajuda={dominio.observacao || undefined}
+      rotuloDaAjuda="Anotações do domínio"
+      acoes={
+        <>
+          <StatusPill tone={TOM_DO_DOMINIO[dominio.estado]}>{ROTULO_DO_ESTADO_DO_DOMINIO[dominio.estado]}</StatusPill>
+          <OverflowMenu
+            label="Mais ações da migração"
+            items={[
+              { label: "Editar o domínio", icon: <Pencil className="h-4 w-4" />, onSelect: aoEditar },
+              webmail ? { label: "Abrir o webmail", icon: <Mail className="h-4 w-4" />, onSelect: () => window.open(webmail, "_blank", "noopener") } : null,
+            ]}
+          />
+        </>
+      }
+      abaixoDoTitulo={
+        <div className="min-w-0 space-y-3">
+          <div className="flex min-w-0 items-center">
+            <ProgressBar value={feitas} max={Math.max(1, etapas.length)} height={6} tone={1} className="min-w-0 flex-1" label={`${feitas} de ${etapas.length} etapas`} />
+            <span className="ml-3 shrink-0 text-[12px] leading-4 tabular-nums text-muted-foreground">{feitas} de {etapas.length}</span>
+          </div>
+          <SeletorCompacto
+            rotulo="Parte da migração"
+            opcoes={[
+              { valor: "passos", rotulo: "Passo a passo", icone: <ListChecks className="h-4 w-4" aria-hidden="true" /> },
+              { valor: "caixas", rotulo: "Caixas", contador: caixas.length, icone: <Inbox className="h-4 w-4" aria-hidden="true" /> },
+              { valor: "dns", rotulo: "DNS e provedor", icone: <Server className="h-4 w-4" aria-hidden="true" /> },
+            ]}
+            valor={parte}
+            onEscolher={(v) => setParte(v as Parte)}
+            listaQuandoNaoCabe
+          />
+        </div>
+      }
+      data-migracao-aberta=""
+    >
+      {parte === "passos" && <PassoAPasso etapas={etapas} aoMudar={aoMudar} />}
+      {parte === "caixas" && <CaixasDaCasa dominio={dominio} caixas={caixas} equipe={equipe} aoMudar={aoMudar} />}
+      {parte === "dns" && (
+        <div className="min-w-0 space-y-8">
+          {dominio.provedor === "migadu" && <MigaduDoDominio key={`migadu-${dominio.id}`} dominio={dominio} aoMudar={aoMudar} />}
+          <IntegracaoDoDominio key={`integracao-${dominio.id}`} dominio={dominio} aoMudar={aoMudar} />
+          <Registros dominio={dominio} />
+          <ChecagemDoDominio dominio={dominio} detalhado aoConferir={() => void aoMudar()} />
+        </div>
+      )}
+    </JanelaCentral>
+  );
+}
+
+/** As etapas como uma linha do tempo: feita (check), a de agora (em destaque) e as que faltam. */
 function PassoAPasso({ etapas, aoMudar }: { etapas: EtapaDaMigracao[]; aoMudar: () => Promise<unknown> }) {
   const [anotando, setAnotando] = useState<EtapaDaMigracao | null>(null);
   const [nota, setNota] = useState("");
-  const feitas = etapas.filter((e) => e.feito_em).length;
+  const [marcando, setMarcando] = useState<string | null>(null);
+  const ordenadas = etapas.slice().sort((a, b) => a.ordem - b.ordem);
+  const atual = ordenadas.findIndex((e) => !e.feito_em);
   const marcar = async (e: EtapaDaMigracao) => {
+    setMarcando(e.id);
     try {
       await casa.marcarEtapa(e.id, !e.feito_em);
       await aoMudar();
     } catch (erro) {
       toast.error(fraseDoErro(erro));
+    } finally {
+      setMarcando(null);
     }
   };
+  if (!ordenadas.length) return <EstadoVazio compacto titulo="Sem passo a passo." descricao="Ele nasce quando a entrada é marcada como paga." />;
   return (
-    <Secao titulo="Passo a passo da migração" descricao={`${feitas} de ${etapas.length}`} ajuda="A ordem importa: só cancele o serviço antigo depois de testar envio e recebimento em todas as caixas e conferir o histórico.">
-      <ol className={juntar(lista.aberta, lista.divisoria)} data-passo-a-passo="">
-        {etapas.map((e) => (
-          <li key={e.id} className={juntar(lista.linha, "items-start")}>
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={!!e.feito_em}
-              aria-label={e.titulo}
-              onClick={() => void marcar(e)}
-              className={juntar("toque-compacto mr-3 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border", foco, e.feito_em ? "border-primary bg-primary text-primary-foreground" : "border-border")}
-            >
-              {e.feito_em && <Check className="h-3 w-3" aria-hidden="true" />}
-            </button>
-            <span className="min-w-0 flex-1">
-              <span className={juntar(texto.corpo, "block font-medium", e.feito_em && "text-muted-foreground")}>{e.ordem}. {e.titulo}</span>
-              <span className={juntar(texto.auxiliar, "block leading-5")}>{e.ajuda}</span>
-              {e.nota && <span className={juntar(texto.corpo, "mt-1 block whitespace-pre-wrap")}>{e.nota}</span>}
-              {e.feito_em && <span className={juntar(texto.auxiliar, "mt-0.5 block")}>Feito em {diaLegivel(e.feito_em, true)}</span>}
-            </span>
-            <button type="button" className={juntar(botao.icone, "ml-1")} aria-label={`Anotar na etapa ${e.titulo}`} title="Anotar" onClick={() => { setAnotando(e); setNota(e.nota || ""); }}>
-              <Pencil className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </li>
-        ))}
+    <>
+      <ol className="min-w-0" data-passo-a-passo="">
+        {ordenadas.map((e, i) => {
+          const feita = !!e.feito_em;
+          const agora = i === atual;
+          return (
+            <li key={e.id} className={juntar("relative flex min-w-0 items-start", i < ordenadas.length - 1 && "pb-5")} data-etapa={feita ? "feita" : agora ? "agora" : "falta"}>
+              {i < ordenadas.length - 1 && <span aria-hidden="true" className={juntar("absolute bottom-0 left-[15px] top-8 w-0.5", feita ? "bg-primary" : "bg-border")} />}
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={feita}
+                aria-label={e.titulo}
+                title={feita ? "Desmarcar" : "Marcar como feita"}
+                onClick={() => void marcar(e)}
+                disabled={marcando === e.id}
+                className={juntar(
+                  "toque-compacto relative z-[1] mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold tabular-nums transition-colors",
+                  foco,
+                  feita ? "bg-primary text-primary-foreground" : agora ? "border-2 border-primary bg-card text-primary" : "border-2 border-border bg-card text-muted-foreground hover:border-primary/60",
+                  marcando === e.id && "animate-pulse",
+                )}
+              >
+                {feita ? <Check className="h-4 w-4" aria-hidden="true" /> : e.ordem}
+              </button>
+              <div className={juntar("min-w-0 flex-1 rounded-lg px-3 py-1.5", agora && "bg-primary/[0.07]")}>
+                <div className="flex min-w-0 items-center">
+                  <span className={juntar(texto.corpo, "min-w-0 font-medium", feita && "text-muted-foreground")}>{e.titulo}</span>
+                  {e.ajuda && <HelpTooltip className="ml-1" label={`Como fazer: ${e.titulo}`}>{e.ajuda}</HelpTooltip>}
+                  {agora && <Chip tone="accent" className="ml-2">Agora</Chip>}
+                </div>
+                {e.nota && <p className={juntar(texto.auxiliar, "mt-1 whitespace-pre-wrap leading-5 text-foreground/80")}>{e.nota}</p>}
+                {feita && <span className={juntar(texto.auxiliar, "mt-0.5 block")}>Feita em {diaLegivel(e.feito_em as string, true)}</span>}
+              </div>
+              <button type="button" className={juntar(botao.icone, "ml-1")} aria-label={`Anotar na etapa ${e.titulo}`} title="Anotar" onClick={() => { setAnotando(e); setNota(e.nota || ""); }}>
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </li>
+          );
+        })}
       </ol>
       <JanelaCentral
         aberta={!!anotando}
@@ -236,7 +363,7 @@ function PassoAPasso({ etapas, aoMudar }: { etapas: EtapaDaMigracao[]; aoMudar: 
       >
         <textarea value={nota} onChange={(e) => setNota(e.target.value)} className={campoTexto} maxLength={1500} aria-label="Anotação da etapa" placeholder="O que foi feito, o que falta, com quem falar" />
       </JanelaCentral>
-    </Secao>
+    </>
   );
 }
 
@@ -251,6 +378,7 @@ function CaixasDaCasa({ dominio, caixas, equipe, aoMudar }: { dominio: DominioDe
   };
   const [nova, setNova] = useState({ usuario: "", pessoa: "", tipo: "caixa" as CaixaDeEmail["tipo"], tamanho: "", convite: "", destinos: "" });
   const noMigadu = dominio.provedor === "migadu";
+  const [adicionando, setAdicionando] = useState(caixas.length === 0);
   const [salvando, setSalvando] = useState(false);
   const criar = async () => {
     const nome = nova.usuario.trim().toLowerCase().replace(/@.*$/, "");
@@ -280,90 +408,125 @@ function CaixasDaCasa({ dominio, caixas, equipe, aoMudar }: { dominio: DominioDe
       toast.error(fraseDoErro(e));
     }
   };
+  const porEstado = ESTADOS_DA_CAIXA.map((e) => ({ e, n: caixas.filter((c) => c.estado === e).length })).filter((x) => x.n > 0);
   return (
-    <Secao titulo="Caixas" descricao={`${caixas.length}`} ajuda="Cadastre cada caixa que existe hoje e acompanhe: criada no provedor novo, copiando o histórico, ativa. Diga de quem é cada caixa: no correio, a pessoa vê a dela e quem administra a empresa vê todas. O cliente vê a lista e a situação; a senha nunca passa por aqui.">
+    <div className="min-w-0 space-y-5" data-caixas-da-casa="">
+      <TituloDoBloco
+        aoLado={
+          <>
+            <HelpTooltip label="Sobre as caixas">Cadastre cada caixa que existe hoje e acompanhe: criada no provedor novo, copiando o histórico, ativa. Diga de quem é cada caixa: no correio, a pessoa vê a dela e quem administra a empresa vê todas. A senha nunca passa por aqui.</HelpTooltip>
+            {!adicionando && (
+              <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => setAdicionando(true)} data-abrir-nova-caixa="">
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Caixa
+              </button>
+            )}
+          </>
+        }
+      >
+        {caixas.length} {caixas.length === 1 ? "caixa" : "caixas"}
+      </TituloDoBloco>
+      {porEstado.length > 0 && (
+        <div className="-mt-2 flex min-w-0 flex-wrap [&>*]:mb-1.5 [&>*]:mr-1.5">
+          {porEstado.map((x) => <Chip key={x.e} tone={TOM_DA_CAIXA[x.e]} dot>{x.n} {ROTULO_DA_CAIXA[x.e].toLowerCase()}</Chip>)}
+        </div>
+      )}
       {caixas.length > 0 && (
-        <ul className={juntar(lista.aberta, lista.divisoria, "mb-3")} data-caixas-da-casa="">
+        <ul className="-mx-2 min-w-0 divide-y divide-border/50">
           {caixas.map((c) => (
-            <li key={c.id} className={lista.linha}>
-              <span className="min-w-0 flex-1">
+            <li key={c.id} className="flex min-w-0 flex-wrap items-center rounded-lg px-2 py-2.5 hover:bg-muted/40 sm:flex-nowrap">
+              <span className="min-w-0 flex-1 basis-full sm:basis-0">
                 <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.endereco}</span>
                 <span className={juntar(texto.auxiliar, "block truncate")}>{[c.pessoa, c.tipo !== "caixa" ? c.tipo : "", c.tamanho_origem ? `${c.tamanho_origem} hoje` : ""].filter(Boolean).join(" · ") || "Sem responsável"}</span>
               </span>
-              {c.tipo === "caixa" && equipe.length > 0 && (
-                <select value={(c as CaixaDeEmail & { membro_id?: string | null }).membro_id || ""} onChange={(e) => void atribuir(c, e.target.value)} className={juntar(campo, "ml-2 h-8 w-auto max-w-[150px] text-[12px]")} aria-label={`De quem é ${c.endereco}`} title="De quem é a caixa no correio" data-dono-da-caixa="">
-                  <option value="">Sem pessoa</option>
-                  {equipe.map((m) => <option key={m.id} value={m.id}>{m.nome || m.email}</option>)}
+              <span className="mt-2 flex min-w-0 items-center sm:mt-0">
+                {c.tipo === "caixa" && equipe.length > 0 && (
+                  <select value={(c as CaixaDeEmail & { membro_id?: string | null }).membro_id || ""} onChange={(e) => void atribuir(c, e.target.value)} className={juntar(campo, "h-8 w-auto max-w-[150px] text-[12px] sm:ml-2")} aria-label={`De quem é ${c.endereco}`} title="De quem é a caixa no correio" data-dono-da-caixa="">
+                    <option value="">Sem pessoa</option>
+                    {equipe.map((m) => <option key={m.id} value={m.id}>{m.nome || m.email}</option>)}
+                  </select>
+                )}
+                <select value={c.estado} onChange={(e) => void mudarEstado(c, e.target.value as CaixaDeEmail["estado"])} className={juntar(campo, "ml-2 h-8 w-auto text-[12px]")} aria-label={`Situação de ${c.endereco}`}>
+                  {ESTADOS_DA_CAIXA.map((e) => <option key={e} value={e}>{ROTULO_DA_CAIXA[e]}</option>)}
                 </select>
-              )}
-              <select value={c.estado} onChange={(e) => void mudarEstado(c, e.target.value as CaixaDeEmail["estado"])} className={juntar(campo, "ml-2 h-8 w-auto text-[12px]")} aria-label={`Situação de ${c.endereco}`}>
-                {ESTADOS_DA_CAIXA.map((e) => <option key={e} value={e}>{ROTULO_DA_CAIXA[e]}</option>)}
-              </select>
+              </span>
             </li>
           ))}
         </ul>
       )}
-      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px_110px_auto]">
-        <input value={nova.usuario} onChange={(e) => setNova({ ...nova, usuario: e.target.value })} className={campo} placeholder={`nome @${dominio.dominio}`} aria-label="Endereço da caixa" autoCapitalize="none" />
-        <input value={nova.pessoa} onChange={(e) => setNova({ ...nova, pessoa: e.target.value })} className={campo} placeholder="Quem usa" aria-label="Quem usa" />
-        <select value={nova.tipo} onChange={(e) => setNova({ ...nova, tipo: e.target.value as CaixaDeEmail["tipo"] })} className={campo} aria-label="Tipo">
-          <option value="caixa">Caixa</option>
-          <option value="apelido">Apelido</option>
-          <option value="grupo">Grupo</option>
-        </select>
-        <input value={nova.tamanho} onChange={(e) => setNova({ ...nova, tamanho: e.target.value })} className={campo} placeholder="Tamanho" aria-label="Tamanho hoje" />
-        <button type="button" className={botao.secundario} onClick={() => void criar()} disabled={salvando || !nova.usuario.trim()}>Adicionar</button>
-      </div>
-      {noMigadu && (
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2" data-convite-da-caixa="">
-          {nova.tipo === "caixa" ? (
-            <input value={nova.convite} onChange={(e) => setNova({ ...nova, convite: e.target.value })} className={campo} placeholder="E-mail de hoje da pessoa (recebe o convite)" aria-label="E-mail de hoje da pessoa, para o convite" autoCapitalize="none" inputMode="email" />
-          ) : (
-            <input value={nova.destinos} onChange={(e) => setNova({ ...nova, destinos: e.target.value })} className={campo} placeholder={`Entrega em (ex.: joao, maria)`} aria-label="Caixas que recebem o apelido" autoCapitalize="none" />
+      {adicionando && (
+        <div className="min-w-0 rounded-lg bg-muted/40 p-4" data-nova-caixa="">
+          <p className={juntar(texto.rotulo, "mb-2")}>Nova caixa</p>
+          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px_110px]">
+            <input value={nova.usuario} onChange={(e) => setNova({ ...nova, usuario: e.target.value })} className={campo} placeholder={`nome @${dominio.dominio}`} aria-label="Endereço da caixa" autoCapitalize="none" />
+            <input value={nova.pessoa} onChange={(e) => setNova({ ...nova, pessoa: e.target.value })} className={campo} placeholder="Quem usa" aria-label="Quem usa" />
+            <select value={nova.tipo} onChange={(e) => setNova({ ...nova, tipo: e.target.value as CaixaDeEmail["tipo"] })} className={campo} aria-label="Tipo">
+              <option value="caixa">Caixa</option>
+              <option value="apelido">Apelido</option>
+              <option value="grupo">Grupo</option>
+            </select>
+            <input value={nova.tamanho} onChange={(e) => setNova({ ...nova, tamanho: e.target.value })} className={campo} placeholder="Tamanho" aria-label="Tamanho hoje" />
+          </div>
+          {noMigadu && (
+            <div className="mt-2 min-w-0" data-convite-da-caixa="">
+              {nova.tipo === "caixa" ? (
+                <input value={nova.convite} onChange={(e) => setNova({ ...nova, convite: e.target.value })} className={campo} placeholder="E-mail de hoje da pessoa (recebe o convite)" aria-label="E-mail de hoje da pessoa, para o convite" autoCapitalize="none" inputMode="email" />
+              ) : (
+                <input value={nova.destinos} onChange={(e) => setNova({ ...nova, destinos: e.target.value })} className={campo} placeholder="Entrega em (ex.: joao, maria)" aria-label="Caixas que recebem o apelido" autoCapitalize="none" />
+              )}
+            </div>
           )}
+          <div className="mt-3 flex items-center justify-end">
+            {caixas.length > 0 && <button type="button" className={juntar(botao.discreto, "mr-2 h-8")} onClick={() => setAdicionando(false)}>Cancelar</button>}
+            <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void criar()} disabled={salvando || !nova.usuario.trim()}>{salvando ? "Adicionando..." : "Adicionar"}</button>
+          </div>
         </div>
       )}
-    </Secao>
+    </div>
   );
 }
 
 function Registros({ dominio }: { dominio: DominioDeEmail }) {
   const textoDosRegistros = registrosParaPublicar(dominio);
+  const [ver, setVer] = useState(false);
   return (
-    <Secao
-      titulo="Registros para publicar"
-      recolher="produto:email:registros"
-      recolhidaDeInicio
-      ajuda="O modelo do provedor escolhido. O DKIM e a verificação do domínio usam valores que o próprio provedor gera para a conta do cliente: copie de lá. Comece o DMARC em p=none e suba para quarantine depois de alguns dias sem erro."
-      acao={
-        <button
-          type="button"
-          className={botao.icone}
-          aria-label="Copiar os registros"
-          title="Copiar"
-          onClick={() => void navigator.clipboard.writeText(textoDosRegistros).then(() => toast.success("Registros copiados.")).catch(() => toast.error("Não foi possível copiar."))}
-        >
-          <Copy className="h-4 w-4" aria-hidden="true" />
-        </button>
-      }
-    >
-      <pre className="min-w-0 overflow-x-auto rounded-md bg-muted/50 p-3 text-[12px] leading-5 text-foreground" data-registros-de-dns="">{textoDosRegistros}</pre>
-    </Secao>
+    <section className="min-w-0" data-registros="">
+      <TituloDoBloco
+        aoLado={
+          <>
+            <HelpTooltip label="Sobre os registros">O modelo do provedor escolhido. O DKIM e a verificação do domínio usam valores que o próprio provedor gera para a conta do cliente: copie de lá. Comece o DMARC em p=none e suba para quarantine depois de alguns dias sem erro.</HelpTooltip>
+            <button type="button" className={juntar(botao.discreto, "h-8")} onClick={() => setVer((v) => !v)} aria-expanded={ver}>{ver ? "Esconder" : "Ver"}</button>
+            <button
+              type="button"
+              className={botao.icone}
+              aria-label="Copiar os registros"
+              title="Copiar"
+              onClick={() => void navigator.clipboard.writeText(textoDosRegistros).then(() => toast.success("Registros copiados.")).catch(() => toast.error("Não foi possível copiar."))}
+            >
+              <Copy className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </>
+        }
+      >
+        Modelo de registros ({NOME_CURTO_DO_PROVEDOR[dominio.provedor]})
+      </TituloDoBloco>
+      {ver && <pre className="min-w-0 overflow-x-auto rounded-md bg-muted/50 p-3 text-[12px] leading-5 text-foreground" data-registros-de-dns="">{textoDosRegistros}</pre>}
+    </section>
   );
 }
 
-function EditorDeDominio({ dominio, contas, onFechar, onSalvo }: { dominio: DominioDeEmail | null; contas: Array<{ id: string; nome: string }>; onFechar: () => void; onSalvo: (id: string) => void }) {
+function EditorDeDominio({ dominio, contas, onFechar, onSalvo }: { dominio: DominioDeEmail; contas: Array<{ id: string; nome: string }>; onFechar: () => void; onSalvo: (id: string) => void }) {
   const [f, setF] = useState({
-    conta_id: dominio ? dominio.conta_id : contas[0] ? contas[0].id : "",
-    dominio: dominio ? dominio.dominio : "",
-    provedor: (dominio ? dominio.provedor : "zoho") as ProvedorDeEmail,
-    provedor_antigo: dominio ? dominio.provedor_antigo || "" : "",
-    dns_em: dominio ? dominio.dns_em || "" : "Cloudflare",
-    registro_em: dominio ? dominio.registro_em || "" : "",
-    webmail_url: dominio ? dominio.webmail_url || "" : "",
-    dkim_seletor: dominio ? dominio.dkim_seletor || "" : "",
-    estado: (dominio ? dominio.estado : "levantamento") as EstadoDoDominio,
-    observacao: dominio ? dominio.observacao || "" : "",
+    conta_id: dominio.conta_id,
+    dominio: dominio.dominio,
+    provedor: dominio.provedor,
+    provedor_antigo: dominio.provedor_antigo || "",
+    dns_em: dominio.dns_em || "",
+    registro_em: dominio.registro_em || "",
+    webmail_url: dominio.webmail_url || "",
+    dkim_seletor: dominio.dkim_seletor || "",
+    estado: dominio.estado,
+    observacao: dominio.observacao || "",
   });
   const [salvando, setSalvando] = useState(false);
   const salvar = async () => {
@@ -373,7 +536,7 @@ function EditorDeDominio({ dominio, contas, onFechar, onSalvo }: { dominio: Domi
     setSalvando(true);
     try {
       const id = await casa.salvarDominio({
-        ...(dominio ? { id: dominio.id } : {}),
+        id: dominio.id,
         conta_id: f.conta_id,
         dominio: limpo,
         provedor: f.provedor,
@@ -385,7 +548,7 @@ function EditorDeDominio({ dominio, contas, onFechar, onSalvo }: { dominio: Domi
         estado: f.estado,
         observacao: f.observacao.trim() || null,
       });
-      toast.success(dominio ? "Domínio salvo." : "Domínio criado, com o passo a passo.");
+      toast.success("Domínio salvo.");
       onSalvo(id);
     } catch (e) {
       toast.error(fraseDoErro(e, "Não foi possível salvar o domínio."));
@@ -398,12 +561,12 @@ function EditorDeDominio({ dominio, contas, onFechar, onSalvo }: { dominio: Domi
       aberta
       onFechar={onFechar}
       largura="md"
-      titulo={dominio ? "Editar o domínio" : "Novo domínio"}
+      titulo="Editar o domínio"
       rodape={<button type="button" className={botao.primario} onClick={() => void salvar()} disabled={salvando} data-salvar-dominio="">{salvando ? "Salvando..." : "Salvar"}</button>}
     >
       <GrupoDeCampos>
         <CampoDeFormulario rotulo="Empresa" obrigatorio>
-          <select value={f.conta_id} onChange={(e) => setF({ ...f, conta_id: e.target.value })} className={campo} disabled={!!dominio}>
+          <select value={f.conta_id} onChange={(e) => setF({ ...f, conta_id: e.target.value })} className={campo} disabled>
             {contas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </CampoDeFormulario>

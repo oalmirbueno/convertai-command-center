@@ -218,6 +218,7 @@ export async function carregarMinhasCaixas(): Promise<MinhasCaixas> {
 
 export interface ResumoDaMensagem {
   id: string;
+  mensagem_id?: string | null;
   de: string;
   para: string;
   assunto: string;
@@ -228,10 +229,32 @@ export interface ResumoDaMensagem {
 }
 export interface MensagemAberta extends ResumoDaMensagem {
   texto: string;
+  /** O e-mail como foi enviado (HTML já limpo no servidor). Mostrado num iframe sandbox, sem script. */
+  html?: string | null;
   anexos: Array<{ nome: string; tamanho: number }>;
 }
 
-async function chamarCorreio<T>(corpo: Record<string, unknown>): Promise<T> {
+/**
+ * Minha caixa (19/11/2026): a casa entra numa caixa com a senha dela para ver o correio como o cliente
+ * vê. A senha fica só na memória desta aba (nunca em armazenamento, nunca em log), vai junto de cada
+ * pedido para a função produto-correio e some ao sair da caixa ou recarregar a página.
+ */
+const senhasDaCasa: Record<string, string> = {};
+export const abertaPelaCasa = (caixaId: string) => Object.prototype.hasOwnProperty.call(senhasDaCasa, caixaId);
+export async function entrarPelaCasa(caixaId: string, senha: string): Promise<{ endereco: string }> {
+  const r = await chamarCorreio<{ ok: boolean; endereco: string }>({ acao: "entrar_pela_casa", caixa_id: caixaId, senha_da_casa: senha });
+  senhasDaCasa[caixaId] = senha;
+  return { endereco: r.endereco };
+}
+export function sairPelaCasa(caixaId?: string): void {
+  Object.keys(senhasDaCasa).forEach((id) => {
+    if (!caixaId || id === caixaId) delete senhasDaCasa[id];
+  });
+}
+
+async function chamarCorreio<T>(pedido: Record<string, unknown>): Promise<T> {
+  const id = typeof pedido.caixa_id === "string" ? pedido.caixa_id : "";
+  const corpo = id && abertaPelaCasa(id) && !pedido.senha_da_casa ? { ...pedido, senha_da_casa: senhasDaCasa[id] } : pedido;
   const { data, error } = await supabase.functions.invoke("produto-correio", { body: corpo });
   if (error) {
     let resposta: { error?: string; mensagem?: string } | null = null;
@@ -249,7 +272,7 @@ async function chamarCorreio<T>(corpo: Record<string, unknown>): Promise<T> {
 
 export const correio = {
   pastas: (caixaId: string) => chamarCorreio<{ pastas: Array<{ id: string; nome: string; nao_lidas: number }> }>({ acao: "pastas", caixa_id: caixaId }).then((r) => r.pastas),
-  listar: (caixaId: string, pasta: string, busca?: string) => chamarCorreio<{ mensagens: ResumoDaMensagem[] }>({ acao: "listar", caixa_id: caixaId, pasta, busca }).then((r) => r.mensagens),
+  listar: (caixaId: string, pasta: string, busca?: string, pagina = 1) => chamarCorreio<{ mensagens: ResumoDaMensagem[] }>({ acao: "listar", caixa_id: caixaId, pasta, busca, pagina }).then((r) => r.mensagens),
   ler: (caixaId: string, pasta: string, id: string) => chamarCorreio<{ mensagem: MensagemAberta }>({ acao: "ler", caixa_id: caixaId, pasta, id }).then((r) => r.mensagem),
   enviar: (caixaId: string, envio: { para: string; assunto: string; texto: string; em_resposta_a?: string | null }) => chamarCorreio<{ id: string }>({ acao: "enviar", caixa_id: caixaId, ...envio }),
   guardarSegredo: (caixaId: string, segredo: string) => chamarCorreio<{ guardado: boolean }>({ acao: "guardar_segredo", caixa_id: caixaId, segredo }).then((r) => r.guardado),
