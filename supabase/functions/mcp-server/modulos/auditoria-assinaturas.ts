@@ -405,7 +405,7 @@ export async function listarAssinaturas(entrada: unknown, porta: PortaDaAuditori
   const ordenados = [...(alertas ?? [])].sort((a, b) => b.hora.localeCompare(a.hora) || b.ultima_em.localeCompare(a.ultima_em));
   return {
     janela_horas: horas,
-    ...(instalado ? {} : { instalado: false, aviso: 'A auditoria das assinaturas ainda não foi instalada neste banco (migration 20261119211009).' }),
+    ...(instalado ? {} : { instalado: false, aviso: 'A auditoria das assinaturas ainda não foi instalada neste banco (migration 20261119233000).' }),
     alertas: ordenados.slice(0, limite).map((a) => ({
       hora: a.hora,
       principal: a.principal,
