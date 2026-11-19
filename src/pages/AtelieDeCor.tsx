@@ -192,7 +192,7 @@ export default function AtelieDeCor() {
               </div>
             ) : <EntradaPorBriefing clientId={clienteId || null} onLido={(b, f) => { setRascunho({ ...BRIEFING_VAZIO, ...b, marca: b.marca || nomeDoCliente }); setFaltou(f); }} />
           )}
-          {modo === "zero" && <Questionario key="zero" inicial={{ ...BRIEFING_VAZIO, marca: nomeDoCliente }} onPronto={(b) => gerar(b)} />}
+          {modo === "zero" && <Questionario key={`zero-${clienteId}`} inicial={{ ...BRIEFING_VAZIO, marca: nomeDoCliente }} onPronto={(b) => gerar(b)} />}
           {modo === "nicho" && (
             rascunho ? <Questionario key={`n-${rascunho.nicho}`} inicial={rascunho} onPronto={(b) => gerar(b)} /> : <EntradaPorNicho onEscolher={(n, sub) => setRascunho({ ...BRIEFING_VAZIO, marca: nomeDoCliente, nicho: n.nome, subnicho: sub ?? "" })} />
           )}

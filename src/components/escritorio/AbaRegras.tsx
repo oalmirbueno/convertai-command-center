@@ -83,7 +83,7 @@ function CartaoDaRegra({
   };
   const salvar = () => {
     const r = validarLimites(regra.chave, rascunho, { ligada: regra.ligada });
-    if (!r.ok) { setErros(r.erros); return; }
+    if ("erros" in r) { setErros(r.erros); return; }
     setErros({});
     void aoSalvar(regra, r.limites);
   };
