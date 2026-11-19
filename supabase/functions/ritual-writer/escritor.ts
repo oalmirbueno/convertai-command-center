@@ -495,6 +495,9 @@ export function avisoDeFidelidade(inventa: number | null | undefined): string | 
  * painel) ANTES da escolha; o Jev escolhe também por tom positivo e naturalidade e confere a fidelidade aos
  * fatos (com uma versão só, a mesma chamada vira só o aviso de fidelidade).
  */
+/** A mensagem tem cerca de 10 linhas e o JSON inteiro fica bem abaixo disto; o motor soma a folga do raciocínio. */
+export const TETO_DE_SAIDA_DO_RITUAL = 4_000;
+
 export async function escreverRitual(
   p: PedidoDoRitual,
   escrever: typeof escreverComModeloDaCentral = escreverComModeloDaCentral,
@@ -506,7 +509,7 @@ export async function escreverRitual(
   const umaVersao = (extra: string): Promise<TextoEscrito | null> => {
     const texto = extra ? `${usuario}\n\n${extra}` : usuario;
     if (p.clientId) {
-      return escrever({ clientId: p.clientId, sistema: SYSTEM_PROMPT, usuario: texto, escolha: p.escolha, temperatura, criadoPor: p.criadoPor ?? null, metodo: p.metodo ?? null });
+      return escrever({ clientId: p.clientId, sistema: SYSTEM_PROMPT, usuario: texto, escolha: p.escolha, temperatura, maxTokensSaida: TETO_DE_SAIDA_DO_RITUAL, criadoPor: p.criadoPor ?? null, metodo: p.metodo ?? null });
     }
     // Sem cliente não há carteira: só a cadeia antiga.
     return escrever({ clientId: "", sistema: SYSTEM_PROMPT, usuario: texto, escolha: { modelo: "legado:gpt-4.1", raciocinio: "medium" }, temperatura, metodo: p.metodo ?? null });

@@ -84,6 +84,11 @@ export interface PedidoDeEscrita {
   criadoPor?: string | null;
   /** Para o registro do uso (ia_usos.referencia). */
   referencia?: { tipo: string; id: string };
+  /**
+   * Teto de tokens da resposta (18/11/2026). Sem teto o OpenRouter reserva o máximo do modelo (65.536) e recusa
+   * com 402 quando o saldo não cobre essa reserva, mesmo que cubra o texto pedido. Quem escreve texto curto informa.
+   */
+  maxTokensSaida?: number;
 }
 
 export interface TextoEscrito {
@@ -115,6 +120,7 @@ export type ChamadaDoMotor = (e: {
   criadoPor?: string | null;
   referencia?: { tipo: string; id: string };
   metodo?: MetodoInjetado | null;
+  maxTokensSaida?: number;
 }) => Promise<{ texto: string; modeloId: string; custoUsd: number; usoId?: string | null }>;
 
 export type ChamadaLegada = (sistema: string, usuario: string, temperatura: number) => Promise<{ texto: string; modelo: string; usage: unknown } | null>;
@@ -135,6 +141,7 @@ async function motorDeVerdade(e: Parameters<ChamadaDoMotor>[0]) {
     referencia: e.referencia,
     timeoutMs: TEMPO_DO_MOTOR_MS,
     metodo: e.metodo ?? null,
+    ...(e.maxTokensSaida ? { maxTokensSaida: e.maxTokensSaida } : {}),
   });
   return { texto: saida.texto, modeloId: saida.modeloId, custoUsd: saida.custoUsd, usoId: saida.usoId || null };
 }
@@ -199,6 +206,7 @@ export async function escreverComModeloDaCentral(
         criadoPor: p.criadoPor,
         referencia: p.referencia,
         ...(p.metodo ? { metodo: p.metodo } : {}),
+        ...(p.maxTokensSaida ? { maxTokensSaida: p.maxTokensSaida } : {}),
       });
       if (r.texto.trim()) {
         return { texto: r.texto, modelo: r.modeloId, rotulo: rotuloDoModelo(r.modeloId), raciocinio: escolha.raciocinio, custoUsd: r.custoUsd, reserva: null, usoId: r.usoId ?? null };

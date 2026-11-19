@@ -79,6 +79,9 @@ describe("ritual curto e sem repetir", () => {
     const r = await escreverRitual(pedido, escrever as never, julgar);
     expect(escrever).toHaveBeenCalledTimes(2);
     expect(String(escrever.mock.calls[1][0].usuario)).toContain("VERSÃO B");
+    // 18/11: o escritor manda o teto da resposta; sem ele o OpenRouter reserva 65.536 tokens e recusa com saldo curto.
+    expect(escrever.mock.calls[0][0].maxTokensSaida).toBe(4000);
+    expect(escrever.mock.calls[1][0].maxTokensSaida).toBe(4000);
     expect(r?.body).toBe(acabado(NOVA));
     expect(r?.escolha_da_versao).toMatchObject({ versoes: 2, escolhida: 1, jev: false });
   });
