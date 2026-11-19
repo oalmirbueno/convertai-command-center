@@ -260,7 +260,7 @@ function FotoDaCampanha({ ensaio, tomada, modeloId, qualidade, onAmpliar }: { en
             </span>
           )}
           {mostrada && (
-            <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
+            <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
               gerada
             </span>
           )}

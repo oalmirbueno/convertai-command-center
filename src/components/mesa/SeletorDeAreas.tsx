@@ -123,7 +123,7 @@ export default function SeletorDeAreas({
   });
 
   return (
-    <div className="relative w-full select-none overflow-hidden rounded-lg border-2 border-primary/70" style={{ paddingBottom: "125%" }}>
+    <div className="relative w-full select-none overflow-hidden rounded-lg border-2 border-border" style={{ paddingBottom: "125%" }}>
       <ImagemDaMesa caminho={caminho} alt="Lâmina para marcar a área" className="absolute inset-0 h-full w-full" />
       <div
         ref={caixa}

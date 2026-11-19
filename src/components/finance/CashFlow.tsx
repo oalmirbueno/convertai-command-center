@@ -972,9 +972,9 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
         {/* Capital de Investidor foi movido para sua própria aba ("Capital") em /financeiro */}
         {investorEntries.length > 0 && (
           <p className={juntar(superficie.poco, "mt-4 flex min-w-0 items-center rounded-full px-4 py-2.5 text-[12px] text-muted-foreground")}>
-            <Briefcase className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <Briefcase className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 truncate">
-              <span className="font-semibold tabular-nums text-primary">{fmt(investor.total)}</span> de capital de investidor ficam na aba Capital, fora deste fluxo.
+              <span className="font-semibold tabular-nums text-foreground">{fmt(investor.total)}</span> de capital de investidor ficam na aba Capital, fora deste fluxo.
             </span>
           </p>
         )}
@@ -1388,7 +1388,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
                       </GradeDeKpis>
 
                       {!proLaboreView.molde && proLaboreView.proporcional > 0 && (
-                        <div className="flex min-w-0 flex-wrap items-center rounded-md bg-accent-soft px-4 py-2.5">
+                        <div className="flex min-w-0 flex-wrap items-center rounded-md bg-muted px-4 py-2.5">
                           <p className="mr-3 flex min-w-0 flex-1 items-center py-1 text-[13px] leading-5 text-muted-foreground">
                             <span className="min-w-0 truncate">Pró-labore ainda não lançado como saída</span>
                             <AjudaRecolhida className="ml-1" rotulo="Sobre lançar o pró-labore">
@@ -1553,7 +1553,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
             />
           </ul>
           <p className={juntar(superficie.poco, "flex items-start px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
-            <Briefcase className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <Briefcase className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span>Capital de investidor (aporte de sócio) entra pela aba Capital, fora do fluxo operacional.</span>
           </p>
         </DialogContent>
@@ -1565,7 +1565,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
           <DialogHeader>
             <DialogTitle className="flex items-center text-foreground">
               {expenseModal?.mode === "investment"
-                ? <Briefcase className="mr-2 h-4 w-4 text-primary" aria-hidden="true" />
+                ? <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 : <ArrowDownRight className="mr-2 h-4 w-4 text-destructive" aria-hidden="true" />}
               {expenseModal?.data?.id
                 ? (expenseModal.mode === "investment" ? "Editar investimento" : "Editar despesa")
@@ -1665,7 +1665,7 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
     <div className="space-y-4">
       {mode === "investment" && (
         <p className={juntar(superficie.poco, "flex min-w-0 items-center px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
-          <span className="min-w-0 truncate"><span className="font-semibold text-primary">Investimento</span> fora do DRE</span>
+          <span className="min-w-0 truncate"><span className="font-semibold text-foreground">Investimento</span> fora do DRE</span>
           <AjudaRecolhida className="ml-1" rotulo="Sobre investimento">
             Investimento não conta como despesa no DRE. Vai para o bloco de Capital e o retorno é medido contra ele.
           </AjudaRecolhida>
@@ -1733,9 +1733,9 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
 
 function LauncherChoice({ icon, tone, title, desc, onClick }: any) {
   const iconTone: any = {
-    success: "bg-success-soft text-success",
+    success: "bg-muted text-success",
     danger: "bg-danger-soft text-destructive",
-    primary: "bg-accent-soft text-primary",
+    primary: "bg-muted text-foreground",
   };
   return (
     <li>

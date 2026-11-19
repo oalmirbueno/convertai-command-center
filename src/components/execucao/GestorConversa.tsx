@@ -118,7 +118,7 @@ const PAUSA_MS = import.meta.env.MODE === "test" ? 0 : 520;
 const hora = (iso?: string | null) => (iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "");
 
 const SECAO: Record<SecaoDaResposta, { rotulo: string; cor: string; barra: string }> = {
-  anexo: { rotulo: "Do que você mandou", cor: "text-primary", barra: "bg-primary/60" },
+  anexo: { rotulo: "Do que você mandou", cor: "text-foreground", barra: "bg-muted-foreground/60" },
   feito: { rotulo: "Feito com prova", cor: "text-success", barra: "bg-success" },
   concluido_sem_prova: { rotulo: "Concluído sem prova", cor: "text-warning", barra: "bg-warning/60" },
   em_revisao: { rotulo: "Em revisão", cor: "text-info", barra: "bg-info" },
@@ -126,7 +126,7 @@ const SECAO: Record<SecaoDaResposta, { rotulo: string; cor: string; barra: strin
   bloqueado: { rotulo: "Bloqueado", cor: "text-warning", barra: "bg-warning" },
   decisao: { rotulo: "Sua decisão", cor: "text-destructive", barra: "bg-destructive" },
   lacuna: { rotulo: "Pendências e lacunas", cor: "text-muted-foreground", barra: "bg-muted-foreground/30" },
-  proximo: { rotulo: "Próximos passos", cor: "text-primary", barra: "bg-primary" },
+  proximo: { rotulo: "Próximos passos", cor: "text-foreground", barra: "bg-primary" },
   conversa: { rotulo: "Conversa", cor: "text-foreground", barra: "bg-muted-foreground/30" },
 };
 const NUMEROS: SecaoDaResposta[] = ["feito", "em_revisao", "em_andamento", "bloqueado", "decisao", "concluido_sem_prova"];
@@ -153,7 +153,7 @@ function CartaoDoRecorte({ d }: { d: RespostaDoGestor }) {
     <div className="w-full max-w-[560px] rounded-lg border border-border bg-background p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] font-semibold text-foreground">{d.cabecalho}</p>
-        <span className={juntar("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", d.origem === "ia_conferida" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
+        <span className={juntar("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", d.origem === "ia_conferida" ? "bg-muted text-success" : "bg-muted text-muted-foreground")}>
           <ShieldCheck className="h-3 w-3" />{d.origem === "ia_conferida" ? "Conferido nas fontes" : "Só fatos registrados"}
         </span>
       </div>
@@ -176,7 +176,7 @@ function FonteAberta({ f, aoAbrirDiario, aoAbrirObjeto }: { f: Fonte; aoAbrirDia
   const objeto = objetoDaFonte(f);
   return (
     <div className="w-full max-w-[560px] rounded-lg border border-border bg-background p-3 text-[12px] shadow-sm">
-      <p className="font-medium text-foreground"><span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">{f.apelido}</span>{f.titulo}</p>
+      <p className="font-medium text-foreground"><span className="mr-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-foreground">{f.apelido}</span>{f.titulo}</p>
       <p className="mt-1 text-muted-foreground">{ROTULO_DO_ESTADO[f.estado]}{f.cliente ? ` · ${f.cliente}` : ""}{f.agente ? ` · ${f.agente}` : ""}</p>
       <p className="mt-2 line-clamp-6 whitespace-pre-wrap break-words text-foreground/85">{f.texto}</p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -316,7 +316,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
           ))}
           {d.aprendi && (
             <p className="mt-1 flex max-w-[560px] gap-1.5 px-1 text-[12px] text-muted-foreground" data-aprendi="">
-              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />Aprendi: <span className="text-foreground">{d.aprendi}</span>
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />Aprendi: <span className="text-foreground">{d.aprendi}</span>
             </p>
           )}
           {!!d.avisos?.length && (
@@ -369,7 +369,7 @@ function AnexosDoPedido({ p }: { p?: PedidoDoDono | null }) {
   if (!docs.length && !imgs.length && !p.audio && !(p.nao_lidos || []).length) return null;
   return (
     <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5 sm:max-w-[75%]">
-      {p.audio && <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"><Mic className="h-3 w-3" />Áudio {tempoDoAudio(p.audio.segundos)} · transcrito</span>}
+      {p.audio && <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-foreground"><Mic className="h-3 w-3" />Áudio {tempoDoAudio(p.audio.segundos)} · transcrito</span>}
       {(p.previas || []).map((src, i) => <img key={i} src={src} alt="" className="h-16 w-16 rounded-md border border-border object-cover" />)}
       {!p.previas?.length && imgs.length > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground"><ImageIcon className="h-3 w-3" />{imgs.length} {imgs.length === 1 ? "imagem" : "imagens"}</span>}
       {docs.map((a, i) => <span key={i} className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground" title={`${a.caracteres.toLocaleString("pt-BR")} caracteres lidos`}><FileText className="h-3 w-3 shrink-0" /><span className="truncate">{a.nome}</span></span>)}
@@ -609,7 +609,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
         </div>
       )}
       <div className="flex shrink-0 items-center gap-2.5 border-b border-border/70 px-4 py-2.5 sm:px-5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="h-4 w-4" /></span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Sparkles className="h-4 w-4" /></span>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-semibold leading-tight">{contexto?.titulo || "Gestor Aceleriq"}</h3>
           <p className="truncate text-[12px] text-muted-foreground">
@@ -647,7 +647,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
             <EstadoDeErro titulo="Não foi possível ler a conversa." descricao={textoDoErro(conversa.error)} acao={<button type="button" className={botao.secundario} onClick={() => void conversa.refetch()}>Tentar de novo</button>} />
           ) : mensagens.length === 0 ? (
             <div className="flex flex-col items-center py-10 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="h-5 w-5" /></span>
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><Sparkles className="h-5 w-5" /></span>
               <p className="mt-4 text-[20px] font-semibold">O que você quer saber da operação?</p>
               <p className="mt-1 max-w-md text-[13px] text-muted-foreground">Pergunte como a um gerente: por cliente, por período, por agente. Pode mandar arquivo, print ou áudio.</p>
               <div className="mt-6 grid w-full max-w-xl gap-2 sm:grid-cols-2">
@@ -714,7 +714,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
           {(voz.estado === "transcrevendo" || voz.estado === "erro") && <EstadoDaVoz voz={voz} className="mb-2" />}
           {doAudio && rascunho.trim() && !vozEmCurso(voz) && (
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-1 pl-2.5 pr-1 text-[12px] font-medium text-primary">
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted py-1 pl-2.5 pr-1 text-[12px] font-medium text-foreground">
                 <Mic className="h-3 w-3" />Transcrito do áudio · {tempoDoAudio(doAudio.segundos)}
                 <button type="button" onClick={descartarTranscricao} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-primary/10" aria-label="Descartar a transcrição" title="Descartar a transcrição"><X className="h-3 w-3" /></button>
               </span>

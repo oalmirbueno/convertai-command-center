@@ -13,13 +13,13 @@ export type TomDaBolha = "neutro" | "marca" | "solido" | "tinta" | "info" | "ale
 
 const TOM_DA_BOLHA: Record<TomDaBolha, string> = {
   neutro: "bg-muted text-foreground",
-  marca: "bg-accent-soft text-primary",
+  marca: "bg-muted text-foreground",
   solido: "bg-accent-solid text-on-accent",
   tinta: "bg-foreground text-background",
   info: "bg-info-soft text-info",
   alerta: "bg-warning-soft text-warning",
   perigo: "bg-danger-soft text-destructive",
-  sucesso: "bg-success-soft text-success",
+  sucesso: "bg-muted text-success",
   violeta: "bg-chart-2/15 text-chart-2",
 };
 

@@ -59,7 +59,7 @@ function Desenho({ nome, lista, tamanho = "md", lado, forma = "redonda", tituloS
   if (!atual) {
     return (
       <div
-        className={`${base} flex items-center justify-center bg-primary/15 font-semibold text-primary ${lado ? "" : t.texto}`}
+        className={`${base} flex items-center justify-center bg-muted font-semibold text-foreground ${lado ? "" : t.texto}`}
         style={lado ? { ...estilo, fontSize: Math.max(10, lado * 0.32) } : undefined}
         aria-label={nome}
         title={tituloSemFoto}

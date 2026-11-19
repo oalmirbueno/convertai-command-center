@@ -958,7 +958,7 @@ export default function EstudioFotos({
       </section>
 
       {vindasDaMesaFoto.length > 0 && (
-        <section aria-label="Fotos que vieram da Mesa Foto" className="rounded-lg border border-primary/40 bg-primary/5 p-2.5">
+        <section aria-label="Fotos que vieram da Mesa Foto" className="rounded-lg border border-border bg-muted p-2.5">
           <div className="mb-2 flex min-w-0 items-center">
             <p className="min-w-0 flex-1 text-[12px] font-medium">Fotos que vieram da Mesa Foto</p>
             <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground" onClick={dispensarMesaFoto}>Dispensar</button>
@@ -1044,7 +1044,7 @@ export default function EstudioFotos({
             ) : (
               <>
                 <p className="flex items-center justify-center text-[13px] font-medium">
-                  <ClipboardPaste className="mr-1.5 h-4 w-4 text-primary" /> Cole com Ctrl+V ou solte a foto aqui
+                  <ClipboardPaste className="mr-1.5 h-4 w-4 text-muted-foreground" /> Cole com Ctrl+V ou solte a foto aqui
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">JPG, PNG ou WEBP · até 1 fundo e 2 elementos</p>
               </>

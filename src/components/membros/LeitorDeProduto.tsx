@@ -748,7 +748,7 @@ export default function LeitorDeProduto({
                           className="membros-material-cartao"
                           onClick={() => abrir(m.id)}
                         >
-                          <FileText size={22} className="text-primary" />
+                          <FileText size={22} className="text-muted-foreground" />
                           <span className="flex-1 text-left">
                             <strong className="block text-[13px]">
                               {m.titulo}

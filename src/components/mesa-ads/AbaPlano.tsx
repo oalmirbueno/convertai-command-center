@@ -84,9 +84,9 @@ function TestarPrimeiro({ plano }: { plano: PlanoAds }) {
   const { itens, base } = testarPrimeiroDoPlano(plano);
   if (!itens.length) return null;
   return (
-    <section className="rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Testar primeiro">
+    <section className="rounded-lg border border-border bg-muted p-4" aria-label="Testar primeiro">
       <h3 className="flex items-center text-[14px] font-semibold">
-        <Target className="mr-1.5 h-4 w-4 text-primary" /> Testar primeiro
+        <Target className="mr-1.5 h-4 w-4 text-muted-foreground" /> Testar primeiro
         <AjudaRecolhida className="ml-1.5" rotulo="Como a ordem é feita">
           Ordem pela conferência do Jev e pela prova. O corte usa o custo tolerável do briefing ou a média real da conta.
         </AjudaRecolhida>
@@ -128,7 +128,7 @@ function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
 /** Nota geral do ângulo: cor pela régua (7 ou mais é forte). */
 function SeloDaPontuacao({ nota }: { nota: number | null }) {
   if (nota === null) return null;
-  const tom = nota >= 7.5 ? "border-success/40 bg-success-soft text-success" : nota >= 6 ? "border-warning/40 bg-warning/10 text-warning" : "border-destructive/30 bg-danger-soft text-destructive";
+  const tom = nota >= 7.5 ? "border-border bg-muted text-success" : nota >= 6 ? "border-warning/40 bg-warning/10 text-warning" : "border-destructive/30 bg-danger-soft text-destructive";
   return (
     <span className={`ml-2 inline-flex shrink-0 flex-col items-center rounded-lg border px-2 py-1 leading-none ${tom}`} aria-label={`Pontuação ${nota.toLocaleString("pt-BR")} de 10`}>
       <span className="text-[15px] font-semibold tabular-nums">{nota.toLocaleString("pt-BR")}</span>
@@ -187,7 +187,7 @@ function CartaoDoAngulo({
           <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
             {temQualidade && (
               <span
-                className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium ${aprovado ? "bg-success-soft text-success" : "bg-warning/15 text-warning"}`}
+                className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium ${aprovado ? "bg-muted text-success" : "bg-warning/15 text-warning"}`}
                 data-aprovado={aprovado ? "sim" : "nao"}
               >
                 {aprovado ? <ShieldCheck className="mr-1 h-3 w-3" /> : <AlertTriangle className="mr-1 h-3 w-3" />}
@@ -195,7 +195,7 @@ function CartaoDoAngulo({
               </span>
             )}
             {angulo.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[11px]">{humanizar(angulo.estilo_visual)}</span>}
-            {angulo.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(angulo.objetivo)}</span>}
+            {angulo.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-foreground">{rotuloDoObjetivo(angulo.objetivo)}</span>}
             {typeof angulo.ordem_teste === "number" && (
               <span className="mb-1 mr-1.5 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground">Testar {angulo.ordem_teste}º</span>
             )}
@@ -240,7 +240,7 @@ function CartaoDoAngulo({
       </div>
 
       {angulo.hipotese && (
-        <blockquote className="mt-3 rounded-lg border-l-2 border-primary bg-primary/5 px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]">
+        <blockquote className="mt-3 rounded-lg border-l-2 border-border bg-muted px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]">
           <span className="mb-0.5 block text-[11px] font-medium text-muted-foreground">Hipótese</span>
           {angulo.hipotese}
         </blockquote>
@@ -623,11 +623,11 @@ export default function AbaPlano({
                   Conferência do Jev
                   {qualidade.rodadas !== null ? `: ${qualidade.rodadas} rodada${qualidade.rodadas === 1 ? "" : "s"} de qualidade` : ""}
                 </span>
-                {qualidade.aprovados !== null && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-success/10 px-2.5 py-1 text-[11px] text-success">{qualidade.aprovados} aprovados</span>}
+                {qualidade.aprovados !== null && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-success">{qualidade.aprovados} aprovados</span>}
                 {qualidade.descartados.length > 0 && (
                   <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">{qualidade.descartados.length} descartados</span>
                 )}
-                {qualidade.objetivo && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{rotuloDoObjetivo(qualidade.objetivo)}</span>}
+                {qualidade.objetivo && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-foreground">{rotuloDoObjetivo(qualidade.objetivo)}</span>}
                 {ofertaDoPlano && <span className="mb-0.5 mt-0.5 min-w-0 truncate text-[12px] text-muted-foreground">Oferta: {ofertaDoPlano.nome}</span>}
               </div>
             )}

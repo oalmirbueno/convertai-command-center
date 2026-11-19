@@ -52,7 +52,7 @@ import { senhaAceita } from "./CriarSenha";
 type Parte = "funil" | "campos" | "conexoes" | "plano" | "faturas" | "empresa" | "aparencia" | "acesso";
 
 const COR_DA_COBRANCA: Record<string, string> = {
-  paga: "bg-accent-soft text-primary",
+  paga: "bg-muted text-foreground",
   aberta: "bg-muted text-muted-foreground",
   atrasada: "bg-warning-soft text-warning",
   estornada: "bg-muted text-muted-foreground",

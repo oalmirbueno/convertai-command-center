@@ -144,7 +144,7 @@ export function ZonaDeEnvio({
       ) : (
         <div className={compacta ? "flex flex-wrap items-center justify-center" : ""}>
           <p className={`flex min-w-0 items-center justify-center font-medium ${compacta ? "mr-2 text-[12px] text-muted-foreground" : "text-[14px]"}`}>
-            <ClipboardPaste className="mr-1.5 h-4 w-4 shrink-0 text-primary" /> <span className="min-w-0 truncate">{compacta ? "Solte ou cole com Ctrl+V" : "Solte as fotos aqui ou cole com Ctrl+V"}</span>
+            <ClipboardPaste className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" /> <span className="min-w-0 truncate">{compacta ? "Solte ou cole com Ctrl+V" : "Solte as fotos aqui ou cole com Ctrl+V"}</span>
           </p>
           {!compacta && (
             <p className="mt-1 text-[12px] text-muted-foreground">JPG, PNG ou WEBP, até 25 MB cada</p>
@@ -304,7 +304,7 @@ function DetalheDaFoto({
         <FotoInteira foto={foto} />
       </button>
       {classeDaFoto(foto) === "gerada" && (
-        <p className="rounded-md bg-primary/5 px-2.5 py-1.5 text-[12px] leading-snug text-foreground">
+        <p className="rounded-md bg-muted px-2.5 py-1.5 text-[12px] leading-snug text-foreground">
           Imagem gerada por IA. Partes que não aparecem nas fotos originais podem ter sido criadas.
         </p>
       )}
@@ -415,7 +415,7 @@ function GuiaDaArea() {
   return (
     <div className="p-4" data-guia-das-fotos="">
       <p className="flex items-center text-[13px] font-medium">
-        <Eye className="mr-1.5 h-4 w-4 text-primary" /> Nenhuma foto aberta
+        <Eye className="mr-1.5 h-4 w-4 text-muted-foreground" /> Nenhuma foto aberta
       </p>
       <ul className="mt-2.5 space-y-2">
         {itens.map((i) => (
@@ -960,7 +960,7 @@ export default function EtapaAcervo() {
                   className="pointer-events-auto flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto overscroll-contain scrollbar-hidden rounded-md border border-border bg-card px-2 py-1.5 shadow-card lg:rounded-none lg:border-0 lg:px-1 lg:shadow-none"
                   data-linha-da-selecao=""
                 >
-                  <span className="mr-1 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[12px] font-semibold tabular-nums text-primary" title={`${escolhidas.length} ${escolhidas.length === 1 ? "foto marcada" : "fotos marcadas"}`}>
+                  <span className="mr-1 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[12px] font-semibold tabular-nums text-foreground" title={`${escolhidas.length} ${escolhidas.length === 1 ? "foto marcada" : "fotos marcadas"}`}>
                     {escolhidas.length} {escolhidas.length === 1 ? "marcada" : "marcadas"}
                   </span>
                   {prepararNaAgenda && (

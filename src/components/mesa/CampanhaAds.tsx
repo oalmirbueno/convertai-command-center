@@ -89,7 +89,7 @@ export default function CampanhaAds({ campanha }: { campanha: Campanha }) {
   return (
     <div className="min-w-0" data-campanha-ads="vinculada">
       <div className="flex min-w-0 items-center">
-        <Megaphone className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <Megaphone className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="mr-2 min-w-0 flex-1 truncate text-[13px] font-medium" title={vinculo.nome}>{vinculo.nome}</span>
         {salvando && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando" />}
         <LinkDoRouter to={linkDaMesaAds(clientId, campanha.id)} className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label="Abrir na Mesa Ads" title="Abrir na Mesa Ads com as peças prontas como criativos">

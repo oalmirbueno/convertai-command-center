@@ -130,7 +130,7 @@ export default function AprendizadoDoAgente({
       )}
       {aprendido && (
         <p className="flex min-w-0 items-start text-muted-foreground" data-aprendi={aprendido.esquecido_em ? "esquecido" : aprendido.id ? "guardado" : "incerto"}>
-          <GraduationCap className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-primary" aria-hidden />
+          <GraduationCap className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 [overflow-wrap:anywhere]">
             <span className="font-medium text-foreground">{aprendido.id ? "Aprendi:" : "Guardar como regra?"}</span>{" "}
             <span className={aprendido.esquecido_em ? "line-through" : undefined}>{aprendido.texto}</span>

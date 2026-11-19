@@ -178,7 +178,7 @@ function LinhaDoConteudo({
     <li className={`min-w-0 rounded-lg border bg-background ${marcado ? "border-primary/60" : "border-border"}`} data-conteudo={item.tema_id}>
       <div className="flex min-w-0 items-start px-3 py-2.5">
         {naAgenda ? (
-          <CalendarCheck2 className="mr-2.5 mt-0.5 h-4 w-4 shrink-0 text-success" aria-label="Na agenda" />
+          <CalendarCheck2 className="mr-2.5 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-label="Na agenda" />
         ) : (
           <input
             type="checkbox"
@@ -190,7 +190,7 @@ function LinhaDoConteudo({
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center text-[11px] text-muted-foreground">
-            {item.etapa && <span className="mb-0.5 mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 font-medium capitalize text-primary">{item.etapa}</span>}
+            {item.etapa && <span className="mb-0.5 mr-1.5 rounded-full bg-muted px-2 py-0.5 font-medium capitalize text-foreground">{item.etapa}</span>}
             <span className="mb-0.5 mr-2">{rotuloDoFormato(item.formato)}</span>
             {laminas > 0 && (
               <span className="mb-0.5 mr-2 inline-flex items-center"><Layers className="mr-0.5 h-3 w-3" />{laminas}</span>
@@ -469,7 +469,7 @@ export default function CampanhaConteudos({
             </>
           ) : (
             <span className="mb-1 mr-2 inline-flex h-8 items-center" role="img" aria-label="Tudo na agenda" title="Tudo na agenda">
-              <CalendarCheck2 className="h-4 w-4 text-success" aria-hidden="true" />
+              <CalendarCheck2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             </span>
           )}
           {onPedirAoAgente && (

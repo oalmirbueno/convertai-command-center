@@ -76,7 +76,7 @@ export default function GuiaDaLinha() {
                 className={juntar("mb-1.5 mr-1.5 inline-flex h-7 items-center rounded-full border border-border bg-background px-2.5 text-[12px] text-foreground hover:border-primary/50", foco)}
                 data-objetivo-rapido={o.valor}
               >
-                <Icone className="mr-1 h-3.5 w-3.5 text-primary" aria-hidden="true" /> {o.titulo}
+                <Icone className="mr-1 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> {o.titulo}
               </button>
             );
           })}
@@ -90,7 +90,7 @@ export default function GuiaDaLinha() {
     <div className="flex min-w-0 flex-wrap items-center pb-1" data-guia-da-linha={objetivo.valor} data-pronto={prontidao.pronto ? "sim" : "nao"}>
       {/* No celular o botão desce para a linha de baixo (o texto não corta). */}
       <div className="mb-1.5 flex w-full min-w-0 items-center sm:mb-1 sm:mr-3 sm:w-auto sm:flex-1">
-        <Icone className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <Icone className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0">
           <div className="flex min-w-0 items-center text-[13px]">
             <span className="mr-1 shrink-0 text-muted-foreground">Fazendo:</span>

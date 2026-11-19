@@ -877,7 +877,7 @@ export default function EstudioDeMockups({
                       Acervo
                     </label>
                     {e.enviado ? (
-                      <span className={juntar(texto.etiqueta, "text-primary")}>Enviado</span>
+                      <span className={juntar(texto.etiqueta, "text-foreground")}>Enviado</span>
                     ) : (
                       <button
                         type="button"

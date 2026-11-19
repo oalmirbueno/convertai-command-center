@@ -869,7 +869,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                   </button>
                   <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{ROTULO_DA_ORIGEM[v.origem] || v.origem}</p>
                   {eAtual ? (
-                    <span className="text-[11px] text-primary">Em uso</span>
+                    <span className="text-[11px] text-muted-foreground">Em uso</span>
                   ) : (
                     <span className="inline-flex items-center">
                       <button type="button" className="mr-2 text-[11px] text-primary hover:underline" disabled={trocando} onClick={() => void escolher(v.id, "Versão escolhida.")}>

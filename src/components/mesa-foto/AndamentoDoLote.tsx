@@ -94,7 +94,7 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
   const r = resumoDoLote(lote);
   const pct = r.total ? Math.round((r.andando / r.total) * 100) : 0;
   return (
-    <section className={`min-w-0 rounded-lg border border-primary/30 p-3 ${className}`} aria-label="Andamento do lote" data-lote={ensaioId}>
+    <section className={`min-w-0 rounded-lg border border-border p-3 ${className}`} aria-label="Andamento do lote" data-lote={ensaioId}>
       <div className="flex min-w-0 flex-wrap items-center">
         <p className="mr-auto min-w-0 text-[13px] font-semibold" role="status" aria-live="polite">
           {lote.ativo ? (
@@ -133,11 +133,11 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
             title={i.erro || undefined}
             className={`mb-1 mr-1 inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[11px] ${
               i.estado === "feita"
-                ? "border-success/40 text-success"
+                ? "border-border text-success"
                 : i.estado === "falhou"
                   ? "border-destructive/40 text-destructive"
                   : i.estado === "gerando"
-                    ? "border-primary/50 text-primary"
+                    ? "border-border text-foreground"
                     : "border-border text-muted-foreground"
             }`}
             data-item-do-lote={i.estado}

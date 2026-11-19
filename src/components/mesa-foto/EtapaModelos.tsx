@@ -127,7 +127,7 @@ const ehFiltro = (v: unknown) => FILTROS.some((f) => f.valor === v);
 /** Pílula "gerada" em cima da imagem (clara, nunca véu escuro). */
 function SeloGerada() {
   return (
-    <span className="pointer-events-none absolute left-1 top-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
+    <span className="pointer-events-none absolute left-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-foreground" data-selo="gerada">
       <Sparkles className="mr-0.5 h-2.5 w-2.5" /> gerada
     </span>
   );
@@ -304,7 +304,7 @@ function BotoesDeUso({ persona, className = "" }: { persona: Persona; className?
 /** Ponto de cor de cada estado da persona (o cartão não usa pílula grande). */
 const PONTO_DO_STATUS: Record<string, string> = {
   rascunho: "bg-muted-foreground/40",
-  candidatos: "bg-primary/60",
+  candidatos: "bg-muted-foreground/60",
   ancora: "bg-primary",
   folha: "bg-primary",
   pronta: "bg-success",
@@ -749,7 +749,7 @@ function SeletorDeMotores({
           className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-card px-2.5 text-left text-[13px] transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-seletor-de-motores=""
         >
-          <span className="mr-2 shrink-0 rounded-full bg-primary/10 px-2 py-px text-[11px] font-semibold tabular-nums text-primary">{ligados.length}</span>
+          <span className="mr-2 shrink-0 rounded-full bg-muted px-2 py-px text-[11px] font-semibold tabular-nums text-foreground">{ligados.length}</span>
           <span className={`min-w-0 flex-1 truncate ${ligados.length ? "" : "text-muted-foreground"}`}>{resumo}</span>
           <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </button>
@@ -861,7 +861,7 @@ function ColunaDoMotor({
                   </button>
                   <SeloGerada />
                   {ehAncora && (
-                    <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-primary/40 bg-card px-1.5 py-px text-[11px] font-semibold text-primary">
+                    <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-foreground">
                       <Crown className="mr-0.5 h-2.5 w-2.5" /> âncora
                     </span>
                   )}
@@ -1175,7 +1175,7 @@ export function AntesEDepois({ antes, depois, proporcao }: { antes: ImagemDaPers
           <ImagemDaPersonaNaTela imagem={depois} alt="Depois, 4K" className="!object-contain" />
         </span>
         <span className="pointer-events-none absolute bottom-0 top-0 w-px bg-card" style={{ left: `${pos}%` }} />
-        <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary">depois 4K</span>
+        <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-foreground">depois 4K</span>
         <span className="pointer-events-none absolute right-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-medium text-foreground">antes</span>
       </Moldura>
       <input type="range" min={0} max={100} value={pos} onChange={(e) => setPos(Number(e.target.value))} aria-label="Cortina entre antes e depois" className="mt-2 w-full" />
@@ -1449,7 +1449,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
             <p className={juntar(texto.tituloSecao, "mr-2 min-w-0 truncate")}>{persona.nome}</p>
             <span className={`mr-1.5 rounded-full px-1.5 py-px text-[11px] font-medium ${status.cor}`}>{status.rotulo}</span>
           </div>
-          <span className="mt-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
+          <span className="mt-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-foreground" data-selo="gerada">
             <Sparkles className="mr-0.5 h-2.5 w-2.5" /> pessoa sintética
           </span>
           <dl className="mt-2 space-y-0.5 text-[12px] leading-snug">

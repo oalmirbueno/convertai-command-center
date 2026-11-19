@@ -21,7 +21,7 @@ export const OBJETIVOS = [
 
 const TOM_DO_STATUS: Record<StatusDoRoteiro, string> = {
   rascunho: "bg-muted text-muted-foreground",
-  aprovado: "bg-accent-soft text-primary",
+  aprovado: "bg-muted text-foreground",
   gravado: "bg-foreground/10 text-foreground",
 };
 

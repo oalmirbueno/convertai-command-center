@@ -367,7 +367,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
             <ul className="mt-2 space-y-1.5">
               {t.gostos.map((g) => (
                 <li key={g.id} className="flex min-w-0 items-start text-[13px]">
-                  {g.tipo === "gostou" ? <ThumbsUp className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-label="Gostou" /> : <ThumbsDown className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Não gostou" />}
+                  {g.tipo === "gostou" ? <ThumbsUp className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Gostou" /> : <ThumbsDown className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Não gostou" />}
                   <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                     <span className="text-muted-foreground">{g.quem === "dono" ? "Dono" : "Cliente"}: </span>
                     {g.texto}
@@ -390,7 +390,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
                 <div key={x.id} className="min-w-0">
                   <MiniaturaDoTemplate mini={x.mini} url={x.url} alt={x.tema || "Teste do template"} />
                   {x.status === "aprovado" ? (
-                    <p className="mt-1 inline-flex items-center text-[12px] text-primary">
+                    <p className="mt-1 inline-flex items-center text-[12px] text-muted-foreground">
                       <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Virou âncora
                     </p>
                   ) : (
@@ -421,7 +421,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
                   </span>
                   <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{quando(v.criado_em)}</span>
                   {v.numero === t.versao_atual ? (
-                    <span className="ml-2 inline-flex shrink-0 items-center text-[11px] text-primary">
+                    <span className="ml-2 inline-flex shrink-0 items-center text-[11px] text-muted-foreground">
                       <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Atual
                     </span>
                   ) : (

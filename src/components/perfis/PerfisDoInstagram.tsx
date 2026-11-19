@@ -97,7 +97,7 @@ function LinhaDoPerfil({
               </span>
             )}
             {p.contagem.fora > 0 && (
-              <span className={juntar(etiqueta, "ml-2 bg-primary/15 text-foreground")} title="Posts fora da curva (2x a mediana ou mais)">
+              <span className={juntar(etiqueta, "ml-2 bg-muted text-foreground")} title="Posts fora da curva (2x a mediana ou mais)">
                 {p.contagem.fora} fora da curva
               </span>
             )}
@@ -127,7 +127,7 @@ function MudancasDosConcorrentes({ mudancas }: { mudancas: MudancaNosConcorrente
   return (
     <section className="mt-4 min-w-0 border-t border-border pt-3" aria-label="O que mudou nos concorrentes" data-mudancas-concorrentes="">
       <div className="flex min-w-0 items-center">
-        <Radar className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <Radar className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <h4 className={texto.tituloSecao}>O que mudou</h4>
         <AjudaRecolhida className="ml-1.5" rotulo="O que é O que mudou">
           As últimas rodadas dos concorrentes: posts novos, os que ficaram fora da curva e as ideias de resposta. As ideias também vão como sinal para o Radar de ideias.

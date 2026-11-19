@@ -595,8 +595,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   };
 
   const getFileIcon = (type: string) => {
-    if (type?.startsWith("image/")) return <Image className="w-4 h-4 text-primary" />;
-    if (type?.startsWith("video/")) return <Film className="w-4 h-4 text-primary" />;
+    if (type?.startsWith("image/")) return <Image className="w-4 h-4 text-muted-foreground" />;
+    if (type?.startsWith("video/")) return <Film className="w-4 h-4 text-muted-foreground" />;
     return <FileText className="w-4 h-4 text-muted-foreground" />;
   };
 
@@ -835,7 +835,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               ) : (
                 <>
                   <p className={texto.rotulo}>Área</p>
-                  <span className={juntar(pilula, "bg-primary/10 text-primary")}>
+                  <span className={juntar(pilula, "bg-muted text-foreground")}>
                     {TASK_WORKSTREAM_LABELS[workstream]}
                   </span>
                 </>
@@ -846,7 +846,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
           {task.milestone?.title && (
             <div className="min-w-0 space-y-1">
               {rotuloDoCampo(<Folder className="h-3 w-3" />, "Milestone")}
-              <span className={juntar(pilula, "bg-primary/10 text-primary")}>{task.milestone.title}</span>
+              <span className={juntar(pilula, "bg-muted text-foreground")}>{task.milestone.title}</span>
             </div>
           )}
 

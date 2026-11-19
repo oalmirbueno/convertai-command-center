@@ -285,7 +285,7 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
           {` · ${percent}%`}
           {pendentes > 0 && <span className="text-warning">{` · ${pendentes} ${pendentes === 1 ? "pendente" : "pendentes"}`}</span>}
           {(contract || briefing) && (
-            <span className="text-primary" title="Contrato assinado e briefing entregue marcam os itens sozinhos.">
+            <span className="text-foreground" title="Contrato assinado e briefing entregue marcam os itens sozinhos.">
               {" · auto-preenchido"}
             </span>
           )}
@@ -426,17 +426,17 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
                                         )}
                                       >
                                         {auto?.kind === "contract" && (
-                                          <FileSignature className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                                          <FileSignature className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                                         )}
                                         {auto?.kind === "briefing" && (
-                                          <ClipboardList className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                                          <ClipboardList className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                                         )}
                                         <span className={juntar("min-w-0", (checked || skipped) && "line-through")}>{it.label}</span>
                                         {it.is_required && !skipped && (
                                           <span className="ml-0.5 text-destructive" aria-label="obrigatório">*</span>
                                         )}
                                         {auto && !skipped && (
-                                          <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>Auto</span>
+                                          <span className={juntar(etiqueta, "ml-2 bg-muted text-foreground")}>Auto</span>
                                         )}
                                         {skipped && (
                                           <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")}>Não necessário</span>

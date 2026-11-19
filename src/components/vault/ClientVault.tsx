@@ -47,7 +47,7 @@ interface VaultItem {
 }
 
 const CATEGORY_META: Record<Category, { label: string; plural: string; icon: any; color: string }> = {
-  password: { label: "Senha", plural: "Senhas", icon: KeyRound, color: "text-primary" },
+  password: { label: "Senha", plural: "Senhas", icon: KeyRound, color: "text-foreground" },
   link: { label: "Link útil", plural: "Links úteis", icon: Link2, color: "text-info" },
   system: { label: "Sistema", plural: "Sistemas", icon: Server, color: "text-warning" },
 };
@@ -299,7 +299,7 @@ export default function ClientVault({ clientId, canManage, titulo, amplo = false
                               <p className="flex min-w-0 items-center text-[15px] font-semibold leading-5 text-foreground">
                                 <span className="min-w-0 truncate">{it.title}</span>
                                 {it.agentes_podem_usar ? (
-                                  <span className="ml-1.5 shrink-0 text-primary" title="Os agentes podem usar este acesso" aria-label="Os agentes podem usar este acesso" role="img">
+                                  <span className="ml-1.5 shrink-0 text-muted-foreground" title="Os agentes podem usar este acesso" aria-label="Os agentes podem usar este acesso" role="img">
                                     <Bot className="h-3.5 w-3.5" aria-hidden="true" />
                                   </span>
                                 ) : null}

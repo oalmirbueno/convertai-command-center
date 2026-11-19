@@ -382,7 +382,7 @@ function Lamina({
           <span className="flex min-w-0 flex-1 items-center text-[11px] leading-none">
             {/* v4: o número da lâmina num círculo (de tinta na aberta), como os contadores das referências. */}
             <span className={`inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[10.5px] font-semibold tabular-nums ${ativo ? "bg-foreground text-background" : "bg-muted text-foreground"}`}>{card.ordem}</span>
-            <span className={`ml-1 min-w-0 truncate ${funcao === "capa" ? "font-medium text-primary" : "text-muted-foreground"}`}> {funcao}</span>
+            <span className={`ml-1 min-w-0 truncate ${funcao === "capa" ? "font-medium text-foreground" : "text-muted-foreground"}`}> {funcao}</span>
           </span>
           {versao && onAjustar && !andamento && (
             <button

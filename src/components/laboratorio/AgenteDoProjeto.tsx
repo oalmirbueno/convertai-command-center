@@ -141,7 +141,7 @@ export default function AgenteDoProjeto({
                 ))}
               </ol>
               {m.aplicada ? (
-                <p className={juntar(texto.auxiliar, "mt-2 inline-flex items-center text-primary")}>
+                <p className={juntar(texto.auxiliar, "mt-2 inline-flex items-center text-foreground")}>
                   <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
                   {m.aplicada.feitas} aplicada(s){m.aplicada.falhas.length ? `, ${m.aplicada.falhas.length} não coube(ram)` : ""}
                 </p>

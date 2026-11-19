@@ -52,7 +52,7 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
         <p className={juntar("text-[13px] font-medium leading-5 text-foreground", compacto ? "truncate" : "break-words", feito && "line-through")}>{item.titulo}</p>
         <p className={juntar("text-[12px] leading-4 text-muted-foreground", compacto ? "truncate" : "break-words")}>
           {item.passo}
-          {auto ? <span className={juntar(etiqueta, "ml-1.5 bg-primary/15 text-primary")}>pelo painel</span> : null}
+          {auto ? <span className={juntar(etiqueta, "ml-1.5 bg-muted text-foreground")}>pelo painel</span> : null}
         </p>
         {!compacto && item.fatos.length > 0 && (
           <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground/80">{item.fatos.join(" · ")}</p>

@@ -16,7 +16,7 @@ function TreePreview({ nodes, depth = 0 }: { nodes: TplNode[]; depth?: number })
       {nodes.map((n, i) => (
         <li key={i} className="min-w-0">
           <div className="flex min-w-0 items-start py-1" style={{ paddingLeft: depth * 14 }}>
-            <Folder className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/70" aria-hidden="true" />
+            <Folder className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className={juntar(texto.corpo, "truncate")}>{n.name}</p>
               {n.hint && <p className={juntar(texto.auxiliar, "truncate")} title={n.hint}>{n.hint}</p>}

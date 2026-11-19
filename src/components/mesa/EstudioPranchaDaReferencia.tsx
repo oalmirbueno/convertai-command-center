@@ -155,7 +155,7 @@ export default function EstudioPranchaDaReferencia({
   return (
     <div className="min-w-0 rounded-md border border-border bg-background p-2" data-prancha="quadros">
       <p className="mb-1.5 flex min-w-0 items-center text-[12px] leading-snug">
-        <LayoutGrid className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" />
+        <LayoutGrid className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1">
           {rotulo[0].toUpperCase() + rotulo.slice(1)}: {TIPO[r.prancha.tipo || "mosaico"] || "prancha"} com {quadros.length} artes. {capas} capa{capas === 1 ? "" : "s"}, {seq} de sequência.
         </span>

@@ -57,7 +57,7 @@ export default function DocumentoDoContrato({
       <dl key={`q-${chave}`} className="mt-3 grid min-w-0 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)]">
         {linhas.map((l, i) => (
           <Fragment key={i}>
-            <dt className={juntar(texto.rotulo, "pt-2.5 text-primary sm:border-t sm:border-border/60")}>{l.rotulo}</dt>
+            <dt className={juntar(texto.rotulo, "pt-2.5 text-foreground sm:border-t sm:border-border/60")}>{l.rotulo}</dt>
             <dd className={juntar(texto.corpo, "min-w-0 border-b border-border/60 pb-2.5 pt-1 sm:border-b-0 sm:border-t sm:pt-2.5")}>{comFaltas(l.texto)}</dd>
           </Fragment>
         ))}
@@ -91,14 +91,14 @@ export default function DocumentoDoContrato({
     fecharItens(String(i));
     if (b.tipo === "titulo") saida.push(<h2 key={i} className={juntar(texto.tituloPagina, "mt-5")}>{b.texto}</h2>);
     else if (b.tipo === "meta") saida.push(<p key={i} className={juntar(texto.auxiliar, "mt-1")}>{b.texto}</p>);
-    else if (b.tipo === "secao") saida.push(<h3 key={i} className={juntar(texto.tituloSecao, "mt-8 border-b border-primary/40 pb-1.5")}>{b.texto}</h3>);
+    else if (b.tipo === "secao") saida.push(<h3 key={i} className={juntar(texto.tituloSecao, "mt-8 border-b border-border pb-1.5")}>{b.texto}</h3>);
     else if (b.tipo === "clausula") {
       const numero = b.texto.split(" ")[0].replace(/\.$/, "");
       const alterada = alteradas.indexOf(numero) >= 0;
       saida.push(
         <h4 key={i} className="mt-5 text-[13px] font-semibold leading-5 text-foreground">
           {b.texto}
-          {alterada && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">alterada</span>}
+          {alterada && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground">alterada</span>}
         </h4>,
       );
     } else saida.push(<p key={i} className={juntar(texto.corpo, "mt-2")}>{comFaltas(b.texto)}</p>);

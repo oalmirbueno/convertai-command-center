@@ -327,7 +327,7 @@ export default function PerfilDoAgente({
                 </div>
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12px]">
-                <span className={juntar(etiqueta, "h-6 px-2", ativo ? "bg-success/15 text-success" : "bg-warning/15 text-warning")}>{ativo ? "ativo" : operador.status === "paused" ? "pausado" : operador.status}</span>
+                <span className={juntar(etiqueta, "h-6 px-2", ativo ? "bg-muted text-success" : "bg-warning/15 text-warning")}>{ativo ? "ativo" : operador.status === "paused" ? "pausado" : operador.status}</span>
                 <span className="text-muted-foreground">{operador.last_run_at ? `trabalhou ${quando(operador.last_run_at)}` : "ainda não trabalhou"}</span>
                 <label className="inline-flex items-center gap-1 text-muted-foreground">
                   Área

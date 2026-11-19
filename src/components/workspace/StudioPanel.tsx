@@ -917,7 +917,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </button>
         ) : (
-          <span className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+          <span className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground" aria-hidden="true">
             <Sparkles className="h-3.5 w-3.5" />
           </span>
         )}
@@ -990,7 +990,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           {/* Linha de contexto: escopo, projeto vinculado e as ações do documento. Sem caixa dentro de caixa. */}
           <div className="flex min-w-0 shrink-0 flex-wrap items-center border-b border-border px-2 py-1 sm:px-3">
             <div className="mr-2 flex min-w-0 max-w-full items-center py-0.5">
-              <Globe2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <Globe2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               <span className="min-w-0 truncate text-[13px] font-medium text-foreground sm:max-w-[300px]" title={scopeChipLabel}>
                 {scopeChipLabel}
               </span>
@@ -1037,7 +1037,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <span
                 className={cn("hidden h-7 w-5 shrink-0 items-center justify-center sm:flex",
                   docSyncing === "saving" && "text-amber-500",
-                  docSyncing === "saved" && "text-primary",
+                  docSyncing === "saved" && "text-foreground",
                   docSyncing === "error" && "text-destructive",
                   docSyncing === "idle" && "text-muted-foreground")}
                 title={statusDaSincronia}
@@ -1139,7 +1139,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
                 <aside aria-label="Notas do projeto" className="hidden min-h-0 min-w-0 flex-col overflow-hidden border-l border-border lg:flex">
                   <div className="flex min-w-0 shrink-0 items-center border-b border-border px-3 py-2">
-                    <NotebookPen className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                    <NotebookPen className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <h3 className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">Notas do projeto</h3>
                     <AjudaRecolhida rotulo="Sobre as notas do projeto" className="ml-1.5">
                       O agente usa este conteúdo como memória de trabalho. Use / para estruturar e @ para anexar arquivos.
@@ -1193,13 +1193,13 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     )}
                   >
                     <div className="flex min-w-0 shrink-0 items-center border-b border-border px-3 py-2">
-                      <NotebookPen className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                      <NotebookPen className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                       <h3 className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">Notas de trabalho</h3>
                       <AjudaRecolhida rotulo="Comandos das notas" className="ml-1.5">
                         / abre os comandos, @ anexa um arquivo da pasta, imagem colada vira texto e link de vídeo colado vira player.
                       </AjudaRecolhida>
                       {ocrBusy && (
-                        <span className="ml-3 inline-flex shrink-0 items-center text-[12px] text-primary" role="status">
+                        <span className="ml-3 inline-flex shrink-0 items-center text-[12px] text-muted-foreground" role="status">
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> Lendo a imagem
                         </span>
                       )}
@@ -1236,7 +1236,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     )}
                   >
                     <div className="flex min-w-0 shrink-0 items-center border-b border-border px-3 py-2">
-                      <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                      <FileText className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                       <h3 className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">Documento</h3>
                       <AjudaRecolhida rotulo="Sobre o documento" className="ml-1.5">
                         Preview das notas: marque as caixas, veja vídeos e o Kanban vivo. Publicado, é isto que o cliente vê na aba Documento.
@@ -1268,7 +1268,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     )}
                     {(enrichBusy || enrichData) && (
                       <div className="shrink-0 space-y-2 border-t border-border px-3 py-2.5">
-                        <p className={cn(texto.rotulo, "flex items-center text-primary")}>
+                        <p className={cn(texto.rotulo, "flex items-center text-foreground")}>
                           <Zap className="mr-1 h-3 w-3" aria-hidden="true" /> Sugestões do agente{enrichBusy && ": lendo"}
                         </p>
                         {enrichData?.suggestion && <p className="text-[12px] leading-5 text-foreground/85">{enrichData.suggestion}</p>}
@@ -1706,7 +1706,7 @@ function SlashList({ items, onPick }: { items: SlashCmd[]; onPick: (c: SlashCmd)
       {items.map(c => (
         <button key={c.key} type="button" onClick={() => onPick(c)}
           className="flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[13px] hover:bg-muted">
-          <Sparkles className="mr-2 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+          <Sparkles className="mr-2 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="shrink-0 font-medium">{c.label}</span>
           <span className="ml-auto min-w-0 truncate pl-2 text-[11px] text-muted-foreground">{c.hint}</span>
         </button>
@@ -3050,7 +3050,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           {lendoConversa && !erroMsgs && <Carregando rotulo="Lendo a conversa" linhas={3} />}
           {msgs.length === 0 && !streaming && !lendoConversa && !erroMsgs && (
             <div className="mx-auto max-w-sm px-2 py-8 text-center">
-              <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+              <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground" aria-hidden="true">
                 <Bot className="h-4 w-4" />
               </span>
               {/* Só o título: o que o agente faz está no "?" do cabeçalho. */}
@@ -3104,7 +3104,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           {streaming && streamBuf && (
             <article className={classeDaResposta}>
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{streamBuf}</ReactMarkdown>
-              <span className="ml-0.5 inline-block h-3.5 w-[3px] bg-primary/70 align-middle" aria-hidden="true" />
+              <span className="ml-0.5 inline-block h-3.5 w-[3px] bg-muted-foreground/60 align-middle" aria-hidden="true" />
             </article>
           )}
           {streaming && !streamBuf && (
@@ -3120,7 +3120,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           {attached.length > 0 && (
             <div className="-mb-1 flex flex-wrap" aria-label="Anexos da próxima mensagem">
               {attached.map(a => (
-                <span key={a.id} className="mb-1 mr-1 inline-flex max-w-full items-center rounded-full bg-primary/10 py-0.5 pl-2 pr-1 text-[11px] text-primary">
+                <span key={a.id} className="mb-1 mr-1 inline-flex max-w-full items-center rounded-full bg-muted py-0.5 pl-2 pr-1 text-[11px] text-foreground">
                   {a.kind === "folder" ? <FolderIcon className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" /> : <FileIcon className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />}
                   <span className="max-w-[160px] truncate">{a.name}</span>
                   <button type="button" onClick={() => removeAttached(a.id)} aria-label={`Tirar ${a.name}`} className={cn("ml-1 rounded-full p-0.5 hover:bg-primary/20", foco)}>
@@ -3170,7 +3170,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                     onClick={() => pickSlash(c)}
                     className={cn("flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[13px]",
                       i === slashIdx ? "bg-primary/15" : "hover:bg-muted")}>
-                    <Sparkles className="mr-2 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                    <Sparkles className="mr-2 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="shrink-0 font-medium">{c.label}</span>
                     <span className="ml-auto min-w-0 truncate pl-2 text-[11px] text-muted-foreground">{c.hint}</span>
                   </button>
@@ -3223,7 +3223,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                       }}
                       className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[13px] hover:bg-muted"
                     >
-                      <Paperclip className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <Paperclip className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                       <span className="min-w-0 flex-1">
                         <span className="block font-medium text-foreground">Arquivo do workspace</span>
                         <span className="block truncate text-[11px] text-muted-foreground">busca rápida com @</span>
@@ -3244,7 +3244,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                       }}
                       className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[13px] hover:bg-muted"
                     >
-                      <Link2 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <Link2 className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                       <span className="min-w-0 flex-1">
                         <span className="block font-medium text-foreground">Link externo</span>
                         <span className="block truncate text-[11px] text-muted-foreground">o agente lê o conteúdo</span>
@@ -3255,7 +3255,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                       onClick={() => setPickerOpen(true)}
                       className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[13px] hover:bg-muted"
                     >
-                      <Columns3 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <Columns3 className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                       <span className="min-w-0 flex-1">
                         <span className="block font-medium text-foreground">Navegar pastas</span>
                         <span className="block truncate text-[11px] text-muted-foreground">seleção múltipla</span>
@@ -3300,7 +3300,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         <DialogContent className="flex h-[85vh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
           <DialogTitle className="sr-only">Link aberto no chat</DialogTitle>
           <div className="flex min-w-0 items-center border-b border-border px-3 py-2 pr-12">
-            <Link2 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <Link2 className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className={cn(texto.auxiliar, "min-w-0 flex-1 truncate")}>{linkPreview}</span>
             <button
               type="button"
@@ -3521,7 +3521,7 @@ function AttachPicker({
                     >
                       {n.kind === "folder"
                         ? <FolderIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
-                        : <FileIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
+                        : <FileIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
                       <span className="min-w-0 truncate text-[13px]">{n.name}</span>
                       {n.kind === "folder" && (
                         <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 opacity-40" aria-hidden="true" />
@@ -3761,7 +3761,7 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex min-w-0 items-center pr-6 text-[15px]">
-            <Bot className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <Bot className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 truncate">Personas do agente</span>
             <span className="ml-1.5 shrink-0 text-[13px] font-normal tabular-nums text-muted-foreground">{list.length}</span>
             <AjudaRecolhida rotulo="Sobre as personas" className="ml-1.5">
@@ -3774,7 +3774,7 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
             <ul className="max-h-56 divide-y divide-border overflow-y-auto overscroll-contain" aria-label="Personas">
               {list.map(p => (
                 <li key={p.id} className="flex min-w-0 items-center py-2">
-                  <span className="mr-2 shrink-0 text-primary/80" aria-hidden="true">
+                  <span className="mr-2 shrink-0 text-foreground" aria-hidden="true">
                     {p.folder_path ? <FolderIcon className="h-3.5 w-3.5" /> : p.client_id ? <Bot className="h-3.5 w-3.5" /> : <GitBranch className="h-3.5 w-3.5" />}
                   </span>
                   <div className="mr-2 min-w-0 flex-1">

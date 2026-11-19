@@ -3,7 +3,9 @@ import { toast } from "sonner";
 import { Check, ImagePlus, Moon, Sun, Trash2 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { fraseDoErro, salvarConta, type EstadoDoProduto } from "@/lib/produto/api";
-import { CORES_DA_EMPRESA, prepararLogo, type AparenciaDaEmpresa, type CorDaEmpresa } from "@/lib/produto/aparencia";
+import { CORES_DA_EMPRESA, contrasteDaCor, prepararLogo, tonsDaCor, type AparenciaDaEmpresa, type CorDaEmpresa } from "@/lib/produto/aparencia";
+import { MINIMO, formatarRazao } from "@/lib/design/contraste";
+import { Chip } from "@/components/ds";
 import { useRelerProduto } from "@/hooks/useProduto";
 import { CampoDeFormulario, Secao, SeletorCompacto, botao, campo, foco, juntar, superficie, texto } from "@/components/sistema";
 
@@ -97,7 +99,7 @@ export default function AparenciaDaConta({ estado }: { estado: EstadoDoProduto }
                   className={juntar("toque-compacto mb-2 mr-2 flex h-9 w-9 items-center justify-center rounded-full border-2 transition-transform active:scale-95", foco, cor === c.id ? "border-foreground" : "border-transparent")}
                 >
                   <span className="flex h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: `hsl(${theme === "light" ? c.claro : c.escuro})` }}>
-                    {cor === c.id && <Check className="h-3.5 w-3.5 text-white" aria-hidden="true" />}
+                    {cor === c.id && <Check className="h-3.5 w-3.5" style={{ color: `hsl(${theme === "light" ? c.textoNoClaro : c.textoNoEscuro})` }} aria-hidden="true" />}
                   </span>
                 </button>
               ))}
@@ -126,29 +128,40 @@ export default function AparenciaDaConta({ estado }: { estado: EstadoDoProduto }
   );
 }
 
-/** Uma miniatura do topo e de um botão com a escolha de agora, antes de salvar. */
+/** Uma miniatura do topo e de um botão com a escolha de agora, antes de salvar, e o contraste dela. */
 function Previa({ cor, tema, logo, nome }: { cor: CorDaEmpresa; tema: "dark" | "light"; logo: string | null; nome: string }) {
-  const c = CORES_DA_EMPRESA.filter((x) => x.id === cor)[0];
-  const tom = `hsl(${tema === "light" ? c.claro : c.escuro})`;
-  const textoDoBotao = tema === "light" ? "#fff" : `hsl(${c.textoNoEscuro})`;
+  const t = tonsDaCor(cor, tema);
+  const tom = `hsl(${t.tom})`;
+  const textoDoBotao = `hsl(${t.textoNoBotao})`;
+  const medida = contrasteDaCor(cor, tema);
+  const botaoNoFundo = Math.min(medida.fundo, medida.cartao);
   return (
-    <div className={juntar(superficie.painel, "min-w-0 overflow-hidden")} data-previa-da-aparencia="" aria-hidden="true">
-      <div className="flex h-11 min-w-0 items-center border-b border-border px-3">
-        {logo ? <img src={logo} alt="" className="h-6 w-auto max-w-[110px] object-contain" /> : <span className={juntar(texto.corpo, "min-w-0 truncate font-semibold")}>{nome}</span>}
-        <span className="min-w-0 flex-1" />
-        <span className="ml-2 h-2 w-10 rounded-full bg-muted" />
-        <span className="ml-2 h-2 w-10 rounded-full bg-muted" />
-      </div>
-      <div className="space-y-3 p-3">
-        <span className="block h-2.5 w-2/3 rounded-full bg-muted" />
-        <span className="block h-2.5 w-1/2 rounded-full bg-muted" />
-        <div className="flex items-center">
-          <span className="inline-flex h-8 items-center rounded-md px-3 text-[12px] font-medium" style={{ backgroundColor: tom, color: textoDoBotao }}>Novo negócio</span>
-          <span className="ml-3 text-[12px] font-medium" style={{ color: tom }}>Ver agenda</span>
+    <div className="min-w-0">
+      <div className={juntar(superficie.painel, "min-w-0 overflow-hidden")} data-previa-da-aparencia="" aria-hidden="true">
+        <div className="flex h-11 min-w-0 items-center border-b border-border px-3">
+          {logo ? <img src={logo} alt="" className="h-6 w-auto max-w-[110px] object-contain" /> : <span className={juntar(texto.corpo, "min-w-0 truncate font-semibold")}>{nome}</span>}
+          <span className="min-w-0 flex-1" />
+          <span className="ml-2 h-2 w-10 rounded-full bg-muted" />
+          <span className="ml-2 h-2 w-10 rounded-full bg-muted" />
         </div>
-        <span className="block h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <span className="block h-full w-3/5 rounded-full" style={{ backgroundColor: tom }} />
-        </span>
+        <div className="space-y-3 p-3">
+          <span className="block h-2.5 w-2/3 rounded-full bg-muted" />
+          <span className="block h-2.5 w-1/2 rounded-full bg-muted" />
+          <div className="flex items-center">
+            <span className="inline-flex h-8 items-center rounded-md px-3 text-[12px] font-medium" style={{ backgroundColor: tom, color: textoDoBotao }}>Novo negócio</span>
+            <span className="ml-3 text-[12px] font-medium" style={{ color: `hsl(${t.tomDoTexto})` }}>Ver agenda</span>
+          </div>
+          <span className="block h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <span className="block h-full w-3/5 rounded-full" style={{ backgroundColor: tom }} />
+          </span>
+        </div>
+      </div>
+      {/* Contraste ao vivo (WCAG 2.2): texto pede 4,5:1, botão pede 3:1 contra o fundo e o cartão. */}
+      <div className="mt-3 flex min-w-0 flex-wrap items-center" data-contraste-da-cor="">
+        <span className={juntar(texto.auxiliar, "mb-1.5 mr-1.5")}>Texto no botão {formatarRazao(medida.botao)}</span>
+        <Chip className="mb-1.5 mr-4">{medida.notaBotao}</Chip>
+        <span className={juntar(texto.auxiliar, "mb-1.5 mr-1.5")}>Botão no fundo {formatarRazao(botaoNoFundo)}</span>
+        <Chip className="mb-1.5">{botaoNoFundo >= MINIMO.grafico ? "AA" : "reprova"}</Chip>
       </div>
     </div>
   );

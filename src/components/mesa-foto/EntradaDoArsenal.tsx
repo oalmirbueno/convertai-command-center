@@ -58,9 +58,9 @@ export default function EntradaDoArsenal() {
     }
   };
   return (
-    <section className="min-w-0 rounded-lg border border-primary/40 p-3" aria-label="Foto para o Arsenal" data-entrada-do-arsenal="">
+    <section className="min-w-0 rounded-lg border border-border p-3" aria-label="Foto para o Arsenal" data-entrada-do-arsenal="">
       <div className="mb-2 flex min-w-0 items-center">
-        <BookmarkPlus className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <BookmarkPlus className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">Guardar no Arsenal</p>
         <AjudaRecolhida rotulo="Sobre guardar no Arsenal">O prompt fica no Arsenal deste cliente com a foto como exemplo. Copie e use em Fotos do produto, Foto com modelo ou no Book.</AjudaRecolhida>
         <button type="button" onClick={fechar} aria-label="Dispensar" className="ml-1 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">

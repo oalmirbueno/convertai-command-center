@@ -91,7 +91,7 @@ export default function RichText({ text, className }: { text: string; className?
           return (
             <p
               key={index}
-              className="mb-1.5 mt-4 text-[11px] font-semibold text-primary first:mt-0"
+              className="mb-1.5 mt-4 text-[11px] font-semibold text-foreground first:mt-0"
             >
               {block.text}
             </p>
@@ -102,7 +102,7 @@ export default function RichText({ text, className }: { text: string; className?
             <ul key={index} className="mb-3 space-y-1.5 last:mb-0">
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex} className="flex items-start gap-2 text-[13px] leading-relaxed text-foreground/85">
-                  <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" aria-hidden="true" />
+                  <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/60" aria-hidden="true" />
                   <span>{renderInline(item, `li-${index}-${itemIndex}`)}</span>
                 </li>
               ))}

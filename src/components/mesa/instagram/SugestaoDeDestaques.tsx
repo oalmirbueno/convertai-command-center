@@ -95,7 +95,7 @@ export default function SugestaoDeDestaques({ sugestao, lista, onUsar }: { suges
   const usada = !!guardada && guardada.destaques.length > 0 && lista.length === guardada.destaques.length && guardada.destaques.every((d, i) => lista[i] && lista[i].nome === d.nome);
 
   return (
-    <div className="min-w-0 rounded-md border border-primary/30 bg-primary/5 px-3 py-2" data-sugestao-de-destaques="">
+    <div className="min-w-0 rounded-md border border-border bg-muted px-3 py-2" data-sugestao-de-destaques="">
       <div className="flex min-w-0 items-center justify-between">
         <TituloRecolhivel
           titulo="Sugestão para este perfil"

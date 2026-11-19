@@ -78,7 +78,7 @@ export function SeloDoEstadoDoVideo({ pronto, className = "" }: { pronto: boolea
   const Icone = pronto ? CheckCircle2 : CircleDashed;
   return (
     <span
-      className={juntar("inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-[12px] font-medium", pronto ? "bg-success-soft text-success" : "bg-muted text-muted-foreground", className)}
+      className={juntar("inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-[12px] font-medium", pronto ? "bg-muted text-success" : "bg-muted text-muted-foreground", className)}
       data-estado-do-video={pronto ? "pronto" : "a_fazer"}
       title={pronto ? "Pronto: a peça tem o vídeo final" : "A fazer: falta o vídeo final da peça"}
     >
@@ -419,7 +419,7 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
             </>
           ) : (
             <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border p-6 text-center" data-sem-video="">
-              <Video className="mb-2 h-7 w-7 text-primary" aria-hidden="true" />
+              <Video className="mb-2 h-7 w-7 text-muted-foreground" aria-hidden="true" />
               <p className={juntar(texto.corpo, "font-medium")}>Gravou? Suba o vídeo aqui</p>
               <p className={juntar(texto.auxiliar, "mt-1")}>Vai direto para o Workspace do cliente e a peça fica Pronta.</p>
               <div className="mt-3 flex min-w-0 flex-wrap items-center justify-center gap-1">

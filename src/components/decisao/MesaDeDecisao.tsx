@@ -99,7 +99,7 @@ const SUGESTOES: Record<"ajuste" | "rejeitado", string[]> = {
 };
 
 const TOM_DO_SELO: Record<string, string> = {
-  primario: "bg-primary/15 text-primary",
+  primario: "bg-muted text-foreground",
   aviso: "bg-warning/15 text-warning",
   perigo: "bg-destructive/15 text-destructive",
   neutro: "bg-muted text-muted-foreground",
@@ -240,7 +240,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
 
   if (!item) {
     return emTelaCheia(<div className="flex min-h-[220px] flex-col items-center justify-center py-10 text-center" aria-live="polite">
-      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/15 text-primary"><Check className="h-7 w-7" aria-hidden="true" /></span>
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-muted-foreground"><Check className="h-7 w-7" aria-hidden="true" /></span>
       <p className="mt-3 text-[15px] font-semibold text-foreground">Tudo decidido</p>
       {vazio && <div className={juntar(texto.auxiliar, "mt-1")}>{vazio}</div>}
       {emFoco && <button type="button" onClick={() => setEmFoco(false)} className={juntar(botao.secundario, "mt-4 h-9 px-4")}>Sair da tela cheia</button>}
@@ -303,7 +303,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
           <h3 className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-foreground" title={item.titulo}>{item.titulo}</h3>
           {item.mensagem && <p className="mt-2 whitespace-pre-wrap sm:max-h-72 sm:overflow-y-auto text-[14px] leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{item.mensagem}</p>}
           {item.diagrama && <div className="mt-4 rounded-xl bg-muted/30 p-3 sm:p-4">{item.diagrama}</div>}
-          {item.passo && <p className="mt-2 flex items-start text-[13px] text-muted-foreground"><ChevronRight className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{item.passo}</span></p>}
+          {item.passo && <p className="mt-2 flex items-start text-[13px] text-muted-foreground"><ChevronRight className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{item.passo}</span></p>}
           {!!item.sinais?.length && <ul className="-m-0.5 mt-3 flex flex-wrap" aria-label="Sinais">
             {item.sinais.map((s, n) => <li key={n} className={juntar("m-0.5 inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[11px]", TOM_DO_SELO[s.tom ?? "neutro"])}>{s.icone && <span className="mr-1 inline-flex shrink-0" aria-hidden="true">{s.icone}</span>}<span className="truncate">{s.texto}</span></li>)}
           </ul>}

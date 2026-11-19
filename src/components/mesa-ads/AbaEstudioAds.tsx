@@ -766,7 +766,7 @@ export default function AbaEstudioAds({
                       <span className="mt-0.5 flex min-w-0 flex-wrap items-center">
                         {midia === "video" ? <span className="text-[11px] text-primary">{pedidosDeVideo.isLoading || arquivosDeVideo.isLoading ? "Conferindo…" : pedidosDeVideo.isError || arquivosDeVideo.isError ? "Sem leitura" : `${videoResumo.nome} · ${videoResumo.quantidade ? `${videoResumo.quantidade} versão(ões)` : "sem vídeo"}`}</span> : <SeloDaSituacao situacao={situacao(c)} />}
                         {midia === "arte" && estaNaConta(c) && <span className="ml-1 text-[11px] font-medium text-primary" title="Na conta: o agente sênior enxerga">na conta</span>}
-                        {midia === "arte" && c.ad_id && <Link2 className="ml-1 h-3 w-3 text-success" aria-label="ligado a um anúncio" />}
+                        {midia === "arte" && c.ad_id && <Link2 className="ml-1 h-3 w-3 text-muted-foreground" aria-label="ligado a um anúncio" />}
                       </span>
                       {midia === "arte" && campanhaDoCriativo(c) && (
                         <span className="mt-0.5 block truncate text-[11px] text-primary" data-da-campanha="" title={`Da campanha ${campanhaDoCriativo(c)!.nome}`}>
@@ -817,7 +817,7 @@ export default function AbaEstudioAds({
                       {midia === "video" ? nomeBaseVideo(aberto) : nomeDoCriativo(aberto, listaDePlanos)}
                     </h2>
                     <span className="ml-2 inline-flex shrink-0" title={situacaoAberta === "entregue" ? AVISO_DA_ENTREGA : undefined}>
-                      {midia === "video" ? <span className="text-[12px] leading-4 text-primary">{videoDe(aberto).nome}</span> : <SeloDaSituacao situacao={situacaoAberta} />}
+                      {midia === "video" ? <span className="text-[12px] leading-4 text-muted-foreground">{videoDe(aberto).nome}</span> : <SeloDaSituacao situacao={situacaoAberta} />}
                     </span>
                     {midia === "arte" && estaNaConta(aberto) && <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[11px] font-medium text-primary">{aberto.status === "no_ar" ? "No ar" : "Na conta"}</span>}
                   </div>

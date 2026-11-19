@@ -31,7 +31,7 @@ export default function PainelDeMudancas({ plano, podePublicar, compacto = false
           </AjudaRecolhida>
         </div>
       ) : (
-        <div className="min-w-0 rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
+        <div className="min-w-0 rounded-md border border-border bg-muted px-3 py-2">
           <div className="flex min-w-0 items-center">
             <p className="text-[13px] font-medium text-foreground">Antes e depois</p>
             <AjudaRecolhida className="ml-1" rotulo="Como confirmar as datas">

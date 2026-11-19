@@ -49,14 +49,14 @@ export function MenuDeFerramentas({ contexto, aoAbrir, aoAbrirNavegador }: { con
           const semCliente = a.precisaCliente && !contexto.clientId;
           return (
             <button key={a.id} type="button" onMouseEnter={() => preCarregarFerramenta(a.caminho)} onFocus={() => preCarregarFerramenta(a.caminho)} onClick={() => aoAbrir({ rotulo: a.rotulo, caminho: a.caminho })} title={semCliente ? `${a.descricao}. Abre sem cliente escolhido.` : a.descricao} className="flex min-w-0 flex-col items-center gap-1 rounded-md px-1 py-2.5 text-center hover:bg-muted">
-              <Icone className="h-4 w-4 text-primary" aria-hidden="true" />
+              <Icone className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <span className="w-full truncate text-[12px] font-medium">{a.rotulo}</span>
             </button>
           );
         })}
         {aoAbrirNavegador && (
           <button type="button" onClick={aoAbrirNavegador} title="Sites externos que permitem ser embutidos" className="flex min-w-0 flex-col items-center gap-1 rounded-md px-1 py-2.5 text-center hover:bg-muted">
-            <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
+            <Globe className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <span className="w-full truncate text-[12px] font-medium">Navegador</span>
           </button>
         )}

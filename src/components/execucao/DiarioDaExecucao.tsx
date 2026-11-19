@@ -60,10 +60,10 @@ const NOME_DO_TIPO: Record<string, string> = {
 };
 
 const TOM_DO_TIPO: Record<string, string> = {
-  instrucao: "bg-primary/15 text-primary",
-  decisao: "bg-success/15 text-success",
-  aprovacao: "bg-success/15 text-success",
-  evidencia: "bg-success/10 text-success",
+  instrucao: "bg-muted text-foreground",
+  decisao: "bg-muted text-success",
+  aprovacao: "bg-muted text-success",
+  evidencia: "bg-muted text-success",
   correcao: "bg-warning/15 text-warning",
   pedido_insumo: "bg-warning/15 text-warning",
   pedido_revisao: "bg-warning/15 text-warning",
@@ -83,11 +83,11 @@ const ENTENDI: Record<string, string> = {
 
 const SITUACAO: Record<string, { rotulo: string; cor: string }> = {
   queued: { rotulo: "Na fila", cor: "bg-muted text-muted-foreground" },
-  in_progress: { rotulo: "Em andamento", cor: "bg-primary/15 text-primary" },
+  in_progress: { rotulo: "Em andamento", cor: "bg-muted text-foreground" },
   review: { rotulo: "Esperando sua revisão", cor: "bg-warning/15 text-warning" },
   awaiting_input: { rotulo: "Esperando algo seu", cor: "bg-warning/15 text-warning" },
   blocked: { rotulo: "Travada", cor: "bg-destructive/15 text-destructive" },
-  done: { rotulo: "Concluída", cor: "bg-success/15 text-success" },
+  done: { rotulo: "Concluída", cor: "bg-muted text-success" },
 };
 
 type Entrada = {
@@ -402,8 +402,8 @@ export default function DiarioDaExecucao({
             <DialogDescription className="sr-only">
               {contextoInicial ? `Pedido para ${contextoInicial.cliente.nome} · conversa compartilhada com a coordenação` : 'Conversa, trabalho e comprovantes no mesmo lugar.'}
             </DialogDescription>
-            {contextoInicial && <span className="truncate text-[12px] leading-4 text-primary">Para {contextoInicial.cliente.nome}</span>}
-            {!contextoInicial && contexto.data && <span className="truncate text-[12px] leading-4 text-primary">{nomeDaTarefaDoBanco(contexto.data).texto}</span>}
+            {contextoInicial && <span className="truncate text-[12px] leading-4 text-muted-foreground">Para {contextoInicial.cliente.nome}</span>}
+            {!contextoInicial && contexto.data && <span className="truncate text-[12px] leading-4 text-muted-foreground">{nomeDaTarefaDoBanco(contexto.data).texto}</span>}
             {!contextoInicial && contexto.isError && <button className="text-[12px] leading-4 text-warning" onClick={() => void contexto.refetch()}>Conferir cliente e projeto</button>}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px]">
@@ -424,7 +424,7 @@ export default function DiarioDaExecucao({
         {linkId && vinculo.data && status !== "done" && (esperaRevisao || travada || agora) && (
           <div className={juntar("flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-5 py-2.5", esperaRevisao ? "bg-warning/5" : travada ? "bg-destructive/5" : "bg-muted/30")} data-faixa-de-decisao="">
             <span className="flex min-w-0 flex-1 items-center gap-2 text-[13px]">
-              {esperaRevisao ? <Clock3 className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" /> : travada ? <Lock className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" /> : <ArrowRight className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />}
+              {esperaRevisao ? <Clock3 className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" /> : travada ? <Lock className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" /> : <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
               <span className="min-w-0">
                 <span className="font-medium">{esperaRevisao ? "Esta entrega espera a sua decisão." : travada ? "Travada: " : "Agora: "}</span>
                 <span className="text-muted-foreground">{esperaRevisao ? " Olhe o diário e as imagens, e decida." : travada ? (motivo || "o agente precisa de algo seu para continuar.") : agora}</span>
@@ -523,7 +523,7 @@ export default function DiarioDaExecucao({
         {/* O compositor: escreve do jeito do dono; o tipo é entendido e mostrado antes de registrar. */}
         <div className={juntar("shrink-0 space-y-2 border-t border-border px-5 py-3", aba === "hermes" && "hidden")}>
           {entendi && (
-            <p role="status" className="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-2 text-[13px] text-success">
+            <p role="status" className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-[13px] text-success">
               <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="min-w-0 flex-1">{entendi}</span>
               <button type="button" aria-label="Fechar aviso" className="shrink-0 opacity-70 hover:opacity-100" onClick={() => setEntendi(null)}><X className="h-3.5 w-3.5" /></button>
             </p>

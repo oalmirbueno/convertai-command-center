@@ -196,7 +196,7 @@ export default function AdminEsteira() {
     { k: "urgentes", valor: String(resumo.urgentes), rotulo: plural(resumo.urgentes, "urgente", "urgentes"), Icone: Flame, cor: resumo.urgentes ? "text-destructive" : "text-muted-foreground" },
     { k: "atencao", valor: String(resumo.atencao), rotulo: `${resumo.atencao} de atenção`, Icone: AlertTriangle, cor: resumo.atencao ? "text-warning" : "text-muted-foreground" },
     // 16/10/2026: no celular só urgentes e de atenção (menos números no topo).
-    { k: "emdia", valor: String(resumo.emDia), rotulo: `${resumo.emDia} em dia`, Icone: CheckCircle2, cor: "text-primary", classe: "hidden sm:inline-flex" },
+    { k: "emdia", valor: String(resumo.emDia), rotulo: `${resumo.emDia} em dia`, Icone: CheckCircle2, cor: "text-foreground", classe: "hidden sm:inline-flex" },
     ...(resumo.entrada > 0 ? [{ k: "entrada", valor: String(resumo.entrada), rotulo: `${resumo.entrada} em entrada`, Icone: DoorOpen, cor: "text-muted-foreground", classe: "hidden md:inline-flex lg:hidden xl:inline-flex" }] : []),
     { k: "rituais", valor: `${resumo.rituaisFeitos}/${visiveis.length * 3}`, rotulo: `rituais ${resumo.rituaisFeitos} de ${visiveis.length * 3}`, Icone: CalendarCheck, cor: "text-muted-foreground", classe: "hidden sm:inline-flex" },
     { k: "feitos", valor: String(resumo.feitos), rotulo: `${plural(resumo.feitos, "feito", "feitos")} na semana`, Icone: ListChecks, cor: "text-muted-foreground", classe: "hidden md:inline-flex lg:hidden xl:inline-flex" },

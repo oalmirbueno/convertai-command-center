@@ -210,7 +210,7 @@ export default function ReferenciasDoCriativo({
 
       <section className="min-w-0 rounded-lg border border-border bg-background" aria-label="Banco de anúncios">
         <button type="button" onClick={() => setBancoAberto((v) => !v)} aria-expanded={bancoAberto} className="flex w-full items-center px-3 py-2 text-left">
-          <Library className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <Library className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 text-[12px] font-medium">Banco de anúncios da Mesa Ads</span>
           <span className="text-[11px] text-muted-foreground">{(referencias.data || []).length}</span>
         </button>

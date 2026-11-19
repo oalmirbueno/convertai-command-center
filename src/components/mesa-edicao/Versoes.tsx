@@ -36,7 +36,7 @@ export function segundosDoTexto(t: string): number | null {
 const COR_DO_ESTADO: Record<string, string> = {
   aprovada: "bg-success/15 text-foreground",
   rejeitada: "bg-danger-soft text-destructive",
-  em_revisao: "bg-accent-soft text-primary",
+  em_revisao: "bg-muted text-foreground",
   rascunho: "bg-muted text-muted-foreground",
 };
 

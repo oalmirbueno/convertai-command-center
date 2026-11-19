@@ -178,7 +178,7 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
         <ol className="flex shrink-0 gap-2 lg:flex-col">{arquivos.map((a, i) => <li key={a.id} className="relative w-12 shrink-0 lg:w-full">{a.id !== enviado?.id && <button type="button" disabled={tirando === a.id} onClick={() => void tirarDaPrancheta(a)} aria-label={`Tirar ${nomeNaPrancheta(a, pedidos, i)} da prancheta`} title="Tirar da prancheta" className="absolute right-1 top-1 z-10 rounded-full bg-card/90 p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50">{tirando === a.id ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <X className="h-3 w-3" aria-hidden="true" />}</button>}<button type="button" aria-pressed={atual?.id === a.id} onClick={() => { setVendo(a.id); setAba("entrega"); }} className={`block w-full overflow-hidden rounded-lg border-2 text-left ${atual?.id === a.id ? "border-primary" : "border-transparent"}`} title={a.nome}>
           <span className="relative block aspect-[9/16] w-full bg-muted"><QuadroDoVideo bucket={a.storage_bucket || "mesa"} caminho={a.storage_path} /></span>
         </button><p className={juntar(texto.auxiliar, "mt-1 truncate")}>{nomeNaPrancheta(a, pedidos, i)}</p></li>)}</ol>
-        {arte?.capa?.tipo_midia === "video" && <p className="text-[12px] text-primary">Vídeo na Agenda</p>}
+        {arte?.capa?.tipo_midia === "video" && <p className="text-[12px] text-muted-foreground">Vídeo na Agenda</p>}
       </div>}
       // 24/10 (dono): o miolo é a peça (A fazer / Pronto, Vídeo, Roteiro e Só o texto, subir e preparar para publicar);
       // a direção genérica do estilo ("Produto elegante") ficou só no "?" da barra. A linha da mídia mora dentro da peça, não solta acima.

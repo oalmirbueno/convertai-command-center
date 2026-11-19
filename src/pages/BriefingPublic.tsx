@@ -399,7 +399,7 @@ export default function BriefingPublic() {
       {logo ? (
         <img src={logo} alt={marcaDoCliente} className="mr-3 h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1" />
       ) : (
-        <span className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/15 text-[15px] font-semibold text-primary" aria-hidden="true">
+        <span className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-[15px] font-semibold text-muted-foreground" aria-hidden="true">
           {marcaDoCliente.charAt(0).toUpperCase()}
         </span>
       )}
@@ -460,7 +460,7 @@ export default function BriefingPublic() {
         descricao="Obrigado pelo tempo."
         ajuda="Cada resposta ajuda a montar o melhor trabalho para o seu negócio."
         acimaDoTitulo={
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary" aria-hidden="true">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
             <CheckCircle2 className="h-6 w-6" />
           </div>
         }
@@ -502,7 +502,7 @@ export default function BriefingPublic() {
     >
       {dados?.equipe && (
         <p className={juntar(superficie.poco, texto.corpo, "mb-4 flex items-center px-3 py-2")}>
-          <Users className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <Users className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           Você está como equipe. Preencha junto com o cliente: tudo salva neste mesmo link.
         </p>
       )}
@@ -631,7 +631,7 @@ function EnviadoTravado({
       <div className={juntar(superficie.poco, "mb-6 min-w-0 px-3 py-3")}>
         {pedidoEm ? (
           <p className={juntar(texto.corpo, "flex items-center")}>
-            <RotateCcw className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <RotateCcw className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             Reabertura pedida em {dia(pedidoEm)}. A equipe libera o link e avisa você.
           </p>
         ) : abrirPedido ? (

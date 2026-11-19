@@ -352,7 +352,7 @@ export function MontarOPost({
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                {precisaDaEquipe(f) && <p className="text-center text-[11px] text-primary">gerada, a aprovar</p>}
+                {precisaDaEquipe(f) && <p className="text-center text-[11px] text-muted-foreground">gerada, a aprovar</p>}
               </li>
             ))}
             {ids.length < MAX_FOTOS_NO_POST && (

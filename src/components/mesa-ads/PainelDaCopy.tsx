@@ -122,7 +122,7 @@ export function PreviaDoFeed({ copy, caminho, formato, nome }: { copy: CopyDoAnu
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-background text-foreground" aria-label="Prévia no feed">
       <div className="flex items-center px-3 py-2">
-        <span className="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[12px] font-semibold text-primary">
+        <span className="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold text-muted-foreground">
           {(nome || "?").trim().charAt(0).toUpperCase()}
         </span>
         <span className="min-w-0 flex-1">
@@ -253,7 +253,7 @@ export default function PainelDaCopy({
         )}
         {(anguloAtual || (criativo.copy.conferencia_casa && criativo.copy.conferencia_casa.reprovada) || criativo.copy.referencia_replicada) && (
           <p className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground" data-angulo-de-venda={criativo.copy.angulo_de_venda || ""}>
-            {anguloAtual && <span className="rounded-full bg-primary/10 px-1.5 py-px font-medium text-primary">Ângulo: {anguloAtual}</span>}
+            {anguloAtual && <span className="rounded-full bg-muted px-1.5 py-px font-medium text-foreground">Ângulo: {anguloAtual}</span>}
             {criativo.copy.referencia_replicada && criativo.copy.referencia_replicada.fidelidade && (
               <span>Segue "{criativo.copy.referencia_replicada.titulo}" ({ROTULO_DA_FIDELIDADE_ADS[criativo.copy.referencia_replicada.fidelidade as FidelidadeAds] || criativo.copy.referencia_replicada.fidelidade})</span>
             )}

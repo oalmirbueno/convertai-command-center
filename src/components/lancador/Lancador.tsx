@@ -248,7 +248,7 @@ export default function Lancador({
                 <ol className="max-h-64 space-y-2 overflow-y-auto pr-1">
                   {passosDaTela.slice(0, 6).map((p, i) => (
                     <li key={`${i}-${p.title}`} className="flex min-w-0 items-start">
-                      <span className="mr-2 mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-semibold tabular-nums text-primary">{i + 1}</span>
+                      <span className="mr-2 mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
                       <span className="min-w-0">
                         <span className="block text-[13px] font-medium leading-5 text-foreground">{p.title}</span>
                         <span className="line-clamp-3 block text-[12px] leading-4 text-muted-foreground">{p.description}</span>

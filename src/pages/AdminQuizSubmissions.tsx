@@ -84,14 +84,14 @@ function answeredCount(s: Submission) {
 
 function scoreTone(score: number | null) {
   if (score == null) return { label: "-", className: "bg-muted text-muted-foreground border-transparent" };
-  if (score >= 80) return { label: `${score}`, className: "bg-success-soft text-success border-transparent" };
+  if (score >= 80) return { label: `${score}`, className: "bg-muted text-success border-transparent" };
   if (score >= 60) return { label: `${score}`, className: "bg-info-soft text-info border-transparent" };
   if (score >= 40) return { label: `${score}`, className: "bg-warning-soft text-warning border-transparent" };
   return { label: `${score}`, className: "bg-danger-soft text-destructive border-transparent" };
 }
 
 function statusTone(status: string | null) {
-  if (status === "processed") return { label: "Processado", className: "bg-accent-soft text-primary border-transparent" };
+  if (status === "processed") return { label: "Processado", className: "bg-muted text-foreground border-transparent" };
   if (status === "submitted") return { label: "Novo", className: "bg-warning-soft text-warning border-transparent" };
   return { label: "Em andamento", className: "bg-muted text-muted-foreground border-transparent" };
 }
@@ -246,7 +246,7 @@ export default function AdminQuizSubmissions() {
     { rotulo: "Total", valor: stats.total, cor: "text-foreground" },
     { rotulo: "Em andamento", valor: stats.drafts, cor: "text-muted-foreground" },
     { rotulo: "Novas", valor: stats.submitted, cor: "text-warning" },
-    { rotulo: "ICP ≥ 80", valor: stats.high, cor: "text-primary" },
+    { rotulo: "ICP ≥ 80", valor: stats.high, cor: "text-foreground" },
     { rotulo: "Score médio", valor: stats.avg, cor: "text-foreground" },
   ];
 

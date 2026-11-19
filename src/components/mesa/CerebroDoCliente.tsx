@@ -93,7 +93,7 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
   };
   return <section aria-label="Segundo cérebro do cliente" className="min-w-0 space-y-3">
     <div className="flex min-w-0 items-center">
-      <Brain className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /><h2 className="shrink-0 text-[13px] font-semibold">Segundo cérebro</h2>
+      <Brain className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /><h2 className="shrink-0 text-[13px] font-semibold">Segundo cérebro</h2>
       <AjudaRecolhida className="ml-1" rotulo="Como o segundo cérebro funciona">Dossiê e memória do cliente, com origem e validade. Em uso significa registro ativo, não fato verificado. Os agentes leem as áreas relevantes e as regras gerais. Arquivar preserva o histórico. A validade vencida não apaga o registro.</AjudaRecolhida>
       {/* Abas do cérebro na mesma linha do título (rolam de lado no celular). */}
       <div role="tablist" aria-label="Conhecimento do cliente" className="scrollbar-hidden ml-2 flex min-w-0 flex-1 overflow-x-auto overscroll-x-contain">
@@ -130,7 +130,7 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
       <div className="-mx-2 min-w-0 divide-y divide-border/50">
       {lista.slice(0,limite).map(r => <article key={r.id} className="min-w-0 space-y-1 rounded-lg px-2 py-2 hover:bg-muted/30">
         <div className="flex min-w-0 items-center text-[11px] text-muted-foreground">
-          <span className="min-w-0 flex-1 truncate"><span className="font-medium text-primary">{CATEGORIA[categoriaDoRegistro(r)]}</span> · {AREA[areaDoRegistro(r)]} · {dataCurta(r.criado_em)}{r.reforcos && r.reforcos > 1 ? ` · ${r.reforcos} registros semelhantes` : ""} · {r.valido_ate ? `Validade: ${dataCurta(r.valido_ate)}` : "Sem prazo de validade"}</span>
+          <span className="min-w-0 flex-1 truncate"><span className="font-medium text-foreground">{CATEGORIA[categoriaDoRegistro(r)]}</span> · {AREA[areaDoRegistro(r)]} · {dataCurta(r.criado_em)}{r.reforcos && r.reforcos > 1 ? ` · ${r.reforcos} registros semelhantes` : ""} · {r.valido_ate ? `Validade: ${dataCurta(r.valido_ate)}` : "Sem prazo de validade"}</span>
           {!r.substituida_por && <button type="button" className={juntar(botao.icone, "-my-1 ml-1 h-7 w-7")} disabled={gravando} aria-label={r.ativa ? "Arquivar" : "Reativar"} title={r.ativa ? "Arquivar (guarda no histórico)" : "Reativar"} onClick={() => void alternar(r,!r.ativa)}>{r.ativa ? <Archive className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}</button>}
           {r.substituida_por && <span className="ml-1 shrink-0" title="Substituído por conhecimento mais recente">substituído</span>}
         </div>

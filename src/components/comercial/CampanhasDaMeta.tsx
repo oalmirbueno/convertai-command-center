@@ -96,7 +96,7 @@ export default function CampanhasDaMeta({
         </ul>
       )}
       <div className="flex min-w-0 items-center gap-2 border-t border-border pt-3">
-        <Bot className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <Bot className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <label className="flex min-w-0 flex-1 items-center text-[13px] font-medium">
           <input type="checkbox" className="mr-2" checked={mercurioAtivo} onChange={(e) => aoMudarMercurio(e.target.checked)} aria-label="O Mercúrio atende os leads desta campanha" />
           O Mercúrio atende os leads desta campanha

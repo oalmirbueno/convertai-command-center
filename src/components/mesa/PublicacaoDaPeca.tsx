@@ -73,8 +73,8 @@ export interface PublicacaoParaPublicar {
 
 export const TOM_DO_ESTADO: Record<TomDoEstado, string> = {
   neutro: "bg-secondary text-muted-foreground",
-  andamento: "bg-accent-soft text-primary",
-  ok: "bg-success-soft text-success",
+  andamento: "bg-muted text-foreground",
+  ok: "bg-muted text-success",
   alerta: "bg-warning/15 text-foreground",
   erro: "bg-danger-soft text-destructive",
 };

@@ -52,7 +52,7 @@ export default function OrigemDoLead({ lead, className = "" }: { lead: Pick<Lead
     .join(" · ");
   return (
     <p className={juntar("flex min-w-0 items-center text-[12px] leading-4 text-muted-foreground", className)} title={detalhe} data-origem-do-lead="">
-      <Megaphone className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+      <Megaphone className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="min-w-0 truncate">{frase}</span>
     </p>
   );

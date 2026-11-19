@@ -45,10 +45,10 @@ export function ordemParaGravar(lista: { id: string }[], movidoId: string, area?
 /** Onde o agente roda. A ordem é a da legenda da hierarquia. */
 export const ORIGENS: { valor: string; rotulo: string; classe: string }[] = [
   { valor: "hermes", rotulo: "Hermes", classe: "bg-info/15 text-info" },
-  { valor: "grok", rotulo: "Grok", classe: "bg-primary/15 text-primary" },
+  { valor: "grok", rotulo: "Grok", classe: "bg-muted text-foreground" },
   { valor: "paperclip", rotulo: "Paperclip", classe: "bg-warning/15 text-warning" },
   { valor: "n8n", rotulo: "n8n", classe: "bg-destructive/15 text-destructive" },
-  { valor: "claude_code", rotulo: "Claude Code", classe: "bg-success/15 text-success" },
+  { valor: "claude_code", rotulo: "Claude Code", classe: "bg-muted text-success" },
   { valor: "codex", rotulo: "Codex", classe: "bg-secondary text-foreground" },
   { valor: "chatgpt", rotulo: "ChatGPT", classe: "bg-secondary text-foreground" },
   // 18/11/2026: o Fred e os agentes do OpenBot entram no cadastro (Escritório).

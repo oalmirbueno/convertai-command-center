@@ -72,7 +72,7 @@ export function CartaoTipografico({ r, grande = false, className = "" }: { r: Re
   const nicho = nichoDaReferencia(r) ? nomeDoNicho(r) : "";
   return (
     <div data-tipografico="" className={`flex h-full w-full flex-col justify-between bg-primary/5 ${grande ? "p-8" : "p-3"} ${className}`}>
-      <p className={`truncate font-medium text-primary ${grande ? "text-[11px]" : "text-[11px]"}`}>
+      <p className={`truncate font-medium text-foreground ${grande ? "text-[11px]" : "text-[11px]"}`}>
         {[nicho, estilo ? humanizar(estilo) : ""].filter(Boolean).join(" · ") || rotuloDaOrigem(r.origem)}
       </p>
       <p className={`tracking-[-0.01em] font-semibold leading-tight text-foreground [overflow-wrap:anywhere] ${grande ? "text-[24px]" : "line-clamp-5 text-[15px]"}`}>
@@ -216,7 +216,7 @@ function SerieDiaria({ serie }: { serie: PontoDaSerie[] }) {
       <div className="mt-3 flex h-32 items-end">
         {serie.map((p) => (
           <div key={p.dia} className="mr-px flex h-full min-w-0 flex-1 flex-col justify-end" title={`${p.dia}: ${brl(p.gasto)} · ${inteiro(p.resultados)} resultados`}>
-            <div className="w-full rounded-t-sm bg-primary/70" style={{ height: `${Math.max(2, ((p.gasto || 0) / maior) * 100)}%` }} />
+            <div className="w-full rounded-t-sm bg-muted-foreground/60" style={{ height: `${Math.max(2, ((p.gasto || 0) / maior) * 100)}%` }} />
           </div>
         ))}
       </div>
@@ -398,7 +398,7 @@ export default function JanelaDaReferencia({
   const estilo = r ? estiloDaReferencia(r) : "";
 
   const blocoCompletar = (r && !lida) || desde !== null || lendoSozinho ? (
-    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+    <div className="rounded-lg border border-border bg-muted p-3">
       <p className="flex min-w-0 items-center text-[13px] font-medium">
         <span className="min-w-0 truncate">{lendoSozinho || desde !== null ? "Completando a ficha" : "Ficha ainda não lida"}</span>
         <AjudaRecolhida className="ml-1.5" rotulo="Como a ficha é completada">

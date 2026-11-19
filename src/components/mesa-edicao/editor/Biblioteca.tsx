@@ -38,7 +38,7 @@ const LinhaDaMidia = memo(function LinhaDaMidia({ i, noProjeto, onInserir, onVir
           {i.duracao_s ? ` · ${duracaoCurta(i.duracao_s)}` : midia === "imagem" ? " · imagem" : " · sem duração lida"}
         </span>
       </span>
-      {noProjeto && <span className={juntar(etiqueta, "mr-1 bg-accent-soft text-primary")}>na linha</span>}
+      {noProjeto && <span className={juntar(etiqueta, "mr-1 bg-muted text-foreground")}>na linha</span>}
       {midia === "imagem" && (
         <button type="button" className={botao.icone} onClick={() => onVirarClipe(i)} aria-label={`Virar clipe: ${i.nome}`} title="Virar clipe (gera vídeo a partir da imagem)">
           <Wand2 className="h-3.5 w-3.5" />

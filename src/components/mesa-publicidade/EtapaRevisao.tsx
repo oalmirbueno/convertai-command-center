@@ -225,7 +225,7 @@ export default function EtapaRevisao() {
       />
       {!banco && <AvisoDoRascunho />}
       {semConferencia.length > 0 && (
-        <div className="flex min-w-0 flex-wrap items-center rounded-md bg-primary/5 px-3 py-2" data-conferir="">
+        <div className="flex min-w-0 flex-wrap items-center rounded-md bg-muted px-3 py-2" data-conferir="">
           <p className="mr-2 min-w-0 flex-1 text-[12px] font-medium">
             {semConferencia.length} {semConferencia.length === 1 ? "foto sem conferência" : "fotos sem conferência"} com as fontes
           </p>

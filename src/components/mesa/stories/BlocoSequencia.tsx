@@ -362,7 +362,7 @@ export default function BlocoSequencia({
         >
           <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-2">
             {sequencia.campanha ? (
-              <span className={juntar(etiqueta, "bg-accent-soft text-primary")} data-campanha-da-sequencia={sequencia.campanha.campanha_id}>
+              <span className={juntar(etiqueta, "bg-muted text-foreground")} data-campanha-da-sequencia={sequencia.campanha.campanha_id}>
                 <Megaphone className="mr-1 h-3 w-3" aria-hidden="true" />
                 Da campanha {sequencia.campanha.nome}
                 {sequencia.campanha.fase ? ` · ${ROTULO_DA_FASE[sequencia.campanha.fase]}` : ""}
@@ -370,7 +370,7 @@ export default function BlocoSequencia({
             ) : null}
             {estrutura ? (
               estrutura.completa ? (
-                <span className={juntar(etiqueta, "bg-success-soft text-success")} data-estrutura-completa="">
+                <span className={juntar(etiqueta, "bg-muted text-success")} data-estrutura-completa="">
                   <CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" />
                   Estrutura que converte
                 </span>

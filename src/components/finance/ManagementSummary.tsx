@@ -210,7 +210,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                 />
                 <Linha
                   icone={<PiggyBank className="h-4 w-4 text-foreground" />}
-                  rotulo={<>Pró-labore proporcional <span className={juntar(etiqueta, "ml-1 bg-accent-soft text-primary")}>escada</span></>}
+                  rotulo={<>Pró-labore proporcional <span className={juntar(etiqueta, "ml-1 bg-muted text-foreground")}>escada</span></>}
                   valor={`− ${fmt(proLaboreProp)}`}
                 />
                 <Linha
@@ -283,7 +283,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                     <div className="mt-3 flex min-w-0 items-baseline">
                       <span className="text-[28px] font-semibold leading-9 tracking-[-0.035em] tabular-nums text-foreground">{fmt(operationalReceived)}</span>
                       <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>de {fmt(monthlyGoal)}</span>
-                      <span className={juntar(etiqueta, "ml-auto h-6 px-2.5 text-[12px]", goalProgress! >= 1 ? "bg-success-soft text-success" : "bg-muted text-foreground")}>
+                      <span className={juntar(etiqueta, "ml-auto h-6 px-2.5 text-[12px]", goalProgress! >= 1 ? "bg-muted text-success" : "bg-muted text-foreground")}>
                         {Math.round(goalProgress! * 100)}%
                       </span>
                     </div>

@@ -203,7 +203,7 @@ export default function PainelEditarComIA({
   return (
     <div className="space-y-3" data-painel-editar-com-ia={etapa}>
       <div className="flex min-w-0 items-center">
-        <Sparkles className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <Sparkles className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <p className="min-w-0 flex-1 truncate text-[14px] font-semibold">Editar com IA</p>
         <AjudaRecolhida titulo="Editar com IA">
           Você diz o que quer e a IA monta a edição inteira: tira erros e pausas, reenquadra, legenda no estilo da marca, zoom nos momentos fortes, B-roll do acervo, animações, sons, música abaixo da voz, transições, cor, cartão final, capítulos e momentos virais. Nada muda antes do Confirmar, e cada peça fica na linha do tempo para ajustar. O planejamento usa o modelo escolhido (custo antes); os julgamentos finos usam o Jev, sem custo para o cliente. O Plano da casa faz o mesmo sem modelo, de graça.

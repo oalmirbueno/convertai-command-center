@@ -316,7 +316,7 @@ export default function FaixaDaCampanha({ projetoId, clienteId, antesDeChamar, a
     // v4 (15/11/2026): faixa fina em pílula, com o megafone num círculo; sem campanha e sem cliente é só uma linha discreta.
     <section className={juntar("mb-2 min-w-0 rounded-[22px] px-1.5 py-1.5", campanha || clienteId ? "bg-card shadow-card" : "bg-transparent py-0")} aria-label="Campanha deste canvas" data-faixa-da-campanha={campanha ? "ligada" : "solta"}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary" aria-hidden="true">
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
           <Megaphone className="h-4 w-4" />
         </span>
         {campanha ? (

@@ -57,8 +57,8 @@ const TRAVAS =
 const COR_DO_ESTADO: Record<string, string> = {
   aguardando_dono: "bg-warning-soft text-warning",
   aprovada: "bg-muted text-foreground",
-  executando: "bg-primary/10 text-primary",
-  feita: "bg-success-soft text-success",
+  executando: "bg-muted text-foreground",
+  feita: "bg-muted text-success",
   falhou: "bg-destructive/10 text-destructive",
   cancelada: "bg-muted text-muted-foreground",
 };

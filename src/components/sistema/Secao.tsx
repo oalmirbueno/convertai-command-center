@@ -77,7 +77,7 @@ export function CabecalhoDeSecao({
         {(titulo || ajuda) && (
           <div className="flex min-w-0 items-center">
             {icone && (
-              <span className="mr-1.5 inline-flex shrink-0 text-primary" aria-hidden="true">
+              <span className="mr-1.5 inline-flex shrink-0 text-muted-foreground" aria-hidden="true">
                 {icone}
               </span>
             )}

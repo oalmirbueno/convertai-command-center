@@ -237,7 +237,7 @@ export default function DiaPrioritarioNoCadastro({ client, admin }: { client: Cl
             </label>
 
             {sugestao && (
-              <div className="rounded-md border border-primary/30 bg-primary/[0.05] px-3 py-2" data-sugestao-do-dia={String(sugestao.dia)}>
+              <div className="rounded-md border border-border bg-muted px-3 py-2" data-sugestao-do-dia={String(sugestao.dia)}>
                 <p className="text-[13px] font-medium text-foreground">Sugestão: {nomeDoDia(sugestao.dia)}</p>
                 <ul className="mt-1 space-y-0.5 text-[12px] leading-4 text-muted-foreground">
                   {sugestao.motivos.map((m, i) => <li key={i}>{m}</li>)}

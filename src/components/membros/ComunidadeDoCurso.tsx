@@ -127,7 +127,7 @@ export default function ComunidadeDoCurso({
           </time>
         </div>
         {c.fixado && (
-          <span className="text-[11px] text-primary inline-flex items-center gap-1 mt-1">
+          <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1 mt-1">
             <Pin size={12} />
             Recado fixado
           </span>
@@ -213,7 +213,7 @@ export default function ComunidadeDoCurso({
           <h2
             className={`${tituloOculto ? "sr-only" : "text-[15px] font-semibold flex items-center gap-2"}`}
           >
-            <MessageCircle size={19} className="text-primary" />
+            <MessageCircle size={19} className="text-muted-foreground" />
             Comunidade
             {!tituloOculto && (
               <AjudaRecolhida rotulo="Sobre a comunidade">

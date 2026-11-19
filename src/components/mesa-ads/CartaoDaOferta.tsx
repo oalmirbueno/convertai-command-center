@@ -46,7 +46,7 @@ function Lista({ itens }: { itens: string[] }) {
 
 const STATUS: Record<StatusDaOferta, { rotulo: string; tom: string }> = {
   rascunho: { rotulo: "Proposta", tom: "bg-muted text-muted-foreground" },
-  escolhida: { rotulo: "Escolhida", tom: "bg-success-soft text-success" },
+  escolhida: { rotulo: "Escolhida", tom: "bg-muted text-success" },
   arquivada: { rotulo: "Arquivada", tom: "bg-muted text-muted-foreground" },
 };
 
@@ -148,7 +148,7 @@ export default function CartaoDaOferta({
 
   if (editando) {
     return (
-      <article className={juntar(superficie.painel, "min-w-0 border-primary/50 p-4")} aria-label={`Editar a oferta ${o.nome}`}>
+      <article className={juntar(superficie.painel, "min-w-0 border-border p-4")} aria-label={`Editar a oferta ${o.nome}`}>
         <GrupoDeCampos titulo="Editar oferta">
           {CAMPOS.map((c) => (
             <CampoDeFormulario key={c.chave} rotulo={c.rotulo} apoio={c.dica} largo={c.longo}>
@@ -198,9 +198,9 @@ export default function CartaoDaOferta({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center">
             <span className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium ${st.tom}`}>{st.rotulo}</span>
-            {nova && <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full bg-primary/10 px-2 text-[11px] font-medium text-primary">Nova</span>}
+            {nova && <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium text-foreground">Nova</span>}
             {doContexto && (
-              <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full border border-primary/30 px-2 text-[11px] font-medium text-primary" title="Montada a partir do contexto do cliente, sem IA. Cada campo diz de onde veio.">
+              <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full border border-border px-2 text-[11px] font-medium text-muted-foreground" title="Montada a partir do contexto do cliente, sem IA. Cada campo diz de onde veio.">
                 Do contexto
               </span>
             )}

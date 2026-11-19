@@ -218,16 +218,16 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center overflow-hidden bg-background">
       <div className="relative flex items-center justify-center">
-        <span className="absolute inline-flex h-40 w-40 rounded-full bg-primary/12 blur-2xl" />
+        <span className="absolute inline-flex h-40 w-40 rounded-full bg-muted blur-2xl" />
         {/* Aceleracao: a marca entra em velocidade da esquerda, com rastro de
             movimento, e freia suave na posicao. Sem piscar, sem elementos extras. */}
         <span
           aria-hidden="true"
-          className="absolute right-[55%] top-[38%] h-[2px] w-24 rounded-full bg-primary/60 animate-[speedline_0.7s_ease-out_both]"
+          className="absolute right-[55%] top-[38%] h-[2px] w-24 rounded-full bg-muted-foreground/60 animate-[speedline_0.7s_ease-out_both]"
         />
         <span
           aria-hidden="true"
-          className="absolute right-[52%] top-[58%] h-[2px] w-16 rounded-full bg-primary/35 animate-[speedline_0.7s_0.08s_ease-out_both]"
+          className="absolute right-[52%] top-[58%] h-[2px] w-16 rounded-full bg-muted animate-[speedline_0.7s_0.08s_ease-out_both]"
         />
         <img
           src={aceleriqLogo}
