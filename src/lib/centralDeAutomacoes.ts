@@ -21,6 +21,9 @@ export interface Fluxo {
   ultima: UltimaExecucao | null;
   qtdNos: number;
   efeitoNoCliente: boolean;
+  /** Fluxo feito para um cliente (automacao_fluxo_cliente). Sem cliente, o fluxo é da Aceleriq. */
+  clientId: string | null;
+  cliente: string | null;
 }
 
 export interface ItemDeSaude { chave: string; nome: string; estado: EstadoDeSaude; detalhe: string; info: Record<string, unknown> }
@@ -73,6 +76,8 @@ export function normalizarFluxo(v: unknown): Fluxo {
     ultima: ultimaDe(o.ultima_execucao),
     qtdNos: n(o.qtd_nos),
     efeitoNoCliente: o.efeito_no_cliente === true,
+    clientId: typeof o.client_id === "string" && o.client_id ? o.client_id : null,
+    cliente: typeof o.cliente === "string" && o.cliente ? o.cliente : null,
   };
 }
 
@@ -248,4 +253,49 @@ export function emQuanto(iso: string | null, agoraMs: number): string {
   const hh = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   if (d.toDateString() === hoje.toDateString()) return `hoje ${hh}`;
   return `${d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")} ${hh}`;
+}
+
+// ---------------------------------------------------------------- pastas
+export interface Pasta {
+  chave: string;
+  titulo: string;
+  tipo: "aceleriq" | "cliente";
+  clientId: string | null;
+  fluxos: Fluxo[];
+  ligados: number;
+  erros24h: number;
+  rodadas24h: number;
+  ultimaEm: string | null;
+  falaComCliente: boolean;
+}
+
+function montarPasta(chave: string, titulo: string, tipo: Pasta["tipo"], clientId: string | null, fluxos: Fluxo[]): Pasta {
+  const ordenados = [...fluxos].sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome));
+  const ultimas = fluxos.map((f) => f.ultima?.inicio).filter((x): x is string => Boolean(x)).sort();
+  return {
+    chave, titulo, tipo, clientId, fluxos: ordenados,
+    ligados: fluxos.filter((f) => f.ativo).length,
+    erros24h: fluxos.reduce((n, f) => n + f.erros24h, 0),
+    rodadas24h: fluxos.reduce((n, f) => n + f.total24h, 0),
+    ultimaEm: ultimas.at(-1) ?? null,
+    falaComCliente: fluxos.some((f) => f.efeitoNoCliente && f.ativo),
+  };
+}
+
+/** Pastas da Aceleriq: os grupos do n8n, só com os fluxos que não são de um cliente. */
+export function pastasDaAceleriq(fluxos: Fluxo[]): Pasta[] {
+  return agruparFluxos(fluxos.filter((f) => !f.clientId)).map((g) => montarPasta(`aceleriq:${g.grupo}`, g.rotulo, "aceleriq", null, g.fluxos));
+}
+
+/** Uma pasta por cliente, em ordem alfabética. */
+export function pastasDeClientes(fluxos: Fluxo[]): Pasta[] {
+  const mapa = new Map<string, Fluxo[]>();
+  for (const f of fluxos) if (f.clientId) mapa.set(f.clientId, [...(mapa.get(f.clientId) ?? []), f]);
+  return [...mapa.entries()]
+    .map(([id, lista]) => montarPasta(`cliente:${id}`, lista[0].cliente ?? "Cliente", "cliente", id, lista))
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, "pt-BR"));
+}
+
+export function fluxosDoCliente(fluxos: Fluxo[], clientId: string): Fluxo[] {
+  return fluxos.filter((f) => f.clientId === clientId).sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome));
 }

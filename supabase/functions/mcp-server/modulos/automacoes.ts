@@ -36,7 +36,7 @@ export const FERRAMENTAS_DAS_AUTOMACOES: readonly ToolDefinition[] = [
     name: 'aceleriq_automacoes_listar',
     title: 'Automações: fluxos do n8n',
     description:
-      'Só leitura. Todos os fluxos do n8n de produção, agrupados (Clientes, Comercial, Instagram, Apoio, Grupos DK, Desligado): ligado ou não, gatilhos, última e próxima execução, rodadas e erros em 24 h, se mexe com cliente. Retrato do coletor do servidor (a cada minuto; "coleta.atrasada" avisa quando parou).',
+      'Só leitura. Todos os fluxos do n8n de produção em pastas: da_aceleriq (por grupo: Clientes, Comercial, Instagram, Apoio, Desligado) e de_clientes (fluxos feitos para um cliente, por cliente): ligado ou não, gatilhos, última e próxima execução, rodadas e erros em 24 h, se mexe com cliente. Retrato do coletor do servidor (a cada minuto; "coleta.atrasada" avisa quando parou).',
     scopes: ['aceleriq:read'],
     annotations: { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
     cacheSeg: 20,
@@ -56,11 +56,15 @@ export const FERRAMENTAS_DAS_AUTOMACOES: readonly ToolDefinition[] = [
       if (p.grupo) fluxos = fluxos.filter((f) => String(f.grupo).toLowerCase() === p.grupo!.toLowerCase());
       if (p.so_desligados) fluxos = fluxos.filter((f) => f.ativo === false);
       if (p.so_com_erro) fluxos = fluxos.filter((f) => Number(f.erros_24h) > 0);
+      // 19/11: as da Aceleriq (por grupo) e as de cada cliente (por cliente), como as pastas da tela.
+      const deClientes: Record<string, Linha[]> = {};
+      for (const f of fluxos) if (f.client_id) (deClientes[String(f.cliente ?? f.client_id)] ??= []).push(f);
       return {
         coleta: d.coleta,
         total: d.fluxos.length,
         ligados: d.fluxos.filter((f) => f.ativo === true).length,
-        grupos: agrupar(fluxos),
+        da_aceleriq: agrupar(fluxos.filter((f) => !f.client_id)),
+        de_clientes: deClientes,
         ultimas_acoes: d.acoes.slice(0, 5),
       };
     },
