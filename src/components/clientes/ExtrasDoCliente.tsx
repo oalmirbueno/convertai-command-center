@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
+import ProdutosNoPlano from "./ProdutosNoPlano";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lerValorBR } from "@/lib/paymentInstallments";
@@ -129,6 +130,8 @@ export default function ExtrasDoCliente({ clientId, nomeDoCliente, mensalidade }
       }
     >
       {dados.isError && <p className="text-[13px] text-destructive">Não foi possível ler os extras deste cliente.</p>}
+      {/* 19/11/2026: o E-mail e o CRM do produto aparecem aqui, no plano do cliente: como é cobrado e quem usa. */}
+      <ProdutosNoPlano clientId={clientId} crm={crm} />
       {extras.length > 0 && (
         <ul>
           {extras.map((e) => {
