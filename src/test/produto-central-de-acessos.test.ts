@@ -29,7 +29,7 @@ const LIB = ler("src/lib/produto/central-de-acessos.ts");
 const PAGINA = ler("src/pages/AcessosDosClientes.tsx");
 const FN_PRODUTO = ler("supabase/functions/produto/index.ts");
 const FN_EMAIL = ler("supabase/functions/produto-email/index.ts");
-const MIG = ler("supabase/migrations/20261119210000_produto_central_de_acessos.sql");
+const MIG = ler("supabase/migrations/20261119160841_produto_central_de_acessos.sql");
 
 beforeEach(() => {
   invocar.mockReset();
