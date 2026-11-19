@@ -60,6 +60,8 @@ export interface Envio {
   assunto: string;
   texto: string;
   em_resposta_a?: string | null;
+  /** Ateliê de Cor (19/11/2026): a mesma mensagem em HTML com as cores da marca. O texto puro vai sempre. */
+  html?: string | null;
 }
 
 export interface AdaptadorDeCorreio {

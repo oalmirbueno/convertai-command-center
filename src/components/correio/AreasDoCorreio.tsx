@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bot, CalendarClock, Check, Clock, FileSignature, FolderClosed, Inbox, Link2, ListFilter, Megaphone, MessageSquareReply, Repeat2, Send, Share2, Undo2, Users, X, Zap, BellRing, BriefcaseBusiness } from "lucide-react";
+import { Bot, CalendarClock, Check, Clock, FileSignature, FolderClosed, Inbox, Link2, ListFilter, Megaphone, MessageSquareReply, Repeat2, Send, Share2, Undo2, Users, X, Zap, BellRing, BriefcaseBusiness, Palette } from "lucide-react";
 import { correio, correioDesligado, enderecosColados, type CaixaDoCorreio } from "@/lib/produto/email-central";
 import { COLUNAS, agruparCaixa, colunaDaMensagem, fraseDoDia, hojeEmBrasilia, listarCompromissos, listarTarefas, type ColunaDoQuadro, type EuNoCorreio, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
 import { diaLegivel, fraseDoErro, lerOfertas, lerPrecos, type CaixaDeEmail } from "@/lib/produto/api";
@@ -10,6 +10,7 @@ import { Carregando, EstadoDeErro, EstadoVazio, botao, etiqueta, foco, juntar, t
 import { AgendaDeHoje, TarefasDoDia, chaveDaAgenda, chaveDasTarefas } from "./PainelDoDia";
 import { CaixaEmPreparo, LeituraDaMensagem, categoriaDa, enderecoDe, nomeDe, useMensagensDaPasta } from "./CaixaPorPrioridade";
 import LogoDoRemetente from "./LogoDoRemetente";
+import MensagensComAMarca from "./MensagensComAMarca";
 import TrazerEmailsAntigos from "@/components/produto/TrazerEmailsAntigos";
 
 const cartao = "min-w-0 rounded-3xl bg-card p-5";
@@ -312,6 +313,7 @@ export const FERRAMENTAS: Ferramenta[] = [
   { nome: "Agenda e reuniões", plano: "Essencial", texto: "Marque a reunião direto do e-mail e veja o dia num lugar só.", pronta: true, icone: CalendarClock, area: "dia" },
   { nome: "Tarefas do dia", plano: "Essencial", texto: "Um e-mail vira tarefa com um toque e aparece no seu dia.", pronta: true, icone: Check, area: "dia" },
   { nome: "Campanhas", plano: "Essencial", texto: "E-mail para uma lista, em lotes, com teste, limite do dia e descadastro.", pronta: true, icone: Megaphone, area: "campanhas" },
+  { nome: "Mensagens com a sua marca", plano: "Essencial", texto: "Cada e-mail sai também nas cores da empresa, legível no modo escuro. O texto puro vai junto.", pronta: true, icone: Palette },
   { nome: "Trazer e-mails antigos", plano: "Essencial", texto: "Copia Gmail, Outlook, UOL, Locaweb e outros para a caixa nova, sem apagar nada lá.", pronta: true, icone: Repeat2 },
   { nome: "Visão do gestor", plano: "Equipe", texto: "Quem administra vê e troca entre todas as caixas da empresa.", pronta: true, icone: Users },
   { nome: "Documentos", plano: "Essencial", texto: "Anexos guardados sozinhos na pasta da pessoa ou do assunto.", pronta: false, icone: FolderClosed },
@@ -413,6 +415,8 @@ export function FerramentasDoCorreio({ caixas, master, aoIr }: { caixas: CaixaDo
           <Link to="/app/email" className={juntar(botao.secundario, "mt-4 w-full")} data-pedir-extra="">Ver no painel do e-mail</Link>
         </div>
       </section>
+
+      <MensagensComAMarca caixaId={(ligadas[0] || caixas[0] || null)?.id ?? null} />
 
       {master ? (
         <TrazerEmailsAntigos caixas={caixas.map(caixaParaMigrar)} />
