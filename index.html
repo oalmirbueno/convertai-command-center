@@ -31,11 +31,23 @@
     -->
     <script>
       (function () {
-        if (window.location.pathname.replace(/\/+$/, "") !== "/ciclo") return;
+        var caminho = window.location.pathname.replace(/\/+$/, "");
         var set = function (selector, attr, value) {
           var el = document.querySelector(selector);
           if (el) el.setAttribute(attr, value);
         };
+        // 19/11/2026: o Correio também é um app próprio (ícone do envelope, abre direto na caixa).
+        if (caminho === "/correio") {
+          set('link[rel="manifest"]', "href", "/correio.webmanifest");
+          set('meta[name="apple-mobile-web-app-title"]', "content", "Correio");
+          set('meta[name="theme-color"]', "content", "#F4F6F8");
+          set('meta[name="apple-mobile-web-app-status-bar-style"]', "content", "default");
+          set('link[rel="apple-touch-icon"]', "href", "/correio-apple-touch-icon.png");
+          set('link[rel="icon"]', "href", "/correio-icon-192.png");
+          document.title = "Correio | Aceleriq";
+          return;
+        }
+        if (caminho !== "/ciclo") return;
         set('link[rel="manifest"]', "href", "/ciclo.webmanifest");
         set('meta[name="apple-mobile-web-app-title"]', "content", "Ciclo");
         set('link[rel="apple-touch-icon"]', "href", "/ciclo-apple-touch-icon.png");
