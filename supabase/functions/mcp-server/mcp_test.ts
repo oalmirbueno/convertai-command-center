@@ -1963,7 +1963,7 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
 
 Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nenhum outro escopo concede', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.36.0');
+  assertEquals(MCP_VERSION, '2.36.1');
   const t = TOOL_MAP.get('aceleriq_escritorio_dono')!;
   assertEquals([...t.scopes], ['escritorio:write']);
   assert(ALL_SCOPES.includes('escritorio:write') && SCOPE_DESCRIPTIONS['escritorio:write'].sensitive);
