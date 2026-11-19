@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
+import AutomacoesDoCliente, { useAutomacoesDoCliente } from "@/components/automacoes/AutomacoesDoCliente";
 import { saldoDaCobranca, saldoDaParcela } from "@/lib/clientes/situacaoDaCobranca";
 import DiaPrioritarioNoCadastro from "@/components/dia-prioritario/DiaPrioritarioNoCadastro";
 import ModoDeAprovacaoNoCadastro from "@/components/admin/ModoDeAprovacaoNoCadastro";
@@ -72,8 +73,8 @@ const NON_RECURRING_TYPES = ["automation", "site", "landing_page", "event", "oth
 const NON_RECURRING_SERVICE_KEYS = ["automacao", "site"];
 
 /** Partes da ficha (abas). A aberta fica lembrada ao sair e voltar. */
-type AbaDaFicha = "resumo" | "cadastro" | "plano" | "acesso" | "contas" | "onboarding";
-const ABAS_DA_FICHA: AbaDaFicha[] = ["resumo", "cadastro", "plano", "acesso", "contas", "onboarding"];
+type AbaDaFicha = "resumo" | "cadastro" | "plano" | "acesso" | "contas" | "onboarding" | "automacoes";
+const ABAS_DA_FICHA: AbaDaFicha[] = ["resumo", "cadastro", "plano", "acesso", "contas", "onboarding", "automacoes"];
 
 const STATUS_DO_PROJETO: Record<string, string> = {
   todo: "A fazer",
@@ -445,6 +446,8 @@ export default function EditClientDrawer({
     setUploadingAvatar(false);
   };
 
+  // Antes do retorno cedo: hook sempre na mesma ordem. Só lê com a ficha aberta.
+  const automacoesDoCliente = useAutomacoesDoCliente(open ? client?.id ?? null : null);
   if (!open || !client) return null;
 
   const hasUnsavedChanges =
@@ -757,6 +760,7 @@ export default function EditClientDrawer({
     ...(isAdmin ? [{ value: "acesso" as AbaDaFicha, label: "Acesso" }] : []),
     { value: "contas", label: "Contas e cofre" },
     { value: "onboarding", label: "Onboarding" },
+    { value: "automacoes", label: "Automações", count: automacoesDoCliente.fluxos.length || undefined },
   ];
   const abaAberta: AbaDaFicha = abas.some((a) => a.value === aba) ? aba : "resumo";
   const painelDaAba = (valor: AbaDaFicha) => juntar("space-y-5", abaAberta !== valor && "hidden");
@@ -1461,6 +1465,15 @@ export default function EditClientDrawer({
               <div className={BLOCO}>
                 <Secao titulo="Esteira de onboarding">
                   <ClientOnboardingPanel clientId={client.id} servicesConfig={services} />
+                </Secao>
+              </div>
+            </div>
+
+            {/* ── Automações do cliente (19/11/2026): os fluxos do n8n feitos para ele ── */}
+            <div className={painelDaAba("automacoes")}>
+              <div className={BLOCO}>
+                <Secao titulo="Automações" recolher={false}>
+                  {abaAberta === "automacoes" && <AutomacoesDoCliente clientId={client.id} />}
                 </Secao>
               </div>
             </div>

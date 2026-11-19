@@ -8,6 +8,7 @@ import { QuadroDaCaixa } from "@/components/correio/AreasDoCorreio";
 import { carregarEmail, fraseDoErro, listarContasDaCasa } from "@/lib/produto/api";
 import { entrarPelaCasa, sairPelaCasa, type CaixaDoCorreio } from "@/lib/produto/email-central";
 import { caixasParaEntrar, type CaixaParaEntrar } from "@/lib/produto/acessos";
+import { central } from "@/lib/produto/central-de-acessos";
 
 /**
  * Minha caixa (19/11/2026, pedido do dono: "entrar e ver exatamente como aparece para o cliente,
@@ -48,6 +49,21 @@ export default function MinhaCaixa() {
     return grupos;
   }, [caixas]);
   const selecionada = caixas.filter((c) => c.id === escolhida)[0] || null;
+  // A senha guardada no cofre (central de acessos): preencher sem digitar. Ler fica no histórico da empresa.
+  const guardada = !!selecionada && !!email.data && email.data.caixas.some((c) => c.id === selecionada.id && (c as { tem_segredo?: boolean }).tem_segredo === true);
+  const [buscandoNoCofre, setBuscandoNoCofre] = useState(false);
+  const usarDoCofre = async () => {
+    if (!selecionada) return;
+    setBuscandoNoCofre(true);
+    setErro("");
+    try {
+      setSenha((await central.mostrarSenha(selecionada.id)).senha);
+    } catch (e) {
+      setErro(fraseDoErro(e, "Não foi possível abrir o cofre agora."));
+    } finally {
+      setBuscandoNoCofre(false);
+    }
+  };
 
   // Ao sair desta tela, a senha some da memória e as mensagens lidas saem do cache.
   useEffect(
@@ -152,7 +168,12 @@ export default function MinhaCaixa() {
               </span>
             </CampoDeFormulario>
           </GrupoDeCampos>
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex flex-wrap items-center justify-end [&>*]:mb-2">
+            {guardada && (
+              <button type="button" className={juntar(botao.discreto, "mr-2")} onClick={() => void usarDoCofre()} disabled={buscandoNoCofre} data-senha-do-cofre="">
+                {buscandoNoCofre ? "Abrindo o cofre..." : "Usar a senha do cofre"}
+              </button>
+            )}
             <button type="submit" className={botao.primario} disabled={entrando || !selecionada || !senha} data-entrar="">
               {entrando ? "Entrando..." : "Entrar na caixa"}
             </button>

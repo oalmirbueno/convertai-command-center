@@ -721,6 +721,9 @@ export interface ContaNaCasa {
   dominios: number;
   negocios: number;
   ultimo_uso: string | null;
+  /** Quem paga o CRM: a assinatura no cartão ou o extra "crm" do plano do cliente. */
+  cobranca_por?: "assinatura" | "plano";
+  extra_id?: string | null;
 }
 
 export async function listarContasDaCasa(): Promise<ContaNaCasa[]> {

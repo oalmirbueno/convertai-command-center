@@ -1,25 +1,29 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, KeyRound, Link2, MailOpen, MessageCircle, Send, Users } from "lucide-react";
+import { Building2, Copy, KeyRound, Link2, MailOpen, MessageCircle, Send, Users } from "lucide-react";
 import { Avatar, Card, Chip, EmptyState, List, ListRow, PageHeader, PillTabs, SearchField, StatCard, StatGrid, Toolbar, type Tone } from "@/components/ds";
-import { Carregando, EstadoDeErro, JanelaCentral, botao, juntar, texto } from "@/components/sistema";
+import { Carregando, EstadoDeErro, JanelaCentral, botao, juntar, rolagem, texto } from "@/components/sistema";
 import { copiarLinkDeAcesso, diaLegivel, fraseDoErro, linkDeAcesso, listarContasDaCasa, reenviarConvite, type ContaNaCasa } from "@/lib/produto/api";
 import { linkDeEntrada, linkDoWhatsApp, mensagemDeEntrada, situacaoDoAcesso, temAcesso, type DestinoDoAcesso, type SituacaoDoAcesso } from "@/lib/produto/acessos";
 
 const MinhaCaixa = lazy(() => import("@/components/produto/casa/MinhaCaixa"));
+const PessoasECaixas = lazy(() => import("@/components/produto/casa/PessoasECaixas"));
+const LigarAoCliente = lazy(() => import("@/components/produto/casa/PessoasECaixas").then((m) => ({ default: m.LigarAoCliente })));
 
 /**
  * Acessos dos clientes (19/11/2026, pedido do dono), só admin:
  *   /produto/acessos        cada empresa com CRM ou e-mail, o link de entrada para copiar ou mandar no
  *                           WhatsApp, quem já entrou e o convite ou primeiro acesso de quem falta;
+ *   /produto/acessos/pessoas Pessoas e caixas: todas as pessoas do CRM e todas as caixas, com senha nova,
+ *                           senha do cofre, link, desativar e o Adicionar (componente PessoasECaixas);
  *   /produto/acessos/caixa  Minha caixa: escolher uma caixa e entrar com a senha dela para ver o correio
  *                           como o cliente vê (componente MinhaCaixa).
  * O painel não vira usuário do CRM: os links abrem o login do produto, em outra sessão (TrocaDeAcesso).
  */
 
-type Aba = "clientes" | "caixa";
+type Aba = "clientes" | "pessoas" | "caixa";
 type Filtro = "todos" | "crm" | "email" | "faltam";
 
 export const chaveDasContasDaCasa = ["produto", "casa", "contas"] as const;
@@ -56,19 +60,20 @@ const abrirWhatsApp = (telefone: string | null, mensagem: string) => {
 export default function AcessosDosClientes() {
   const { aba: pedida } = useParams();
   const navegar = useNavigate();
-  const aba: Aba = pedida === "caixa" ? "caixa" : "clientes";
+  const aba: Aba = pedida === "caixa" ? "caixa" : pedida === "pessoas" ? "pessoas" : "clientes";
   return (
     <div className="min-w-0 space-y-6" data-acessos-dos-clientes={aba}>
       <PageHeader
         title="Acessos dos clientes"
-        help="Clientes: o link de entrada de cada empresa (abre o login do produto dela, sem senha no link), quem já entrou e o convite de quem falta. Minha caixa: escolha uma caixa e entre com a senha dela para ver o correio como o cliente vê. A senha fica só nesta aba e some ao sair."
+        help="Empresas: o link de entrada de cada empresa (abre o login do produto dela, sem senha no link), quem já entrou e o convite de quem falta. Pessoas e caixas: todos os logins do CRM e todas as caixas, com senha nova, senha do cofre, link e o Adicionar. Minha caixa: escolha uma caixa e entre com a senha dela para ver o correio como o cliente vê. A senha fica só nesta aba e some ao sair."
         toolbar={
           <PillTabs<Aba>
             label="Áreas dos acessos"
             value={aba}
-            onChange={(v) => navegar(v === "caixa" ? "/produto/acessos/caixa" : "/produto/acessos", { replace: true })}
+            onChange={(v) => navegar(v === "clientes" ? "/produto/acessos" : `/produto/acessos/${v}`, { replace: true })}
             tabs={[
-              { value: "clientes", label: "Clientes", icon: <Users className="h-4 w-4" aria-hidden="true" /> },
+              { value: "clientes", label: "Empresas", icon: <Building2 className="h-4 w-4" aria-hidden="true" /> },
+              { value: "pessoas", label: "Pessoas e caixas", icon: <Users className="h-4 w-4" aria-hidden="true" /> },
               { value: "caixa", label: "Minha caixa", icon: <MailOpen className="h-4 w-4" aria-hidden="true" /> },
             ]}
           />
@@ -76,6 +81,10 @@ export default function AcessosDosClientes() {
       />
       {aba === "clientes" ? (
         <ListaDeAcessos />
+      ) : aba === "pessoas" ? (
+        <Suspense fallback={<Carregando linhas={6} rotulo="Carregando pessoas e caixas" />}>
+          <PessoasECaixas />
+        </Suspense>
       ) : (
         <Suspense fallback={<Carregando linhas={4} rotulo="Abrindo a caixa" />}>
           <MinhaCaixa />
@@ -147,7 +156,7 @@ function ListaDeAcessos() {
             }
           />
         </div>
-        <div className="min-w-0 px-4 pb-3 sm:px-5">
+        <div className={juntar("min-w-0 px-4 pb-3 sm:px-5", rolagem.longa)} data-lista-rolavel="">
           {contas.isLoading ? (
             <Carregando linhas={6} rotulo="Carregando as empresas" />
           ) : !todas.length ? (
@@ -198,6 +207,7 @@ function LinhaDaEmpresa({ conta, aoAbrir }: { conta: ContaNaCasa; aoAbrir: () =>
 
 /** A ficha da empresa, no centro: os links de entrada e cada pessoa com o seu acesso. */
 function FichaDeAcesso({ conta, aoFechar }: { conta: ContaNaCasa; aoFechar: () => void }) {
+  const qc = useQueryClient();
   const s = situacaoDoAcesso(conta.equipe);
   const destinos = destinosDaConta(conta);
   const [gerado, setGerado] = useState<{ nome: string; email: string; link: string; primeiro: boolean } | null>(null);
@@ -219,6 +229,14 @@ function FichaDeAcesso({ conta, aoFechar }: { conta: ContaNaCasa; aoFechar: () =
   return (
     <JanelaCentral aberta onFechar={aoFechar} largura="md" titulo={conta.nome} descricao={s.total ? `${s.entraram} de ${s.total} entraram` : "Sem pessoas ainda"} data-ficha-de-acesso={conta.id}>
       <div className="min-w-0 space-y-6">
+        {!conta.client_id && (
+          <section className="min-w-0" aria-label="Cliente">
+            <h3 className={juntar(texto.rotulo, "mb-2")}>Cliente</h3>
+            <Suspense fallback={null}>
+              <LigarAoCliente conta={conta} aoLigar={() => void qc.invalidateQueries({ queryKey: chaveDasContasDaCasa })} />
+            </Suspense>
+          </section>
+        )}
         <section className="min-w-0" aria-label="Links de entrada">
           <h3 className={juntar(texto.rotulo, "mb-2")}>Link de entrada</h3>
           <List label="Links de entrada">

@@ -171,7 +171,7 @@ function EmailContratado({ estado }: { estado: EstadoDoProduto }) {
             {dominios.length > 1 && (
               <SeletorCompacto rotulo="Domínio" modo="lista" opcoes={dominios.map((d) => ({ valor: d.id, rotulo: d.dominio }))} valor={dominio.id} onEscolher={setEscolhido} />
             )}
-            <Link to="/correio" className={botao.secundario} data-abrir-correio="">Correio</Link>
+            <Link to="/correio?de=crm" className={botao.secundario} data-abrir-correio="">Correio</Link>
             <AbrirWebmail dominio={dominio} />
           </>
         }

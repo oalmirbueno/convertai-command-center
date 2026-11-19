@@ -1,7 +1,9 @@
+import { MarcaAceleriq } from "@/components/publico/CascaPublica";
+
 /**
  * O logo do Aceleriq Correio (19/11/2026): o envelope branco num bloco verde floresta, com a aba em neon
  * (o mesmo verde da marca) e o ponto de "chegou" no canto. Os traços à esquerda dão a ideia de rapidez.
- * Ao lado, "Correio" grande e "da Aceleriq" pequeno, para não virar só mais um ícone de e-mail.
+ * Ele vem sempre junto do logo da Aceleriq.
  */
 export function IconeDoCorreio({ tamanho = 40, className = "" }: { tamanho?: number; className?: string }) {
   return (
@@ -21,14 +23,21 @@ export function IconeDoCorreio({ tamanho = 40, className = "" }: { tamanho?: num
   );
 }
 
-export default function LogoDoCorreio({ tamanho = 38, className = "" }: { tamanho?: number; className?: string }) {
+/**
+ * A marca completa: o logo da Aceleriq, um traço fino e o ícone com "Correio". A Aceleriq continua na frente
+ * (pedido do dono: combinar, não trocar); o ícone diz que aqui é o e-mail.
+ */
+export default function LogoDoCorreio({ tamanho = 34, className = "", compacto = false }: { tamanho?: number; className?: string; compacto?: boolean }) {
   return (
     <span className={`inline-flex min-w-0 items-center ${className}`} data-logo-do-correio="">
-      <IconeDoCorreio tamanho={tamanho} className="mr-2.5 shrink-0" />
-      <span className="flex min-w-0 flex-col leading-none">
-        <span className="text-[17px] font-semibold tracking-[-0.03em] text-[#07291E]">Correio</span>
-        <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2F6B52]">da Aceleriq</span>
-      </span>
+      {!compacto && (
+        <>
+          <MarcaAceleriq altura={Math.round(tamanho * 0.6)} className="logo-do-topo" />
+          <i className="mx-3 h-6 w-px shrink-0 bg-[#07291E]/15" aria-hidden="true" />
+        </>
+      )}
+      <IconeDoCorreio tamanho={tamanho} className="mr-2 shrink-0" />
+      <span className="text-[17px] font-semibold tracking-[-0.03em] text-[#07291E]">Correio</span>
     </span>
   );
 }

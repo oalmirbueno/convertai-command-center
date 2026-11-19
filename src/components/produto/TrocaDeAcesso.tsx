@@ -7,7 +7,7 @@ import { JanelaCentral, botao, juntar, texto } from "@/components/sistema";
  * login geral da empresa; o CRM, com o usuário de cada pessoa. Passar de um para o outro sai desta
  * sessão e pede o login do outro lado, para nunca misturar quem é quem.
  */
-export type DestinoDaTroca = "painel" | "crm";
+export type DestinoDaTroca = "painel" | "crm" | "correio";
 
 const TEXTOS: Record<DestinoDaTroca, { titulo: string; corpo: string; botao: string; para: string }> = {
   painel: {
@@ -21,6 +21,12 @@ const TEXTOS: Record<DestinoDaTroca, { titulo: string; corpo: string; botao: str
     corpo: "No CRM cada pessoa entra com o próprio usuário, e não com o login geral do painel. Você vai sair do painel e entrar com o seu usuário do CRM.",
     botao: "Sair e entrar no CRM",
     para: "/app",
+  },
+  correio: {
+    titulo: "Entrar no Correio",
+    corpo: "O Correio abre com o seu usuário (o mesmo do CRM), e não com o login geral do painel. Você vai sair do painel e entrar com o seu usuário.",
+    botao: "Sair e entrar no Correio",
+    para: "/correio?de=painel",
   },
 };
 
