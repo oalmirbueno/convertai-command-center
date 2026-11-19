@@ -7,10 +7,12 @@ import ContasDaCasa from "@/components/produto/casa/ContasDaCasa";
 const MonitorDoProduto = lazy(() => import("@/components/produto/casa/MonitorDoProduto"));
 const EmailDaCasa = lazy(() => import("@/components/produto/casa/EmailDaCasa"));
 const PrecosDoProduto = lazy(() => import("@/components/produto/casa/PrecosDoProduto"));
+const PrecosDoCrm = lazy(() => import("@/components/produto/casa/PrecosDoCrm"));
 const FaturamentoDoProduto = lazy(() => import("@/components/produto/casa/FaturamentoDoProduto"));
 const CentralDeEmail = lazy(() => import("@/components/produto/casa/CentralDeEmail"));
 const CaixaDaAceleriq = lazy(() => import("@/components/produto/casa/CaixaDaAceleriq"));
 const CentralDeDominios = lazy(() => import("@/components/produto/casa/CentralDeDominios"));
+const PrecosDoEmail = lazy(() => import("@/components/produto/casa/PrecosDoEmail"));
 
 /**
  * A gestão dos produtos vendidos, dentro do painel da casa (só admin).
@@ -34,8 +36,8 @@ const ABAS: Record<Produto, Aba[]> = {
   ],
   email: [
     { valor: "inicio", rotulo: "Central", icone: <HeartPulse className="h-4 w-4" />, ajuda: "A saúde do e-mail de cada cliente: pagamento, vencimento do domínio e do plano, DNS, limite de caixas e pedidos parados. Do mais urgente para o mais tranquilo." },
-    { valor: "entradas", rotulo: "Entradas e migrações", icone: <Mail className="h-4 w-4" />, ajuda: "As entradas (pedidos) com o marcar como pago e, embaixo, a migração de cada empresa: domínio, passo a passo, caixas, integração com Cloudflare e Zoho e a conferência do DNS." },
-    { valor: "caixa", rotulo: "Caixa da Aceleriq", icone: <Inbox className="h-4 w-4" />, ajuda: "A caixa de e-mail oficial da Aceleriq dentro do painel, com o Zoho por trás. Desligada até o dono decidir: ligar pede o plano pago do Zoho." },
+    { valor: "entradas", rotulo: "Entradas e migrações", icone: <Mail className="h-4 w-4" />, ajuda: "Duas partes: as entradas (pedidos a pagar e pagos, com o marcar como pago) e a migração de cada empresa (passo a passo, caixas e DNS), que abre no centro." },
+    { valor: "caixa", rotulo: "Caixa da Aceleriq", icone: <Inbox className="h-4 w-4" />, ajuda: "A caixa de e-mail oficial da Aceleriq dentro do painel, pelo correio no Migadu (IMAP para ler, SMTP para enviar). A situação é lida dos dados e se atualiza sozinha." },
     { valor: "precos", rotulo: "Preços", icone: <Tags className="h-4 w-4" />, ajuda: "Quanto custa o e-mail profissional: migração, mensalidade, caixas incluídas e caixa adicional, e quanto cada caixa extra custa para a casa." },
   ],
   dominios: [
@@ -97,12 +99,12 @@ export default function AdminProduto() {
       {produto === "crm" && aba === "empresas" && <ContasDaCasa />}
       <Suspense fallback={<Carregando linhas={5} />}>
         {produto === "crm" && aba === "inicio" && <MonitorDoProduto />}
-        {produto === "crm" && aba === "precos" && <PrecosDoProduto parte="crm" />}
+        {produto === "crm" && aba === "precos" && <PrecosDoCrm />}
         {produto === "crm" && aba === "faturamento" && <FaturamentoDoProduto />}
         {produto === "email" && aba === "inicio" && <CentralDeEmail />}
         {produto === "email" && aba === "entradas" && <EmailDaCasa />}
         {produto === "email" && aba === "caixa" && <CaixaDaAceleriq />}
-        {produto === "email" && aba === "precos" && <PrecosDoProduto parte="email" />}
+        {produto === "email" && aba === "precos" && <PrecosDoEmail />}
         {produto === "dominios" && <CentralDeDominios key={aba} parte={aba === "sites" ? "sites" : "dominios"} />}
       </Suspense>
     </div>

@@ -64,6 +64,7 @@ const EmailLanding = rotas.lazy(() => import("@/pages/EmailLanding"));
 const EmailPedir = rotas.lazy(() => import("@/pages/EmailPedir"));
 const Correio = rotas.lazy(() => import("@/pages/Correio"));
 const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
+const AcessosDosClientes = rotas.lazy(() => import("@/pages/AcessosDosClientes"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
 const ClientDashboard = rotas.lazy(() => import("@/pages/ClientDashboard"));
@@ -111,6 +112,7 @@ const ProfilePage = rotas.lazy(() => import("@/pages/ProfilePage"));
 const SettingsPage = rotas.lazy(() => import("@/pages/SettingsPage"));
 const BaseDosAgentes = rotas.lazy(() => import("@/pages/BaseDosAgentes"));
 const CentralDeSkills = rotas.lazy(() => import("@/pages/CentralDeSkills"));
+const CentralDeAutomacoes = rotas.lazy(() => import("@/pages/CentralDeAutomacoes"));
 const GruposAoVivo = rotas.lazy(() => import("@/pages/GruposAoVivo"));
 const AdminViewAsClient = rotas.lazy(() => import("@/pages/AdminViewAsClient"));
 const ApiDocs = rotas.lazy(() => import("@/pages/ApiDocs"));
@@ -432,6 +434,8 @@ export function AppRoutes() {
         <Route path="/base-dos-agentes" element={<StaffRoute><BaseDosAgentes /></StaffRoute>} />
         {/* 18/11/2026: Central de Skills e segundo cérebro (todas as skills de todos os agentes). */}
         <Route path="/skills" element={<StaffRoute><CentralDeSkills /></StaffRoute>} />
+        {/* 19/11/2026: Central de Automações (fluxos do n8n, saúde do servidor, execuções e o botão do dono). */}
+        <Route path="/automacoes" element={<StaffRoute><CentralDeAutomacoes /></StaffRoute>} />
         <Route path="/grupos" element={<StaffRoute><GruposAoVivo /></StaffRoute>} />
         <Route path="/metricas" element={<StaffRoute><AdminMetricas /></StaffRoute>} />
         <Route path="/anuncios" element={<StaffRoute><AdminAds /></StaffRoute>} />
@@ -456,6 +460,9 @@ export function AppRoutes() {
         <Route path="/ver-como-cliente" element={<StaffRoute><AdminViewAsClient /></StaffRoute>} />
         <Route path="/financeiro" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</>} />
         <Route path="/produto" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
+        {/* 19/11/2026: acessos dos clientes (links de entrada, convites) e Minha caixa. */}
+        <Route path="/produto/acessos" element={<>{profile?.role === "admin" ? <AcessosDosClientes /> : <Navigate to="/dashboard" replace />}</>} />
+        <Route path="/produto/acessos/:aba" element={<>{profile?.role === "admin" ? <AcessosDosClientes /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/produto/:produto" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/produto/:produto/:aba" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/comercial" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />

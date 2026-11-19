@@ -12,13 +12,12 @@ import {
   type DominioComIntegracao,
   type ItemConferido,
 } from "@/lib/produto/email-pedidos";
-import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, Secao, botao, campo, etiqueta, juntar, lista, texto } from "@/components/sistema";
+import { Chip, Collapsible, HelpTooltip, OverflowMenu, type Tone } from "@/components/ds";
+import { CampoDeFormulario, EstadoVazio, GrupoDeCampos, JanelaCentral, botao, campo, juntar, texto } from "@/components/sistema";
+import { TituloDoBloco } from "./pecasDaCasa";
 
-const COR: Record<ItemConferido["situacao"], string> = {
-  ok: "bg-accent-soft text-primary",
-  alerta: "bg-warning-soft text-warning",
-  falta: "bg-destructive/10 text-destructive",
-};
+const TOM: Record<ItemConferido["situacao"], Tone> = { ok: "success", alerta: "warning", falta: "danger" };
+const contar = (itens: ItemConferido[]) => ({ falta: itens.filter((i) => i.situacao === "falta").length, alerta: itens.filter((i) => i.situacao === "alerta").length });
 const ROTULO: Record<ItemConferido["situacao"], string> = { ok: "Certo", alerta: "Atenção", falta: "Falta" };
 
 export function lerConferencias(d: DominioComIntegracao): { cloudflare: ConferenciaDaCloudflare | null; zoho: ConferenciaDoZoho | null } {
@@ -32,6 +31,7 @@ export function lerConferencias(d: DominioComIntegracao): { cloudflare: Conferen
  * A base de cada cliente nos provedores: a zona na Cloudflare da Aceleriq e a organização do Zoho do
  * cliente. Aqui ficam só os ids e o que a conferência leu; senha nunca. O token do Zoho vai direto para
  * o cofre (Vault) pela função produto-email e não volta para a tela.
+ * 19/11/2026 (redesenho): a conferência à vista com estado em pílula e os ids recolhidos.
  */
 export default function IntegracaoDoDominio({ dominio, aoMudar }: { dominio: DominioComIntegracao; aoMudar: () => Promise<unknown> }) {
   const [f, setF] = useState({
@@ -76,84 +76,70 @@ export default function IntegracaoDoDominio({ dominio, aoMudar }: { dominio: Dom
     }
   };
 
-  return (
-    <Secao
-      titulo="Integração"
-      descricao={dominio.integracao_conferida_em ? `Conferida em ${diaLegivel(dominio.integracao_conferida_em, true)}` : "Ainda não conferida"}
-      recolher="produto:email:integracao"
-      ajuda="Cloudflare: a zona do cliente fica na conta da Aceleriq; a conferência lê os registros e aponta proxy ligado, MX, SPF duplicado, DKIM e DMARC. Zoho: uma conta por cliente; com o token guardado, a conferência lê as caixas, os apelidos e a verificação do domínio. Só leitura nos dois: nada muda o DNS nem as caixas."
-    >
-      <GrupoDeCampos>
-        <CampoDeFormulario rotulo="Zona na Cloudflare" apoio="Vazio: a conferência acha pelo domínio e guarda">
-          <input value={f.cloudflare_zona_id} onChange={(e) => setF({ ...f, cloudflare_zona_id: e.target.value })} className={campo} placeholder="id da zona (32 caracteres)" autoCapitalize="none" data-campo="zona" />
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Organização do Zoho" apoio="Vazio: a conferência descobre">
-          <input value={f.zoho_org_id} onChange={(e) => setF({ ...f, zoho_org_id: e.target.value })} className={campo} placeholder="zoid" autoCapitalize="none" />
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Região do Zoho">
-          <select value={f.zoho_dc} onChange={(e) => setF({ ...f, zoho_dc: e.target.value })} className={campo}>
-            <option value="com">Estados Unidos (zoho.com)</option>
-            <option value="eu">Europa (zoho.eu)</option>
-            <option value="in">Índia (zoho.in)</option>
-          </select>
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Plano do Zoho">
-          <select value={f.zoho_plano} onChange={(e) => setF({ ...f, zoho_plano: e.target.value })} className={campo}>
-            <option value="gratuito">Gratuito (até 5 caixas, sem IMAP)</option>
-            <option value="lite">Mail Lite</option>
-            <option value="premium">Mail Premium</option>
-            <option value="workplace">Workplace</option>
-          </select>
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Admin do Zoho" largo apoio="Só o endereço. A senha fica no cofre do cliente no painel.">
-          <input value={f.zoho_admin} onChange={(e) => setF({ ...f, zoho_admin: e.target.value })} className={campo} placeholder={`admin@${dominio.dominio}`} autoCapitalize="none" />
-        </CampoDeFormulario>
-      </GrupoDeCampos>
-      <div className="mt-1 flex flex-wrap items-center [&>*]:mr-2 [&>*]:mt-2">
-        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void salvar()} disabled={!!ocupado} data-salvar-integracao="">
-          <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {ocupado === "salvar" ? "Salvando..." : "Salvar"}
-        </button>
-        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void conferir("cloudflare")} disabled={!!ocupado} data-conferir-cloudflare="">
-          <RefreshCw className={juntar("mr-1.5 h-4 w-4", ocupado === "cloudflare" && "animate-spin")} aria-hidden="true" />
-          Conferir na Cloudflare
-        </button>
-        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void conferir("zoho")} disabled={!!ocupado} data-conferir-zoho="">
-          <RefreshCw className={juntar("mr-1.5 h-4 w-4", ocupado === "zoho" && "animate-spin")} aria-hidden="true" />
-          Conferir no Zoho
-        </button>
-        <button type="button" className={botao.icone} onClick={() => setPedindoToken(true)} aria-label="Guardar o token do Zoho" title={dominio.zoho_conectado ? "Token do Zoho guardado. Trocar" : "Guardar o token do Zoho"}>
-          <KeyRound className={juntar("h-4 w-4", dominio.zoho_conectado && "text-primary")} aria-hidden="true" />
-        </button>
-      </div>
+  const zohoEmUso = dominio.provedor === "zoho" || !!dominio.zoho_org_id || !!dominio.zoho_conectado || !!zoho;
+  const resumoCf = cloudflare ? contar(cloudflare.itens) : null;
 
-      {cloudflare && (
-        <div className="mt-4 min-w-0" data-conferencia-cloudflare="">
-          <p className={juntar(texto.auxiliar, "mb-1")}>Cloudflare{cloudflare.status ? ` · zona ${cloudflare.status}` : ""}</p>
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+  return (
+    <section className="min-w-0 space-y-5" data-integracao-do-dominio="">
+      <TituloDoBloco
+        aoLado={
+          <>
+            <Chip tone={dominio.integracao_conferida_em ? "neutral" : "warning"}>{dominio.integracao_conferida_em ? `Conferida em ${diaLegivel(dominio.integracao_conferida_em, true)}` : "Não conferida"}</Chip>
+            <HelpTooltip label="Sobre a integração">Cloudflare: a zona do cliente fica na conta da Aceleriq; a conferência lê os registros e aponta proxy ligado, MX, SPF duplicado, DKIM e DMARC. Zoho: uma conta por cliente; com o token guardado, a conferência lê as caixas, os apelidos e a verificação do domínio. Só leitura nos dois: nada muda o DNS nem as caixas.</HelpTooltip>
+            <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void conferir("cloudflare")} disabled={!!ocupado} data-conferir-cloudflare="">
+              <RefreshCw className={juntar("h-4 w-4 sm:mr-1.5", ocupado === "cloudflare" && "animate-spin")} aria-hidden="true" />
+              <span className="hidden sm:inline">Conferir na Cloudflare</span>
+              <span className="sr-only sm:hidden">Conferir na Cloudflare</span>
+            </button>
+            <OverflowMenu
+              label="Mais ações da integração"
+              disabled={!!ocupado}
+              items={[
+                { label: "Conferir no Zoho", icon: <RefreshCw className="h-4 w-4" />, onSelect: () => void conferir("zoho") },
+                { label: dominio.zoho_conectado ? "Trocar o token do Zoho" : "Guardar o token do Zoho", icon: <KeyRound className="h-4 w-4" />, onSelect: () => setPedindoToken(true) },
+              ]}
+            />
+          </>
+        }
+      >
+        Integração
+      </TituloDoBloco>
+
+      {cloudflare ? (
+        <div className="min-w-0" data-conferencia-cloudflare="">
+          <div className="mb-1.5 flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-1.5">
+            <span className={texto.rotulo}>Cloudflare{cloudflare.status ? ` · zona ${cloudflare.status}` : ""}</span>
+            {resumoCf && resumoCf.falta > 0 && <Chip tone="danger">{resumoCf.falta} faltando</Chip>}
+            {resumoCf && resumoCf.alerta > 0 && <Chip tone="warning">{resumoCf.alerta} com atenção</Chip>}
+            {resumoCf && resumoCf.falta + resumoCf.alerta === 0 && <Chip tone="success">tudo certo</Chip>}
+          </div>
+          <ul className="min-w-0 divide-y divide-border/50">
             {cloudflare.itens.map((i) => (
-              <li key={i.chave} className={lista.linha}>
+              <li key={i.chave} className="flex min-w-0 items-center py-2">
                 <span className={juntar(texto.corpo, "min-w-0 flex-1")}>{i.texto}</span>
-                <span className={juntar(etiqueta, "ml-2", COR[i.situacao])}>{ROTULO[i.situacao]}</span>
+                <Chip tone={TOM[i.situacao]} dot className="ml-2">{ROTULO[i.situacao]}</Chip>
               </li>
             ))}
           </ul>
         </div>
+      ) : (
+        <EstadoVazio compacto titulo="Ainda sem conferência." descricao="Confira na Cloudflare para ler os registros." />
       )}
+
       {zoho && (
-        <div className="mt-4 min-w-0" data-conferencia-zoho="">
-          <p className={juntar(texto.auxiliar, "mb-1")}>
+        <div className="min-w-0" data-conferencia-zoho="">
+          <p className={juntar(texto.rotulo, "mb-1")}>
             Zoho{zoho.usuarios != null ? ` · ${zoho.usuarios} de ${f.zoho_plano === "gratuito" ? 5 : "?"} caixas` : ""}{zoho.dominio ? ` · domínio ${zoho.dominio.verificado ? "verificado" : "sem verificação"}, DKIM ${zoho.dominio.dkim ? "certo" : "pendente"}` : ""}
           </p>
           {(zoho.caixas || []).length > 0 && (
-            <ul className={juntar(lista.aberta, lista.divisoria)}>
+            <ul className="min-w-0 divide-y divide-border/50">
               {(zoho.caixas || []).map((c) => (
-                <li key={c.endereco} className={lista.linha}>
+                <li key={c.endereco} className="flex min-w-0 items-center py-2">
                   <span className="min-w-0 flex-1">
                     <span className={juntar(texto.corpo, "block truncate")}>{c.endereco}</span>
                     {c.apelidos.length > 0 && <span className={juntar(texto.auxiliar, "block truncate")}>Apelidos: {c.apelidos.join(", ")}</span>}
                   </span>
-                  {c.admin && <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")}>Admin</span>}
+                  {c.admin && <Chip tone="neutral" className="ml-2">Admin</Chip>}
                 </li>
               ))}
             </ul>
@@ -161,8 +147,47 @@ export default function IntegracaoDoDominio({ dominio, aoMudar }: { dominio: Dom
           {zoho.avisos.map((a) => <p key={a} className={juntar(texto.auxiliar, "mt-1")}>{a}</p>)}
         </div>
       )}
+
+      <Collapsible title="Ids nos provedores" summary={f.cloudflare_zona_id ? "zona guardada" : "a conferência acha sozinha"} defaultOpen={false}>
+        <GrupoDeCampos>
+          <CampoDeFormulario rotulo="Zona na Cloudflare" apoio="Vazio: a conferência acha pelo domínio e guarda">
+            <input value={f.cloudflare_zona_id} onChange={(e) => setF({ ...f, cloudflare_zona_id: e.target.value })} className={campo} placeholder="id da zona (32 caracteres)" autoCapitalize="none" data-campo="zona" />
+          </CampoDeFormulario>
+          {zohoEmUso && (
+            <>
+              <CampoDeFormulario rotulo="Organização do Zoho" apoio="Vazio: a conferência descobre">
+                <input value={f.zoho_org_id} onChange={(e) => setF({ ...f, zoho_org_id: e.target.value })} className={campo} placeholder="zoid" autoCapitalize="none" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Região do Zoho">
+                <select value={f.zoho_dc} onChange={(e) => setF({ ...f, zoho_dc: e.target.value })} className={campo}>
+                  <option value="com">Estados Unidos (zoho.com)</option>
+                  <option value="eu">Europa (zoho.eu)</option>
+                  <option value="in">Índia (zoho.in)</option>
+                </select>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Plano do Zoho">
+                <select value={f.zoho_plano} onChange={(e) => setF({ ...f, zoho_plano: e.target.value })} className={campo}>
+                  <option value="gratuito">Gratuito (até 5 caixas, sem IMAP)</option>
+                  <option value="lite">Mail Lite</option>
+                  <option value="premium">Mail Premium</option>
+                  <option value="workplace">Workplace</option>
+                </select>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Admin do Zoho" largo apoio="Só o endereço. A senha fica no cofre do cliente no painel.">
+                <input value={f.zoho_admin} onChange={(e) => setF({ ...f, zoho_admin: e.target.value })} className={campo} placeholder={`admin@${dominio.dominio}`} autoCapitalize="none" />
+              </CampoDeFormulario>
+            </>
+          )}
+        </GrupoDeCampos>
+        <div className="mt-3 flex justify-end">
+          <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void salvar()} disabled={!!ocupado} data-salvar-integracao="">
+            <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            {ocupado === "salvar" ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </Collapsible>
       {pedindoToken && <JanelaDoToken dominio={dominio} onFechar={() => setPedindoToken(false)} aoGuardar={aoMudar} />}
-    </Secao>
+    </section>
   );
 }
 

@@ -9,6 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * grau, as conversas dos agentes, as salas, as automações e os acessos. Só o
  * dono (admin) escreve, e sempre pelos RPCs do banco ou pelas tabelas que a
  * política deixa.
+ * 19/11: a tela abre no "Agora" (cartões de quem está aqui e a caixa), os
+ * números do dia em StatCard e a ficha do agente no centro, com as ações do
+ * dono (grau, bloquear, desbloquear, ligar credencial, mandar mensagem).
  */
 
 const haMin = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -134,9 +137,57 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+const abrirFicha = async (slug: string, nome: string) => {
+  const linha = (await screen.findByRole("list", { name: "Acessos dos agentes" })).querySelector(`[data-acesso="${slug}"]`) as HTMLElement;
+  fireEvent.click(within(linha).getByTitle(`Abrir a ficha de ${nome}`));
+  return screen.findByRole("dialog");
+};
+const abrirMenuDaFicha = async (ficha: HTMLElement, nome: string) => {
+  fireEvent.keyDown(within(ficha).getByRole("button", { name: `Mais ações de ${nome}` }), { key: "Enter" });
+  return screen.findByRole("menu");
+};
+
 describe("Escritório (tela)", () => {
+  it("agora: números do dia, cartões de quem está aqui (com o que faz) e a caixa com prévia; clicar abre a ficha e a conversa", async () => {
+    montar();
+    const numeros = await screen.findByRole("group", { name: /O escritório hoje/ });
+    const cartoes = Array.from(numeros.querySelectorAll("[data-stat-card]")).map((c) => c.textContent);
+    expect(cartoes[0]).toContain("Aqui agora");
+    expect(cartoes[0]).toContain("1");
+    expect(cartoes[0]).toContain("de 3 agentes ativos");
+    expect(cartoes[1]).toContain("Não lidas");
+    expect(cartoes[3]).toContain("Agentes ativos");
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Agora", "Conversas", "Organograma", "Salas", "Automações", "Acessos", "Regras"]);
+
+    const agentes = screen.getByRole("list", { name: "Agentes do escritório" });
+    const ordem = Array.from(agentes.querySelectorAll("[data-cartao-do-agente]")).map((c) => c.getAttribute("data-cartao-do-agente"));
+    expect(ordem[0]).toBe("lia");
+    expect(ordem).not.toContain("fred");
+    expect(agentes.querySelector('[data-cartao-do-agente="lia"] [data-fazendo]')?.textContent).toBe("Montando o calendário da Acerbi");
+    expect(document.body.textContent).not.toContain("Recado velho");
+
+    const caixa = screen.getByRole("list", { name: "Conversas da caixa" });
+    expect(within(caixa).getAllByRole("button")[0].getAttribute("title")).toBe("Abrir a conversa com Jori");
+
+    fireEvent.click(within(agentes).getByTitle("Abrir a ficha de Lia"));
+    const ficha = await screen.findByRole("dialog");
+    expect(ficha.textContent).toContain("Aqui agora");
+    expect(ficha.textContent).toContain("Montando o calendário da Acerbi");
+    expect(within(ficha).getByRole("region", { name: "Salas" }).textContent).toContain("Conteúdo");
+    fireEvent.click(within(ficha).getByRole("button", { name: "Mandar mensagem" }));
+    const nova = await screen.findByRole("dialog");
+    expect((within(nova).getByLabelText(/Para/) as HTMLSelectElement).value).toBe("agente:lia");
+    fireEvent.click(within(nova).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.click(within(caixa).getByTitle("Abrir a conversa com Jori"));
+    expect((await screen.findByRole("list", { name: "Recados da conversa" })).textContent).toContain("Posso seguir com a pauta da Acerbi?");
+    expect(screen.getByRole("tab", { name: "Conversas" }).getAttribute("aria-selected")).toBe("true");
+  });
+
   it("organograma: todas as plataformas, o grau no cartão, o que o agente faz agora e a função repetida em cima", async () => {
     montar();
+    await abrirAba("Organograma");
     const aviso = await screen.findByRole("region", { name: "Função repetida" });
     expect(aviso.textContent).toContain("Conteúdo · Social media: Lia, Nina");
     expect(aviso.textContent).not.toContain("Jori");
@@ -148,8 +199,6 @@ describe("Escritório (tela)", () => {
     // Batimento de 2 min: está aqui e diz o que faz. Batimento de 45 min: o recado velho não aparece.
     expect(document.querySelector('[data-agente="2"] [data-agora]')?.textContent).toContain("Montando o calendário da Acerbi");
     expect(document.body.textContent).not.toContain("Recado velho");
-    expect(screen.getByText("3 agentes ativos · 1 aqui agora")).toBeTruthy();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Organograma", "Conversas", "Salas", "Automações", "Acessos", "Regras"]);
   });
 
   it("conversas: a mais recente primeiro, ponto na não lida, abrir marca como lida e o dono escreve pelo RPC", async () => {
@@ -222,7 +271,7 @@ describe("Escritório (tela)", () => {
     await waitFor(() => expect(escritas).toContainEqual({ tabela: "escritorio_grupo_membros", modo: "delete", dados: null, filtros: { grupo_id: "g1", operator_slug: "lia" } }));
   });
 
-  it("automações: vazio com o texto combinado; com dados, tabela, filtros e troca de dono, sem botão de ligar e desligar", async () => {
+  it("automações: vazio com o texto combinado; com dados, lista, filtros e troca de dono, sem botão de ligar e desligar", async () => {
     montar();
     await abrirAba("Automações");
     expect(await screen.findByText("Nenhuma automação registrada ainda.")).toBeTruthy();
@@ -236,7 +285,7 @@ describe("Escritório (tela)", () => {
     ];
     montar();
     await abrirAba("Automações");
-    const tabela = await screen.findByRole("table", { name: "Automações" });
+    const tabela = await screen.findByRole("list", { name: "Automações" });
     const linha = (ref: string) => tabela.querySelector(`[data-automacao="${ref}"]`) as HTMLElement;
     expect(linha("wf-1").textContent).toContain("Ligada");
     expect(linha("wf-1").textContent).toContain("há 12 min");
@@ -247,12 +296,14 @@ describe("Escritório (tela)", () => {
     expect(within(tabela).queryByRole("switch")).toBeNull();
     expect(within(tabela).queryByRole("button")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Só com erro" }));
-    expect(Array.from(tabela.querySelectorAll("[data-automacao]")).map((l) => l.getAttribute("data-automacao"))).toEqual(["wf-2"]);
-    fireEvent.click(screen.getByRole("button", { name: "Nunca rodou" }));
-    expect(Array.from(tabela.querySelectorAll("[data-automacao]")).map((l) => l.getAttribute("data-automacao"))).toEqual(["wf-3"]);
-    fireEvent.click(screen.getByRole("button", { name: "Nunca rodou" }));
-    expect(tabela.querySelectorAll("[data-automacao]").length).toBe(3);
+    const filtro = screen.getByRole("tablist", { name: "Filtrar automações" });
+    const lidas = () => Array.from(screen.getByRole("list", { name: "Automações" }).querySelectorAll("[data-automacao]")).map((l) => l.getAttribute("data-automacao"));
+    fireEvent.click(within(filtro).getByRole("tab", { name: /^Com erro/ }));
+    expect(lidas()).toEqual(["wf-2"]);
+    fireEvent.click(within(filtro).getByRole("tab", { name: /^Nunca rodou/ }));
+    expect(lidas()).toEqual(["wf-3"]);
+    fireEvent.click(within(filtro).getByRole("tab", { name: /^Todas/ }));
+    expect(lidas().length).toBe(3);
 
     fireEvent.change(screen.getByLabelText("Dono de Leitura dos grupos"), { target: { value: "jori" } });
     await waitFor(() => expect(escritas).toContainEqual({ tabela: "escritorio_automacoes", modo: "update", dados: { dono_slug: "jori" }, filtros: { id: "a2" } }));
@@ -261,25 +312,33 @@ describe("Escritório (tela)", () => {
   it("acessos: credencial só com nome e prévia, última atividade, grau, bloquear com confirmação, desbloquear e ligar credencial", async () => {
     montar();
     await abrirAba("Acessos");
-    const tabela = await screen.findByRole("table", { name: "Acessos dos agentes" });
-    const linha = (slug: string) => tabela.querySelector(`[data-acesso="${slug}"]`) as HTMLElement;
-    await waitFor(() => expect(linha("jori").textContent).toContain("Jori no Grok"));
-    expect(linha("jori").textContent).toContain("ak_1a2b");
-    expect(linha("jori").textContent).toContain("padrão");
-    expect(document.body.textContent).not.toContain("NUNCA-NA-TELA");
+    const lista = await screen.findByRole("list", { name: "Acessos dos agentes" });
+    const linha = (slug: string) => lista.querySelector(`[data-acesso="${slug}"]`) as HTMLElement;
     // Última atividade = o mais recente entre a última execução (120 min) e o batimento (2 min).
-    expect(linha("lia").textContent).toContain("há 2 min");
+    await waitFor(() => expect(linha("lia").textContent).toContain("há 2 min"));
     expect(linha("jori").textContent).toContain("há 45 min");
-    expect(linha("nina").textContent).toContain("sem atividade ainda");
-    expect(linha("fred").textContent).toContain("Pausado");
-    expect(linha("fred").querySelector("[data-bloqueado]")?.getAttribute("title")).toBe("Motivo: respondeu cliente sem aprovação");
+    expect(linha("nina").textContent).toContain("sem atividade");
+    expect(linha("fred").textContent).toContain("Bloqueado");
 
-    fireEvent.change(screen.getByLabelText("Grau de Nina"), { target: { value: "coordenador" } });
+    // Na ficha: credencial só com nome e prévia, nunca o segredo.
+    let ficha = await abrirFicha("jori", "Jori");
+    const credenciais = within(ficha).getByRole("region", { name: "Credenciais de Jori" });
+    expect(credenciais.textContent).toContain("Jori no Grok");
+    expect(credenciais.textContent).toContain("ak_1a2b");
+    expect(credenciais.textContent).toContain("padrão");
+    expect(document.body.textContent).not.toContain("NUNCA-NA-TELA");
+    fireEvent.keyDown(ficha, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    ficha = await abrirFicha("nina", "Nina");
+    fireEvent.change(within(ficha).getByLabelText("Grau de Nina"), { target: { value: "coordenador" } });
     await waitFor(() => expect(escritas).toContainEqual({ tabela: "internal_operators", modo: "update", dados: { grau: "coordenador" }, filtros: { id: "3" } }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Nina agora é coordenador."));
+    fireEvent.keyDown(ficha, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    await waitFor(() => expect((within(linha("lia")).getByRole("button", { name: "Bloquear" }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(within(linha("lia")).getByRole("button", { name: "Bloquear" }));
+    ficha = await abrirFicha("lia", "Lia");
+    fireEvent.click(within(await abrirMenuDaFicha(ficha, "Lia")).getByRole("menuitem", { name: "Bloquear" }));
     const confirmar = await screen.findByRole("dialog");
     expect(confirmar.textContent).toContain("Bloquear pausa o agente e tira as credenciais dele na hora.");
     expect(rpc).not.toHaveBeenCalledWith("escritorio_bloquear_agente", expect.anything());
@@ -288,14 +347,18 @@ describe("Escritório (tela)", () => {
     await waitFor(() => expect(rpc).toHaveBeenCalledWith("escritorio_bloquear_agente", { _slug: "lia", _motivo: "Teste de segurança" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    expect(within(linha("fred")).queryByRole("button", { name: "Bloquear" })).toBeNull();
-    await waitFor(() => expect((within(linha("fred")).getByRole("button", { name: "Desbloquear" }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(within(linha("fred")).getByRole("button", { name: "Desbloquear" }));
+    ficha = await abrirFicha("fred", "Fred");
+    expect(ficha.querySelector("[data-bloqueado]")?.getAttribute("title")).toBe("Motivo: respondeu cliente sem aprovação");
+    const menuDoFred = await abrirMenuDaFicha(ficha, "Fred");
+    expect(within(menuDoFred).queryByRole("menuitem", { name: "Bloquear" })).toBeNull();
+    fireEvent.click(within(menuDoFred).getByRole("menuitem", { name: "Desbloquear" }));
     await waitFor(() => expect(rpc).toHaveBeenCalledWith("escritorio_desbloquear_agente", { _slug: "fred" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    await waitFor(() => expect((screen.getByRole("button", { name: "Ligar credencial a Nina" }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: "Ligar credencial a Nina" }));
-    const ligar = await screen.findByRole("dialog");
+    ficha = await abrirFicha("nina", "Nina");
+    fireEvent.click(within(await abrirMenuDaFicha(ficha, "Nina")).getByRole("menuitem", { name: "Ligar credencial" }));
+    const ligar = await screen.findByRole("dialog", { name: /Ligar credencial a Nina/ });
     const escolha = within(ligar).getByLabelText(/Credencial/);
     // Só chave do MCP ativa entra na escolha.
     expect(within(escolha).getAllByRole("option").map((o) => o.textContent)).toEqual(["Escolha uma chave", "Jori no Grok (ak_1a2b)"]);
@@ -322,10 +385,14 @@ describe("Escritório (tela)", () => {
     expect(screen.queryByRole("button", { name: "Adicionar" })).toBeNull();
 
     await abrirAba("Acessos");
-    const tabela = await screen.findByRole("table", { name: "Acessos dos agentes" });
-    expect(within(tabela).queryByRole("button")).toBeNull();
-    expect(within(tabela).queryByRole("combobox")).toBeNull();
-    expect(tabela.querySelector('[data-acesso="jori"] [data-grau="orquestrador"]')?.textContent).toBe("Orquestrador");
+    const deAcessos = await screen.findByRole("list", { name: "Acessos dos agentes" });
+    expect(within(deAcessos).queryByRole("combobox")).toBeNull();
+    expect(deAcessos.querySelector('[data-acesso="jori"] [data-grau="orquestrador"]')?.textContent).toBe("Orquestrador");
+    const ficha = await abrirFicha("jori", "Jori");
+    expect(within(ficha).queryByRole("combobox")).toBeNull();
+    expect(within(ficha).queryByRole("button", { name: "Mais ações de Jori" })).toBeNull();
+    expect(within(ficha).queryByRole("button", { name: "Mandar mensagem" })).toBeNull();
+    expect(ficha.querySelector('[data-grau="orquestrador"]')?.textContent).toBe("Orquestrador");
     expect(rpc).not.toHaveBeenCalled();
     expect(escritas).toEqual([]);
   });

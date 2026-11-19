@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock, FileText, Image as ImageIcon, MessageCircle, Mic, RefreshCw, Video } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, FileText, Hourglass, Image as ImageIcon, MessageCircle, MessagesSquare, Mic, NotebookText, RefreshCw, Video } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
 import {
@@ -8,16 +8,15 @@ import {
   Carregando,
   EstadoDeErro,
   EstadoVazio,
-  FaixaDeNumeros,
   JanelaCentral,
   botao,
   espaco,
-  etiqueta,
   juntar,
   larguraDaMesa,
   lista,
   texto,
 } from "@/components/sistema";
+import { Card, Chip, PillTabs, StatCard, StatGrid, type Tone } from "@/components/ds";
 import {
   ROTULO_DO_ITEM,
   ROTULO_DO_PAPEL,
@@ -38,6 +37,8 @@ import {
 /*
  * Grupos dos clientes (18/11/2026). Dono: "quero ver os grupos sempre
  * atualizados, entender o que eu envio e como eu respondo".
+ * 19/11: números no tamanho da base (StatCard, contagem em pílula), estado em
+ * Chip e a lista num cartão só, como as outras telas novas.
  * - Topo: quem espera resposta, mensagens de hoje, o tempo de resposta da
  *   agência na semana e a saúde do resumo.
  * - Uma linha por grupo: quem espera resposta vem primeiro, com o que o
@@ -52,10 +53,10 @@ const hora = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: 
 const diaCurto = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
 const diaDoResumo = (dia: string) => { const [, m, d] = dia.split("-"); return `${d}/${m}`; };
 
-const TOM: Record<TomDaEspera, string> = {
-  calmo: "bg-muted text-muted-foreground",
-  atencao: "bg-warning-soft text-warning",
-  urgente: "bg-danger-soft text-destructive",
+const TOM: Record<TomDaEspera, Tone> = {
+  calmo: "neutral",
+  atencao: "warning",
+  urgente: "danger",
 };
 
 function useGrupos() {
@@ -106,7 +107,7 @@ function Conversa({ mensagens }: { mensagens: MensagemDoGrupo[] }) {
           <li key={m.id}>
             {mudouODia && <p className={juntar(texto.auxiliar, "mb-2 mt-4 text-center first:mt-0")}>{dia}</p>}
             <div className={juntar("flex min-w-0", daAgencia ? "justify-end" : "justify-start")}>
-              <div className={juntar("min-w-0 max-w-[86%] rounded-2xl px-3.5 py-2", daAgencia ? "bg-primary/10" : "bg-muted/70", m.ruido && "opacity-60")}>
+              <div className={juntar("min-w-0 max-w-[86%] rounded-lg px-3.5 py-2", daAgencia ? "bg-primary/10" : "bg-muted/70", m.ruido && "opacity-60")}>
                 <p className={juntar(texto.etiqueta, "text-muted-foreground")}>
                   {daAgencia ? ROTULO_DO_PAPEL.agencia : m.nome || ROTULO_DO_PAPEL[m.papel]} · {hora(m.quando)}
                 </p>
@@ -186,9 +187,8 @@ export default function GruposAoVivo() {
   const saude = q.data?.saude;
   const abrir = (g: GrupoDoCliente) => { setAba(g.esperandoDesde ? "conversa" : "resumo"); setAbertoId(g.clientId); };
 
-  const estado = q.isLoading
-    ? " "
-    : `Atualizado ${q.dataUpdatedAt ? hora(new Date(q.dataUpdatedAt).toISOString()) : ""} · ${numeros.esperando === 0 ? "ninguém esperando resposta" : numeros.esperando === 1 ? "1 grupo esperando resposta" : `${numeros.esperando} grupos esperando resposta`}`;
+  const estado = q.isLoading || !q.dataUpdatedAt ? " " : `Atualizado ${hora(new Date(q.dataUpdatedAt).toISOString())}`;
+  const resumoParado = Boolean(saude && saude.resumosComFalha > 0);
 
   return (
     <div className={juntar(larguraDaMesa, espaco.pagina, "pb-10")} data-grupos-ao-vivo="">
@@ -204,29 +204,31 @@ export default function GruposAoVivo() {
       />
 
       {q.isLoading ? <Carregando rotulo="Lendo os grupos" linhas={6} />
-        : q.error ? <EstadoDeErro titulo="Não foi possível ler os grupos." descricao={(q.error as Error).message} />
+        : q.error ? <EstadoDeErro titulo="Não foi possível ler os grupos." descricao={(q.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />
         : !q.data?.disponivel ? <EstadoVazio icone={<MessageCircle className="h-5 w-5" />} titulo="A leitura dos grupos não está ligada neste ambiente." />
         : (
           <>
-            <FaixaDeNumeros
-              rotulo="Os grupos agora"
-              itens={[
-                { rotulo: "Esperando resposta", valor: numeros.esperando, ponto: numeros.esperando ? "alerta" : "verde", apoio: numeros.esperando ? "a última palavra é do cliente" : "tudo respondido" },
-                { rotulo: "Mensagens hoje", valor: numeros.mensagensHoje, apoio: saude?.ultimaMensagem ? `última ${haQuanto(saude.ultimaMensagem, agora)}` : "nenhuma ainda" },
-                { rotulo: "Você responde em", valor: duracao(numeros.respostaMin), apoio: `${numeros.respondidas} de ${numeros.conversas} conversas na semana` },
-                {
-                  rotulo: "Resumo do dia",
-                  valor: saude && saude.resumosComFalha > 0 ? "Parado" : "Em dia",
-                  ponto: saude && saude.resumosComFalha > 0 ? "perigo" : "verde",
-                  corDoValor: saude && saude.resumosComFalha > 0 ? "text-destructive" : undefined,
-                  apoio: saude?.ultimoResumo ? `último ${haQuanto(saude.ultimoResumo, agora)}` : "ainda sem resumo",
-                  dica: saude && saude.resumosComFalha > 0 ? "O modelo que escreve o resumo não respondeu (quase sempre é falta de crédito). A leitura das mensagens continua." : undefined,
-                },
-              ]}
-            />
+            <StatGrid cols={4} label="Os grupos agora">
+              <StatCard
+                label="Esperando resposta"
+                value={String(numeros.esperando)}
+                icon={<Hourglass className="h-4 w-4" />}
+                hint={numeros.esperando === 0 ? "tudo respondido" : numeros.esperando === 1 ? "1 grupo esperando resposta" : `${numeros.esperando} grupos esperando resposta`}
+              />
+              <StatCard label="Mensagens hoje" value={String(numeros.mensagensHoje)} icon={<MessagesSquare className="h-4 w-4" />} hint={saude?.ultimaMensagem ? `última ${haQuanto(saude.ultimaMensagem, agora)}` : "nenhuma ainda"} />
+              <StatCard label="Você responde em" value={duracao(numeros.respostaMin)} icon={<Clock className="h-4 w-4" />} hint={`${numeros.respondidas} de ${numeros.conversas} conversas na semana`} />
+              <StatCard
+                label="Resumo do dia"
+                value={resumoParado ? "Parado" : "Em dia"}
+                icon={<NotebookText className="h-4 w-4" />}
+                hint={saude?.ultimoResumo ? `último ${haQuanto(saude.ultimoResumo, agora)}` : "ainda sem resumo"}
+                help={resumoParado ? "O modelo que escreve o resumo não respondeu (quase sempre é falta de crédito). A leitura das mensagens continua." : undefined}
+              />
+            </StatGrid>
 
             {grupos.length === 0 ? <EstadoVazio titulo="Nenhum grupo com leitura ligada." />
               : (
+                <Card data-lista-dos-grupos="">
                 <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Grupos dos clientes">
                   {grupos.map((g) => {
                     const tom = tomDaEspera(g.esperandoDesde, agora);
@@ -239,9 +241,7 @@ export default function GruposAoVivo() {
                             <span className="flex min-w-0 items-center">
                               <span className={juntar(texto.corpo, "truncate font-medium")}>{g.cliente}</span>
                               {g.esperandoDesde && (
-                                <span className={juntar(etiqueta, TOM[tom], "ml-2")}>
-                                  <Clock className="mr-1 h-3 w-3" aria-hidden="true" />espera {haQuanto(g.esperandoDesde, agora)}
-                                </span>
+                                <Chip tone={TOM[tom]} icon={<Clock className="h-3 w-3" />} className="ml-2">espera {haQuanto(g.esperandoDesde, agora)}</Chip>
                               )}
                             </span>
                             <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
@@ -250,9 +250,9 @@ export default function GruposAoVivo() {
                                 : ultima ? `Respondido · última conversa ${haQuanto(ultima, agora)}` : "Sem conversa na semana"}
                             </span>
                           </span>
-                          <span className={juntar(texto.auxiliar, "ml-3 hidden shrink-0 text-right tabular-nums sm:block")}>
-                            <span className="block">{g.mensagensHoje} hoje</span>
-                            <span className="block">{g.medianaRespostaMin === null ? "sem conversa" : `resposta em ${duracao(g.medianaRespostaMin)}`}</span>
+                          <span className="ml-3 hidden shrink-0 items-center sm:flex" data-numeros-do-grupo="">
+                            <span className={juntar(texto.auxiliar, "mr-2 tabular-nums")}>{g.medianaRespostaMin === null ? "sem conversa" : `resposta em ${duracao(g.medianaRespostaMin)}`}</span>
+                            <Chip tone={g.mensagensHoje > 0 ? "accent" : "neutral"} title="Mensagens hoje">{g.mensagensHoje} hoje</Chip>
                           </span>
                           {!g.esperandoDesde && <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-success" aria-label="Respondido" />}
                         </button>
@@ -260,6 +260,7 @@ export default function GruposAoVivo() {
                     );
                   })}
                 </ul>
+                </Card>
               )}
           </>
         )}
@@ -272,13 +273,12 @@ export default function GruposAoVivo() {
         descricao={aberto ? (aberto.esperandoDesde ? `Esperando resposta ${haQuanto(aberto.esperandoDesde, agora)}` : `Respondido · ${aberto.tarefasAbertas} ${aberto.tarefasAbertas === 1 ? "tarefa aberta" : "tarefas abertas"} vindas do grupo`) : undefined}
         largura="lg"
         abaixoDoTitulo={
-          <div className="flex gap-1.5" role="tablist" aria-label="O que ver do grupo">
-            {(["resumo", "conversa"] as Aba[]).map((id) => (
-              <button key={id} type="button" role="tab" aria-selected={aba === id} onClick={() => setAba(id)} className={juntar(aba === id ? botao.primario : botao.discreto, "h-8")}>
-                {id === "resumo" ? "Resumo" : "Conversa"}
-              </button>
-            ))}
-          </div>
+          <PillTabs<Aba>
+            label="O que ver do grupo"
+            value={aba}
+            onChange={setAba}
+            tabs={[{ value: "resumo", label: "Resumo" }, { value: "conversa", label: "Conversa", count: aberto ? aberto.mensagens.filter((m) => m.papel !== "automatico").length : undefined }]}
+          />
         }
       >
         {aberto && (aba === "resumo" ? <ResumoDoDia g={aberto} /> : <Conversa mensagens={aberto.mensagens} />)}

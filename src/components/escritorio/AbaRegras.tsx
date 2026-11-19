@@ -3,7 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Inbox, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { tabela } from "@/components/finance/pecasDoFinanceiro";
-import { CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, JanelaCentral, Painel, Secao, botao, campo, campoTexto, espaco, etiqueta, juntar, texto } from "@/components/sistema";
+import { Chip } from "@/components/ds";
+import { CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, JanelaCentral, Painel, Secao, botao, campo, campoTexto, espaco, juntar, texto } from "@/components/sistema";
 import { Switch } from "@/components/ui/switch";
 import { haQuanto } from "@/lib/gruposAoVivo";
 import { mensagemDoErroDoEscritorio } from "@/lib/escritorio/acessos";
@@ -93,6 +94,7 @@ function CartaoDaRegra({
       aria-label={regra.nome}
       titulo={regra.nome}
       descricao={[regra.area, fraseDeUsos(usadaNaSemana)].filter(Boolean).join(" · ")}
+      ajuda={regra.descricao || undefined}
       recolher={false}
       data-regra={regra.chave}
       acao={admin ? (
@@ -107,12 +109,11 @@ function CartaoDaRegra({
           {regra.ligada ? "Ligada" : "Desligada"}
         </label>
       ) : (
-        <span className={juntar(etiqueta, regra.ligada ? "bg-success-soft text-success" : "bg-muted text-muted-foreground")}>{regra.ligada ? "Ligada" : "Desligada"}</span>
+        <Chip tone={regra.ligada ? "success" : "neutral"} dot>{regra.ligada ? "Ligada" : "Desligada"}</Chip>
       )}
     >
       {!regra.ligada && !ligar.pode && <p className={juntar(texto.corpo, "mb-2 text-warning")} data-falta="">{ligar.motivo}</p>}
-      {regra.descricao && <p className={texto.corpo}>{regra.descricao}</p>}
-      <p className={juntar(texto.auxiliar, "mt-1")} data-quem="">Quem usa: {quem}</p>
+      <p className={texto.auxiliar} data-quem="">Quem usa: {quem}</p>
 
       {temLimites && (
         <div className="mt-4 border-t border-border pt-4" data-limites="">
@@ -244,7 +245,7 @@ export default function AbaRegras({ agentes, admin, agora }: { agentes: AgenteDo
   const verFila = () => void rodar(async () => { setPrevia(await limparFilaDasRegras(false)); return null; });
 
   if (q.isLoading) return <Carregando rotulo="Lendo as regras" forma="grade" />;
-  if (q.error) return <EstadoDeErro titulo="Não foi possível ler as regras." descricao={(q.error as Error).message} />;
+  if (q.error) return <EstadoDeErro titulo="Não foi possível ler as regras." descricao={(q.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />;
   const regras = q.data?.regras ?? [];
   const daSemana = q.data?.daSemana ?? [];
   const nomeDaRegra = (chave: string) => regras.find((r) => r.chave === chave)?.nome ?? chave;
@@ -254,8 +255,6 @@ export default function AbaRegras({ agentes, admin, agora }: { agentes: AgenteDo
 
   return (
     <div className={espaco.pagina} data-regras-do-escritorio="">
-      <p className={texto.corpo}>Dentro da regra, o agente faz sozinho e fica registrado. Fora dela, sobe para você.</p>
-
       {regras.length === 0 ? (
         <EstadoVazio icone={<ShieldCheck className="h-5 w-5" />} titulo="Nenhuma regra cadastrada ainda." />
       ) : (
@@ -277,9 +276,9 @@ export default function AbaRegras({ agentes, admin, agora }: { agentes: AgenteDo
         </div>
       )}
 
-      <Secao titulo="Sempre sobe para você" recolher={false} divisoria data-sempre-sobe="">
-        <ul className={juntar(texto.corpo, "min-w-0 list-disc space-y-1 pl-5")} aria-label="Sempre sobe para você">
-          {SEMPRE_SOBE.map((item) => <li key={item}>{item}</li>)}
+      <Secao titulo="Sempre sobe para você" ajuda="Dentro da regra, o agente faz sozinho e fica registrado. Fora dela, sobe para você." recolher={false} divisoria data-sempre-sobe="">
+        <ul className="flex min-w-0 flex-wrap [&>li]:mb-2 [&>li]:mr-2" aria-label="Sempre sobe para você">
+          {SEMPRE_SOBE.map((item) => <li key={item}><Chip size="md" tone="warning">{item}</Chip></li>)}
         </ul>
       </Secao>
 
@@ -293,9 +292,7 @@ export default function AbaRegras({ agentes, admin, agora }: { agentes: AgenteDo
       >
         {!admin ? (
           <p className={texto.auxiliar}>Só o dono limpa a fila.</p>
-        ) : !previa ? (
-          <p className={texto.auxiliar}>Veja a lista antes de tirar qualquer pedido da caixa.</p>
-        ) : total === 0 ? (
+        ) : !previa ? null : total === 0 ? (
           <EstadoVazio compacto icone={<Inbox className="h-5 w-5" />} titulo="Nenhum pedido antigo cabe nas regras de hoje." />
         ) : (
           <>

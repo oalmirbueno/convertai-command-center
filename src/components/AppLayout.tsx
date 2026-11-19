@@ -19,8 +19,8 @@ import {
   LayoutGrid, GraduationCap, BookOpen, Boxes, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle,
-  Activity, Building2, Mail, Inbox, Tags, Wallet, Globe, MonitorSmartphone,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle, Workflow,
+  Activity, Building2, Mail, Inbox, Tags, Wallet, Globe, MonitorSmartphone, MailOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -186,6 +186,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Escritório", url: "/escritorio", icon: Building2 },
       // 18/11/2026: Central de Skills e segundo cérebro para todos os agentes.
       { title: "Skills e cérebro", url: "/skills", icon: Library },
+      // 19/11/2026: Central de Automações (n8n: fluxos, saúde, execuções e o botão ligar/desligar do dono).
+      { title: "Automações", url: "/automacoes", icon: Workflow },
     ],
   },
   {
@@ -263,6 +265,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Empresas", url: "/produto/crm/empresas", icon: Building2, soAdmin: true },
       { title: "Planos e preços", url: "/produto/crm/precos", icon: Tags, soAdmin: true },
       { title: "Faturamento", url: "/produto/crm/faturamento", icon: Wallet, soAdmin: true },
+      // 19/11/2026: o link de entrada de cada cliente, quem já entrou e os convites (CRM e e-mail).
+      { title: "Acessos dos clientes", url: "/produto/acessos", icon: KeyRound, soAdmin: true, fimExato: true },
     ],
   },
   {
@@ -272,6 +276,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Central", url: "/produto/email", icon: HeartPulse, soAdmin: true, fimExato: true },
       { title: "Entradas e migrações", url: "/produto/email/entradas", icon: Mail, soAdmin: true },
       { title: "Caixa da Aceleriq", url: "/produto/email/caixa", icon: Inbox, soAdmin: true },
+      // 19/11/2026: entrar numa caixa (da Aceleriq ou de um cliente) com a senha e ver como o cliente vê.
+      { title: "Minha caixa", url: "/produto/acessos/caixa", icon: MailOpen, soAdmin: true },
       { title: "Preços", url: "/produto/email/precos", icon: Tags, soAdmin: true },
     ],
   },

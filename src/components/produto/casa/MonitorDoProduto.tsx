@@ -1,51 +1,34 @@
-import NumerosOusados from "@/components/admin/NumerosOusados";
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
-import { StatusDot, type Tone } from "@/components/ds";
-import {
-  lerMonitor,
-  lerMonitorDaConta,
-  reais,
-  ROTULO_DO_ESTADO,
-  type EmpresaNoMonitor,
-  type NivelDaSaude,
-} from "@/lib/produto/api";
-import { Carregando, EstadoDeErro, EstadoVazio, JanelaCentral, Secao, botao, etiqueta, juntar, lista, superficie, texto } from "@/components/sistema";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Activity, Handshake, RefreshCw, Sparkles, Users } from "lucide-react";
+import { CardSurface, Chip, HelpTooltip, StatCard, StatGrid, StatusPill, type Tone } from "@/components/ds";
+import { lerMonitor, listarContasDaCasa, listarPlanos, reais, type ContaNaCasa, type EmpresaNoMonitor, type NivelDaSaude } from "@/lib/produto/api";
+import { EstadoDeErro, EstadoVazio, Secao, botao, juntar, texto } from "@/components/sistema";
+import { ListaDeEmpresas, ListaDeEmpresasCarregando } from "./ContasDaCasa";
+import JanelaDaEmpresa, { haQuanto } from "./JanelaDaEmpresa";
+import { chaveDasContas, reaisCurto } from "./estadoDaConta";
+
+export { haQuanto };
 
 /**
- * O monitor do produto, para a administração da casa (18/11/2026): se está
- * tudo em ordem (e-mails, cobrança, rotinas, integrações, convites) e o
- * movimento do CRM de cada empresa, relido sozinho a cada 15 segundos.
+ * A Visão geral do produto CRM, para a administração da casa (18/11/2026; redesenhada em 19/11):
+ * se está tudo em ordem (e-mails, cobrança, rotinas, integrações, convites) e o movimento do CRM de
+ * cada empresa, relido sozinho a cada 15 segundos.
+ *
+ * Carga (19/11, dono: "a visão geral não carrega, está bugada"): a tela não espera mais tudo para
+ * aparecer. A lista das empresas sai da leitura rápida das contas (a mesma da aba Empresas, já em
+ * cache quando se passa por lá) e o monitor, que é a leitura pesada, corre em paralelo e preenche
+ * os números e o movimento quando chega. Cada região tem o seu esqueleto e o seu "Tentar de novo".
  * Mostra números e movimento; o nome dos leads de cada empresa não aparece.
  */
 
 const RELER_A_CADA = 15_000;
 const TOM: Record<NivelDaSaude, Tone> = { ok: "success", atencao: "warning", problema: "danger" };
 const PESO: Record<NivelDaSaude, number> = { problema: 0, atencao: 1, ok: 2 };
-const ETAPA: Record<string, string> = { novo: "Novo", contato: "Contato", diagnostico: "Diagnóstico", proposta: "Proposta", negociacao: "Negociação", ganho: "Ganho no mês", perdido: "Perdido no mês" };
-const ORDEM_DAS_ETAPAS = ["novo", "contato", "diagnostico", "proposta", "negociacao", "ganho", "perdido"];
-const PAPEL: Record<string, string> = { admin: "administra", gerente: "gerente", usuario: "vendedor" };
-
-const etapa = (id: string | null) => (id ? ETAPA[id] || id : "");
-
-/** "agora", "há 4 min", "há 3 h", "há 2 dias" ou "nunca". */
-export function haQuanto(iso: string | null | undefined, agora = Date.now()): string {
-  if (!iso) return "nunca";
-  const t = new Date(iso).getTime();
-  if (isNaN(t)) return "nunca";
-  const min = Math.floor((agora - t) / 60000);
-  if (min < 1) return "agora";
-  if (min < 60) return `há ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `há ${h} h`;
-  const d = Math.floor(h / 24);
-  return `há ${d} ${d === 1 ? "dia" : "dias"}`;
-}
+const ROTULO_DO_NIVEL: Record<NivelDaSaude, string> = { ok: "Em ordem", atencao: "Atenção", problema: "Problema" };
 
 /** Mexeram no CRM nos últimos 10 minutos. */
-const emUsoAgora = (e: EmpresaNoMonitor, agora: number) => !!e.ultima_atividade && agora - new Date(e.ultima_atividade).getTime() < 600_000;
+const emUsoAgora = (e: Pick<EmpresaNoMonitor, "ultima_atividade"> | null | undefined, agora: number) => !!e && !!e.ultima_atividade && agora - new Date(e.ultima_atividade).getTime() < 600_000;
 
 /** O relógio que faz "há 2 min" andar entre uma releitura e outra. */
 function useAgora(): number {
@@ -57,203 +40,176 @@ function useAgora(): number {
   return agora;
 }
 
+/** As empresas na ordem do monitor (quem mexeu por último primeiro); sem o monitor, a ordem das contas. */
+export function ordenarPeloMonitor(contas: ContaNaCasa[], empresas: EmpresaNoMonitor[] | undefined): ContaNaCasa[] {
+  if (!empresas || empresas.length === 0) return contas;
+  const posicao: Record<string, number> = {};
+  empresas.forEach((e, i) => {
+    posicao[e.id] = i;
+  });
+  return contas.slice().sort((a, b) => (a.id in posicao ? posicao[a.id] : 1e6) - (b.id in posicao ? posicao[b.id] : 1e6));
+}
+
 export default function MonitorDoProduto() {
-  const monitor = useQuery({ queryKey: ["produto", "casa", "monitor"], queryFn: lerMonitor, refetchInterval: RELER_A_CADA });
+  const qc = useQueryClient();
+  // As três leituras saem juntas: nenhuma espera a outra.
+  const monitor = useQuery({ queryKey: ["produto", "casa", "monitor"], queryFn: lerMonitor, refetchInterval: RELER_A_CADA, placeholderData: (antes) => antes });
+  const contas = useQuery({ queryKey: chaveDasContas, queryFn: listarContasDaCasa, staleTime: 30_000 });
+  const planos = useQuery({ queryKey: ["produto", "planos", "todos"], queryFn: () => listarPlanos(true), staleTime: 300_000 });
   const agora = useAgora();
   const [aberta, setAberta] = useState<string | null>(null);
 
-  if (monitor.isLoading) return <Carregando linhas={6} rotulo="Carregando o monitor" />;
-  if (monitor.isError || !monitor.data) {
-    return <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void monitor.refetch()}>Tentar de novo</button>} />;
-  }
-
-  const { saude, empresas } = monitor.data;
+  const dados = monitor.data;
+  const saude = dados ? dados.saude : [];
+  const empresas = dados ? dados.empresas : undefined;
   const pontos = saude.slice().sort((a, b) => PESO[a.nivel] - PESO[b.nivel]);
   const problemas = saude.filter((s) => s.nivel === "problema").length;
   const atencoes = saude.filter((s) => s.nivel === "atencao").length;
   const geral: NivelDaSaude = problemas ? "problema" : atencoes ? "atencao" : "ok";
   const frase = problemas
-    ? `${problemas} ${problemas === 1 ? "problema" : "problemas"} para resolver${atencoes ? ` e ${atencoes} para olhar` : ""}`
+    ? `${problemas} ${problemas === 1 ? "problema" : "problemas"}${atencoes ? ` e ${atencoes} para olhar` : ""}`
     : atencoes
       ? `${atencoes} ${atencoes === 1 ? "ponto pede" : "pontos pedem"} atenção`
       : "Tudo em ordem";
-  const somar = (campo: "novos_hoje" | "movimentos_hoje" | "abertos" | "valor_aberto" | "tarefas_atrasadas") => empresas.reduce((s, e) => s + e[campo], 0);
-  const usando = empresas.filter((e) => emUsoAgora(e, agora)).length;
-  const empresaAberta = empresas.filter((e) => e.id === aberta)[0] || null;
+  const somar = (campo: "novos_hoje" | "movimentos_hoje" | "abertos" | "valor_aberto" | "novos_7d") => (empresas || []).reduce((s, e) => s + e[campo], 0);
+  const usando = (empresas || []).filter((e) => emUsoAgora(e, agora)).length;
+  const total = empresas ? empresas.length : contas.data ? contas.data.length : 0;
+  const doMonitor = useMemo(() => {
+    const m: Record<string, EmpresaNoMonitor> = {};
+    (empresas || []).forEach((e) => {
+      m[e.id] = e;
+    });
+    return m;
+  }, [empresas]);
+  const lista = useMemo(() => ordenarPeloMonitor(contas.data || [], empresas), [contas.data, empresas]);
+  const nomeDoPlano = (id: string) => ((planos.data || []).filter((p) => p.id === id)[0] || { nome: id }).nome;
+  const contaAberta = (contas.data || []).filter((c) => c.id === aberta)[0] || null;
+  const ou = (v: string) => (dados ? v : "…");
 
   return (
-    <div className="min-w-0 space-y-5" data-monitor-do-produto="">
-      <div className={juntar(superficie.painel, "flex min-w-0 flex-wrap items-center px-4 py-3")} data-saude-geral={geral}>
-        <StatusDot tone={TOM[geral]} pulse={geral !== "ok"} />
-        <span className={juntar(texto.corpo, "ml-3 min-w-0 flex-1 font-medium")}>{frase}</span>
-        <span className={juntar(texto.apoio, "ml-3 tabular-nums")} aria-live="off">
-          ao vivo · lido {haQuanto(new Date(monitor.dataUpdatedAt).toISOString(), agora)}
+    <div className="min-w-0 space-y-6" data-monitor-do-produto="">
+      <div className="flex min-w-0 items-center" data-saude-geral={dados ? geral : "lendo"}>
+        {dados ? (
+          <StatusPill tone={TOM[geral]} pulse={geral !== "ok"}>{frase}</StatusPill>
+        ) : monitor.isError ? (
+          <StatusPill tone="danger">Sem leitura do monitor</StatusPill>
+        ) : (
+          <span className="h-6 w-40 animate-pulse rounded-full bg-muted" aria-label="Lendo o monitor" />
+        )}
+        <span className={juntar(texto.auxiliar, "ml-3 min-w-0 flex-1 truncate tabular-nums")} aria-live="off">
+          {dados ? `ao vivo · lido ${haQuanto(new Date(monitor.dataUpdatedAt).toISOString(), agora)}` : monitor.isError ? "" : "lendo o monitor"}
         </span>
-        <button type="button" className={juntar(botao.icone, "ml-2")} onClick={() => void monitor.refetch()} aria-label="Reler agora" title="Reler agora">
+        <button
+          type="button"
+          className={juntar(botao.icone, "ml-2")}
+          onClick={() => {
+            void monitor.refetch();
+            void qc.invalidateQueries({ queryKey: chaveDasContas });
+          }}
+          aria-label="Reler agora"
+          title="Reler agora"
+        >
           <RefreshCw className={juntar("h-4 w-4", monitor.isFetching ? "animate-spin" : "")} aria-hidden="true" />
         </button>
       </div>
 
-      <NumerosOusados
-        rotulo="O dia nos CRMs"
-        itens={[
-          { rotulo: "Usando agora", valor: String(usando), apoio: `de ${empresas.length} ${empresas.length === 1 ? "empresa" : "empresas"}`, ponto: usando ? "verde" : undefined },
-          { rotulo: "Leads novos hoje", valor: String(somar("novos_hoje")) },
-          { rotulo: "Movimentos hoje", valor: String(somar("movimentos_hoje")) },
-          { rotulo: "Em aberto", valor: reais(somar("valor_aberto")), apoio: `${somar("abertos")} negócios` },
-        ]}
-      />
+      <StatGrid label="O dia nos CRMs">
+        <StatCard
+          size="md"
+          variant="ink"
+          icon={<Activity className="h-4 w-4" />}
+          progress={dados && total ? { value: usando, max: total } : undefined}
+          label="Usando agora"
+          value={ou(String(usando))}
+          hint={`de ${total} ${total === 1 ? "empresa" : "empresas"}`}
+        />
+        <StatCard size="md" icon={<Sparkles className="h-4 w-4" />} label="Leads novos hoje" value={ou(String(somar("novos_hoje")))} hint={dados ? `${somar("novos_7d")} em 7 dias` : " "} />
+        <StatCard size="md" icon={<Users className="h-4 w-4" />} label="Movimentos hoje" value={ou(String(somar("movimentos_hoje")))} hint="no funil das empresas" />
+        <StatCard size="md" icon={<Handshake className="h-4 w-4" />} label="Em aberto" value={ou(reaisCurto(somar("valor_aberto"), reais))} hint={dados ? `${somar("abertos")} negócios` : " "} />
+      </StatGrid>
 
-      <Secao titulo="Está tudo em ordem?" descricao={`${saude.length - problemas - atencoes} de ${saude.length} em ordem`}>
-        <ul className={juntar(superficie.painel, lista.divisoria, "px-2 py-1.5 sm:px-3")} data-lista-da-saude="">
-          {pontos.map((s) => (
-            <li key={s.chave} className={juntar(lista.linha, "items-start hover:bg-transparent")} data-saude={s.chave} data-nivel={s.nivel}>
-              <StatusDot tone={TOM[s.nivel]} className="mt-1.5" />
-              <span className="ml-3 min-w-0 flex-1">
-                <span className={juntar(texto.corpo, "block font-medium")}>{s.titulo}</span>
-                <span className={juntar(texto.apoio, "block")}>{s.resumo}</span>
-                {s.detalhe && <span className={juntar(texto.apoio, "mt-0.5 block break-words", s.nivel === "problema" ? "text-destructive" : "")}>{s.detalhe}</span>}
-              </span>
-              {s.quando && <span className={juntar(texto.apoio, "ml-3 shrink-0 text-right tabular-nums")}>{s.rotulo_quando} {haQuanto(s.quando, agora)}</span>}
-            </li>
-          ))}
-        </ul>
-      </Secao>
-
-      <Secao titulo="O CRM de cada empresa" descricao="Quem mexeu por último aparece primeiro. Abra uma empresa para ver o funil, as pessoas e os movimentos.">
-        {empresas.length === 0 ? (
-          <EstadoVazio compacto titulo="Nenhuma empresa ainda." />
+      <Secao
+        titulo="Está tudo em ordem?"
+        descricao={dados ? `${saude.length - problemas - atencoes} de ${saude.length} em ordem` : undefined}
+        ajuda="Cada cartão é uma parte do produto: e-mails, cobrança, acesso pelo plano do cliente, rotinas automáticas, Meta, WhatsApp e convites. O detalhe do erro fica no ? de cada cartão."
+        recolher="produto:crm:monitor:saude"
+      >
+        {monitor.isError && !dados ? (
+          <EstadoDeErro titulo="Não foi possível ler o monitor." acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void monitor.refetch()}>Tentar de novo</button>} />
+        ) : !dados ? (
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Carregando a saúde do produto">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="h-[92px] animate-pulse rounded-lg bg-muted" style={{ opacity: 1 - i * 0.08 }} />
+            ))}
+          </div>
         ) : (
-          <ul className={juntar(superficie.painel, lista.divisoria, "px-2 py-1.5 sm:px-3")} data-lista-do-monitor="">
-            {empresas.map((e) => (
-              <li key={e.id}>
-                <button type="button" className={juntar(lista.linha, "w-full text-left")} onClick={() => setAberta(e.id)} data-empresa-no-monitor={e.id}>
-                  <StatusDot tone={emUsoAgora(e, agora) ? "success" : "neutral"} pulse={emUsoAgora(e, agora)} />
-                  <span className="ml-3 min-w-0 flex-1">
-                    <span className="flex min-w-0 items-center">
-                      <span className={juntar(texto.corpo, "truncate font-medium")}>{e.nome}</span>
-                      {!e.liberada && <span className={juntar(etiqueta, "ml-2 bg-danger-soft text-destructive")}>sem acesso</span>}
-                      {e.tarefas_atrasadas > 0 && <span className={juntar(etiqueta, "ml-2 bg-warning-soft text-warning")}>{e.tarefas_atrasadas} {e.tarefas_atrasadas === 1 ? "tarefa atrasada" : "tarefas atrasadas"}</span>}
-                    </span>
-                    <span className={juntar(texto.apoio, "block truncate")}>
-                      {ROTULO_DO_ESTADO[e.estado].toLowerCase()} · {e.usuarios_ativos} {e.usuarios_ativos === 1 ? "usuário" : "usuários"}
-                      {e.convites ? ` · ${e.convites} sem entrar` : ""} · mexeram {haQuanto(e.ultima_atividade, agora)} · entraram {haQuanto(e.ultimo_acesso, agora)}
-                    </span>
-                  </span>
-                  <span className="ml-3 hidden shrink-0 text-right sm:block">
-                    <span className={juntar(texto.corpo, "block tabular-nums")}>{e.novos_hoje} hoje · {e.novos_7d} em 7 dias</span>
-                    <span className={juntar(texto.apoio, "block tabular-nums")}>{e.abertos} em aberto · {reais(e.valor_aberto)}</span>
-                  </span>
-                </button>
-              </li>
+          <ul className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-lista-da-saude="">
+            {pontos.map((s) => (
+              <CardSurface as="li" key={s.chave} className="flex min-w-0 flex-col p-4" data-saude={s.chave} data-nivel={s.nivel}>
+                <span className="flex min-w-0 items-center">
+                  <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{s.titulo}</span>
+                  {(s.detalhe || s.quando) && (
+                    <HelpTooltip className="ml-1" label={`Detalhe: ${s.titulo}`} title={s.titulo}>
+                      {[s.resumo, s.detalhe, s.quando ? `${s.rotulo_quando || "última vez"} ${haQuanto(s.quando, agora)}` : ""].filter(Boolean).join(". ")}
+                    </HelpTooltip>
+                  )}
+                </span>
+                <span className={juntar(texto.auxiliar, "mt-1 block truncate")} title={s.resumo}>{s.resumo}</span>
+                <span className="mt-3 flex min-w-0 items-center">
+                  <Chip tone={TOM[s.nivel]} dot>{ROTULO_DO_NIVEL[s.nivel]}</Chip>
+                  {s.quando && <span className={juntar(texto.auxiliar, "ml-auto truncate pl-2 tabular-nums")}>{haQuanto(s.quando, agora)}</span>}
+                </span>
+              </CardSurface>
             ))}
           </ul>
         )}
       </Secao>
 
-      {empresaAberta && <EmpresaAoVivo empresa={empresaAberta} agora={agora} onFechar={() => setAberta(null)} />}
-    </div>
-  );
-}
+      <Secao titulo="O CRM de cada empresa" descricao={contas.data ? `${lista.length} ${lista.length === 1 ? "empresa" : "empresas"} · quem mexeu por último primeiro` : undefined} recolher="produto:crm:monitor:empresas">
+        {contas.isLoading ? (
+          <ListaDeEmpresasCarregando />
+        ) : contas.isError ? (
+          <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void contas.refetch()}>Tentar de novo</button>} />
+        ) : lista.length === 0 ? (
+          <EstadoVazio compacto titulo="Nenhuma empresa ainda." />
+        ) : (
+          <div data-lista-do-monitor="">
+            <ListaDeEmpresas
+              contas={lista}
+              nomeDoPlano={nomeDoPlano}
+              onAbrir={setAberta}
+              aoVivo={(c) => emUsoAgora(doMonitor[c.id], agora)}
+              linhaDeApoio={(c) => {
+                const e = doMonitor[c.id];
+                if (!e) return dados ? "sem movimento" : "lendo o movimento";
+                const partes = [`mexeram ${haQuanto(e.ultima_atividade, agora)}`];
+                if (e.novos_hoje) partes.push(`${e.novos_hoje} ${e.novos_hoje === 1 ? "lead novo" : "leads novos"} hoje`);
+                if (e.tarefas_atrasadas) partes.push(`${e.tarefas_atrasadas} ${e.tarefas_atrasadas === 1 ? "tarefa atrasada" : "tarefas atrasadas"}`);
+                if (e.convites) partes.push(`${e.convites} sem entrar`);
+                return partes.join(" · ");
+              }}
+              valor={{
+                titulo: "Em aberto",
+                de: (c) => {
+                  const e = doMonitor[c.id];
+                  return e ? { valor: reaisCurto(e.valor_aberto, reais), apoio: `${e.abertos} ${e.abertos === 1 ? "negócio" : "negócios"}` } : { valor: dados ? reais(0) : "…" };
+                },
+              }}
+            />
+          </div>
+        )}
+      </Secao>
 
-function EmpresaAoVivo({ empresa, agora, onFechar }: { empresa: EmpresaNoMonitor; agora: number; onFechar: () => void }) {
-  const d = useQuery({ queryKey: ["produto", "casa", "monitor", empresa.id], queryFn: () => lerMonitorDaConta(empresa.id), refetchInterval: RELER_A_CADA });
-  const funil = (d.data ? d.data.funil : []).slice().sort((a, b) => {
-    const ia = ORDEM_DAS_ETAPAS.indexOf(a.etapa);
-    const ib = ORDEM_DAS_ETAPAS.indexOf(b.etapa);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-  });
-  const maior = funil.reduce((m, f) => Math.max(m, f.negocios), 1);
-  return (
-    <JanelaCentral
-      aberta
-      onFechar={onFechar}
-      largura="lg"
-      titulo={empresa.nome}
-      descricao={`mexeram ${haQuanto(empresa.ultima_atividade, agora)} · relido a cada 15 segundos`}
-      ajuda="Aqui a casa acompanha o movimento: quantos negócios em cada etapa, quem está trabalhando e o que mudou. O nome e o contato dos leads são da empresa e não aparecem."
-      rodape={
-        <Link to="/produto/crm/empresas" className={botao.secundario} onClick={onFechar}>
-          Ajustar plano e pessoas
-        </Link>
-      }
-    >
-      {d.isLoading ? (
-        <Carregando linhas={5} rotulo="Carregando o CRM da empresa" />
-      ) : d.isError || !d.data ? (
-        <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void d.refetch()}>Tentar de novo</button>} />
-      ) : (
-        <div className="min-w-0 space-y-5" data-empresa-ao-vivo={empresa.id}>
-          <NumerosOusados
-            tamanho="compacto"
-            tinta={-1}
-            rotulo="Números da empresa"
-            itens={[
-              { rotulo: "Novos hoje", valor: String(empresa.novos_hoje), apoio: `${empresa.novos_7d} em 7 dias` },
-              { rotulo: "Em aberto", valor: String(empresa.abertos), apoio: reais(empresa.valor_aberto) },
-              { rotulo: "Ganhos no mês", valor: String(empresa.ganhos_mes), apoio: reais(empresa.valor_ganho_mes) },
-              { rotulo: "Tarefas atrasadas", valor: String(empresa.tarefas_atrasadas), ponto: empresa.tarefas_atrasadas ? "alerta" : undefined },
-            ]}
-          />
-
-          <Secao titulo="Funil">
-            {funil.length === 0 ? (
-              <EstadoVazio compacto titulo="Nenhum negócio no funil ainda." />
-            ) : (
-              <ul className="min-w-0 space-y-2" data-funil-ao-vivo="">
-                {funil.map((f) => (
-                  <li key={f.etapa} className="flex min-w-0 items-center">
-                    <span className={juntar(texto.apoio, "w-32 shrink-0 truncate")}>{etapa(f.etapa)}</span>
-                    <span className="ml-3 h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-                      <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(4, Math.round((f.negocios / maior) * 100))}%` }} />
-                    </span>
-                    <span className={juntar(texto.corpo, "ml-3 w-36 shrink-0 text-right tabular-nums")}>{f.negocios} · {reais(f.valor)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Secao>
-
-          <Secao titulo="Pessoas" descricao={`${d.data.pessoas.length}`}>
-            <ul className={juntar(lista.aberta, lista.divisoria)} data-pessoas-ao-vivo="">
-              {d.data.pessoas.map((p) => (
-                <li key={p.id} className={juntar(lista.linha, "hover:bg-transparent")}>
-                  <span className="min-w-0 flex-1">
-                    <span className={juntar(texto.corpo, "block truncate font-medium")}>{p.nome}</span>
-                    <span className={juntar(texto.apoio, "block truncate")}>
-                      {p.estado === "convidado" ? "convidado, ainda não entrou" : `${p.cargo || PAPEL[p.papel] || p.papel} · entrou ${haQuanto(p.ultimo_acesso, agora)} · mexeu ${haQuanto(p.ultimo_movimento, agora)}`}
-                    </span>
-                  </span>
-                  <span className="ml-3 shrink-0 text-right">
-                    <span className={juntar(texto.corpo, "block tabular-nums")}>{p.abertos} em aberto · {p.ganhos_mes} ganhos</span>
-                    <span className={juntar(texto.apoio, "block tabular-nums", p.tarefas_atrasadas ? "text-warning" : "")}>
-                      {p.movimentos_7d} movimentos em 7 dias{p.tarefas_atrasadas ? ` · ${p.tarefas_atrasadas} atrasadas` : ""}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Secao>
-
-          <Secao titulo="Últimos movimentos" descricao="os 40 mais recentes">
-            {d.data.movimentos.length === 0 ? (
-              <EstadoVazio compacto titulo="Nenhum movimento ainda." />
-            ) : (
-              <ul className={juntar(lista.aberta, lista.divisoria)} data-movimentos-ao-vivo="">
-                {d.data.movimentos.map((m) => (
-                  <li key={m.id} className={juntar(lista.linha, "py-2 hover:bg-transparent")}>
-                    <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>
-                      <span className="font-medium">{m.quem || "Automático"}</span>{" "}
-                      {m.de && m.para ? `moveu um negócio de ${etapa(m.de)} para ${etapa(m.para)}` : m.para ? `colocou um negócio em ${etapa(m.para)}` : `registrou ${m.tipo.replace(/_/g, " ")}`}
-                    </span>
-                    <span className={juntar(texto.apoio, "ml-3 shrink-0 tabular-nums")}>{haQuanto(m.quando, agora)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Secao>
-        </div>
+      {contaAberta && (
+        <JanelaDaEmpresa
+          key={contaAberta.id}
+          conta={contaAberta}
+          planos={planos.data || []}
+          aoVivo={doMonitor[contaAberta.id] || null}
+          onFechar={() => setAberta(null)}
+          onMudou={() => qc.invalidateQueries({ queryKey: chaveDasContas })}
+        />
       )}
-    </JanelaCentral>
+    </div>
   );
 }

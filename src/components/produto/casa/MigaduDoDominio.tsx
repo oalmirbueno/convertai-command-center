@@ -3,11 +3,14 @@ import { toast } from "sonner";
 import { Copy, Hammer, Power, RefreshCw } from "lucide-react";
 import { fraseDoErro } from "@/lib/produto/api";
 import { ativarMigadu, conferirMigadu, lerConferenciaDoMigadu, montarMigadu, registrosDoMigaduParaColar, type DominioComIntegracao } from "@/lib/produto/email-pedidos";
-import { Secao, botao, etiqueta, juntar, lista, texto } from "@/components/sistema";
+import { Chip, HelpTooltip, OverflowMenu, type Tone } from "@/components/ds";
+import { EstadoVazio, botao, juntar, texto } from "@/components/sistema";
+import { TituloDoBloco } from "./pecasDaCasa";
 
 /**
  * O domínio no Migadu (o correio da Aceleriq): montar (domínio, caixas por convite e apelidos),
  * conferir e ativar. A chave da API fica nos segredos da função; sem ela, os botões avisam o que falta.
+ * 19/11/2026 (redesenho): o estado em pílula, UM botão com o próximo passo e o resto no "...".
  */
 export default function MigaduDoDominio({ dominio, aoMudar }: { dominio: DominioComIntegracao; aoMudar: () => Promise<unknown> | void }) {
   const [ocupado, setOcupado] = useState<"" | "montar" | "conferir" | "ativar">("");
@@ -40,40 +43,53 @@ export default function MigaduDoDominio({ dominio, aoMudar }: { dominio: Dominio
     void navigator.clipboard.writeText(registrosDoMigaduParaColar(m.registros)).then(() => toast.success("Registros copiados."));
   };
 
+  const estado: { tom: Tone; rotulo: string } = !m ? { tom: "neutral", rotulo: "Não montado" } : !m.existe ? { tom: "warning", rotulo: "Não existe no Migadu" } : m.ok ? { tom: "success", rotulo: "Ativo" } : { tom: "warning", rotulo: "Falta ativar" };
+  // O próximo passo vira o botão à vista; os outros dois vão para o "...".
+  const proximo: "montar" | "ativar" | "conferir" = !m || !m.existe ? "montar" : !m.ok ? "ativar" : "conferir";
+  const ICONE = { montar: Hammer, ativar: Power, conferir: RefreshCw } as const;
+  const ROTULO = { montar: "Montar", ativar: "Ativar", conferir: "Conferir" } as const;
+  const Icone = ICONE[proximo];
+
   return (
-    <Secao
-      titulo="Migadu"
-      descricao={!m ? "Ainda não montado" : !m.existe ? "Não existe no Migadu" : m.ok ? "Ativo" : "Falta ativar"}
-      ajuda="Montar cria o domínio no Migadu, as caixas por convite (cada pessoa recebe o link para criar a própria senha no e-mail de hoje) e os apelidos. Depois publique os registros na Cloudflare e clique em Ativar."
-      acao={
-        <span className="flex flex-wrap items-center gap-1">
-          <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void rodar("montar")} disabled={!!ocupado} data-montar-migadu="">
-            <Hammer className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            {ocupado === "montar" ? "Montando..." : "Montar"}
-          </button>
-          <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void rodar("conferir")} disabled={!!ocupado} data-conferir-migadu="">
-            <RefreshCw className={juntar("mr-1.5 h-4 w-4", ocupado === "conferir" && "animate-spin")} aria-hidden="true" />
-            Conferir
-          </button>
-          <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void rodar("ativar")} disabled={!!ocupado || !m || !m.existe} data-ativar-migadu="">
-            <Power className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Ativar
-          </button>
-        </span>
-      }
-    >
+    <section className="min-w-0" data-migadu-do-dominio="">
+      <TituloDoBloco
+        aoLado={
+          <>
+            <Chip tone={estado.tom} dot>{estado.rotulo}</Chip>
+            <HelpTooltip label="Sobre o Migadu">Montar cria o domínio no Migadu, as caixas por convite (cada pessoa recebe o link para criar a própria senha no e-mail de hoje) e os apelidos. Depois publique os registros na Cloudflare e clique em Ativar.</HelpTooltip>
+            <button type="button" className={juntar(proximo === "conferir" ? botao.secundario : botao.primario, "h-8")} onClick={() => void rodar(proximo)} disabled={!!ocupado} data-montar-migadu={proximo === "montar" ? "" : undefined} data-ativar-migadu={proximo === "ativar" ? "" : undefined} data-conferir-migadu={proximo === "conferir" ? "" : undefined}>
+              <Icone className={juntar("mr-1.5 h-4 w-4", ocupado === proximo && proximo === "conferir" && "animate-spin")} aria-hidden="true" />
+              {ocupado === proximo ? `${ROTULO[proximo]}...` : ROTULO[proximo]}
+            </button>
+            <OverflowMenu
+              label="Mais ações do Migadu"
+              disabled={!!ocupado}
+              items={[
+                proximo !== "montar" && { label: "Montar de novo", icon: <Hammer className="h-4 w-4" />, onSelect: () => void rodar("montar") },
+                proximo !== "conferir" && { label: "Conferir", icon: <RefreshCw className="h-4 w-4" />, onSelect: () => void rodar("conferir") },
+                proximo !== "ativar" && { label: "Ativar", icon: <Power className="h-4 w-4" />, onSelect: () => void rodar("ativar"), disabled: !m || !m.existe },
+              ]}
+            />
+          </>
+        }
+      >
+        Migadu
+      </TituloDoBloco>
+
+      {!m && <EstadoVazio compacto titulo="Ainda não montado." descricao="Cadastre as caixas (com o e-mail de hoje de cada pessoa) e clique em Montar." />}
+
       {m && m.registros.length > 0 && (
-        <div className="min-w-0 space-y-2" data-registros-do-migadu="">
-          <div className="flex items-center">
-            <span className={juntar(texto.corpo, "flex-1 font-medium")}>Registros para a Cloudflare</span>
+        <div className="min-w-0" data-registros-do-migadu="">
+          <div className="mb-1 flex items-center">
+            <span className={juntar(texto.rotulo, "flex-1")}>Registros para a Cloudflare</span>
             <button type="button" className={botao.icone} onClick={copiar} aria-label="Copiar os registros" title="Copiar os registros">
               <Copy className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <ul className="min-w-0 divide-y divide-border/50">
             {m.registros.map((r) => (
-              <li key={`${r.tipo}-${r.nome}-${r.valor}`} className={juntar(lista.linha, "items-start")}>
-                <span className={juntar(etiqueta, "mr-2 shrink-0 bg-muted text-muted-foreground")}>{r.tipo}</span>
+              <li key={`${r.tipo}-${r.nome}-${r.valor}`} className="flex min-w-0 items-start py-2">
+                <Chip tone="neutral" className="mr-2 mt-0.5 w-14 justify-center">{r.tipo}</Chip>
                 <span className="min-w-0 flex-1">
                   <span className={juntar(texto.corpo, "block truncate")}>{r.nome}</span>
                   <span className={juntar(texto.auxiliar, "block break-all")}>{r.tipo === "MX" ? `${r.prioridade ?? 10} ` : ""}{r.valor}</span>
@@ -92,7 +108,6 @@ export default function MigaduDoDominio({ dominio, aoMudar }: { dominio: Dominio
           ))}
         </ul>
       )}
-      {!m && <p className={texto.auxiliar}>Cadastre as caixas acima (com o e-mail de hoje de cada pessoa, para o convite) e clique em Montar.</p>}
-    </Secao>
+    </section>
   );
 }

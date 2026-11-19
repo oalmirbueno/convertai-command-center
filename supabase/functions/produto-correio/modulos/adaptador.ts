@@ -29,6 +29,8 @@ export interface Pasta {
 
 export interface ResumoDaMensagem {
   id: string;
+  /** O Message-ID do cabeçalho: é ele que a resposta cita (In-Reply-To) para a conversa ficar junta. */
+  mensagem_id?: string | null;
   de: string;
   para: string;
   assunto: string;
@@ -46,6 +48,8 @@ export interface ResumoDaMensagem {
 export interface Mensagem extends ResumoDaMensagem {
   /** Só texto: o HTML do remetente nunca é devolvido cru para a tela. */
   texto: string;
+  /** O HTML original já limpo (sem script nem evento). A tela mostra num iframe sandbox. */
+  html?: string | null;
   anexos: Array<{ nome: string; tamanho: number }>;
 }
 
@@ -97,3 +101,22 @@ export function envioValido(bruto: unknown): Envio | { erro: string } {
   const resp = typeof b.em_resposta_a === "string" && b.em_resposta_a.length <= 300 ? b.em_resposta_a : null;
   return { para: Array.from(new Set(para)), assunto, texto, em_resposta_a: resp };
 }
+
+/**
+ * Minha caixa (19/11/2026): a casa (admin do painel) abre uma caixa com a senha que digitou, para ver o
+ * correio como o cliente vê. A senha vem em cada pedido, vale só para ele e nunca é guardada nem logada.
+ * O provedor de leitura é o do correio; com o correio ainda não marcado, um domínio do Migadu lê pelo Migadu.
+ */
+export function provedorPelaCasa(correioProvedor: string | null | undefined, provedor: string | null | undefined): ProvedorDeCorreio {
+  const c = String(correioProvedor || "nenhum") as ProvedorDeCorreio;
+  if (c !== "nenhum") return c;
+  return provedor === "migadu" ? "migadu" : "nenhum";
+}
+
+/** A senha digitada pela casa, quando o pedido traz uma (texto de 1 a 200 caracteres); senão, vazio. */
+export function senhaDaCasa(v: unknown): string {
+  return typeof v === "string" && v.length > 0 && v.length <= 200 ? v : "";
+}
+
+/** A frase para a casa quando o provedor recusa a senha digitada. */
+export const SENHA_DA_CASA_RECUSADA = "A senha não confere com esta caixa. Confira e tente de novo.";

@@ -65,6 +65,7 @@ import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspa
 import { FERRAMENTAS_DA_CENTRAL } from '../mcp-server/modulos/central-de-skills.ts';
 import { FERRAMENTAS_DO_ESCRITORIO } from '../mcp-server/modulos/escritorio.ts';
 import { FERRAMENTAS_DAS_REGRAS } from '../mcp-server/modulos/regras-permanentes.ts';
+import { FERRAMENTAS_DAS_AUTOMACOES } from '../mcp-server/modulos/automacoes.ts';
 import { FERRAMENTA_DO_DONO_NO_ESCRITORIO } from '../mcp-server/modulos/escritorio-dono.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
@@ -214,6 +215,7 @@ export type ToolScope =
   | 'memory:write'
   | 'mesas:write'
   | 'escritorio:write'
+  | 'automacoes:write'
   | 'admin';
 
 export const ALL_SCOPES: readonly ToolScope[] = [
@@ -245,6 +247,7 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'memory:write',
   'mesas:write',
   'escritorio:write',
+  'automacoes:write',
   'admin',
 ] as const;
 
@@ -278,6 +281,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'memory:write': { title: 'Central e Segundo Cérebro — escrever', description: 'Publicar skills e conectores na Central de Skills e criar ou editar notas do segundo cérebro (cada gravação vira commit; memória consolidada continua só pela revisão diária).', sensitive: true },
   'mesas:write': { title: 'Mesas: agir', description: 'Agir nas mesas com a sessão da pessoa conectada (OAuth): pedir conteúdo e gravar na agenda, criar e editar campanha, briefing e imagens, salvar oferta da Mesa Ads e mandar peça para aprovação. Cada mesa confere acesso e regra como na tela. Não publica, não agenda post e não gasta verba de anúncio.', sensitive: true },
   'escritorio:write': { title: 'Escritório: falar como dono', description: 'Ler e escrever no Escritório dos agentes como o dono, fora do painel (app do Hermes). Nenhum outro escopo concede este; não alcança cliente, gasto nem publicação.', sensitive: true },
+  'automacoes:write': { title: 'Automações: ligar e desligar', description: 'Ligar ou desligar fluxos do n8n de produção, com confirmação e motivo registrados. Nenhum outro escopo concede este.', sensitive: true },
   'admin': { title: 'Administrador', description: 'Bypass total de escopo. Concede acesso a todas as ferramentas.', sensitive: true },
 };
 
@@ -5137,6 +5141,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DO_ESCRITORIO,
   // MCP 2.34: regras permanentes do dono (o que o agente faz sem esperar aprovação).
   ...FERRAMENTAS_DAS_REGRAS,
+  ...FERRAMENTAS_DAS_AUTOMACOES,
   // MCP 2.35: o dono no Escritório fora do painel (app do Hermes), com escopo próprio.
   ...FERRAMENTA_DO_DONO_NO_ESCRITORIO,
 ];
