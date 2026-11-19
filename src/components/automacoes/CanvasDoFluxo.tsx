@@ -151,6 +151,7 @@ function PainelDoNo({ detalhe, nome, execucao, aoFechar }: { detalhe: DetalheDoF
 function Quadro({ detalhe, execucao, escolhido, aoEscolher }: { detalhe: DetalheDoFluxo; execucao: Execucao | null; escolhido: string | null; aoEscolher: (nome: string | null) => void }) {
   const passos = useMemo(() => caminhoPorNo(execucao?.caminho ?? []), [execucao]);
   const { fitView } = useReactFlow();
+  const escuro = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   const nos = useMemo<Node<DadosDoNo>[]>(() => detalhe.desenho.nos.map((n) => ({
     id: n.nome,
     type: "no",
@@ -180,14 +181,17 @@ function Quadro({ detalhe, execucao, escolhido, aoEscolher }: { detalhe: Detalhe
         type: "smoothstep",
         animated: passou,
         label: l.saida > 0 ? `saída ${l.saida + 1}` : undefined,
-        style: { strokeWidth: passou ? 2.25 : 1.25, stroke: passou ? "hsl(var(--success))" : "hsl(var(--muted-foreground) / 0.45)" },
+        style: { strokeWidth: passou ? 2.25 : 1.5, stroke: passou ? "hsl(var(--success))" : "hsl(var(--muted-foreground) / 0.7)" },
         labelStyle: { fontSize: 11 },
       };
     }), [detalhe.desenho.ligacoes, passos]);
+  // Fluxo grande encolhido inteiro fica ilegível: abre no começo (os 8 nós mais à esquerda) num zoom de leitura.
+  // O botão de ajustar dos controles mostra o fluxo todo.
+  const inicio = useMemo(() => [...detalhe.desenho.nos].sort((a, b) => a.x - b.x || a.y - b.y).slice(0, 8).map((n) => ({ id: n.nome })), [detalhe.desenho.nos]);
   useEffect(() => {
-    const t = setTimeout(() => void fitView({ padding: 0.15, duration: 300 }), 60);
+    const t = setTimeout(() => void fitView({ nodes: inicio, padding: 0.15, minZoom: 0.8, maxZoom: 1, duration: 300 }), 60);
     return () => clearTimeout(t);
-  }, [detalhe.id, fitView]);
+  }, [detalhe.id, fitView, inicio]);
   return (
     <ReactFlow
       nodes={nosComPosicao}
@@ -208,13 +212,12 @@ function Quadro({ detalhe, execucao, escolhido, aoEscolher }: { detalhe: Detalhe
       zoomOnPinch
       minZoom={0.15}
       maxZoom={2}
-      fitView
-      fitViewOptions={{ padding: 0.15 }}
+      colorMode={escuro ? "dark" : "light"}
       proOptions={{ hideAttribution: true }}
     >
       <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-      <Controls showInteractive={false} position="bottom-left" />
-      <MiniMap pannable zoomable position="bottom-right" className="!hidden sm:!block" nodeStrokeWidth={2} maskColor="hsl(var(--background) / 0.6)" />
+      <Controls showInteractive={false} position="bottom-left" className="overflow-hidden rounded-md border border-border/60 shadow-sm" />
+      <MiniMap pannable zoomable position="bottom-right" className="!hidden overflow-hidden rounded-md border border-border/60 sm:!block" style={{ backgroundColor: "hsl(var(--card))" }} nodeColor="hsl(var(--muted-foreground))" nodeStrokeWidth={2} maskColor="hsl(var(--background) / 0.55)" />
     </ReactFlow>
   );
 }
