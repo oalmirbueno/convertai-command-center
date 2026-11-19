@@ -14,7 +14,11 @@
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
-import { adaptadorPara, CorreioDesligado, envioValido, type CaixaAberta, type ProvedorDeCorreio } from "./modulos/adaptador.ts";
+import { ADAPTADORES, adaptadorPara, CorreioDesligado, envioValido, type CaixaAberta, type ProvedorDeCorreio } from "./modulos/adaptador.ts";
+import { adaptadorImap, ErroDoCorreio } from "./modulos/imap.ts";
+
+// Migadu (19/11/2026): IMAP para ler e SMTP para enviar, com a senha de cada caixa guardada no Vault.
+ADAPTADORES.migadu = adaptadorImap({ imap: { host: "imap.migadu.com", porta: 993 }, smtp: { host: "smtp.migadu.com", porta: 465 } });
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -72,6 +76,8 @@ async function comAdaptador<T>(usuario: string, corpo: Record<string, unknown>, 
   } catch (e) {
     if (e instanceof CorreioDesligado) throw new ErroHttp(409, "correio_desligado", e.message);
     if (e instanceof ErroHttp) throw e;
+    // Erro que a pessoa entende (senha recusada, mensagem que sumiu): vai como está.
+    if (e instanceof ErroDoCorreio) throw new ErroHttp(502, "provedor", e.message);
     console.error("[produto-correio] provedor", e instanceof Error ? e.message.slice(0, 200) : "");
     throw new ErroHttp(502, "provedor", "O provedor de e-mail não respondeu agora. Tente de novo.");
   }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Inbox, Lock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Inbox, KeyRound, Lock, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { abrirPorta, carregarMinhasCaixas, portaAberta } from "@/lib/produto/email-central";
+import { abrirPorta, carregarMinhasCaixas, correio, portaAberta, type CaixaDoCorreio } from "@/lib/produto/email-central";
 import { quemSouNoCorreio } from "@/lib/produto/correio-dia";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import { Carregando, EstadoDeErro, EstadoVazio, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
@@ -100,6 +100,58 @@ function Porta({ email, aoAbrir }: { email: string; aoAbrir: () => void }) {
   );
 }
 
+/**
+ * Ligar a caixa ao painel (19/11/2026): quem administra a empresa digita a senha da caixa uma vez.
+ * Ela vai direto para o cofre (Vault) pela função produto-correio e nunca volta para a tela.
+ */
+function ConectarCaixa({ caixa, aoConectar }: { caixa: CaixaDoCorreio; aoConectar: () => void }) {
+  const [senha, setSenha] = useState("");
+  const [ver, setVer] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const conectar = async () => {
+    if (senha.length < 6) return setErro("Digite a senha da caixa.");
+    setSalvando(true);
+    setErro("");
+    try {
+      await correio.guardarSegredo(caixa.id, senha);
+      setSenha("");
+      // Confere na hora: lista a entrada. Se a senha estiver errada, o provedor avisa.
+      await correio.listar(caixa.id, "INBOX");
+      aoConectar();
+    } catch (e) {
+      setErro(e instanceof Error && e.message ? e.message : "Não foi possível conectar agora.");
+      aoConectar();
+    } finally {
+      setSalvando(false);
+    }
+  };
+  return (
+    <div className="mx-auto max-w-[520px] rounded-3xl bg-card p-6" data-conectar-caixa="">
+      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-soft text-primary">
+        <KeyRound className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <h2 className={juntar(texto.tituloSecao, "mt-4")}>Conectar {caixa.endereco}</h2>
+      <p className={juntar(texto.corpo, "mt-1 text-muted-foreground")}>
+        Digite a senha desta caixa (a mesma do webmail). Ela fica guardada no cofre e nunca aparece de novo na tela. Se trocar a senha no provedor, conecte de novo aqui.
+      </p>
+      <label className="mt-5 block">
+        <span className={juntar(texto.auxiliar, "mb-1.5 block")}>Senha da caixa</span>
+        <span className="flex min-w-0 items-center">
+          <input type={ver ? "text" : "password"} value={senha} onChange={(e) => setSenha(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void conectar()} className={juntar(campo, "min-w-0 flex-1")} autoComplete="off" data-senha-da-caixa="" />
+          <button type="button" className={juntar(botao.discreto, "ml-2 h-9")} onClick={() => setVer((v) => !v)} aria-pressed={ver}>
+            {ver ? "Ocultar" : "Mostrar"}
+          </button>
+        </span>
+      </label>
+      {erro && <p className={juntar(texto.auxiliar, "mt-3 text-destructive")} role="alert">{erro}</p>}
+      <button type="button" className={juntar(botao.primario, "mt-5 w-full")} onClick={() => void conectar()} disabled={salvando || !senha} data-conectar="">
+        {salvando ? "Conectando..." : "Conectar a caixa"}
+      </button>
+    </div>
+  );
+}
+
 function CorreioAberto() {
   const [busca, setBusca] = useSearchParams();
   const pedida = busca.get("area") || "";
@@ -127,6 +179,7 @@ function CorreioAberto() {
   else if (area === "ferramentas") corpo = <FerramentasDoCorreio />;
   else if (area === "dia") corpo = euNoCorreio ? <MeuDia caixa={caixa} eu={euNoCorreio} nome={euNoCorreio.nome} /> : <EstadoVazio titulo="Seu acesso ainda não está ligado a esta empresa." />;
   else if (!caixa) corpo = <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Nenhuma caixa ligada a você" descricao={d.master ? "As caixas aparecem aqui quando a migração criar as primeiras." : "Peça para quem administra a empresa ligar a sua caixa ao seu acesso."} />;
+  else if (!caixa.ligado && d.master) corpo = <ConectarCaixa key={caixa.id} caixa={caixa} aoConectar={() => void minhas.refetch()} />;
   else if (area === "quadro") corpo = <QuadroDaCaixa key={caixa.id} caixa={caixa} />;
   else corpo = <CaixaPorPrioridade key={caixa.id} caixa={caixa} eu={euNoCorreio} />;
 
