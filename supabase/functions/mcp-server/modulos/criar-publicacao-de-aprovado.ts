@@ -296,6 +296,8 @@ export async function criarPublicacaoDeAprovado(
     try {
       await deps.rpc('save_editorial_post', { p_payload: payload, p_expected_version: post.version }, ctx);
     } catch (e) {
+      // Falha de infraestrutura (sessão do dono, OAuth, configuração) sobe intacta para o agente ver o código e o transitorio.
+      if (e instanceof Error && /^mesa:(dono_da_chave|exige_oauth|configuracao)\s/.test(e.message)) throw e;
       throw new Error(`mesa:rpc_recusada ${traduzirErroDaCriacao(e)}`);
     }
     const relidas = lido<PublicacaoLida[] | null>(
