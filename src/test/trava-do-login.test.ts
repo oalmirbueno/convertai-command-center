@@ -160,3 +160,83 @@ describe("trava do login", () => {
     expect(fonte).toContain("protegerSessaoGuardada(brokeredPreviewStorage())");
   });
 });
+
+/**
+ * 19/11 (painel lento): outra aba segurando a trava fazia cada consulta desta
+ * aba esperar até 8 s com o token valendo por uma hora. Com folga no token, a
+ * leitura não entra na fila; a renovação continua só com a trava.
+ */
+describe("trava do login: leitura sem fila com o token valendo", () => {
+  it("ocupada e token com folga: a leitura sai na hora, sem esperar o prazo", async () => {
+    vi.useFakeTimers();
+    const l = locksFalsos(true);
+    usarLocks(l);
+    const p = criarTravaDoLogin(8_000, storageCom(3600))("lock:" + CHAVE, 10_000, async () => "lido");
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(p).resolves.toBe("lido");
+    // Uma tentativa sem fila e nenhum pedido esperando a trava.
+    expect(l.pedidos).toHaveLength(1);
+    expect(l.pedidos[0].opcoes.ifAvailable).toBe(true);
+  });
+
+  it("livre e token com folga: roda dentro da trava", async () => {
+    const l = locksFalsos(false);
+    usarLocks(l);
+    let dentro = false;
+    await criarTravaDoLogin(8_000, storageCom(3600))("lock:" + CHAVE, 10_000, async () => {
+      dentro = true;
+    });
+    expect(dentro).toBe(true);
+    expect(l.pedidos[0].opcoes.ifAvailable).toBe(true);
+  });
+
+  it("token perto de vencer: espera a trava como antes (a operação pode renovar)", async () => {
+    vi.useFakeTimers();
+    const l = locksFalsos(true);
+    usarLocks(l);
+    let pronto = false;
+    const p = criarTravaDoLogin(8_000, storageCom(120))("lock:" + CHAVE, 10_000, async () => "lido").then((v) => {
+      pronto = true;
+      return v;
+    });
+    await vi.advanceTimersByTimeAsync(7_000);
+    expect(pronto).toBe(false);
+    expect(l.pedidos.every((x) => !x.opcoes.ifAvailable)).toBe(true);
+    await vi.advanceTimersByTimeAsync(1_001);
+    await expect(p).resolves.toBe("lido");
+  });
+
+  it("leitura sem fila que pede renovação: o POST não sai sem a trava", async () => {
+    vi.useFakeTimers();
+    usarLocks(locksFalsos(true));
+    const rede = vi.fn(async () => new Response("{}"));
+    const f = criarFetchComPrazo(rede as unknown as typeof fetch);
+    const p = criarTravaDoLogin(8_000, storageCom(3600))("lock:" + CHAVE, 10_000, async () =>
+      f("https://x.supabase.co/auth/v1/token?grant_type=refresh_token", { method: "POST", body: JSON.stringify({ refresh_token: "r1" }) }),
+    ).catch((e) => e);
+    await vi.advanceTimersByTimeAsync(ESPERA_DA_RENOVACAO_MS + 1);
+    const erro = await p;
+    expect(erro).toBeInstanceOf(TypeError);
+    expect(rede).not.toHaveBeenCalled();
+  });
+
+  it("retorno de login no endereço (grava a sessão): espera a trava como antes", async () => {
+    vi.useFakeTimers();
+    const l = locksFalsos(true);
+    usarLocks(l);
+    window.history.replaceState(null, "", "/redefinir-senha?code=abc");
+    try {
+      let pronto = false;
+      const p = criarTravaDoLogin(8_000, storageCom(3600))("lock:" + CHAVE, 10_000, async () => "ok").then((v) => {
+        pronto = true;
+        return v;
+      });
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(pronto).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_001);
+      await expect(p).resolves.toBe("ok");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+});

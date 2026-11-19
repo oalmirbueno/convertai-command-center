@@ -116,8 +116,20 @@ export function lazyDiscreto<P = any>(
   return c;
 }
 
-/** Roda quando o navegador estiver ocioso (setTimeout onde não há). Devolve o cancelamento. */
-export function quandoOcioso(fn: () => void, prazoMs = 4000): () => void {
+/** Quanto a pré-carga espera, no máximo, a tela aberta sair do esqueleto. */
+export const ESPERA_MAXIMA_DA_TELA_MS = 12_000;
+const INTERVALO_DA_CONFERENCIA_MS = 250;
+
+/** A tela aberta ainda está carregando (esqueleto na região: `aria-busy`)? */
+export function telaAindaCarregando(): boolean {
+  try {
+    return typeof document !== "undefined" && !!document.querySelector('[aria-busy="true"]');
+  } catch {
+    return false;
+  }
+}
+
+function noOcioso(fn: () => void, prazoMs: number): () => void {
   const w = window as any;
   if (typeof w.requestIdleCallback === "function") {
     const id = w.requestIdleCallback(fn, { timeout: prazoMs });
@@ -127,6 +139,34 @@ export function quandoOcioso(fn: () => void, prazoMs = 4000): () => void {
   }
   const id = window.setTimeout(fn, 1200);
   return () => window.clearTimeout(id);
+}
+
+/**
+ * Roda quando o navegador estiver ocioso (setTimeout onde não há). Devolve o cancelamento.
+ *
+ * 19/11/2026 (painel lento): o "ocioso" do navegador é só a CPU. Em rede lenta,
+ * a CPU fica livre esperando o código e os dados da tela, e as pré-cargas
+ * (agente, mesas, todas as telas) começavam a baixar no meio, dividindo a banda
+ * com o que a pessoa está esperando (medido: o gráfico do Dashboard chegava
+ * 2 s depois por isso). Agora, se a tela ainda mostra esqueleto, espera ele
+ * sair (no máximo ESPERA_MAXIMA_DA_TELA_MS) e só então agenda no ocioso.
+ */
+export function quandoOcioso(fn: () => void, prazoMs = 4000): () => void {
+  if (!telaAindaCarregando()) return noOcioso(fn, prazoMs);
+  let cancelado = false;
+  let cancelarOcioso: () => void = () => undefined;
+  const desde = Date.now();
+  const conferir = window.setInterval(() => {
+    if (cancelado) return;
+    if (telaAindaCarregando() && Date.now() - desde < ESPERA_MAXIMA_DA_TELA_MS) return;
+    window.clearInterval(conferir);
+    cancelarOcioso = noOcioso(fn, prazoMs);
+  }, INTERVALO_DA_CONFERENCIA_MS);
+  return () => {
+    cancelado = true;
+    window.clearInterval(conferir);
+    cancelarOcioso();
+  };
 }
 
 /** Rede econômica (economia de dados ligada ou 2G): não baixa nada por conta própria. */
