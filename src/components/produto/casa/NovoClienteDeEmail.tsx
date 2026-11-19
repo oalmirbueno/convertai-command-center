@@ -130,7 +130,7 @@ export default function NovoClienteDeEmail({ onFechar }: { onFechar: () => void 
         <div className="space-y-4" data-cliente-cadastrado="">
           <p className={texto.corpo}><b>{empresa}</b> foi cadastrada. {emailResponsavel} recebeu o convite do painel, onde a pessoa acompanha tudo e traz os e-mails antigos sozinha.</p>
           {fim.link && (
-            <div className="rounded-2xl bg-accent-soft p-4">
+            <div className="rounded-2xl bg-muted p-4">
               <p className={juntar(texto.corpo, "font-semibold")}>Link de pagamento{fim.valor ? ` (${reais(fim.valor)})` : ""}</p>
               <p className={juntar(texto.auxiliar, "mt-1 break-all")}>{fim.link}</p>
               <button type="button" className={juntar(botao.secundario, "mt-3")} onClick={() => void navigator.clipboard.writeText(fim.link!).then(() => toast.success("Link copiado."))}><Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />Copiar o link</button>

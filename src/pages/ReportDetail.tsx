@@ -131,7 +131,7 @@ const fmtContagem = (v: number) =>
 
 /** Situação do indicador: cor e nome. */
 const SITUACAO = {
-  good: { rotulo: "Excelente", classe: "bg-accent-soft text-primary", tom: "success" as Tone },
+  good: { rotulo: "Excelente", classe: "bg-muted text-foreground", tom: "success" as Tone },
   warning: { rotulo: "Em otimização", classe: "bg-warning-soft text-warning", tom: "warning" as Tone },
   bad: { rotulo: "Em ajuste", classe: "bg-danger-soft text-destructive", tom: "danger" as Tone },
 } as const;
@@ -902,7 +902,7 @@ export default function ReportDetail() {
                           <div className="mr-3 min-w-0 flex-1">
                             <div className="flex min-w-0 items-center">
                               <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{stage.name}</span>
-                              {isFinal && <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>final</span>}
+                              {isFinal && <span className={juntar(etiqueta, "ml-1.5 bg-muted text-foreground")}>final</span>}
                               {i > 0 && (
                                 <span
                                   className={juntar(
@@ -1118,7 +1118,7 @@ export default function ReportDetail() {
                   {chartColumns.map((col) => (
                     <li key={col} className="flex min-w-0 items-center text-[13px] leading-5">
                       <span className="mr-3 min-w-0 flex-1 truncate text-muted-foreground">{col}</span>
-                      <span className="shrink-0 font-semibold tabular-nums text-primary">
+                      <span className="shrink-0 font-semibold tabular-nums text-foreground">
                         {chartData.reduce((s, r) => s + (Number(r[col]) || 0), 0).toLocaleString("pt-BR")}
                       </span>
                     </li>
@@ -1165,7 +1165,7 @@ export default function ReportDetail() {
                     {chartColumns.map(col => {
                       const total = chartData.reduce((s, r) => s + (Number(r[col]) || 0), 0);
                       return (
-                        <td key={col} className="px-2 py-2.5 first:pl-4 last:pr-4 sm:px-4 text-right tabular-nums text-primary">
+                        <td key={col} className="px-2 py-2.5 first:pl-4 last:pr-4 sm:px-4 text-right tabular-nums text-foreground">
                           {total.toLocaleString("pt-BR")}
                         </td>
                       );
@@ -1184,7 +1184,7 @@ export default function ReportDetail() {
           <ul className="divide-y divide-border">
             {insights.map((insight, i) => {
               const Icone = insight.type === "success" ? Star : insight.type === "warning" ? AlertTriangle : Lightbulb;
-              const tom = insight.type === "success" ? "text-primary" : insight.type === "warning" ? "text-warning" : "text-muted-foreground";
+              const tom = insight.type === "success" ? "text-foreground" : insight.type === "warning" ? "text-warning" : "text-muted-foreground";
               return (
                 <li key={i} className="flex min-w-0 items-start py-2.5 first:pt-0 last:pb-0">
                   <Icone className={juntar("mr-2.5 mt-0.5 h-4 w-4 shrink-0", tom)} aria-hidden="true" />

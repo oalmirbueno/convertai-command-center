@@ -67,7 +67,7 @@ export default function EscolhaDoModeloDaFoto({ valor, onEscolher, semPessoa = f
             data-modelo-opcao="ia"
           >
             <Moldura proporcao={1}>
-              <span className="flex h-full w-full items-center justify-center text-primary">
+              <span className="flex h-full w-full items-center justify-center text-muted-foreground">
                 <Sparkles className="h-5 w-5" />
               </span>
             </Moldura>

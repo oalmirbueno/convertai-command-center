@@ -73,7 +73,7 @@ function Resultado({ arquivo }: { arquivo: ArquivoDeVideo }) {
       <div className="mt-1.5 flex min-w-0 items-center">
         {naEdicao ? (
           <>
-            <span className={juntar(etiqueta, "mr-1 bg-accent-soft text-primary")} data-na-edicao="">
+            <span className={juntar(etiqueta, "mr-1 bg-muted text-foreground")} data-na-edicao="">
               Na Edição
             </span>
             <button type="button" className={juntar(botao.icone, "ml-auto")} disabled={ocupado} onClick={() => void editar({ na_edicao: false }, "Saiu da Edição", { na_edicao: true })} aria-label={`Tirar ${arquivo.nome} da Edição`} title="Tirar da Edição">

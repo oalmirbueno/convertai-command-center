@@ -25,7 +25,7 @@ export const COR_DO_ESTADO: Record<EstadoDaConta, string> = {
   atrasada: "bg-warning-soft text-warning",
   suspensa: "bg-danger-soft text-destructive",
   cancelada: "bg-muted text-muted-foreground",
-  cortesia: "bg-accent-soft text-primary",
+  cortesia: "bg-muted text-foreground",
 };
 
 /** O CRM desta empresa é cobrado no plano do cliente da Aceleriq (extra de CRM), e não no cartão. */

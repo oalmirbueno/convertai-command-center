@@ -124,8 +124,8 @@ export default function VinculoAutomatico() {
         <>
           <div className="mt-2 flex min-w-0 flex-wrap text-[12px]" aria-label="Resumo do vínculo">
             <span className="mb-1 mr-2 rounded-full bg-muted px-2 py-0.5">{v.resumo.ja_ligados} já ligados</span>
-            {v.resumo.automaticos > 0 && <span className="mb-1 mr-2 rounded-full bg-success/10 px-2 py-0.5 text-success">{v.resumo.automaticos} reconhecidos agora</span>}
-            {v.resumo.pelo_jev > 0 && <span className="mb-1 mr-2 rounded-full bg-success/10 px-2 py-0.5 text-success">{v.resumo.pelo_jev} pelo Jev</span>}
+            {v.resumo.automaticos > 0 && <span className="mb-1 mr-2 rounded-full bg-muted px-2 py-0.5 text-success">{v.resumo.automaticos} reconhecidos agora</span>}
+            {v.resumo.pelo_jev > 0 && <span className="mb-1 mr-2 rounded-full bg-muted px-2 py-0.5 text-success">{v.resumo.pelo_jev} pelo Jev</span>}
             {v.resumo.confirmar > 0 && <span className="mb-1 mr-2 rounded-full bg-warning/15 px-2 py-0.5 text-warning">{v.resumo.confirmar} para confirmar</span>}
             <span className="mb-1 mr-2 rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{v.resumo.sem_par} feitos fora da Mesa Ads</span>
             {v.custo_usd > 0 && <span className="mb-1 mr-2 px-1 py-0.5 tabular-nums text-muted-foreground">Conferência do Jev: {usd(v.custo_usd)}</span>}

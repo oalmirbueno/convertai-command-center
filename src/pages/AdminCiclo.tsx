@@ -1436,7 +1436,7 @@ export default function AdminCiclo() {
         {avulso && nextStep && (
           <div className={juntar(superficie.poco, "mb-1.5 flex items-center p-2.5")}>
             <div className="mr-2 min-w-0 flex-1">
-              <p className="text-[11px] font-medium text-primary">
+              <p className="text-[11px] font-medium text-muted-foreground">
                 Agora · {doneCount + 1} de {clientTotal}
               </p>
               <p className="truncate text-[13px] font-semibold leading-snug text-foreground">
@@ -1669,7 +1669,7 @@ export default function AdminCiclo() {
           </button>
           <div className="min-w-0 text-center">
             <h1 className="flex items-center justify-center text-[15px] font-semibold leading-tight text-foreground">
-              <ListChecks className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" /> Ciclo da Semana
+              <ListChecks className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Ciclo da Semana
               <AjudaRecolhida className="ml-1 min-h-0" titulo="Ciclo da Semana">
                 Seis etapas por cliente em cada frente, em três filas. Marque Feito na etapa da vez; toque no nome do cliente para ver a evolução e num dia da semana para ver o que foi feito nele. Esta é a versão anterior do Ciclo: a tela atual é a Esteira, e o que se marca aqui não aparece lá.
               </AjudaRecolhida>
@@ -1809,7 +1809,7 @@ export default function AdminCiclo() {
               onClick={jumpToNext}
               className={juntar(superficie.painel, superficie.destaque, "flex w-full items-center gap-3 p-4 text-left transition-transform duration-200 hover:-translate-y-0.5 sm:p-5")}
             >
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-on-accent text-[18px] font-semibold tabular-nums text-accent-solid">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-on-accent text-[18px] font-semibold tabular-nums text-muted-foreground">
                 {nextUp.step}
               </span>
               <span className="min-w-0 flex-1">
@@ -1830,7 +1830,7 @@ export default function AdminCiclo() {
           {coach?.coach && (
             <div className={juntar(superficie.painel, superficie.tinta, "p-4 sm:p-5")}>
               <div className="flex items-center justify-between gap-2">
-                <p className="flex items-center gap-1.5 text-[12px] font-medium text-primary">
+                <p className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
                   <Sparkles className="h-3 w-3" /> Coach da semana
                 </p>
                 <button
@@ -2227,7 +2227,7 @@ export default function AdminCiclo() {
         <SheetContent side="left" className="flex w-[280px] flex-col gap-0 overflow-y-auto p-0 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
           <SheetHeader className="border-b border-border px-4 pb-3 pt-5">
             <SheetTitle className="flex items-center gap-2 text-left text-[15px]">
-              <ListChecks className="h-4 w-4 text-primary" /> Ciclo Aceleriq
+              <ListChecks className="h-4 w-4 text-muted-foreground" /> Ciclo Aceleriq
             </SheetTitle>
             <SheetDescription className="sr-only">
               Atalhos do painel e ajustes do Ciclo.
@@ -2239,11 +2239,11 @@ export default function AdminCiclo() {
               onClick={() => { setLegendOpen(true); setMenuOpen(false); }}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-muted"
             >
-              <ListChecks className="h-4 w-4 text-primary" /> Como funciona o ciclo
+              <ListChecks className="h-4 w-4 text-muted-foreground" /> Como funciona o ciclo
             </button>
             {!standalone && (
               <div className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground">
-                <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0">
                   Instalar o Ciclo no celular
                   <span className="block text-[11px] font-normal leading-snug text-muted-foreground">
@@ -2261,7 +2261,7 @@ export default function AdminCiclo() {
                 disabled={brainSaving}
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-muted disabled:opacity-50"
               >
-                <Brain className={`h-4 w-4 text-primary ${brainSaving ? "animate-pulse" : ""}`} />
+                <Brain className={`h-4 w-4 text-muted-foreground ${brainSaving ? "animate-pulse" : ""}`} />
                 Guardar a semana no segundo cérebro
               </button>
             )}

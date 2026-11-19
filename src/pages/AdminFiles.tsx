@@ -102,7 +102,7 @@ const fileIcon = (name: string) => {
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning", label: "Pendente" },
-  approved: { cls: "bg-success/10 text-success", label: "Aprovado" },
+  approved: { cls: "bg-muted text-success", label: "Aprovado" },
   rejected: { cls: "bg-destructive/10 text-destructive", label: "Rejeitado" },
   none: { cls: "bg-muted text-muted-foreground", label: "Sem status" },
 };
@@ -110,7 +110,7 @@ const approvalBadge: Record<string, { cls: string; label: string }> = {
 const agencyBadge: Record<string, { cls: string; label: string }> = {
   not_requested: { cls: "bg-muted text-muted-foreground", label: "Rascunho interno" },
   pending: { cls: "bg-warning/10 text-warning", label: "Em revisão interna" },
-  approved: { cls: "bg-success/10 text-success", label: "Revisão interna aprovada" },
+  approved: { cls: "bg-muted text-success", label: "Revisão interna aprovada" },
   rejected: { cls: "bg-destructive/10 text-destructive", label: "Ajustes internos pedidos" },
 };
 
@@ -352,7 +352,7 @@ function LinhaDoArquivo({ itensNoCarrossel, onAbrir, formatDate, ...acoes }: Ite
           <span className="flex min-w-0 items-baseline">
             <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{file.file_name}</span>
             {file.version > 1 && <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">v{file.version}</span>}
-            {itensNoCarrossel > 1 && <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>{itensNoCarrossel}</span>}
+            {itensNoCarrossel > 1 && <span className={juntar(etiqueta, "ml-1.5 bg-muted text-foreground")}>{itensNoCarrossel}</span>}
           </span>
           <span className={juntar(texto.auxiliar, "block truncate")}>
             {kindLabel(resolveKind(file))} · {file.project?.name || "Sem projeto"} · {formatDate(file.created_at)}

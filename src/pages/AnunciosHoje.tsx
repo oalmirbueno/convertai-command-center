@@ -78,7 +78,7 @@ const TOM_DO_NIVEL: Record<NivelDoAlerta, string> = {
   info: "bg-muted text-muted-foreground",
 };
 const TOM_DO_CUSTO: Record<TomDoCusto, { rotulo: string; classe: string }> = {
-  bom: { rotulo: "Bom", classe: "bg-success-soft text-success" },
+  bom: { rotulo: "Bom", classe: "bg-muted text-success" },
   atencao: { rotulo: "Atenção", classe: "bg-warning-soft text-warning" },
   ruim: { rotulo: "Ruim", classe: "bg-danger-soft text-destructive" },
   neutro: { rotulo: "Sem comparação", classe: "bg-muted text-muted-foreground" },

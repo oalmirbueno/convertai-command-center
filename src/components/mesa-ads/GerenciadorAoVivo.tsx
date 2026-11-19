@@ -79,7 +79,7 @@ const TOM_DA_ENTREGA: Record<EstadoDaEntrega, string> = {
   conta_travada: "text-destructive",
   reprovado: "text-destructive",
   com_problema: "text-destructive",
-  em_analise: "text-primary",
+  em_analise: "text-foreground",
   pausado: "text-muted-foreground",
   encerrado: "text-muted-foreground",
 };
@@ -128,7 +128,7 @@ function MarcaDaAcao({ n, fazendo, onDesfazer }: { n: NoNoGerenciador; fazendo: 
     );
   }
   return (
-    <p className="mt-0.5 flex min-w-0 items-center text-[12px] leading-snug text-primary" data-marca={m.estado}>
+    <p className="mt-0.5 flex min-w-0 items-center text-[12px] leading-snug text-muted-foreground" data-marca={m.estado}>
       <span className="mr-1.5 min-w-0 truncate" title={m.resumo}>
         {m.estado === "desfeita" ? "Desfeito: " : ""}
         {m.resumo.replace(/\.$/, "")} {QUEM[m.origem] || ""}

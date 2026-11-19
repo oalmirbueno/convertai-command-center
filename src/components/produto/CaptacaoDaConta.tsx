@@ -379,7 +379,7 @@ const PASSOS_DA_META = [
   "Cole o ID e o token aqui e salve. O token fica guardado no cofre e não aparece de novo.",
 ];
 
-const COR_DA_SITUACAO: Record<string, string> = { enviado: "bg-accent-soft text-primary", pendente: "bg-muted text-muted-foreground", erro: "bg-danger-soft text-destructive" };
+const COR_DA_SITUACAO: Record<string, string> = { enviado: "bg-muted text-foreground", pendente: "bg-muted text-muted-foreground", erro: "bg-danger-soft text-destructive" };
 const NOME_DA_SITUACAO: Record<string, string> = { enviado: "Enviado", pendente: "Na fila", erro: "Erro" };
 
 function Meta() {
@@ -455,7 +455,7 @@ function Meta() {
           <ol className="min-w-0 space-y-1.5">
             {PASSOS_DA_META.map((p, i) => (
               <li key={p} className="flex min-w-0 items-start">
-                <span className="mr-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">{i + 1}</span>
+                <span className="mr-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">{i + 1}</span>
                 <span className={juntar(texto.corpo, "min-w-0")}>{p}</span>
               </li>
             ))}

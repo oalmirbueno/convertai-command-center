@@ -429,7 +429,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
                 className={juntar(
                   conversa.balao,
                   "max-w-full",
-                  m.papel === "usuario" ? "ml-8 bg-primary/10" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "bg-muted/40",
+                  m.papel === "usuario" ? "ml-8 bg-muted" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "bg-muted/40",
                 )}
               >
                 <TextoDoAgente texto={m.conteudo} clientId={clientId} />
@@ -670,7 +670,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
           <ul className="space-y-1.5">
             {estado.aprendizados.map((a) => (
               <li key={a.id} className="flex min-w-0 items-start text-[13px]">
-                {a.tipo === "gostou" ? <ThumbsUp className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-label="Gostou" /> : <ThumbsDown className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Não gostou" />}
+                {a.tipo === "gostou" ? <ThumbsUp className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Gostou" /> : <ThumbsDown className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Não gostou" />}
                 <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{a.texto}</span>
                 <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{quando(a.em)}</span>
                 <button type="button" className={juntar(botao.icone, "-my-1 ml-1 h-7 w-7")} onClick={() => void direto("aprendizado_apagar", { id: a.id }, "Não foi possível apagar")} aria-label="Apagar aprendizado">
@@ -695,7 +695,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
                 </span>
                 <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{quando(v.criado_em)}</span>
                 {v.numero === estado.versao_atual ? (
-                  <span className="ml-2 inline-flex shrink-0 items-center text-[11px] text-primary">
+                  <span className="ml-2 inline-flex shrink-0 items-center text-[11px] text-muted-foreground">
                     <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Atual
                   </span>
                 ) : (
@@ -730,7 +730,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
             {t.tema ? ` · ${t.tema}` : ""}
           </p>
           {t.status === "aprovado" ? (
-            <p className="mt-1 inline-flex items-center text-[12px] text-primary">
+            <p className="mt-1 inline-flex items-center text-[12px] text-muted-foreground">
               <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Em Arquivos e nas referências
             </p>
           ) : (

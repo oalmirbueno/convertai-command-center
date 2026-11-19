@@ -100,7 +100,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
               data-alternar-esteira=""
             >
               {aberta ? <ChevronDown className="mr-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="mr-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
-              <CalendarDays className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <CalendarDays className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               Peças do mês
             </button>
             {pecasQ.isSuccess && (
@@ -141,7 +141,7 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
                         <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{rotuloDaData(p) || "sem data"}</span>
                         {!p.gravada && <span className={juntar(etiqueta, "ml-auto bg-warning/15 text-warning")}>não gravado</span>}
                         {feita && (
-                          <span className={juntar(etiqueta, "ml-auto bg-accent-soft text-primary")}>
+                          <span className={juntar(etiqueta, "ml-auto bg-muted text-foreground")}>
                             <Check className="mr-0.5 h-3 w-3" aria-hidden="true" /> feita
                           </span>
                         )}
@@ -202,7 +202,7 @@ export function JanelaDaPeca({
       aberta={!!peca}
       onFechar={onFechar}
       titulo={peca ? peca.titulo : "Peça do mês"}
-      icone={<CalendarDays className="h-4 w-4 text-primary" />}
+      icone={<CalendarDays className="h-4 w-4 text-muted-foreground" />}
       descricao={peca ? `${rotuloDaData(peca) || "Sem data"}${peca.gravada ? "" : " · não gravado na agenda"}` : undefined}
       ajuda="A direção vem do planejamento do mês. Com o diretor, o pedido fica no campo dele para você revisar e mandar. No Canvas, entra uma caixa nova já montada."
       largura="md"

@@ -113,7 +113,7 @@ export default function SeletorDeMesa({
             className,
           )}
         >
-          <Icone className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <Icone className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="truncate">{mesa.curto || mesa.rotulo}</span>
           <ChevronDown className={juntar("ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", aberto && "rotate-180")} aria-hidden="true" />
         </button>

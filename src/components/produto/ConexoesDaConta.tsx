@@ -61,7 +61,7 @@ function Instrucoes({ destino, chave }: { destino: Destino; chave: string }) {
       <ol className="min-w-0 space-y-1.5">
         {passos.map((p, i) => (
           <li key={p} className="flex min-w-0 items-start">
-            <span className="mr-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">{i + 1}</span>
+            <span className="mr-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">{i + 1}</span>
             <span className={juntar(texto.corpo, "min-w-0")}>{p}</span>
           </li>
         ))}

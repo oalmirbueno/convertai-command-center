@@ -38,7 +38,7 @@ export function ritualTiming(ritual: RitualComDia, hoje: Date = new Date()): Qua
     return {
       destaque: true,
       etiqueta: "hoje",
-      cls: "bg-primary/15 text-primary",
+      cls: "bg-muted text-foreground",
     };
   }
 

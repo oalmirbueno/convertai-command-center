@@ -199,7 +199,7 @@ function Grupo({ titulo, icone, ajuda, destaque, id, children }: { titulo: strin
           <TituloRecolhivel
             titulo={
               <span className="inline-flex min-w-0 items-center">
-                <span className="mr-1.5 shrink-0 text-primary">{icone}</span>
+                <span className="mr-1.5 shrink-0 text-muted-foreground">{icone}</span>
                 <span className="truncate">{titulo}</span>
               </span>
             }
@@ -240,7 +240,7 @@ function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura, o
             style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.largura * 100}%`, height: `${r.altura * 100}%` }}
             data-recorte-do-post={formato}
           >
-            <span className="absolute left-1 top-1 rounded-full border border-primary/40 bg-card px-1.5 py-px text-[11px] font-semibold text-primary">
+            <span className="absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold text-primary">
               vai ao ar: {ROTULO_DO_FORMATO_DE_FOTOS[formato]}
             </span>
           </span>

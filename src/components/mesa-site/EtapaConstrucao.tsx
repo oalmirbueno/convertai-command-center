@@ -22,9 +22,9 @@ import RascunhoDoSite from "./RascunhoDoSite";
 
 const TOM: Record<string, string> = {
   na_fila: "bg-muted text-muted-foreground",
-  executando: "bg-accent-soft text-primary",
+  executando: "bg-muted text-foreground",
   parando: "bg-warning-soft text-warning",
-  feito: "bg-accent-soft text-primary",
+  feito: "bg-muted text-foreground",
   falhou: "bg-danger-soft text-destructive",
   parado: "bg-muted text-foreground",
   cancelado: "bg-muted text-muted-foreground",
@@ -232,7 +232,7 @@ export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { 
                   <label key={s} className="flex min-w-0 cursor-pointer items-center py-1 text-[13px]">
                     <input type="checkbox" className="mr-2 shrink-0" checked={escolhidas.indexOf(s) >= 0} onChange={() => setEscolhidas((l) => (l.indexOf(s) >= 0 ? l.filter((x) => x !== s) : secoesDoSite.filter((x) => x === s || l.indexOf(x) >= 0)))} />
                     <span className="truncate">{rotuloDaSecao(s)}</span>
-                    {feitas.indexOf(s) >= 0 && <span className={juntar(etiqueta, "ml-1.5 bg-accent-soft text-primary")}>pronta</span>}
+                    {feitas.indexOf(s) >= 0 && <span className={juntar(etiqueta, "ml-1.5 bg-muted text-foreground")}>pronta</span>}
                   </label>
                 ))}
               </div>

@@ -25,9 +25,9 @@ import { esquemaDaCampanha, ESQUEMAS_DE_CAMPANHA } from "../../../supabase/funct
  */
 
 const COR_DA_FASE: Record<FaseDaLinha, string> = {
-  aquecimento: "bg-primary/25",
+  aquecimento: "bg-muted-foreground/30",
   lancamento: "bg-primary/80",
-  sustentacao: "bg-primary/50",
+  sustentacao: "bg-muted-foreground/60",
   urgencia: "bg-warning/70",
   encerramento: "bg-destructive/60",
 };

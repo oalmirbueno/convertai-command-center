@@ -594,7 +594,7 @@ function CartaoDoGrupo({
                   {(i.duvida || i.situacao) && (
                     <p className="mt-0.5 flex min-w-0 flex-wrap items-center">
                       {i.duvida && <span className={juntar(etiqueta, "mr-1 max-w-full truncate bg-warning/15 text-warning")} title={i.duvida}>dúvida: {i.duvida}</span>}
-                      {i.situacao && <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>{ROTULO_DA_SITUACAO[i.situacao] || i.situacao}</span>}
+                      {i.situacao && <span className={juntar(etiqueta, "bg-muted text-foreground")}>{ROTULO_DA_SITUACAO[i.situacao] || i.situacao}</span>}
                     </p>
                   )}
                 </div>

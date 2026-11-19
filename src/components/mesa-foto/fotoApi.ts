@@ -415,9 +415,9 @@ export const mudaAVista = (c: Camera | null | undefined) => !!c && (c.azimute !=
 export const ESTADOS_DA_TOMADA: Record<EstadoDaTomada, { rotulo: string; cor: string }> = {
   pendente: { rotulo: "A gerar", cor: "bg-muted text-muted-foreground" },
   bloqueada: { rotulo: "Falta evidência", cor: "bg-warning/15 text-warning" },
-  gerando: { rotulo: "Gerando", cor: "bg-primary/10 text-primary" },
+  gerando: { rotulo: "Gerando", cor: "bg-muted text-foreground" },
   gerada: { rotulo: "Para revisar", cor: "bg-info/10 text-info" },
-  aprovada: { rotulo: "Aprovada", cor: "bg-success/15 text-success" },
+  aprovada: { rotulo: "Aprovada", cor: "bg-muted text-success" },
   rejeitada: { rotulo: "Rejeitada", cor: "bg-destructive/10 text-destructive" },
   falhou: { rotulo: "Falhou", cor: "bg-destructive/10 text-destructive" },
 };

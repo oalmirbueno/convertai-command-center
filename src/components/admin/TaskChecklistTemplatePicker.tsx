@@ -93,7 +93,7 @@ export default function TaskChecklistTemplatePicker({
         className="w-80 p-0 bg-card border-border max-h-[400px] overflow-y-auto"
       >
         <div className="px-3 py-2 border-b border-border flex items-center gap-2">
-          <ListChecks className="w-3.5 h-3.5 text-primary" />
+          <ListChecks className="w-3.5 h-3.5 text-muted-foreground" />
           <p className="text-[12px] leading-4 font-medium text-foreground">Biblioteca de checklists</p>
         </div>
         {isLoading ? (

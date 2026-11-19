@@ -527,7 +527,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
       <AjudaRecolhida className="mb-1 ml-1" rotulo="Quando usar o selo">Marque só quando o perfil do cliente tem verificação de verdade. O selo é desenho do template, não confirmação da rede.</AjudaRecolhida>
     </div>
     {!ehCarrossel && <div className="border-t border-border pt-3">
-      <button type="button" aria-expanded={gerarAberto} onClick={() => setGerarAberto((v) => !v)} className={juntar(botao.discreto, "-ml-3.5")}><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />Gerar conteúdo com IA</button>
+      <button type="button" aria-expanded={gerarAberto} onClick={() => setGerarAberto((v) => !v)} className={juntar(botao.discreto, "-ml-3.5")}><Sparkles className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />Gerar conteúdo com IA</button>
       {gerarAberto && <div className="mt-2 space-y-3">
         <label className={juntar("block", texto.rotulo)}>Tema (opcional)<Input aria-label="Tema do conteúdo" value={tema} maxLength={600} disabled={travado} onChange={(e) => setTema(e.target.value)} placeholder="Sem tema, vale a pauta da lâmina" className="mt-1" /></label>
         {ajustes.estilo !== "instagram" && cardsOrdenados.length > 1 && <label className="flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={todas} disabled={travado} onChange={(e) => setTodas(e.target.checked)} />{ajustes.estilo === "twitter" ? `Fio: um post por lâmina (${cardsOrdenados.length})` : `Todas as telas (${cardsOrdenados.length})`}</label>}

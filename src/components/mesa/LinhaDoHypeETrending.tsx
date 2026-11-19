@@ -216,7 +216,7 @@ export function CabecalhoDaColuna({ icone, titulo, ajuda, controles, abaixo }: {
     <div className="shrink-0 border-b border-border pb-2" data-cabecalho-da-coluna="">
       <div className="flex min-h-9 min-w-0 items-center justify-between">
         <h3 className={juntar(texto.tituloSecao, "mr-2 flex min-w-0 items-center")}>
-          <span className="mr-1.5 inline-flex shrink-0 text-primary" aria-hidden="true">{icone}</span>
+          <span className="mr-1.5 inline-flex shrink-0 text-muted-foreground" aria-hidden="true">{icone}</span>
           <span className="truncate">{titulo}</span>
           <AjudaRecolhida rotulo={`O que é ${titulo}?`}>{ajuda}</AjudaRecolhida>
         </h3>

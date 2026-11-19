@@ -172,7 +172,7 @@ function ExemploDoPrompt({ item, onAmpliar }: { item: ItemDaBiblioteca; onAmplia
           <ZoomIn className="h-3.5 w-3.5" />
         </span>
         {item.exemplo_gerado && (
-          <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-primary/30 bg-card px-1 text-[11px] font-semibold text-primary" data-selo="exemplo-gerado">
+          <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-border bg-card px-1 text-[11px] font-semibold text-primary" data-selo="exemplo-gerado">
             exemplo gerado
           </span>
         )}

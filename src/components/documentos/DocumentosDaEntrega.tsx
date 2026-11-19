@@ -36,14 +36,14 @@ const TOM: Record<DocumentoDaEntrega["status"], string> = {
   pendente: "bg-muted text-muted-foreground",
   gerado: "bg-muted text-foreground",
   em_aprovacao: "bg-warning-soft text-warning",
-  no_portal: "bg-accent-soft text-primary",
+  no_portal: "bg-muted text-foreground",
 };
 /** Só na linha do celular (a pastilha longa fica do sm para cima e na janela). */
 const STATUS_CURTO: Record<DocumentoDaEntrega["status"], { rotulo: string; cor: string }> = {
   pendente: { rotulo: "Pendente", cor: "text-muted-foreground" },
   gerado: { rotulo: "Gerado", cor: "text-foreground" },
   em_aprovacao: { rotulo: "Em aprovação", cor: "text-warning" },
-  no_portal: { rotulo: "No portal", cor: "text-primary" },
+  no_portal: { rotulo: "No portal", cor: "text-foreground" },
 };
 
 type Conferir = { id: string; fileId: string | null; reserva: DocumentoDaEntrega | null };

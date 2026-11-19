@@ -48,7 +48,7 @@ export default function MCPConnect() {
       titulo="Conectar agentes ao Aceleriq OS"
       ajuda="Um endereço para ChatGPT Work, Codex, Claude Code, Hermes, OpenClaw e outros clientes MCP autorizados."
       acimaDoTitulo={
-        <p className="mb-1.5 inline-flex items-center text-[12px] font-medium text-primary">
+        <p className="mb-1.5 inline-flex items-center text-[12px] font-medium text-muted-foreground">
           <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
           MCP oficial
         </p>
@@ -73,7 +73,7 @@ export default function MCPConnect() {
             </li>
             <li className="min-w-0 py-3">
               <div className="flex min-w-0 items-center">
-                <Lock className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <Lock className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>Descoberta OAuth</span>
                 <button type="button" onClick={() => copy(PRM_URL)} className={botao.secundario}>
                   <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar PRM

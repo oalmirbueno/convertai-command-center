@@ -230,7 +230,7 @@ export function SeloDoPapel({ papel, className = "" }: { papel: PapelDaReferenci
         <span
           tabIndex={0}
           className={`inline-block max-w-full cursor-help truncate rounded-full px-1.5 py-px text-[11px] font-medium ${
-            papel === "identidade" ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"
+            papel === "identidade" ? "bg-muted text-foreground" : "bg-secondary text-muted-foreground"
           } ${className}`}
         >
           {PAPEIS[papel].curto}

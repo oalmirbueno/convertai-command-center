@@ -166,7 +166,7 @@ export default function WorkspaceInboxPublic() {
 
   return (
     <CascaPublica
-      titulo={<>Enviar para <span className="text-primary">{info.folder.name}</span></>}
+      titulo={<>Enviar para <span className="text-foreground">{info.folder.name}</span></>}
       descricao={`Sem cadastro. Válido até ${expiresLabel}.`}
       ajuda="Os arquivos aparecem no Workspace da equipe em quarentena até a verificação de segurança."
       largura="media"
@@ -206,7 +206,7 @@ export default function WorkspaceInboxPublic() {
           disabled={blocked}
           onChange={(e) => { void onFiles(e.target.files); e.currentTarget.value = ""; }}
         />
-        <UploadCloud className="mb-3 h-8 w-8 text-primary" aria-hidden="true" />
+        <UploadCloud className="mb-3 h-8 w-8 text-muted-foreground" aria-hidden="true" />
         <p className={juntar(texto.corpo, "font-medium")}>
           {quotaBlocked ? "Cota das últimas 24 horas atingida" : isUploading ? "Enviando a fila atual" : isDragActive ? "Solte para enviar" : "Arraste arquivos ou clique aqui"}
         </p>

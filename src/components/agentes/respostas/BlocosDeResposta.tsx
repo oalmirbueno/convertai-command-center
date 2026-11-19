@@ -442,7 +442,7 @@ export function FluxoDaResposta({ bloco }: { bloco: BlocoFluxo }) {
       Proposta
     </span>
   ) : (
-    <span className={juntar(etiqueta, "bg-primary/10 text-primary")} data-natureza="registro">
+    <span className={juntar(etiqueta, "bg-muted text-foreground")} data-natureza="registro">
       Estado no sistema
     </span>
   );

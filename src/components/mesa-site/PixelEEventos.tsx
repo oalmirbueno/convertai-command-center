@@ -138,7 +138,7 @@ export default function PixelEEventos({ site }: { site: LinhaDoSite }) {
                     onClick={() => void gravarPixel(p.id)}
                     data-pixel-sugerido={p.id === d.sugerido ? "" : undefined}
                   >
-                    {escolhido ? <Check className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : p.id === d.sugerido ? <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /> : null}
+                    {escolhido ? <Check className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : p.id === d.sugerido ? <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
                     <span className="min-w-0 truncate">{p.nome}</span>
                   </button>
                 );

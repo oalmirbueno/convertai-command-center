@@ -2136,7 +2136,7 @@ function BoardTaskCard({
           disabled={!canEdit || moving}
           className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
         >
-          <span className="mb-2.5 inline-flex h-[22px] max-w-full items-center rounded-full bg-accent-soft px-2 text-[11px] font-medium leading-none text-primary">
+          <span className="mb-2.5 inline-flex h-[22px] max-w-full items-center rounded-full bg-muted px-2 text-[11px] font-medium leading-none text-foreground">
             <Palette className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="truncate">{taskDeliveryTypeLabel(task)} · Kanban</span>
           </span>

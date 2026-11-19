@@ -25,9 +25,9 @@ export function getProjectBrand(projectType?: string): string {
 }
 
 export function getProjectBrandColor(projectType?: string): string {
-  if (!projectType) return "text-primary";
+  if (!projectType) return "text-foreground";
   if (JOINT_TYPES.includes(projectType)) return "text-info";
-  if (SITEBOLT_TYPES.includes(projectType)) return "text-primary";
+  if (SITEBOLT_TYPES.includes(projectType)) return "text-foreground";
   return "text-success";
 }
 

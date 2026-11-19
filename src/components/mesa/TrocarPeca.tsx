@@ -182,7 +182,7 @@ export default function TrocarPeca({
                   {o.por_que && <span className={juntar(texto.auxiliar, "mt-0.5 block whitespace-normal")}>{o.por_que}</span>}
                 </span>
                 {recomendada && (
-                  <span className="ml-2 inline-flex shrink-0 items-center text-primary" title={`O Jev recomenda${resposta.notas[i] !== null ? `: ${nivel(resposta.notas[i])}` : ""}`} aria-label="Recomendada pelo Jev" data-recomendada="">
+                  <span className="ml-2 inline-flex shrink-0 items-center text-muted-foreground" title={`O Jev recomenda${resposta.notas[i] !== null ? `: ${nivel(resposta.notas[i])}` : ""}`} aria-label="Recomendada pelo Jev" data-recomendada="">
                     <ThumbsUp className="h-4 w-4" aria-hidden="true" />
                   </span>
                 )}

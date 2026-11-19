@@ -78,7 +78,7 @@ export default function EstilosDaBase({
           <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{pt.rotuloDoEstilo(e.id, e.nome)}</span>
           {ligado ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /> : <span className={juntar(etiqueta, "bg-muted")}>{ROTULO_DO_MODO[modoDoEstilo(e)]}</span>}
         </span>
-        {selo && <span className={juntar(etiqueta, "ml-1 mt-1 inline-block bg-primary/15 text-primary")} data-recomendado="">{selo}</span>}
+        {selo && <span className={juntar(etiqueta, "ml-1 mt-1 inline-block bg-muted text-foreground")} data-recomendado="">{selo}</span>}
         {ptEstilo && <span className={juntar(texto.auxiliar, "block truncate px-1")}>{ptEstilo.resumo}</span>}
         {dna && <span className={juntar(texto.auxiliar, "block truncate px-1")} data-dna-do-estilo="">DNA: {dna}</span>}
         {alerta && ptEstilo && (

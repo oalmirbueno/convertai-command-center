@@ -89,7 +89,7 @@ export default function TabOverview({ project }: { project: any }) {
             <ul className="space-y-3">
               {objectives.map((objective: string, index: number) => (
                 <li key={index} className={juntar(texto.corpo, "flex items-start text-foreground/85")}>
-                  <span className="mr-3 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary" aria-hidden="true">
+                  <span className="mr-3 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
                     <Target className="h-3 w-3" />
                   </span>
                   <span className="min-w-0">{objective}</span>
@@ -138,7 +138,7 @@ export default function TabOverview({ project }: { project: any }) {
         {activeMilestone && (
           <CardSurface variant="ink" padded>
             <p className="flex min-w-0 items-center text-[13px] font-medium leading-5 text-muted-foreground">
-              <Target className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <Target className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               Etapa atual
               <span className="ml-auto shrink-0 pl-3 tabular-nums">{`${completedMilestones.length} de ${allMilestones.length} concluídas`}</span>
             </p>

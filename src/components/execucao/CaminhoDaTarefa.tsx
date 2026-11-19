@@ -51,7 +51,7 @@ type Passo = { rotulo: string; texto: string | null; tom: "feito" | "parou" | "v
 const simples = (t: string, seTecnico: string) => { const l = textoParaGente(t); return pareceTecnico(l) ? seTecnico : l; };
 
 const ESTILO: Record<Passo["tom"], { Icone: typeof CheckCircle2; circulo: string; texto: string }> = {
-  feito: { Icone: CheckCircle2, circulo: "bg-success/15 text-success", texto: "text-success" },
+  feito: { Icone: CheckCircle2, circulo: "bg-muted text-success", texto: "text-success" },
   parou: { Icone: Lock, circulo: "bg-destructive/15 text-destructive", texto: "text-destructive" },
   voce: { Icone: Hand, circulo: "bg-warning/15 text-warning", texto: "text-warning" },
   depois: { Icone: ArrowRight, circulo: "bg-muted text-muted-foreground", texto: "text-muted-foreground" },

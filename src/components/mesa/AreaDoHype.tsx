@@ -77,7 +77,7 @@ function LinhaDoTempo({ datas, hoje }: { datas: DataDoHype[]; hoje: string }) {
             <span className="truncate text-[12px] text-muted-foreground" title={`${d.titulo}: ${quandoDaData(d)}`}>{d.titulo}</span>
             <span className="relative block h-3 min-w-0">
               <span className="absolute inset-x-0 top-[5px] h-0.5 rounded-full bg-muted" />
-              <span className="absolute top-1 h-1 rounded-full bg-primary/40" style={{ left: `${p.esquerda}%`, width: `${p.largura}%` }} />
+              <span className="absolute top-1 h-1 rounded-full bg-muted-foreground/60" style={{ left: `${p.esquerda}%`, width: `${p.largura}%` }} />
               {p.pico !== null && <span className="absolute top-0.5 h-2 w-2 -translate-x-1/2 rounded-full bg-primary" style={{ left: `${p.pico}%` }} />}
               {hojeNaLinha !== null && <span className="absolute top-0 h-3 w-px bg-foreground/40" style={{ left: `${hojeNaLinha}%` }} />}
             </span>

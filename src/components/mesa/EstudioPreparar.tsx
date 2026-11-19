@@ -142,7 +142,7 @@ export default function EstudioPreparar({
   return (
     <section className="mx-auto w-full max-w-[560px] rounded-lg border border-border bg-background p-4 sm:p-5">
       <div className="flex items-center">
-        <Sparkles className="mr-2 h-4 w-4 shrink-0 text-primary" />
+        <Sparkles className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
         <h3 className="text-[15px] font-semibold">Preparar a direção</h3>
       </div>
       {aviso && <div className="mt-2">{aviso}</div>}

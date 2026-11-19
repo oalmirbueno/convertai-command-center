@@ -96,7 +96,7 @@ export default function PecasDaCampanha({
     <section className="min-w-0 border-b border-border pb-4" aria-label="Peças da campanha" data-pecas-da-campanha={campanhaId}>
       <CabecalhoDeSecao
         nivel={3}
-        icone={<Megaphone className="h-4 w-4 text-primary" aria-hidden="true" />}
+        icone={<Megaphone className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
         titulo={titulo}
         truncar
         ajuda={AVISO_DA_CAMPANHA}

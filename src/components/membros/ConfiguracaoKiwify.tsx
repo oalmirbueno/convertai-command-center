@@ -179,7 +179,7 @@ export default function ConfiguracaoKiwify() {
           </p>
         )}
         {aviso && (
-          <p role="status" className="text-[13px] text-primary">
+          <p role="status" className="text-[13px] text-foreground">
             {aviso}
           </p>
         )}

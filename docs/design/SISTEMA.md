@@ -53,6 +53,68 @@ dos primitivos de `src/components/sistema` (que continuam valendo: `Secao`, `Pai
 A seção 1 (raio de 12 px, "painel não tem sombra") e a 2 (título de 20 px) foram atualizadas por esta seção.
 A regra "Dashboard intocado" (4.0) foi revogada pelo dono em 14/11/2026.
 
+### 0.1 Cor: 60-30-10 e contraste (19/11/2026)
+
+Lógica de cor do @jorgedaweb (Combina, Sacana!) aplicada ao v4, só pelos tokens (`src/index.css`,
+`tailwind.config.ts`) e pela lib de aparência (`src/lib/produto/aparencia.ts`). Nada de ajuste tela a tela.
+
+**Regra.**
+
+1. **60-30-10**: 60% base, 30% superfícies, 10% destaque. Texto neutro não conta como cor de marca.
+2. **Um destaque saturado só**: o verde no painel; no produto CRM e E-mail, a cor que a empresa escolheu
+   (`/app/conta?parte=aparencia`). O destaque é **preenchimento de botão/CTA**. Texto só fica no tom do
+   destaque se passar 4,5:1; senão usa o tom de texto (`--primary-text`, mais fundo no claro).
+3. **WCAG 2.2 AA**: texto normal 4,5:1; texto grande 3:1; botão, ícone e anel 3:1 contra o fundo **e** contra
+   o cartão; texto dentro do botão 4,5:1.
+
+| Papel | Tokens |
+|---|---|
+| 60% base | `--background`, `--sidebar-background` |
+| 30% superfícies | `--card`, `--popover`, `--secondary`, `--muted` (e `--border`, `--input`) |
+| 10% destaque | `--primary`, `--accent`, `--accent-solid` (cartão `.ds-accent`), `--ring`, `--chart-1`, `--sidebar-primary` |
+| Texto no destaque | `--primary-foreground`, `--accent-foreground`, `--on-accent`, `--on-accent-muted` |
+| Destaque como texto | `--primary-text` (classe `text-primary`) |
+| Neutros de texto | `--foreground`, `--muted-foreground`, `--secondary-foreground` |
+
+**O que mudou (antes, depois).** Painel escuro: nada (já passava em tudo; verde 14,53:1 no fundo).
+
+| Token ou cor | Par | Antes | Depois |
+|---|---|---|---|
+| Claro: `--primary`, `--accent`, `--ring`, `--sidebar-primary`, `--sidebar-ring`, `--chart-1` (`145 80% 38%` para `145 80% 34%`) | botão / fundo | 2,59 reprova | 3,17 |
+| | botão / cartão | 2,91 reprova | 3,57 |
+| | texto quase preto no botão | 6,73 | 5,49 |
+| Empresa, escuro: azul, roxo, rosa (texto no botão branco para `0 0% 5%`) | texto no botão | 2,94 / 3,50 / 3,22 | 6,60 / 5,56 / 6,03 |
+| Empresa, claro: laranja, ciano (texto no botão branco para `0 0% 5%`) | texto no botão | 3,73 / 4,00 | 5,21 / 4,85 |
+| Empresa, claro: verde (igual ao painel) | botão / cartão | 2,91 | 3,57 |
+| Empresa, claro: rosa (tom de texto `336 78% 40%`) | texto / fundo | 4,31 | 5,76 |
+| Empresa, claro: laranja, ciano (tom de texto próprio) | texto / fundo | 3,31 / 3,56 | 5,04 / 4,95 |
+| Empresa, claro: azul (tom de texto `216 88% 44%`, para ler também na etiqueta suave) | texto / accent-soft | novo par | 4,86 |
+
+O `--accent-solid` do claro (`145 78% 46%`, cartão `.ds-accent`) é superfície, não botão, e ficou igual
+(texto em cima 9,66:1); o poço dele (`--accent-solid-deep`, `145 80% 38%`) também (6,73:1).
+
+**Cor da empresa.** `variaveisDaCor` agora troca o destaque inteiro, porque ele é um só: `--primary`, `--accent`,
+`--ring`, `--chart-1`, `--primary-text`, `--success`, `--accent-soft`, `--success-soft` e o cartão `.ds-accent`
+(`--accent-solid`, `--accent-solid-deep`, `--on-accent`, `--on-accent-muted`). Verde ou nada escolhido continua
+`{}`. `contrasteDaCor(cor, tema)` devolve as razões e a nota; a prévia da Aparência mostra ao vivo "Texto no botão"
+e "Botão no fundo" com a nota. Ids, nomes e ordem não mudaram (o banco valida os ids).
+
+**Como conferir.** `npm run design:contraste` imprime a tabela inteira (152 pares, os dois temas e as seis
+cores) e sai com código 1 se algo reprovar. A CI barra regressão em `src/test/contraste-tokens.test.ts`, que usa
+as mesmas verificações (`src/lib/design/verificacoes.ts`). A conta fica em `src/lib/design/contraste.ts`.
+
+**Verde só em ação principal e estado ativo (19/11/2026, pedido do dono).** O verde (`primary`, e `accent`/`success`
+quando só enfeitam) é a única cor forte e fica só em: botão/CTA preenchido, link e botão de texto, estado
+ativo/selecionado (aba, menu aberto, item escolhido, switch/checkbox ligado, `data-[state=*]`, `aria-*`), progresso,
+carregando e foco. Virou neutro, nos dois temas: ícone decorativo (`text-muted-foreground`; o "marcado" `Check*`
+fica), chip/etiqueta de tipo e status "ok" (`bg-muted text-foreground`), caixa de ícone (`bg-muted
+text-muted-foreground`), título/número/texto verde (`text-foreground` ou `text-muted-foreground` no pequeno), borda e
+anel de destaque (`border-border`, `ring-border`), fundo `bg-primary/N` e `bg-accent-soft` decorativos (`bg-muted`),
+balão de quem pediu na conversa. `success` de estado real (pago, aprovado, no ar) mantém **um** dos três: texto verde
+sobre `bg-muted`, sem fundo e borda verdes juntos. Ficam: paleta de categorias (redes, editorial), seta de tendência
+verde/vermelha, menção `@`, marca sobre imagem e o quadro escuro do canvas da Mesa Foto. Catraca: `iconeVerdeDecorativo`
+(seção 16) barra ícone novo com `text-primary` fixo fora de botão/link.
+
 ## 1. Tokens
 
 | Token | Valor | Uso |
@@ -505,8 +567,8 @@ um número caiu). Nunca suba um teto: use o token ou o componente do sistema. N�
 fonte com nome do Tailwind, translúcido em bloco, rolagem presa no celular, rolagem dentro de rolagem, altura
 fixa pela janela, cartão feito à mão, seção em cartão, cartão dentro de cartão, parágrafo explicativo fixo
 (90 ou mais caracteres fora de janela), descrição explicativa (texto de `descricao` com mais de 60 caracteres
-ou frase), canto fora do token (`rounded-2xl`/`3xl`), título que quebra, sombra forte, caixa alta e `<h1>` feito
-à mão. Prioridade dos lotes: parágrafo e descrição explicativos, cartão à mão e rolagem; fonte fica por último.
+ou frase), canto fora do token (`rounded-2xl`/`3xl`), título que quebra, sombra forte, caixa alta, `<h1>` feito
+à mão e ícone verde decorativo (ícone do lucide com `text-primary` fixo fora de botão/link; ver 0.1). Prioridade dos lotes: parágrafo e descrição explicativos, cartão à mão e rolagem; fonte fica por último.
 
 Como conferir sem o Supabase real (harness da D1, fora do repositório):
 1. Subir o Vite pela API (`createServer`, `configFile: false`, `root` no repositório, `process.chdir` para

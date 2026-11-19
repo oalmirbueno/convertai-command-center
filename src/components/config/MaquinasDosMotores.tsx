@@ -48,7 +48,7 @@ export const AJUDA_DO_INSTALADOR =
   "Para conferir o arquivo: certutil -hashfile instalar-aceleriq-motores.cmd SHA256.";
 
 const COR: Record<SituacaoDaMaquina, { ponto: string; texto: string }> = {
-  ok: { ponto: "bg-primary", texto: "text-primary" },
+  ok: { ponto: "bg-primary", texto: "text-foreground" },
   atencao: { ponto: "bg-warning", texto: "text-warning" },
   parado: { ponto: "bg-destructive", texto: "text-destructive" },
 };

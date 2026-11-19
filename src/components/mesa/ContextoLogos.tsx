@@ -533,7 +533,7 @@ export default function LogosDaMarca({
       </div>
 
       {!principal && !principalArquivo.isLoading && fotoIg.data && fotoIg.data.url && (
-        <div className="flex min-w-0 items-center rounded-lg border border-primary/30 bg-primary/5 p-2" data-logo-do-instagram="">
+        <div className="flex min-w-0 items-center rounded-lg border border-border bg-muted p-2" data-logo-do-instagram="">
           <FotoDoCliente nome={clientName} fotos={[{ url: fotoIg.data.url, tipo: "instagram" }]} tamanho="md" alt="Foto do perfil do Instagram" />
           <p className="mx-2 min-w-0 flex-1 text-[12px] leading-4 text-foreground">
             Sem logo? Use a foto do perfil do Instagram{fotoIg.data.username ? ` (@${fotoIg.data.username})` : ""}.

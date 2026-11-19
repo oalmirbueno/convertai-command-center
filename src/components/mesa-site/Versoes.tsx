@@ -176,7 +176,7 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
                 {doRascunho ? (
                   <span className={juntar(etiqueta, "mr-1 bg-warning-soft text-warning")}>rascunho</span>
                 ) : n === 0 || (salva && salvas[0] && salvas[0].trabalho_id === t.id) ? (
-                  <span className={juntar(etiqueta, "mr-1 bg-accent-soft text-primary")}>{salva ? "salva" : "atual"}</span>
+                  <span className={juntar(etiqueta, "mr-1 bg-muted text-foreground")}>{salva ? "salva" : "atual"}</span>
                 ) : null}
                 {naNuvem && (
                   <a className={botao.icone} href={naNuvem.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir a prévia na nuvem desta versão" title={`Abrir prévia (${naNuvem.ramo === "rascunho" ? "rascunho, " : ""}${dataEHora(naNuvem.em)})`} data-abrir-previa-nuvem={naNuvem.commit.slice(0, 8)}>
@@ -200,7 +200,7 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
                   {arquivos.map((a) => (
                     <li key={a.arquivo} className={juntar(texto.auxiliar, "flex min-w-0")}>
                       <span className="min-w-0 flex-1 truncate">{a.arquivo}</span>
-                      <span className="ml-2 shrink-0 tabular-nums text-primary">+{a.mais}</span>
+                      <span className="ml-2 shrink-0 tabular-nums text-foreground">+{a.mais}</span>
                       <span className="ml-1 shrink-0 tabular-nums text-destructive">-{a.menos}</span>
                     </li>
                   ))}

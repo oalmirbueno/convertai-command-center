@@ -80,7 +80,7 @@ export function SaldosDasContas({ contas }: { contas: SaldoDaConta[] }) {
       {contas.map((c) => (
         <div key={c.external_account_id} className={juntar(superficie.painel, "min-w-0 p-5 sm:p-6")}>
           <p className="flex min-w-0 items-center text-[15px] font-semibold leading-6">
-            <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary"><Wallet className="h-4 w-4" /></span>
+            <span aria-hidden="true" className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Wallet className="h-4 w-4" /></span>
             <span className="min-w-0 flex-1 truncate">{c.nome || `Conta ${c.numero}`}</span>
             {c.status && <StatusPill className="ml-2" tone={/ativ|active/i.test(c.status) ? "success" : "neutral"}>{c.status}</StatusPill>}
           </p>
@@ -135,7 +135,7 @@ export function TendenciaDiaria({ serie, rotulo }: { serie: PontoDaConta[]; rotu
   return (
     <section aria-label="Tendência diária" className={juntar(superficie.painel, "min-w-0 p-5 sm:p-6")}>
       <div className="flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
-        <TrendingUp className="mr-2 h-4 w-4 text-primary" />
+        <TrendingUp className="mr-2 h-4 w-4 text-muted-foreground" />
         <span className="mr-auto text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">Por dia</span>
         <span className="mr-4 inline-flex items-center"><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-primary" />Investimento</span>
         <span className="inline-flex items-center"><span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: "hsl(var(--chart-2))" }} />{rotulo}</span>
@@ -377,7 +377,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
               <ul className="mt-1.5 space-y-1.5">
                 {l.aprendizados.map((a, k) => (
                   <li key={k} className="min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]">
-                    <span className={`mr-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-danger-soft text-destructive" : "bg-success-soft text-success"}`}>{a.tipo}</span>
+                    <span className={`mr-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-danger-soft text-destructive" : "bg-muted text-success"}`}>{a.tipo}</span>
                     <span className="mr-1 text-[11px] text-muted-foreground">{a.canal === "organico" ? "orgânico" : "anúncios"}:</span>
                     {a.texto}
                   </li>

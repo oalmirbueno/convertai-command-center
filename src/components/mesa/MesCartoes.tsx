@@ -85,7 +85,7 @@ export function SeloDaArte({ arte, className = "" }: { arte: ArteDoEstudioNaAgen
   return (
     <span
       className={`inline-flex min-w-0 max-w-full items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
-        selo.alerta ? "bg-warning-soft text-warning" : "bg-success-soft text-success"
+        selo.alerta ? "bg-warning-soft text-warning" : "bg-muted text-success"
       } ${className}`}
       title={[selo.texto, selo.laminas].filter(Boolean).join(" · ")}
     >

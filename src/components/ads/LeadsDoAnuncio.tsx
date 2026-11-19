@@ -15,7 +15,7 @@ export function ContagemDeLeads({ total, className = "" }: { total: number; clas
   if (total <= 0) return null;
   const frase = `${total} ${total === 1 ? "lead" : "leads"} no CRM`;
   return (
-    <span role="img" aria-label={frase} title={frase} data-leads-no-crm={total} className={juntar("inline-flex shrink-0 items-center text-[12px] font-medium tabular-nums text-primary", className)}>
+    <span role="img" aria-label={frase} title={frase} data-leads-no-crm={total} className={juntar("inline-flex shrink-0 items-center text-[12px] font-medium tabular-nums text-muted-foreground", className)}>
       <Users className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />
       {total}
     </span>

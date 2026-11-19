@@ -291,7 +291,7 @@ function PainelDoScore({ kit }: { kit: KitDoContexto | null | undefined }) {
             <ul className="mt-1.5 space-y-1">
               {faltas.map((f) => (
                 <li key={f.chave} className="flex min-w-0 items-start text-[13px] leading-snug">
-                  <span className="mr-2 mt-px shrink-0 rounded-full bg-card px-1.5 py-px text-[11px] font-semibold tabular-nums text-primary">+{f.ganho}</span>
+                  <span className="mr-2 mt-px shrink-0 rounded-full bg-card px-1.5 py-px text-[11px] font-semibold tabular-nums text-foreground">+{f.ganho}</span>
                   <span className="min-w-0 text-foreground [overflow-wrap:anywhere]">{f.texto}</span>
                 </li>
               ))}
@@ -387,7 +387,7 @@ function SugestoesPendentes({
       titulo="Sugestões do agente"
       descricao={`${campos.length} ${campos.length === 1 ? "campo" : "campos"}`}
       ajuda="A equipe já tinha preenchido estes campos, então o agente não trocou nada. Aplique o que fizer sentido."
-      className="border-primary/50"
+      className="border-border"
     >
       <ul className={juntar(lista.divisoria, "min-w-0")}>
         {campos.map((campo) => (

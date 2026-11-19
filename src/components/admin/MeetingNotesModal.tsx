@@ -228,7 +228,7 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
       aberta={open}
       onMudar={(v) => { if (!v && !isProcessing) onClose(); }}
       largura="md"
-      icone={<Sparkles className="h-4 w-4 text-primary" />}
+      icone={<Sparkles className="h-4 w-4 text-muted-foreground" />}
       titulo="Gerar Projeto via IA"
       ajuda="A IA lê os documentos e as anotações e monta o projeto: nome, escopo, marcos, tarefas iniciais e prazo estimado."
       rotuloDaAjuda="O que a IA gera"
@@ -257,7 +257,7 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
       <div className="space-y-4">
         {/* Andamento */}
         {isProcessing && (
-          <div className="space-y-2.5 rounded-md bg-accent-soft p-3.5" role="status">
+          <div className="space-y-2.5 rounded-md bg-muted p-3.5" role="status">
             <div className="flex items-center">
               {step === "done" ? (
                 <CheckCircle2 className="mr-2.5 h-4 w-4 shrink-0 text-success" />

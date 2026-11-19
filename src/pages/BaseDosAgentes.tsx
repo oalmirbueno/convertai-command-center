@@ -306,7 +306,7 @@ function ChaveDaBiblioteca({ agente, fichas, podeMudar, aoMudar }: { agente: Age
   };
   return (
     <div className="mt-5 flex min-w-0 items-center border-t border-border/60 pt-4" data-biblioteca-da-casa={ligada ? "ligada" : "desligada"}>
-      <span aria-hidden="true" className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary">
+      <span aria-hidden="true" className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
         <BookOpen className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1">

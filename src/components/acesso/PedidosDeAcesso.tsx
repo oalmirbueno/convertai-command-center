@@ -96,7 +96,7 @@ function LinhaDoPedido({ pedido, agente, abrir, anterior }: { pedido: PedidoDeAc
           )}
         </span>
         <span className="ml-3 flex shrink-0 flex-col items-end">
-          <span className="text-primary" title={ROTULO_DO_TIPO[pedido.tipo]}>
+          <span className="text-muted-foreground" title={ROTULO_DO_TIPO[pedido.tipo]}>
             <IconeDoTipo tipo={pedido.tipo} />
           </span>
           <span className={juntar(texto.auxiliar, "mt-1 whitespace-nowrap")}>{quando(pedido.created_at)}</span>

@@ -272,7 +272,7 @@ function AtalhosDoCliente({ painel, vista, onAbrir }: { painel: PainelDoInstagra
           {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"): o rótulo fica no title e no leitor de tela. */}
           <span aria-hidden="true">{a.icone}</span>
           {a.parte === "proximos" && proximos > 0 && (
-            <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[11px] font-semibold tabular-nums text-primary" aria-hidden="true">
+            <span className="ml-1 rounded-full bg-muted px-1.5 text-[11px] font-semibold tabular-nums text-foreground" aria-hidden="true">
               {proximos}
             </span>
           )}

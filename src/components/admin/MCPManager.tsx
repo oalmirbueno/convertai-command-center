@@ -365,7 +365,7 @@ export default function MCPManager() {
   };
 
   const tones: Record<string, string> = {
-    green: "bg-primary/15 text-primary",
+    green: "bg-muted text-foreground",
     amber: "bg-warning/15 text-warning",
     red: "bg-destructive/15 text-destructive",
     muted: "bg-muted text-muted-foreground",
@@ -475,7 +475,7 @@ export default function MCPManager() {
           >
             <ul className="divide-y divide-border border-y border-border">
               <li className="flex min-w-0 items-center py-2.5">
-                <Network className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                <Network className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className={juntar(texto.rotulo, "mr-3 w-24 shrink-0")}>URL MCP</span>
                 <code className="mr-2 min-w-0 flex-1 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]">{MCP_URL}</code>
                 <button type="button" className={botao.icone} onClick={() => copyText(MCP_URL)} aria-label="Copiar URL MCP" title="Copiar URL MCP">
@@ -483,7 +483,7 @@ export default function MCPManager() {
                 </button>
               </li>
               <li className="flex min-w-0 items-center py-2.5">
-                <FileJson className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                <FileJson className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className={juntar(texto.rotulo, "mr-3 w-24 shrink-0")}>OAuth PRM</span>
                 <code className="mr-2 min-w-0 flex-1 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]">{PRM_URL}</code>
                 <button type="button" className={botao.icone} onClick={() => copyText(PRM_URL)} aria-label="Copiar OAuth PRM" title="Copiar OAuth PRM">
@@ -600,7 +600,7 @@ export default function MCPManager() {
               <Carregando linhas={1} rotulo="Lendo o servidor" />
             ) : (
               <p className="flex items-baseline">
-                <span className="mr-2 text-[24px] font-semibold leading-8 tabular-nums text-primary">{discovery?.toolCount ?? 0}</span>
+                <span className="mr-2 text-[24px] font-semibold leading-8 tabular-nums text-foreground">{discovery?.toolCount ?? 0}</span>
                 <span className={texto.auxiliar}>tools expostos pelo servidor</span>
               </p>
             )}
@@ -648,7 +648,7 @@ export default function MCPManager() {
                         <td className="max-w-[180px] truncate py-2 pr-3 text-muted-foreground">{a.key_id ? (keyById.get(a.key_id)?.name ?? a.key_id.slice(0, 8)) : "-"}</td>
                         <td className="py-2 pr-3">
                           {a.success
-                            ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>{a.status_code ?? 200}</span>
+                            ? <span className={juntar(etiqueta, "bg-muted text-foreground")}>{a.status_code ?? 200}</span>
                             : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")} title={a.error_message ?? ""}>{a.status_code ?? "err"} · {a.error_code ?? "fail"}</span>}
                         </td>
                         <td className="py-2 text-right font-mono tabular-nums">{a.duration_ms ?? "-"}</td>
@@ -662,7 +662,7 @@ export default function MCPManager() {
                       <div className="flex min-w-0 items-center">
                         <code className="mr-2 min-w-0 flex-1 truncate font-mono text-[13px]">{a.tool_name}</code>
                         {a.success
-                          ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>{a.status_code ?? 200}</span>
+                          ? <span className={juntar(etiqueta, "bg-muted text-foreground")}>{a.status_code ?? 200}</span>
                           : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")} title={a.error_message ?? ""}>{a.status_code ?? "err"} · {a.error_code ?? "fail"}</span>}
                       </div>
                       <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
@@ -781,7 +781,7 @@ function StatusCard({
         {loading
           ? <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Verificando</span>
           : ok
-            ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}><CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" /> Online</span>
+            ? <span className={juntar(etiqueta, "bg-muted text-foreground")}><CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" /> Online</span>
             : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}><XCircle className="mr-1 h-3 w-3" aria-hidden="true" /> Offline</span>}
       </div>
       {loading ? (
@@ -1024,7 +1024,7 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className={juntar(texto.tituloSecao, "flex items-center")}><Zap className="mr-2 h-4 w-4 text-primary" aria-hidden="true" /> Testar conexão</DialogTitle>
+          <DialogTitle className={juntar(texto.tituloSecao, "flex items-center")}><Zap className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Testar conexão</DialogTitle>
           <DialogDescription className="text-[13px] leading-5">
             Credencial <span className="font-medium text-foreground">{keyName}</span>. Valida <code>initialize</code> e <code>tools/list</code>.
           </DialogDescription>
@@ -1038,7 +1038,7 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
           {result && (
             result.ok ? (
               <div className={juntar(superficie.poco, "px-3 py-2 text-[12px] leading-5")} role="status">
-                <p className="flex items-center font-medium text-primary"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Conexão OK</p>
+                <p className="flex items-center font-medium text-foreground"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Conexão OK</p>
                 <p className="text-muted-foreground">Servidor: <code className="text-foreground">{result.server}</code></p>
                 <p className="text-muted-foreground">Tools visíveis: <span className="tabular-nums text-foreground">{result.toolCount}</span></p>
                 <p className="text-muted-foreground">Latência: <span className="tabular-nums text-foreground">{result.latencyMs} ms</span></p>

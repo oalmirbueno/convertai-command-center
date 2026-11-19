@@ -1198,8 +1198,8 @@ export default function EditorialEditor({
           </Secao>
 
           {contentLocked && (
-            <div className="flex items-center rounded-lg bg-primary/5 px-4 py-3">
-              <LockKeyhole className="mr-3 h-4 w-4 shrink-0 text-primary" />
+            <div className="flex items-center rounded-lg bg-muted px-4 py-3">
+              <LockKeyhole className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" />
               <p className="min-w-0 truncate text-[13px] font-medium text-foreground">
                 Conteúdo protegido pela aprovação
               </p>
@@ -1470,7 +1470,7 @@ export default function EditorialEditor({
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <CalendarClock className="h-4 w-4 text-primary" />
+                      <CalendarClock className="h-4 w-4 text-muted-foreground" />
                       <p className="text-[13px] leading-5 font-medium text-foreground">
                         {account
                           ? PLATFORM_LABELS[

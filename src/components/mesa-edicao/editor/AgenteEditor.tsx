@@ -1030,7 +1030,7 @@ export default function AgenteEditor({
   const cartaoDoPreparo = preparo && projeto && (
     <div className="rounded-md bg-muted/50 px-2.5 py-2 text-[12px]" data-preparo-da-fala="">
       <p className="mb-1.5 flex items-start">
-        <Timer className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <Timer className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span>
           Primeiro marco a fala de {preparo.fontes.length} {preparo.fontes.length === 1 ? "vídeo" : "vídeos"} ({tempoFino(preparo.fontes.reduce((s, k) => s + (projeto.fontes[k].duracao_s || 0), 0))}) com o Timestamp: <strong className="tabular-nums">{usd(preparo.custoFala)}</strong>.{" "}
           {preparo.pedido ? `Depois o agente edita (~${usd(custo.tipico)}).` : "A skill é de graça."}

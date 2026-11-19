@@ -339,7 +339,7 @@ function EtapasDaEsteira({ atual }: { atual: number }) {
         <li key={e.chave} className="flex items-start">
           <span
             className={`mr-2.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
-              i < atual ? "border-success bg-success-soft text-success" : i === atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
+              i < atual ? "border-border bg-muted text-success" : i === atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
             }`}
           >
             {i < atual ? <Check className="h-3.5 w-3.5" /> : i + 1}
@@ -1502,7 +1502,7 @@ export function DetalheDoItem({
               <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
               {item.momento && (
                 <span className="ml-2 inline-flex shrink-0 items-center" title={item.gancho || undefined} data-foguinho={item.momento}>
-                  <Flame className={`mr-0.5 h-3 w-3 ${item.momento === "nicho" ? "text-primary" : "text-warning"}`} aria-hidden="true" />
+                  <Flame className={`mr-0.5 h-3 w-3 ${item.momento === "nicho" ? "text-muted-foreground" : "text-warning"}`} aria-hidden="true" />
                   {item.momento === "nicho" ? "em alta no nicho" : "hype"}
                 </span>
               )}
@@ -1607,7 +1607,7 @@ export function DetalheDoItem({
 
   // Frente MF: o item é um post de fotos (feito na Mesa Foto): aqui nada é gerado; fotos, legenda e envio moram lá.
   const avisoDePostDeFotos = trabalho && ehPostDeFotos(trabalho.direcao) ? (
-    <div className="mb-3 flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-[12px] leading-snug" role="status" data-aviso="post-de-fotos">
+    <div className="mb-3 flex min-w-0 flex-wrap items-center rounded-lg border border-border bg-muted px-3 py-2 text-[12px] leading-snug" role="status" data-aviso="post-de-fotos">
       <span className="mr-2 min-w-0 flex-1">Este item é um post de fotos da Mesa Foto: as fotos vão como estão, sem arte. Troque as fotos, a legenda e envie ao cliente por lá.</span>
       <Link to={linkDoPostNaMesaFoto(clientId, { taskId: item.id, trabalhoId: trabalho.id })} className="inline-flex h-8 shrink-0 items-center rounded-full bg-primary px-2.5 text-[12px] font-medium text-primary-foreground">
         Abrir na Mesa Foto
@@ -2344,7 +2344,7 @@ export function DetalheDoItem({
         {hashtags.length > 0 && (
           <div className="flex flex-wrap">
             {hashtags.map((h) => (
-              <span key={h} className="mb-1 mr-1.5 max-w-full truncate rounded-full bg-primary/10 px-2.5 py-0.5 text-[12px] text-primary">{h}</span>
+              <span key={h} className="mb-1 mr-1.5 max-w-full truncate rounded-full bg-muted px-2.5 py-0.5 text-[12px] text-foreground">{h}</span>
             ))}
           </div>
         )}
@@ -2458,7 +2458,7 @@ export function DetalheDoItem({
   const cabecalhoDoPainel = ferramenta ? (
     <div className="flex h-14 shrink-0 items-center px-4">
       {/* v4 (cabeçalho de cartão das referências): ícone em círculo, título e fechar em círculo. */}
-      <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-primary">{(() => { const I = FERRAMENTAS[ferramenta].icone; return <I className="h-4 w-4" />; })()}</span>
+      <span aria-hidden="true" className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">{(() => { const I = FERRAMENTAS[ferramenta].icone; return <I className="h-4 w-4" />; })()}</span>
       <p className="min-w-0 flex-1 truncate text-[15px] font-medium tracking-[-0.01em]">{FERRAMENTAS[ferramenta].rotulo}</p>
       <button
         type="button"

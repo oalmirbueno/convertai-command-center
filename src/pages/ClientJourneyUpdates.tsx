@@ -649,7 +649,7 @@ export default function ClientJourneyUpdates() {
                     <ul className="mt-3 space-y-1.5">
                       {doing.map((task: any, index: number) => (
                         <li key={index} className={juntar(texto.auxiliar, "flex min-w-0 items-start")}>
-                          <span className="mr-1.5 mt-[6px] h-1 w-1 shrink-0 rounded-full bg-primary/60" aria-hidden="true" />
+                          <span className="mr-1.5 mt-[6px] h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" aria-hidden="true" />
                           <span className="truncate">{task.title}</span>
                         </li>
                       ))}
@@ -1004,8 +1004,8 @@ export default function ClientJourneyUpdates() {
                       </div>
                     )}
                     {update.next_steps && (
-                      <div className="mt-4 rounded-md bg-accent-soft px-4 py-3">
-                        <p className={juntar(texto.rotulo, "text-primary")}>Próximo passo</p>
+                      <div className="mt-4 rounded-md bg-muted px-4 py-3">
+                        <p className={juntar(texto.rotulo, "text-foreground")}>Próximo passo</p>
                         <p className={juntar(texto.corpo, "mt-1 whitespace-pre-line")}>{update.next_steps}</p>
                       </div>
                     )}

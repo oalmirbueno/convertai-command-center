@@ -43,7 +43,7 @@ export function CabecalhoDoAgente({
     <div className={juntar("shrink-0 border-b border-border px-3.5 pb-2.5 pt-3", className)} data-cabecalho-do-agente="">
       <div className="flex min-w-0 items-center">
         {icone && (
-          <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+          <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground" aria-hidden="true">
             {icone}
           </span>
         )}

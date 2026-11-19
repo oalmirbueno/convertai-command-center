@@ -180,9 +180,9 @@ export default function CartaoDeAcao({
   const total = atual.itens.length;
   const feitosAgora = resultados.length;
   return (
-    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-3.5")} data-acao-agente={estado} data-andamento={andando ? `${feitosAgora}/${total}` : undefined}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-border p-3.5")} data-acao-agente={estado} data-andamento={andando ? `${feitosAgora}/${total}` : undefined}>
       <p className="flex items-center text-[12px] font-semibold">
-        <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 truncate">{titulo || "O agente vai fazer"} · {total} {total === 1 ? "item" : "itens"}</span>
       </p>
       {atual.resumo && <p className="mt-1 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}

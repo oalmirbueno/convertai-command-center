@@ -51,8 +51,8 @@ export const conversa = {
   mensagem: "text-[14px] leading-[1.6]",
   /** Balão de mensagem: junte com `doUsuario` ou `doAgente`. */
   balao: "min-w-0 rounded-lg px-3.5 py-2.5 text-[14px] leading-[1.6] text-foreground [overflow-wrap:anywhere]",
-  /** Balão de quem pediu: à direita, com a cor da marca. */
-  doUsuario: "ml-8 bg-primary/10",
+  /** Balão de quem pediu: à direita, neutro (o verde é só de ação e estado ativo). */
+  doUsuario: "ml-8 bg-muted",
   /** Balão do agente: quase a largura toda (texto longo lê melhor). */
   doAgente: "mr-2 bg-secondary/60",
   /** Linha de apoio dentro da conversa (vazio, lendo, aviso do sistema). */

@@ -330,7 +330,7 @@ export default function OrganogramaAgentes({
             className={cn(
               "relative mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold",
               destaque === "dono"
-                ? "bg-primary/20 text-primary"
+                ? "bg-muted text-foreground"
                 : destaque === "gateway"
                   ? "bg-info/20 text-info"
                   : "bg-muted text-foreground",
@@ -374,7 +374,7 @@ export default function OrganogramaAgentes({
             {!destaque && (no.nivel === "coordenador" || no.origem || no.grau) && (
               <div className="mt-1 flex flex-wrap items-center [&>*]:mr-1.5" data-etiquetas="">
               {no.nivel === "coordenador" && (
-                <span className="shrink-0 rounded bg-primary/20 px-1.5 py-px text-[11px] font-medium text-primary">
+                <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[11px] font-medium text-foreground">
                   coordena
                 </span>
               )}

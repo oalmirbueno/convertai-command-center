@@ -29,7 +29,7 @@ function statusLabel(approval: CentralApproval): string {
 function tomDoStatus(approval?: CentralApproval): string {
   if (approval?.executed_at) return "text-success";
   if (reviewExpired(approval)) return "text-destructive";
-  if (approval?.status === "aprovado") return "text-primary";
+  if (approval?.status === "aprovado") return "text-foreground";
   if (approval && ["rejeitado", "expirado"].includes(approval.status)) return "text-destructive";
   return approval ? "text-warning" : "text-muted-foreground";
 }

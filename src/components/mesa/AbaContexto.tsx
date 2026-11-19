@@ -163,7 +163,7 @@ export default function AbaContexto() {
     >
       <div className="min-w-0 space-y-4 pb-6">
         {marca && !marca.principal && (
-          <div className="flex min-w-0 items-center rounded-md bg-primary/5 px-3 py-1 text-[13px]" data-aviso-da-marca="">
+          <div className="flex min-w-0 items-center rounded-md bg-muted px-3 py-1 text-[13px]" data-aviso-da-marca="">
             <p className="min-w-0 flex-1 truncate">
               Marca <strong>{marca.nome}</strong> aberta
             </p>

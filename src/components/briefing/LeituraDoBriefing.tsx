@@ -391,7 +391,7 @@ export default function LeituraDoBriefing({ briefingId, onGerarProjeto, abrirLem
 
       {b.reabertura_pedida_em && estado === "enviado" && !arquivado && (
         <p className={juntar(superficie.poco, texto.corpo, "flex items-start px-3 py-2")}>
-          <RotateCcw className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <RotateCcw className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="min-w-0 [overflow-wrap:anywhere]">
             O cliente pediu para reabrir em {dataHora(b.reabertura_pedida_em)}.{b.reabertura_motivo ? ` Motivo: ${b.reabertura_motivo}` : ""}
           </span>

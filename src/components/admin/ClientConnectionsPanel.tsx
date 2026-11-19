@@ -723,7 +723,7 @@ export default function ClientConnectionsPanel({
                         <div className="flex min-w-0 items-center">
                           <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{acc.display_name}</p>
                           {isOfficial && (
-                            <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>
+                            <span className={juntar(etiqueta, "ml-2 bg-muted text-foreground")}>
                               Oficial Meta
                             </span>
                           )}

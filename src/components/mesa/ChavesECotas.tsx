@@ -292,7 +292,7 @@ export default function ChavesECotas({
                 <section key={provedor} className={juntar(superficie.painel, "space-y-3 p-4")}>
                   <div className="flex min-w-0 items-center justify-between">
                     <h3 className="mr-2 min-w-0 truncate text-[15px] font-semibold">{nomeDoProvedor(provedor)}</h3>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${ativa ? "bg-success-soft text-success" : "bg-secondary text-muted-foreground"}`}>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${ativa ? "bg-muted text-success" : "bg-secondary text-muted-foreground"}`}>
                       {ativa ? "chave própria" : lista.data.usar_chave_agencia ? "usa a da agência" : "bloqueado"}
                     </span>
                   </div>

@@ -163,7 +163,7 @@ function CartaoDeRisco({ c, logo }: { c: ClienteEmRisco; logo: string | null }) 
           </span>
         </span>
         <BarraDoMes pct={c.pctMes} />
-        {c.sugestao && <span className={juntar(texto.auxiliar, "mt-3 flex min-w-0 items-center")}><Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 truncate">{c.sugestao}</span></span>}
+        {c.sugestao && <span className={juntar(texto.auxiliar, "mt-3 flex min-w-0 items-center")}><Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 truncate">{c.sugestao}</span></span>}
         <PeDaAcao rotulo="Abrir a pauta" />
       </CartaoQueLeva>
     </li>
@@ -257,7 +257,7 @@ export default function Hoje() {
                         <Link to={destinoDaCampanha(c)} className={juntar(cartaoLink, "flex-row items-center p-4 sm:p-5")} title="Abrir Campanhas" aria-label={`Abrir Campanhas: ${c.nome} · ${c.tema}`}>
                           <LogoDoCliente url={logoDe(c.clientId)} clienteId={c.clientId} nome={c.nome} tamanho={40} className="mr-3" />
                           <span className="min-w-0 flex-1">
-                            <span className={juntar(texto.corpo, "flex min-w-0 items-center font-medium")}><Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 truncate">{c.tema}</span></span>
+                            <span className={juntar(texto.corpo, "flex min-w-0 items-center font-medium")}><Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 truncate">{c.tema}</span></span>
                             <span className={juntar(texto.auxiliar, "block truncate")} title={c.porQue || undefined}>{c.nome}{c.porQue ? ` · ${c.porQue}` : ""}</span>
                           </span>
                           <span className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted transition-colors group-hover:bg-foreground group-hover:text-background"><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
@@ -321,7 +321,7 @@ export default function Hoje() {
                         <li key={f.chave} className="min-w-0" data-feito="">
                           <CartaoQueLeva compacto externo={d.externo} para={d.rota} rotulo={`${d.externo ? "Ver a prova" : "Abrir o diário"}: ${f.nome}`}>
                             <span className="flex min-w-0 items-center">
-                              <span className="mr-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success-soft text-success"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /></span>
+                              <span className="mr-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-success"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /></span>
                               <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-semibold")}>{assunto}</span>
                               {d.externo && <ExternalLink className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
                             </span>

@@ -137,7 +137,7 @@ function ItemFeito({ a, fazendo, onDesfazer, onLevar, onDescartar }: { a: AcaoFe
   return (
     <li className="min-w-0 py-2" data-acao-feita={a.estado}>
       <p className="flex min-w-0 flex-wrap items-center text-[13px] leading-snug">
-        {a.estado === "feita" && a.tipo !== "parada" ? <Check className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" /> : a.estado === "proposta" ? <Bot className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" /> : <X className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+        {a.estado === "feita" && a.tipo !== "parada" ? <Check className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" /> : a.estado === "proposta" ? <Bot className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <X className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         <span className="mr-2 min-w-0 font-medium [overflow-wrap:anywhere]">{a.resumo}</span>
         {selo && <span className="mr-2 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">{selo}</span>}
         <span className="text-[11px] text-muted-foreground">

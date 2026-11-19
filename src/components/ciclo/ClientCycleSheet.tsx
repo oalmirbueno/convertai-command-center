@@ -722,7 +722,7 @@ export default function ClientCycleSheet({
               </>
             )}
             <span>·</span>
-            <span title={PHASE_PURPOSE[fase]} className="font-semibold text-primary">
+            <span title={PHASE_PURPOSE[fase]} className="font-semibold text-foreground">
               {PHASE_LABELS[fase]}
             </span>
             {client.plan_name && (
@@ -907,7 +907,7 @@ export default function ClientCycleSheet({
                   onClick={abrirWhatsApp}
                   className="flex flex-col items-center gap-1 rounded-md border border-border bg-card px-2 py-2.5 text-[11px] font-semibold text-foreground"
                 >
-                  <MessageCircle className="h-4 w-4 text-primary" />
+                  <MessageCircle className="h-4 w-4 text-muted-foreground" />
                   WhatsApp
                 </button>
                 <button
@@ -915,7 +915,7 @@ export default function ClientCycleSheet({
                   onClick={() => void copiarResumo()}
                   className="flex flex-col items-center gap-1 rounded-md border border-border bg-card px-2 py-2.5 text-[11px] font-semibold text-foreground"
                 >
-                  <ClipboardCopy className="h-4 w-4 text-primary" />
+                  <ClipboardCopy className="h-4 w-4 text-muted-foreground" />
                   Copiar resumo
                 </button>
               </div>
@@ -957,7 +957,7 @@ export default function ClientCycleSheet({
                     disabled={carregandoMensagem}
                     className="flex flex-col items-center gap-0.5 rounded-md border border-border bg-card px-2 py-2 text-[11px] font-semibold text-foreground disabled:opacity-40"
                   >
-                    <ClipboardCopy className="h-3.5 w-3.5 text-primary" />
+                    <ClipboardCopy className="h-3.5 w-3.5 text-muted-foreground" />
                     {opcao.texto}
                     <span className="text-[11px] font-normal text-muted-foreground">{opcao.dia}</span>
                   </button>
@@ -1144,7 +1144,7 @@ export default function ClientCycleSheet({
                               </p>
                             )}
                             {pendentes.length === 0 ? (
-                              <div className="flex h-9 items-center gap-2 rounded-md border border-success/25 bg-success/[0.05] px-2.5">
+                              <div className="flex h-9 items-center gap-2 rounded-md border border-border bg-success/[0.05] px-2.5">
                                 <Check className="h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
                                 <span className="text-[12px] font-semibold text-success">
                                   Frente completa — tudo desta fila esta no historico abaixo
@@ -1318,7 +1318,7 @@ export default function ClientCycleSheet({
                   {!contextoRecolhido && <div className="mt-2 space-y-1.5">
                     {(contexto0?.agendadas || []).map((pub: any) => (
                       <div key={pub.id} className="flex items-center gap-2 rounded-md bg-muted/50 px-2.5 py-2">
-                        <Clock className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
                           Publicação agendada
                         </span>
@@ -1442,7 +1442,7 @@ export default function ClientCycleSheet({
                       <div
                         key={lista.id}
                         className={`rounded-md border p-2.5 ${
-                          completa ? "border-success/40 bg-success/[0.06]" : "border-border bg-card"
+                          completa ? "border-border bg-success/[0.06]" : "border-border bg-card"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -1529,7 +1529,7 @@ export default function ClientCycleSheet({
                 <div className="mt-3 space-y-2 border-l border-border pl-3">
                   {historia.map((entrada: MemoryEntry) => (
                     <div key={entrada.id} className="relative">
-                      <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-primary/60" />
+                      <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-muted-foreground/60" />
                       <p className="text-[12px] text-muted-foreground">
                         {new Date(entrada.created_at).toLocaleDateString("pt-BR", {
                           day: "2-digit", month: "2-digit", year: "2-digit",
