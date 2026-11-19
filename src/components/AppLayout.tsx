@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, BookOpen, Boxes, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange, Library, MessageCircle, Workflow,
   Activity, Building2, Mail, Inbox, Tags, Wallet, Globe, MonitorSmartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -186,6 +186,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Escritório", url: "/escritorio", icon: Building2 },
       // 18/11/2026: Central de Skills e segundo cérebro para todos os agentes.
       { title: "Skills e cérebro", url: "/skills", icon: Library },
+      // 19/11/2026: Central de Automações (n8n: fluxos, saúde, execuções e o botão ligar/desligar do dono).
+      { title: "Automações", url: "/automacoes", icon: Workflow },
     ],
   },
   {
