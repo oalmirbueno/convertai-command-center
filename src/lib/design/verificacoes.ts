@@ -16,7 +16,25 @@ export interface Verificacao {
   razao: number;
   minimo: number;
   passa: boolean;
+  /** Reprova o mínimo, mas é exceção decidida pelo dono (EXCECOES_DO_DONO). `passa` fica true. */
+  excecao?: boolean;
 }
+
+/**
+ * Exceções decididas pelo Almir no chat (19/11/2026, 15h14): manter o verde atual do tema claro
+ * (`145 80% 38%`) em vez do `145 80% 34%` do PR #160. O botão e o anel verdes do claro ficam em
+ * 2,59:1 no fundo e 2,91:1 no cartão (mínimo 3:1). Só estes pares, e nunca abaixo do piso.
+ * O texto em cima do botão NÃO é exceção: passa 4,5:1 (6,73:1).
+ */
+export const EXCECOES_DO_DONO: ReadonlySet<string> = new Set([
+  "claro|primary / background",
+  "claro|primary / card",
+  "claro|ring / background",
+  "claro|ring / card",
+  "claro|verde: botão / background",
+  "claro|verde: botão / card",
+]);
+export const PISO_DA_EXCECAO = 2.5;
 
 /** Pares de texto do painel (frente, fundo): 4,5:1. */
 export const PARES_DE_TEXTO: Array<[string, string]> = [
@@ -60,6 +78,9 @@ export const PARES_GRAFICOS: Array<[string, string]> = [
 ];
 
 function linha(grupo: Verificacao["grupo"], tema: Tema, par: string, razao: number, minimo: number): Verificacao {
+  if (razao < minimo && razao >= PISO_DA_EXCECAO && EXCECOES_DO_DONO.has(`${tema}|${par}`)) {
+    return { grupo, tema, par, razao, minimo, passa: true, excecao: true };
+  }
   return { grupo, tema, par, razao, minimo, passa: razao >= minimo };
 }
 

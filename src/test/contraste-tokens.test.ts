@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hexParaRgb, hslParaRgb, lerTokensDoCss, nota, razaoDeContraste, rgbParaHex } from "@/lib/design/contraste";
-import { verificarTokens } from "@/lib/design/verificacoes";
+import { EXCECOES_DO_DONO, PISO_DA_EXCECAO, verificarTokens } from "@/lib/design/verificacoes";
 import { CORES_DA_EMPRESA, SUPERFICIES_DA_TINTA, SUPERFICIES_DO_TEMA, variaveisDaCor } from "@/lib/produto/aparencia";
 
 const css = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
@@ -40,6 +40,22 @@ describe("contraste dos tokens (60-30-10, WCAG 2.2 AA)", () => {
     const graficos = linhas.filter((l) => l.grupo === "grafico");
     expect(graficos.length).toBe(8);
     expect(graficos.filter((l) => !l.passa).map(fmt)).toEqual([]);
+  });
+
+  it("o verde do claro fica em 145 80% 38% (decisão do Almir, 19/11 15h14): só os 6 pares de botão e anel são exceção, com piso", () => {
+    const { claro } = lerTokensDoCss(css);
+    expect(claro["--primary"]).toBe("145 80% 38%");
+    const excecoes = linhas.filter((l) => l.excecao);
+    expect(excecoes.map((l) => `${l.tema}|${l.par}`).sort()).toEqual([...EXCECOES_DO_DONO].sort());
+    for (const l of excecoes) {
+      expect(l.grupo === "grafico" || l.par.startsWith("verde: botão")).toBe(true);
+      expect(l.razao).toBeGreaterThanOrEqual(PISO_DA_EXCECAO);
+      expect(l.razao).toBeLessThan(l.minimo);
+    }
+    // O texto sobre o botão NÃO é exceção: passa 4,5:1.
+    const textoNoBotao = linhas.filter((l) => l.par === "primary-foreground / primary" || l.par === "verde: texto no botão");
+    expect(textoNoBotao.length).toBeGreaterThan(0);
+    for (const l of textoNoBotao) expect(l.razao).toBeGreaterThanOrEqual(4.5);
   });
 
   it("as seis cores da empresa passam em tudo nos dois temas", () => {
