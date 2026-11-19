@@ -274,7 +274,19 @@ export function harmonia(hex: string, tipo: Harmonia): string[] {
   if (tipo === "monocromatica") {
     return [0.3, base.l, 0.9].map((l, i) => (i === 1 ? hexValido(hex)! : oklchParaHex({ l, c: base.c * (i === 0 ? 0.8 : 0.35), h: base.h })));
   }
-  return def.graus.map((g) => (g === 0 ? hexValido(hex)! : oklchParaHex({ ...base, h: base.h + g })));
+  // As outras cores vão para o claro em que o matiz delas fica mais vivo (o amarelo só é vivo no claro; o
+  // azul, no meio), com o croma da base ou um pouco mais. Assim o complementar do azul profundo vira
+  // laranja ou âmbar, não um marrom do mesmo escuro.
+  const viva = (h: number) => {
+    let melhorL = base.l;
+    let melhorC = cromaMaximo(base.l, h);
+    for (let l = 0.45; l <= 0.86; l += 0.01) {
+      const c = cromaMaximo(l, h);
+      if (c > melhorC + 0.005) { melhorC = c; melhorL = l; }
+    }
+    return oklchParaHex({ l: melhorL, c: Math.min(melhorC * 0.95, Math.max(base.c * 1.2, 0.12)), h });
+  };
+  return def.graus.map((g) => (g === 0 ? hexValido(hex)! : viva((base.h + g + 360) % 360)));
 }
 
 // ------------------------------------------------------------------ daltonismo

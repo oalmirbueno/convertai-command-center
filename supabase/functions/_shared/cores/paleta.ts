@@ -339,7 +339,8 @@ function estruturaProfunda(ctx: Contexto): Proposta {
   const fundoGerado = fixaO && fixaO.l < 0.5
     ? oklchParaHex({ l: Math.max(0.12, fixaO.l - 0.14), c: 0.02, h: ctx.h0 })
     : oklchParaHex({ l: 0.235, c: Math.min(0.06, 0.05 * ctx.k + 0.01), h: ctx.h0 });
-  const dominante = fixaO && fixaO.l <= 0.25 ? ctx.fixa! : fundoGerado;
+  // Cor fixa escura (azul-marinho, verde-floresta, vinho): ela mesma vira o fundo profundo, com apoio claro por cima.
+  const dominante = fixaO && fixaO.l <= 0.42 ? ctx.fixa! : fundoGerado;
   let apoio = ctx.fixa && dominante !== ctx.fixa ? ctx.fixa : oklchParaHex({ l: 0.92, c: 0.025 * ctx.k, h: ctx.aquecer ? 70 : (ctx.h0 + 30) % 360 });
   if (contraste(apoio, dominante) < 3 && !(ctx.fixa && apoio === ctx.fixa)) apoio = ajustarAteContraste(apoio, dominante, 4.5) ?? apoio;
   const destaque = destaqueVivo(matizesDoDestaque(ctx.h0, ctx.b, [150, 210, 180, 120, 240, 90]), dominante, [apoio, neutros.papel], 0.84, ctx.b.evitar ?? [], 0.13, preferidosDoDestaque(ctx.h0, ctx.b).length);
@@ -356,18 +357,25 @@ function estruturaDeCor(ctx: Contexto): Proposta {
   const fixaO = ctx.fixa ? hexParaOklch(ctx.fixa) : null;
   // Cor fixa quase preta ou quase branca não é "cor": a base de cor usa o matiz da marca e a fixa vai para o apoio.
   const fixaNeutra = !!fixaO && (fixaO.l <= 0.25 || fixaO.l >= 0.9 || fixaO.c < 0.03);
-  const dominante = ctx.fixa && !fixaNeutra ? ctx.fixa : corDaMarca(ctx, 0.42, 1.25);
+  // Cor fixa escura e com cor: a base profunda já a usa de fundo; aqui o fundo é um tom claro e com cor
+  // do mesmo matiz e a cor fixa vai para o apoio (títulos, cartões e faixas escuras), com contraste alto.
+  const fixaEscura = !!fixaO && !fixaNeutra && fixaO.l <= 0.42;
+  const tomClaroDaMarca = oklchParaHex({ l: 0.85, c: Math.min(cromaMaximo(0.85, ctx.h0) * 0.6, 0.085), h: ctx.h0 });
+  const dominante = ctx.fixa && !fixaNeutra && !fixaEscura ? ctx.fixa : fixaEscura ? tomClaroDaMarca : corDaMarca(ctx, 0.42, 1.25);
   const od = hexParaOklch(dominante);
-  const apoio = ctx.fixa && fixaNeutra ? ctx.fixa : neutros.papel;
+  const apoio = ctx.fixa && (fixaNeutra || fixaEscura) ? ctx.fixa : neutros.papel;
   // Com a dominante no meio, o destaque precisa ir para longe no L para ter 3:1.
-  const lAlvo = od.l < 0.55 ? 0.82 : 0.3;
-  const destaque = destaqueVivo(matizesDoDestaque(ctx.h0, ctx.b, [180, 210, 150, 240, 120]), dominante, [apoio, neutros.tinta], lAlvo, ctx.b.evitar ?? [], 0.1, preferidosDoDestaque(ctx.h0, ctx.b).length);
+  // Fundo claro (tom claro da marca): destaque vivo no meio do claro e escuro, como na base clara.
+  const lAlvo = od.l >= 0.75 ? 0.52 : od.l < 0.55 ? 0.82 : 0.3;
+  // Com a cor fixa escura no apoio, a base clara já usa o complementar; aqui o destaque vem da triádica, para a proposta ser outra de verdade.
+  const ordem = fixaEscura ? [120, 240, 90, 270, 180] : [180, 210, 150, 240, 120];
+  const destaque = destaqueVivo(matizesDoDestaque(ctx.h0, ctx.b, ordem), dominante, [apoio, neutros.tinta], lAlvo, ctx.b.evitar ?? [], 0.1, preferidosDoDestaque(ctx.h0, ctx.b).length);
   const cores = [
     cor("dominante", dominante, neutros, dominante === ctx.fixa ? "É a cor que a marca já tem: ocupando as áreas grandes, ela vira a marca inteira." : "A cor da marca em área grande: presença forte e reconhecimento rápido no feed.", dominante === ctx.fixa),
-    cor("apoio", apoio, neutros, apoio === ctx.fixa ? "É a cor que a marca já tem: neutra, ela segura o texto e os cartões ao lado da cor forte." : "Quase branco para o texto e os cartões: equilibra a cor forte e dá leitura.", apoio === ctx.fixa),
+    cor("apoio", apoio, neutros, apoio === ctx.fixa ? (fixaEscura ? "É a cor que a marca já tem: profunda, ela fica nos títulos, cartões e faixas sobre o tom mais vivo." : "É a cor que a marca já tem: neutra, ela segura o texto e os cartões ao lado da cor forte.") : "Quase branco para o texto e os cartões: equilibra a cor forte e dá leitura.", apoio === ctx.fixa),
     cor("destaque", destaque, neutros, "O oposto do círculo, longe no claro e escuro: o botão fica impossível de ignorar.", false),
   ];
-  return montar("cor", "complementar", cores, ctx, "A cor da marca em primeiro plano");
+  return montar("cor", fixaEscura ? "triadica" : "complementar", cores, ctx, fixaEscura ? "A marca em tom claro, com a cor oficial por cima" : "A cor da marca em primeiro plano");
 }
 
 function montar(estrutura: Estrutura, harmonia: Harmonia, coresBase: CorDaProposta[], ctx: Contexto, frase: string): Proposta {

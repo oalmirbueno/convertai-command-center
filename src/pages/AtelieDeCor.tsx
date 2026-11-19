@@ -91,7 +91,7 @@ export default function AtelieDeCor() {
 
   const escrever = async () => {
     if (!briefing || !propostas.length) return;
-    if (!clienteId) { toast.error("Escolha o cliente no topo: os textos com IA saem da carteira dele."); return; }
+    if (!clienteId) { toast.error("Escolha o cliente acima: os textos com IA saem da carteira dele."); return; }
     setOcupado("ia");
     try {
       const r = await escreverComIa(clienteId, briefing, propostas, escolhida);
@@ -124,7 +124,7 @@ export default function AtelieDeCor() {
 
   const aplicar = async () => {
     if (!escolhidaP) return;
-    if (!clienteId) { toast.error("Escolha o cliente no topo para gravar a paleta no kit da marca."); return; }
+    if (!clienteId) { toast.error("Escolha o cliente acima para gravar a paleta no kit da marca."); return; }
     setOcupado("aplicar");
     try {
       await aplicarNoKit(clienteId, escolhidaP, user?.id);
@@ -158,19 +158,19 @@ export default function AtelieDeCor() {
         eyebrow="Criação"
         title="Ateliê de Cor"
         help="Paletas com motivo: dominante (60%), apoio (30%) e um destaque forte só no botão (10%), com contraste conferido pela WCAG 2.2 e pelo APCA e tons em OKLCH. O motor decide as cores sem IA e sem limite; a IA escreve os porquês e o Jev dá a nota contra o briefing. Aplicar no cliente grava a paleta no kit da marca, que o Estúdio usa nas artes."
-        actions={
-          <select aria-label="Cliente" className="h-9 max-w-[220px] rounded-full border border-border bg-card px-3 text-[13px]" value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
-            <option value="">Sem cliente</option>
-            {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </select>
-        }
         toolbar={
-          <PillTabs label="Área" value={aba} onChange={(v) => setAba(v as Aba)} tabs={[
+          <div className="flex min-w-0 flex-wrap items-center justify-between">
+            <div className="mb-2 mr-3 min-w-0 max-w-full"><PillTabs label="Área" value={aba} onChange={(v) => setAba(v as Aba)} tabs={[
             { value: "criar", label: "Criar", icon: <Palette className="h-4 w-4" /> },
             { value: "laboratorio", label: "Laboratório", icon: <FlaskConical className="h-4 w-4" />, disabled: !propostas.length },
             { value: "ferramentas", label: "Ferramentas", icon: <Wrench className="h-4 w-4" /> },
             { value: "projetos", label: "Projetos", icon: <FolderOpen className="h-4 w-4" />, count: projetos.data?.length },
-          ]} />
+          ]} /></div>
+            <div className="mb-2"><select aria-label="Cliente" className="h-9 w-[200px] min-w-0 rounded-full border border-border bg-card px-3 text-[13px] sm:w-[220px]" value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
+            <option value="">Sem cliente</option>
+            {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select></div>
+          </div>
         }
       />
 
@@ -181,7 +181,7 @@ export default function AtelieDeCor() {
             clienteId ? (
               kit.isLoading ? <Card><Loader2 className="h-5 w-5 animate-spin" /></Card> : <Questionario key={`cli-${clienteId}`} inicial={briefingDoCliente()} onPronto={(b) => gerar(b)} />
             ) : (
-              <EmptyState title="Escolha o cliente no topo" description="O nome e a cor da marca vêm do kit do cliente; o resto você completa nas perguntas." />
+              <EmptyState title="Escolha o cliente acima" description="O nome e a cor da marca vêm do kit do cliente; o resto você completa nas perguntas." />
             )
           )}
           {modo === "briefing" && (
@@ -219,7 +219,7 @@ export default function AtelieDeCor() {
                 <button type="button" className={botao.secundario} disabled={ocupado !== null} onClick={() => void escrever()}>
                   {ocupado === "ia" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}{textos.escrito_em ? "Reescrever com IA" : "Escrever com IA"}
                 </button>
-                <button type="button" className={botao.secundario} disabled={ocupado !== null || !clienteId} title={clienteId ? undefined : "Escolha o cliente no topo"} onClick={() => void aplicar()}>
+                <button type="button" className={botao.secundario} disabled={ocupado !== null || !clienteId} title={clienteId ? undefined : "Escolha o cliente acima"} onClick={() => void aplicar()}>
                   {ocupado === "aplicar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <BookmarkCheck className="mr-1.5 h-4 w-4" />}Aplicar no cliente
                 </button>
                 <button type="button" className={botao.discreto} disabled={ocupado !== null} onClick={() => void salvar()}>

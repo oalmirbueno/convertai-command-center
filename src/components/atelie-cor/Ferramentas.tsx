@@ -241,6 +241,7 @@ export function CoresVivas({ onUsar }: { onUsar?: (hex: string) => void }) {
     const lista: string[] = [];
     for (let h = 0; h < 360; h += 24) {
       for (const l of [0.62, 0.84]) {
+        if (h >= 70 && h < 120 && l < 0.78) continue; // amarelo no meio do claro vira mostarda
         const hex = oklchParaHex({ l, c: cromaMaximo(l, h) * 0.98, h });
         if (hexParaOklch(hex).c > 0.13) lista.push(hex);
       }
