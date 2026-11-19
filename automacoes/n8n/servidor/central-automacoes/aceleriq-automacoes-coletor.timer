@@ -1,0 +1,10 @@
+[Unit]
+Description=Aceleriq: coletor da Central de Automacoes a cada minuto
+
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

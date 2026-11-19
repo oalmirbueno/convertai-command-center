@@ -78,3 +78,16 @@ Testes: `node --test servidor/grupo-cliente/enviar.test.mjs` e `node --test test
 3. As rotinas do Hermes "Abertura da semana" e "Atualização de meio e fechamento" precisam parar de preparar texto,
    senão o cliente recebe duas mensagens no mesmo dia.
 4. Publicar o ACQ-11 no n8n.
+
+## Avisos ao dono (desde 18/11/2026)
+
+O próprio `enviar.mjs` avisa o Almir no WhatsApp, sem depender de app aberto:
+
+- em dia de mensagem da semana, 25 minutos depois da hora (segunda 08h25, quarta e sexta 18h25) e de novo às 19h30,
+  se algum grupo ainda não recebeu, com o motivo de cada um;
+- na hora, quando a ponte recusa um grupo porque o nome mudou no WhatsApp (uma vez por dia por grupo).
+
+Grupo renomeado: `bash renomear-grupo.sh "<chat_id>" "<nome novo>" --reiniciar` no servidor, depois trocar o nome em
+`config/ambientes.json`, em `cliente_grupo_whatsapp` e `acq_n8n.grupos_cliente` no banco, e reimportar ACQ-03 e ACQ-11.
+Mensagem já escrita que ficou presa pelo nome antigo e precisa sair fora da janela, só por ordem do dono:
+`enviar-um-fora-da-janela.mjs <client_id> <report_id> "<mensagem do dono>"`.

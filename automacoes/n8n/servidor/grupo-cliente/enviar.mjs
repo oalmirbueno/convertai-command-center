@@ -139,6 +139,37 @@ export function ultimoEnvioPorGrupo(linhas) {
   return m;
 }
 
+// Vigia (18/11/2026): em dia de mensagem da semana, 25 minutos depois da hora combinada e de novo às 19h30, o dono é
+// avisado no WhatsApp se algum grupo ainda não recebeu. Um aviso por horário, nunca repetido.
+export function vigiaDaSemana(linhas, grupos, ms) {
+  const a = agoraSP(ms);
+  const ritual = Object.keys(RITUAIS).find((k) => RITUAIS[k].dia === a.dia_semana);
+  if (!ritual || a.hora >= 20) return null;
+  const min = a.hora * 60 + a.minuto;
+  const etapa = min >= 19 * 60 + 30 ? 'ultima' : min >= RITUAIS[ritual].hora * 60 + 25 ? 'primeira' : null;
+  if (!etapa) return null;
+  const chave = 'vigia-semana:' + a.data + ':' + etapa;
+  if (linhas.some((e) => e && e.fase === 'alerta' && e.id === chave)) return null;
+  const receberam = new Set(linhas.filter((e) => e && e.fase === 'envio' && String(e.id || '').startsWith('semana:') && agoraSP(Date.parse(e.enviado_em || e.em)).data === a.data).map((e) => e.grupo));
+  const todos = [...grupos.values()].map((g) => g.nome);
+  const faltam = todos.filter((n) => !receberam.has(n));
+  if (!faltam.length) return null;
+  return { chave, etapa, ritual, total: todos.length, enviados: todos.length - faltam.length, faltam, hora: String(a.hora).padStart(2, '0') + ':' + String(a.minuto).padStart(2, '0') };
+}
+const MOTIVOS_DO_VIGIA = { nome_do_grupo: 'a ponte recusou, o nome do grupo mudou no WhatsApp', ponte: 'a ponte do WhatsApp recusou o envio', destino_fora_da_lista: 'o pedido está com outro nome de grupo',
+  aguardando: 'está na fila, sai nas próximas rodadas', incerto: 'envio com resultado incerto, não repito sozinho' };
+export function textoDoVigia(v, motivos) {
+  const linhas = v.faltam.map((n) => '• ' + n + ': ' + (MOTIVOS_DO_VIGIA[motivos.get(n)] || 'sem texto pronto (o escritor ou a conferência seguraram)'));
+  const semNada = v.enviados === 0 && v.faltam.every((n) => !motivos.has(n));
+  return ['*Mensagem de hoje não saiu para todos*', '', 'Até ' + v.hora + ' saiu para ' + v.enviados + ' de ' + v.total + ' grupos.', '', '*Faltam*', linhas.join('\n'), '',
+    semNada ? '*O que olhar primeiro*\nNenhum texto ficou pronto. Costuma ser a IA do painel sem crédito ou fora do ar.' : '*O que fazer*\nOs avisos do painel dizem o motivo de cada texto segurado.',
+    '', v.etapa === 'ultima' ? 'A janela de envio fecha às 20h.' : 'Aviso de novo às 19h30 se ainda faltar.'].join('\n');
+}
+export function motivoDaFalha(erro) {
+  const s = String(erro || '');
+  return /group name mismatch/i.test(s) ? 'nome_do_grupo' : /^ponte /.test(s) ? 'ponte' : null;
+}
+
 // ---------------------------------------------------------------- entrada e saída
 function chaveDoPainel() {
   if (process.env.MCP_ACELERIQ_API_KEY) return process.env.MCP_ACELERIQ_API_KEY.trim();
@@ -182,8 +213,8 @@ async function enviar(ctx, id, g, texto, registrar, depois) {
   let novo = false;
   if (!ja) {
     const antes = diario.get('intencao:' + id);
-    if (antes && antes.desfeita !== true) { log({ evento: 'envio_incerto_nao_repetido', id, grupo: g.nome }); return false; }
-    if (Date.now() - (ultimo.get(g.nome) || 0) < INTERVALO_NO_GRUPO_MS) { log({ evento: 'aguardando_intervalo_no_grupo', id, grupo: g.nome }); return false; }
+    if (antes && antes.desfeita !== true) { log({ evento: 'envio_incerto_nao_repetido', id, grupo: g.nome }); ctx.motivos.set(g.nome, 'incerto'); return false; }
+    if (Date.now() - (ultimo.get(g.nome) || 0) < INTERVALO_NO_GRUPO_MS) { log({ evento: 'aguardando_intervalo_no_grupo', id, grupo: g.nome }); ctx.motivos.set(g.nome, 'aguardando'); return false; }
     anotar({ fase: 'intencao', id, grupo: g.nome });
     let r;
     try { r = await ponte(token, '/send', { chatId: g.chat, message: texto }); }
@@ -201,6 +232,25 @@ async function enviar(ctx, id, g, texto, registrar, depois) {
   if (novo && depois) { try { await depois(ja); } catch (e) { log({ evento: 'memoria_nao_gravada', id, erro: String(e.message).slice(0, 160) }); } }
   await dormir(5000);
   return true;
+}
+// Aviso ao dono no WhatsApp, uma vez por chave. Falha no aviso nunca derruba a rodada.
+async function avisarDono(ctx, chave, texto) {
+  if (MODO !== 'grupos' || ctx.diario.has('alerta:' + chave)) return;
+  try {
+    const r = await ponte(ctx.token, '/send', { chatId: DONO, message: texto });
+    const e = { fase: 'alerta', id: chave, message_id: r.messageId || null };
+    anotar(e); ctx.diario.set('alerta:' + chave, e);
+    log({ evento: 'dono_avisado', chave });
+  } catch (e) { log({ evento: 'aviso_ao_dono_falhou', chave, erro: String(e.message).slice(0, 160) }); }
+}
+// Falha de envio: guarda o motivo para o vigia e, se o grupo foi renomeado, avisa o dono na hora (uma vez por dia).
+async function falhou(ctx, id, g, e) {
+  const erro = String(e.message).slice(0, 200);
+  log({ evento: 'falha_no_envio', id, grupo: g.nome, erro });
+  const motivo = motivoDaFalha(erro);
+  if (motivo) ctx.motivos.set(g.nome, motivo);
+  if (motivo === 'nome_do_grupo') await avisarDono(ctx, 'renomeado:' + g.nome + ':' + agoraSP(Date.now()).data,
+    ['*Grupo renomeado no WhatsApp*', '', 'A ponte recusou o envio para "' + g.nome + '" porque o nome do grupo mudou.', '', '*O que fazer*', 'Me diga o nome novo, exatamente como aparece no topo do grupo, para eu atualizar a lista.'].join('\n'));
 }
 async function previa(ctx, id, g, rotulo, texto) {
   if (ctx.diario.has('previa:' + id) || ctx.enviados >= MAX_POR_RODADA) return;
@@ -222,7 +272,7 @@ async function lembretes(ctx) {
       await enviar(ctx, id, g, m.mensagem, (ev) => mcp(ctx.chave, 'aceleriq_mensagens_automaticas_marcar_enviado', { operator: OPERADOR, mensagem_id: m.mensagem_id, evidence: ev, idempotency_key: 'gc-env-' + m.mensagem_id }),
         (ja) => mcp(ctx.chave, 'aceleriq_upsert_project_memory', { client_id: m.client_id, kind: 'aprovacao', source: 'grupo-cliente', title: 'Lembrete de aprovação enviado no grupo',
           content: 'Em ' + ja.enviado_em.slice(0, 10) + ' o lembrete de aprovação saiu sozinho no grupo "' + g.nome + '". Texto enviado:\n' + m.mensagem, tags: ['lembrete', 'whatsapp'], metadata: { client_visible: false, message_id: ja.message_id, mensagem_id: m.mensagem_id } }));
-    } catch (e) { log({ evento: 'falha_no_envio', id, grupo: g.nome, erro: String(e.message).slice(0, 200) }); }
+    } catch (e) { await falhou(ctx, id, g, e); }
   }
 }
 
@@ -251,15 +301,15 @@ async function semana(ctx) {
   if (meus.size) fila = await mcp(ctx.chave, 'aceleriq_central_review_fila', { operator: OPERADOR });
   // Só envia o que ESTE script aprovou (no diário): pedido aprovado por outro caminho, novo ou antigo, não é dele.
   for (const p of fila.aprovados_para_enviar || []) {
-    if (ctx.enviados >= MAX_POR_RODADA) break;
     const id = 'semana:' + p.approval_id;
     if (!ctx.diario.has('aprovado:' + id) && !meus.has(p.approval_id)) continue;
+    if (ctx.enviados >= MAX_POR_RODADA) { const gf = ctx.grupos.get(String(p.client_id)); if (gf && !ctx.diario.has('envio:' + id)) ctx.motivos.set(gf.nome, 'aguardando'); continue; }
     const motivo = !destinoConfere(p, ctx.grupos) ? 'destino_fora_da_lista' : (p.valid_until && Date.parse(p.valid_until) <= Date.now()) ? 'vencido' : textoProibido(p.mensagem) || janelaDaSemana(p.ritual, Date.now());
     if (motivo) { log({ evento: 'semana_segurada', id, motivo }); continue; }
     const g = ctx.grupos.get(String(p.client_id));
     try {
       await enviar(ctx, id, g, p.mensagem, (ev) => mcp(ctx.chave, 'aceleriq_central_review_marcar_enviado', { operator: OPERADOR, approval_id: p.approval_id, evidence: ev, idempotency_key: 'gc-env-' + p.approval_id }));
-    } catch (e) { log({ evento: 'falha_no_envio', id, grupo: g.nome, erro: String(e.message).slice(0, 200) }); }
+    } catch (e) { await falhou(ctx, id, g, e); }
   }
 }
 
@@ -295,19 +345,23 @@ async function anuncios(ctx) {
     const g = ctx.grupos.get(String(p.client_id));
     try {
       await enviar(ctx, id, g, p.mensagem, (ev) => mcp(ctx.chave, 'aceleriq_central_review_marcar_enviado', { operator: OPERADOR, approval_id: p.approval_id, evidence: ev, idempotency_key: 'gc-env-' + p.approval_id }));
-    } catch (e) { log({ evento: 'falha_no_envio', id, grupo: g.nome, erro: String(e.message).slice(0, 200) }); }
+    } catch (e) { await falhou(ctx, id, g, e); }
   }
 }
 
 async function main() {
   const grupos = new Map(JSON.parse(fs.readFileSync(GRUPOS_ARQ, 'utf8')).groups.map((g) => [String(g.client_id), { chat: String(g.chat_id), nome: String(g.group_name) }]));
   const linhas = lerLinhas(ESTADO_DIR + '/diario.jsonl');
-  const ctx = { chave: chaveDoPainel(), token: fs.readFileSync(TOKEN_ARQ, 'utf8').trim(), grupos, enviados: 0,
+  const ctx = { chave: chaveDoPainel(), token: fs.readFileSync(TOKEN_ARQ, 'utf8').trim(), grupos, enviados: 0, motivos: new Map(),
     diario: new Map(linhas.map((e) => [e.fase + ':' + e.id, e])),
     ultimo: ultimoEnvioPorGrupo(linhas.concat(lerLinhas(DIARIO_POST_NO_AR))) };
   for (const [nome, fn] of [['semana', semana], ['anuncios', anuncios], ['lembrete', lembretes]]) {
     if (!LIGADOS.includes(nome)) continue;
     try { await fn(ctx); } catch (e) { log({ evento: 'erro_na_frente', frente: nome, erro: String(e && e.message).slice(0, 300) }); }
+  }
+  if (MODO === 'grupos' && LIGADOS.includes('semana')) {
+    const v = vigiaDaSemana(lerLinhas(ESTADO_DIR + '/diario.jsonl'), grupos, Date.now());
+    if (v) await avisarDono(ctx, v.chave, textoDoVigia(v, ctx.motivos));
   }
   log({ evento: 'fim', ligados: LIGADOS.join(','), enviados: ctx.enviados });
 }

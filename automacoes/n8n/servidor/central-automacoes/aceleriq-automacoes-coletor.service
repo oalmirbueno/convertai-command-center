@@ -1,0 +1,12 @@
+[Unit]
+Description=Aceleriq: coletor da Central de Automacoes do painel (so leitura do n8n e do systemd)
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/aceleriq-automacoes/coletor.py
+TimeoutStartSec=55
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=500M
+CPUQuota=50%
