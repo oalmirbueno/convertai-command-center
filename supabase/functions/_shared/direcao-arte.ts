@@ -32,6 +32,7 @@ import { regrasDoCriativo, TAMANHO_DO_FORMATO, ZONA_SEGURA, type FormatoAds } fr
 import { direcaoCriativaParaImagem } from "./motor-criativo-campanha.ts";
 import { type FidelidadeDaReferencia, FIDELIDADES } from "./fidelidade-da-referencia.ts";
 import { BLOCO_DE_COR_E_REALISMO_NA_IMAGEM } from "./diversidade-visual.ts";
+import { linhaDosPapeis, papeisDaPeca, type PapeisDaPeca } from "./cores/papeis-da-peca.ts";
 import {
   blocosDecorativos,
   blocosDeLeitura,
@@ -417,6 +418,21 @@ function papelDaCor(paleta: MarcaParaDirecao["paleta"], ...nomes: string[]): str
     if (achada) return hexOk(achada.hex);
   }
   return null;
+}
+
+/**
+ * A paleta para a hierarquia do texto com o destaque decidido na frente: o
+ * destaque da marca que não passou (apagado ou sem contraste) deixa de ser
+ * "destaque" e o calculado entra no lugar, para palavra-chave e CTA usarem a
+ * mesma cor.
+ */
+function paletaComDestaque(paleta: MarcaParaDirecao["paleta"], papeis: PapeisDaPeca | null): MarcaParaDirecao["paleta"] {
+  if (!papeis) return paleta;
+  const d = papeis.destaque.hex;
+  const resto = paleta
+    .filter((p) => hexOk(p.hex) !== d)
+    .map((p) => (/destaque|acento/.test(String(p.papel || "").toLowerCase()) ? { ...p, papel: "extra" } : p));
+  return [{ nome: papeis.destaque.nome, hex: d, papel: "destaque" }, ...resto];
 }
 
 /** Quebra o texto exato em blocos por papel quando o diretor não mandou os blocos. */
@@ -858,11 +874,14 @@ export function promptDaLamina(
   const linhaHeadline = Math.round((121.5 / quadro.altura) * 100);
 
   const paleta = marca.paleta.filter((p) => hexOk(p.hex));
-  const corFundo = layout.cor_fundo || papelDaCor(paleta, "fundo", "primaria", "primária", "principal");
+  // Regra de paleta (19/11, cores/papeis-da-peca.ts): dominante ~60%, apoio ~30% e destaque ~10% vivo
+  // (croma >= 0,08 e 3:1 sobre o fundo), texto com 4,5:1. A direção da lâmina (layout) manda quando passa.
+  // A secundária é a cor dos 30%: não vira acento; sem destaque bom na marca, entra um destaque calculado.
+  const papeis = paleta.length ? papeisDaPeca(paleta, { fundo: layout.cor_fundo, texto: layout.cor_texto, destaque: layout.cor_destaque }) : null;
+  const corFundo = papeis ? papeis.fundo.hex : layout.cor_fundo ?? null;
   // Contraste conferido em código quando as duas cores são hex.
-  const corTexto = textoLegivel(layout.cor_texto || papelDaCor(paleta, "texto"), corFundo);
-  // A secundária é a cor dos 30%: não serve de acento. Sem destaque no kit, sem acento.
-  const corDestaque = layout.cor_destaque || papelDaCor(paleta, "destaque", "acento");
+  const corTexto = papeis ? papeis.texto.hex : textoLegivel(layout.cor_texto ?? null, corFundo);
+  const corDestaque = papeis ? papeis.destaque.hex : layout.cor_destaque ?? null;
   const fonteTitulo = marca.fontes.find((f) => f.papel === "titulo")?.nome || marca.tipografiaCitada?.titulo || null;
   const fonteTexto = marca.fontes.find((f) => f.papel === "texto")?.nome || marca.tipografiaCitada?.texto || fonteTitulo;
 
@@ -870,7 +889,7 @@ export function promptDaLamina(
   // Frente R3 (dono, 26/09: "texto numa cor só da marca"): cor por papel dentro da paleta. A headline fica
   // na cor de hoje; o apoio vai a um neutro legível diferente dela (sem foto de fundo); a palavra-chave
   // ganha o destaque. Criativo de anúncio (Mesa Ads) fica como está.
-  const hierarquia = anuncio ? null : hierarquiaDeCor({ paleta, fundo: opcoes.fotoReal ? null : corFundo, titulo: corTexto });
+  const hierarquia = anuncio ? null : hierarquiaDeCor({ paleta: paletaComDestaque(paleta, papeis), fundo: opcoes.fotoReal ? null : corFundo, titulo: corTexto });
   const corDoApoio = hierarquia && !opcoes.fotoReal ? hierarquia.apoio || corTexto : corTexto;
   const linhasBlocos = blocos.map((b, i) => {
     const t = tamanhos[i];
@@ -885,8 +904,8 @@ export function promptDaLamina(
   // atrás do texto, nada de mudar pose ou enquadramento.
   const foto = !!opcoes.fotoReal;
 
-  const paletaTxt = paleta.length
-    ? paleta.map((p) => `${p.nome || p.papel || "cor"} ${hexOk(p.hex)}${p.papel ? ` (${p.papel})` : ""}`).join(", ")
+  const paletaTxt = papeis
+    ? linhaDosPapeis(papeis, { foto })
     : "paleta coerente com as artes da marca anexadas";
 
   return [

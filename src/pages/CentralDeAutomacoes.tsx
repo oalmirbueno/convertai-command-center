@@ -96,7 +96,8 @@ function LinhaDoFluxo({ f, agora, podeLigar, aoAbrir, aoAlternar }: { f: Fluxo; 
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
             <span className={juntar(texto.corpo, "truncate font-medium", !f.ativo && "text-muted-foreground")}>{nomeCurto(f)}</span>
-            {f.efeitoNoCliente && f.ativo && <Chip size="sm" tone="info">fala com cliente</Chip>}
+            {f.efeitoNoCliente && f.ativo && <span className="hidden shrink-0 sm:inline-flex"><Chip size="sm" tone="info">fala com cliente</Chip></span>}
+            {f.efeitoNoCliente && f.ativo && <StatusDot tone="info" className="shrink-0 sm:hidden" />}
             {f.erros24h > 0 && <Chip size="sm" tone="danger">{f.erros24h} {f.erros24h === 1 ? "erro" : "erros"}</Chip>}
           </span>
           <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>{gatilho}</span>
@@ -110,7 +111,7 @@ function LinhaDoFluxo({ f, agora, podeLigar, aoAbrir, aoAlternar }: { f: Fluxo; 
       </button>
       <span className="ml-2 flex w-11 shrink-0 justify-end">
         {podeLigar ? (
-          <Switch checked={f.ativo} onCheckedChange={aoAlternar} aria-label={f.ativo ? `Desligar ${f.nome}` : `Ligar ${f.nome}`} title={f.ativo ? "Desligar" : "Ligar"} />
+          <Switch className="shrink-0" checked={f.ativo} onCheckedChange={aoAlternar} aria-label={f.ativo ? `Desligar ${f.nome}` : `Ligar ${f.nome}`} title={f.ativo ? "Desligar" : "Ligar"} />
         ) : (
           <StatusPill plain tone={f.ativo ? "success" : "neutral"}>{f.ativo ? "ligado" : "desligado"}</StatusPill>
         )}
@@ -128,7 +129,8 @@ const COR_DO_NO: Record<string, string> = {
 function Desenho({ detalhe, execucao }: { detalhe: DetalheDoFluxo; execucao: Execucao | null }) {
   const d = useMemo(() => desenharFluxo(detalhe.desenho), [detalhe.desenho]);
   const passos = useMemo(() => caminhoPorNo(execucao?.caminho ?? []), [execucao]);
-  const [real, setReal] = useState(false);
+  // Fluxo largo (mais de ~6 nós em fila) fica ilegível encolhido: abre em tamanho real, com rolagem para o lado.
+  const [real, setReal] = useState(() => d.largura > 1400);
   if (!d.nos.length) return <EmptyState title="O desenho chega na próxima coleta." />;
   const largura = real ? d.largura : undefined;
   return (

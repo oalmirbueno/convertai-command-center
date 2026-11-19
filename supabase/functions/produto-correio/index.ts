@@ -5,7 +5,12 @@
  *   pastas   { caixa_id }                        -> { pastas }
  *   listar   { caixa_id, pasta?, pagina?, busca? } -> { mensagens }
  *   ler      { caixa_id, pasta?, id }            -> { mensagem }
- *   enviar   { caixa_id, para, assunto, texto }  -> { id }
+ *   enviar   { caixa_id, para, assunto, texto, so_texto? }  -> { id }
+ *   previa_html { caixa_id, texto?, assunto? }   -> { html, marca, origem }  (como a mensagem chega)
+ *
+ * Cores (19/11/2026): enviar e campanha mandam multipart/alternative, o texto puro e a mesma mensagem
+ * em HTML com as cores da marca (kit do cliente do painel; senão a cor da Aparência da empresa; senão
+ * um tema neutro), segura no modo escuro. `so_texto: true` manda só o texto.
  *   guardar_segredo { caixa_id, segredo }        -> { guardado }   (quem administra a empresa, ou a casa)
  *   entrar_pela_casa { caixa_id, senha_da_casa } -> { ok, endereco }  (só a casa: confere a senha no provedor)
  *
@@ -22,6 +27,9 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { ADAPTADORES, adaptadorPara, CorreioDesligado, envioValido, provedorPelaCasa, SENHA_DA_CASA_RECUSADA, senhaDaCasa, type CaixaAberta, type ProvedorDeCorreio } from "./modulos/adaptador.ts";
 import { adaptadorImap, ErroDoCorreio } from "./modulos/imap.ts";
+// Ateliê de Cor (19/11/2026): a parte HTML da mensagem com as cores da marca (o texto puro vai sempre).
+import { htmlDaMensagem, temaDaMensagem, type TemaDaMensagem } from "../_shared/cores/email.ts";
+import { hslParaHex } from "../_shared/escala-da-cor.ts";
 
 // Migadu (19/11/2026): IMAP para ler e SMTP para enviar, com a senha de cada caixa guardada no Vault.
 ADAPTADORES.migadu = adaptadorImap({ imap: { host: "imap.migadu.com", porta: 993 }, smtp: { host: "smtp.migadu.com", porta: 465 } });
@@ -118,7 +126,48 @@ async function registrarPelaCasa(contaId: string, ator: string, acao: string, de
 }
 
 type Acao = (usuario: string, corpo: Record<string, unknown>) => Promise<Response>;
+/** A cor da Aparência da empresa (lib/produto/aparencia.ts, tom "claro"). */
+const COR_DA_APARENCIA: Record<string, { h: number; s: number; l: number }> = {
+  verde: { h: 145, s: 80, l: 38 }, azul: { h: 216, s: 88, l: 48 }, roxo: { h: 262, s: 70, l: 52 },
+  laranja: { h: 22, s: 92, l: 46 }, rosa: { h: 336, s: 78, l: 48 }, ciano: { h: 190, s: 90, l: 34 },
+};
+
+/**
+ * As cores das mensagens desta caixa: a paleta do kit do cliente ligado à empresa; sem ela, a cor da
+ * Aparência; sem nada, o tema neutro. Nunca derruba o envio: em erro, tema neutro.
+ */
+async function temaDaCaixa(caixaId: string): Promise<{ tema: TemaDaMensagem; origem: "kit" | "aparencia" | "neutro" }> {
+  try {
+    const { data: cx } = await servico().from("produto_email_caixas").select("conta_id").eq("id", caixaId).maybeSingle();
+    const contaId = cx ? String((cx as { conta_id: string }).conta_id) : "";
+    const { data: ct } = contaId ? await servico().from("produto_contas").select("nome, client_id, aparencia").eq("id", contaId).maybeSingle() : { data: null };
+    const conta = (ct || null) as { nome: string; client_id: string | null; aparencia: Record<string, unknown> | null } | null;
+    const ap = (conta && conta.aparencia) || {};
+    const marca = (typeof ap.nome_curto === "string" && ap.nome_curto.trim()) || (conta ? conta.nome : "");
+    if (conta && conta.client_id) {
+      const { data: kit } = await servico().from("cliente_kit_marca").select("paleta").eq("client_id", conta.client_id).maybeSingle();
+      const paleta = kit && Array.isArray((kit as { paleta: unknown }).paleta) ? (kit as { paleta: Array<{ nome?: string; hex?: string; papel?: string }> }).paleta : [];
+      if (paleta.length) return { tema: temaDaMensagem(paleta, marca), origem: "kit" };
+    }
+    const cor = typeof ap.cor === "string" ? COR_DA_APARENCIA[ap.cor] : undefined;
+    if (cor) return { tema: temaDaMensagem([{ hex: hslParaHex(cor), papel: "primaria" }], marca), origem: "aparencia" };
+    return { tema: temaDaMensagem(null, marca), origem: "neutro" };
+  } catch {
+    return { tema: temaDaMensagem(null, ""), origem: "neutro" };
+  }
+}
+
 const ACOES: Record<string, Acao> = {
+  // Como a mensagem chega na caixa de quem recebe, com as cores da marca (só lê o banco; não toca no provedor).
+  previa_html: async (u, c) => {
+    const caixaId = idDaCaixa(c.caixa_id);
+    const { data: pode } = await servico().rpc("produto_email_pode_abrir", { _caixa: caixaId, _usuario: u });
+    if (!pode && !(await ehDaCasa(u))) throw new ErroHttp(404, "caixa_inexistente", "Essa caixa não está disponível.");
+    const texto = typeof c.texto === "string" && c.texto.trim() ? c.texto.slice(0, 20_000) : "Olá!\n\nAssim chegam as suas mensagens: o mesmo texto, com as cores da sua marca e legível no modo escuro.\n\nAbraço";
+    const assunto = typeof c.assunto === "string" ? c.assunto.slice(0, 200) : "";
+    const { tema, origem } = await temaDaCaixa(caixaId);
+    return json({ html: htmlDaMensagem(texto, tema, assunto), marca: tema.marca, origem });
+  },
   pastas: async (u, c) => json({ pastas: await comAdaptador(u, c, (a, caixa) => a.pastas(caixa)) }),
   // Abrir a caixa: pastas e a primeira página numa conexão só.
   inicio: async (u, c) =>
@@ -154,12 +203,14 @@ const ACOES: Record<string, Acao> = {
     const cabe = Math.max(0, LIMITE_DO_DIA - jaForam);
     if (!cabe) throw new ErroHttp(429, "limite_do_dia", `Hoje já saíram ${jaForam} e-mails de campanha (o limite é ${LIMITE_DO_DIA} por dia, para não cair no spam). Continue amanhã.`);
     const rodape = "\n\n--\nVocê recebeu este e-mail porque tem contato com a nossa empresa. Para não receber mais, responda SAIR.";
+    // O rodapé de descadastro vai nas duas partes: o HTML é montado do mesmo texto, rodapé incluído.
+    const htmlDaCampanha = c.so_texto === true ? null : htmlDaMensagem(corpoTexto + rodape, (await temaDaCaixa(caixaId)).tema, assunto);
     const resultado = await comAdaptador(u, c, async (a, caixa) => {
       const ok: string[] = [];
       const falhas: string[] = [];
       for (const destinatario of para.slice(0, cabe)) {
         try {
-          await a.enviar(caixa, { para: [destinatario], assunto, texto: corpoTexto + rodape, em_resposta_a: null });
+          await a.enviar(caixa, { para: [destinatario], assunto, texto: corpoTexto + rodape, em_resposta_a: null, html: htmlDaCampanha });
           ok.push(destinatario);
         } catch {
           falhas.push(destinatario);
@@ -179,9 +230,10 @@ const ACOES: Record<string, Acao> = {
   enviar: async (u, c) => {
     const envio = envioValido(c);
     if ("erro" in envio) throw new ErroHttp(400, "envio_invalido", envio.erro);
+    const comHtml = c.so_texto === true ? envio : { ...envio, html: htmlDaMensagem(envio.texto, (await temaDaCaixa(idDaCaixa(c.caixa_id))).tema, envio.assunto) };
     return json(
       await comAdaptador(u, c, async (a, caixa, contaDaCasa) => {
-        const r = await a.enviar(caixa, envio);
+        const r = await a.enviar(caixa, comHtml);
         if (contaDaCasa) await registrarPelaCasa(contaDaCasa, u, "correio_enviado_pela_casa", { caixa: caixa.id, para: envio.para.length });
         return r;
       }),

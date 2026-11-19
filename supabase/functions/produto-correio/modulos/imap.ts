@@ -383,19 +383,7 @@ export function adaptadorImap(servidores: ServidoresDoCorreio, conectar: Conecta
     },
     async enviar(caixa, envio: Envio): Promise<{ id: string }> {
       const id = `<${crypto.randomUUID()}@${caixa.dominio || "aceleriq.com"}>`;
-      const mensagem = [
-        `From: ${caixa.endereco}`,
-        `To: ${envio.para.join(", ")}`,
-        `Subject: ${cabecalhoCodificado(envio.assunto)}`,
-        `Date: ${new Date().toUTCString().replace("GMT", "+0000")}`,
-        `Message-ID: ${id}`,
-        ...(envio.em_resposta_a ? [`In-Reply-To: ${envio.em_resposta_a}`, `References: ${envio.em_resposta_a}`] : []),
-        "MIME-Version: 1.0",
-        "Content-Type: text/plain; charset=utf-8",
-        "Content-Transfer-Encoding: base64",
-        "",
-        corpoBase64(envio.texto),
-      ].join("\r\n");
+      const mensagem = montarMensagem(caixa.endereco, envio, id, new Date());
       await enviarSmtp(conectar, servidores.smtp.host, servidores.smtp.porta, { usuario: caixa.endereco, senha: caixa.segredo, de: caixa.endereco, para: envio.para, mensagem });
       // Uma cópia em Enviados (o SMTP não guarda sozinho). Se falhar, o e-mail já foi.
       // Sem repetir: uma segunda tentativa poderia guardar a cópia duas vezes.
@@ -406,6 +394,45 @@ export function adaptadorImap(servidores: ServidoresDoCorreio, conectar: Conecta
       return { id };
     },
   };
+}
+
+/**
+ * A mensagem pronta para o SMTP. Com `envio.html`, sai multipart/alternative: o texto puro
+ * primeiro (obrigatório, e o que os leitores sem HTML mostram) e o HTML depois (o que o
+ * cliente de e-mail prefere). Sem HTML, a mensagem é a de antes, só texto.
+ */
+export function montarMensagem(de: string, envio: Envio, id: string, quando: Date): string {
+  const cabecalho = [
+    `From: ${de}`,
+    `To: ${envio.para.join(", ")}`,
+    `Subject: ${cabecalhoCodificado(envio.assunto)}`,
+    `Date: ${quando.toUTCString().replace("GMT", "+0000")}`,
+    `Message-ID: ${id}`,
+    ...(envio.em_resposta_a ? [`In-Reply-To: ${envio.em_resposta_a}`, `References: ${envio.em_resposta_a}`] : []),
+    "MIME-Version: 1.0",
+  ];
+  if (!envio.html) {
+    return [...cabecalho, "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "", corpoBase64(envio.texto)].join("\r\n");
+  }
+  const fronteira = `=_aceleriq_${crypto.randomUUID().replace(/-/g, "")}`;
+  return [
+    ...cabecalho,
+    `Content-Type: multipart/alternative; boundary="${fronteira}"`,
+    "",
+    "Esta mensagem tem uma versão em texto e outra em HTML.",
+    `--${fronteira}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    corpoBase64(envio.texto),
+    `--${fronteira}`,
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    corpoBase64(envio.html),
+    `--${fronteira}--`,
+    "",
+  ].join("\r\n");
 }
 
 /** "\0usuário\0senha" em base64, com a senha em UTF-8. */

@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bot, CalendarClock, Check, Clock, Minus, Plus, Sparkles, FileSignature, FolderClosed, Inbox, Link2, ListFilter, Megaphone, MessageSquareReply, Repeat2, Send, Share2, Undo2, Users, X, Zap, BellRing, BriefcaseBusiness } from "lucide-react";
+import { Bot, CalendarClock, Check, Clock, Minus, Plus, Sparkles, FileSignature, FolderClosed, Inbox, Link2, ListFilter, Megaphone, MessageSquareReply, Repeat2, Send, Share2, Undo2, Users, X, Zap, BellRing, BriefcaseBusiness, Palette } from "lucide-react";
 import { correio, correioDesligado, enderecosColados, type CaixaDoCorreio } from "@/lib/produto/email-central";
 import { COLUNAS, agruparCaixa, colunaDaMensagem, fraseDoDia, horaDaMensagem, hojeEmBrasilia, listarCompromissos, listarTarefas, type ColunaDoQuadro, type EuNoCorreio, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
 import { contratarEmailExtras, diaLegivel, fraseDoErro, lerOfertas, lerPrecos, type CaixaDeEmail } from "@/lib/produto/api";
@@ -9,6 +9,7 @@ import { Carregando, EstadoDeErro, EstadoVazio, botao, etiqueta, foco, juntar, t
 import { AgendaDeHoje, TarefasDoDia, chaveDaAgenda, chaveDasTarefas } from "./PainelDoDia";
 import { CaixaEmPreparo, LeituraDaMensagem, categoriaDa, enderecoDe, nomeDe, useMensagensDaPasta } from "./CaixaPorPrioridade";
 import LogoDoRemetente from "./LogoDoRemetente";
+import MensagensComAMarca from "./MensagensComAMarca";
 import TrazerEmailsAntigos from "@/components/produto/TrazerEmailsAntigos";
 
 const cartao = "min-w-0 rounded-3xl bg-card p-5";
@@ -311,6 +312,7 @@ export const FERRAMENTAS: Ferramenta[] = [
   { nome: "Agenda e reuniões", plano: "Essencial", texto: "Marque a reunião direto do e-mail e veja o dia num lugar só.", pronta: true, icone: CalendarClock, area: "dia" },
   { nome: "Tarefas do dia", plano: "Essencial", texto: "Um e-mail vira tarefa com um toque e aparece no seu dia.", pronta: true, icone: Check, area: "dia" },
   { nome: "Campanhas", plano: "Essencial", texto: "E-mail para uma lista, em lotes, com teste, limite do dia e descadastro.", pronta: true, icone: Megaphone, area: "campanhas" },
+  { nome: "Mensagens com a sua marca", plano: "Essencial", texto: "Cada e-mail sai também nas cores da empresa, legível no modo escuro. O texto puro vai junto.", pronta: true, icone: Palette },
   { nome: "Trazer e-mails antigos", plano: "Essencial", texto: "Copia Gmail, Outlook, UOL, Locaweb e outros para a caixa nova, sem apagar nada lá.", pronta: true, icone: Repeat2 },
   { nome: "Visão do gestor", plano: "Equipe", texto: "Quem administra vê e troca entre todas as caixas da empresa.", pronta: true, icone: Users },
   { nome: "Documentos", plano: "Essencial", texto: "Anexos guardados sozinhos na pasta da pessoa ou do assunto.", pronta: false, icone: FolderClosed },
@@ -367,12 +369,12 @@ export function FerramentasDoCorreio({ caixas, master, aoIr }: { caixas: CaixaDo
           <p className={juntar(texto.auxiliar, "mt-1.5 leading-5")}>Quem administra a empresa copia os e-mails do provedor antigo para a sua caixa, em três passos e sem apagar nada lá.</p>
         </section>
       ))}
-      {aba === "ferramentas" && <ListaDeFerramentas aoIr={aoIr} />}
+      {aba === "ferramentas" && <ListaDeFerramentas aoIr={aoIr} caixaId={(caixas.find((c) => c.ligado) || caixas[0] || null)?.id ?? null} />}
     </div>
   );
 }
 
-function ListaDeFerramentas({ aoIr }: { aoIr?: (area: string) => void }) {
+function ListaDeFerramentas({ aoIr, caixaId }: { aoIr?: (area: string) => void; caixaId?: string | null }) {
   const prontas = FERRAMENTAS.filter((f) => f.pronta);
   const breve = FERRAMENTAS.filter((f) => !f.pronta);
   const cartaoDe = (f: Ferramenta) => {
@@ -400,6 +402,7 @@ function ListaDeFerramentas({ aoIr }: { aoIr?: (area: string) => void }) {
   };
   return (
     <div className="min-w-0 space-y-6">
+      <MensagensComAMarca caixaId={caixaId ?? null} />
       <section className="min-w-0 space-y-3" aria-label="Já funciona">
         <h2 className={juntar(texto.tituloSecao, "px-1")}>Já funciona <span className="font-normal text-muted-foreground">{prontas.length}</span></h2>
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{prontas.map(cartaoDe)}</div>
