@@ -375,8 +375,10 @@ const clientMainNav: NavItem[] = semItensOcultos([
 ]);
 
 const clientMoreNav: NavItem[] = semItensOcultos([
-  // 13/11/2026: o produto CRM e E-mail é um lugar à parte; daqui o cliente entra nele.
-  { title: "CRM e E-mail", url: "/app", icon: Boxes },
+  // 19/11/2026: Correio e CRM são lugares à parte, um item para cada (antes era um "CRM e E-mail" misturado).
+  // O ?de=painel faz o botão de voltar do Correio trazer de volta para cá.
+  { title: "Correio", url: "/correio?de=painel", icon: Mail },
+  { title: "CRM", url: "/app", icon: Boxes },
   { title: "Área de membros", url: "/membros", icon: BookOpen },
   { title: "Novidades", url: "/novidades", icon: Sparkles },
   { title: "Cofre", url: "/cofre", icon: KeyRound },
