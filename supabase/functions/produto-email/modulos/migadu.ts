@@ -7,7 +7,8 @@
  * (MIGADU_USUARIO e MIGADU_API_KEY), nunca no banco, no front ou num arquivo.
  *
  * As caixas nascem por CONVITE: o Migadu manda para o e-mail de recuperação o link para a pessoa
- * criar a própria senha. Nenhuma senha passa pelo painel.
+ * criar a própria senha. Exceção (19/11/2026, central de acessos): a casa pode criar a caixa ou trocar a
+ * senha com uma senha escolhida por ela, que vai direto para o Migadu e para o Vault (nunca para log).
  *
  * Sem import: roda na função (Deno) e no vitest. A rede chega de fora (`buscar`).
  */
@@ -260,4 +261,43 @@ export async function montarNoMigadu(c: CredencialDoMigadu, buscar: Buscar, p: {
   }
   const registros = await registrosNoMigadu(c, buscar, p.dominio);
   return { dominio, dominio_criado, registros, criadas, ja_existiam, pendentes };
+}
+
+// ------------------------------------------------------------------ central de acessos (19/11/2026)
+
+/**
+ * Cria a caixa já com a senha que a casa escolheu (a central de acessos guarda a mesma senha no Vault).
+ * A senha vai só no corpo do pedido ao Migadu; nunca no erro, no log ou na resposta.
+ */
+export async function criarCaixaComSenhaNoMigadu(c: CredencialDoMigadu, buscar: Buscar, p: { dominio: string; endereco: string; nome: string; senha: string }): Promise<CaixaNoMigadu> {
+  const local = parteLocal(p.endereco, p.dominio);
+  if (!local) throw new ErroDoMigadu("caixa", 400, `Endereço fora do domínio: ${p.endereco}`);
+  return lerCaixa(await pedir<Record<string, unknown>>(c, buscar, "criar_caixa", "POST", `/domains/${encodeURIComponent(p.dominio)}/mailboxes`, {
+    local_part: local,
+    name: String(p.nome || local).slice(0, 80),
+    password: p.senha,
+  }));
+}
+
+/** Troca a senha da caixa no Migadu (PUT da caixa com `password`). */
+export async function mudarSenhaNoMigadu(c: CredencialDoMigadu, buscar: Buscar, p: { dominio: string; endereco: string; senha: string }): Promise<void> {
+  const local = parteLocal(p.endereco, p.dominio);
+  if (!local) throw new ErroDoMigadu("senha", 400, `Endereço fora do domínio: ${p.endereco}`);
+  await pedir<Record<string, unknown>>(c, buscar, "senha", "PUT", `/domains/${encodeURIComponent(p.dominio)}/mailboxes/${encodeURIComponent(local)}`, { password: p.senha });
+}
+
+/**
+ * Desativa a caixa sem apagar as mensagens: a API do Migadu não deixa mudar `is_active`, então a caixa
+ * deixa de enviar, receber e abrir por IMAP, POP3 e filtros. Reativar é ligar os mesmos campos de novo.
+ */
+export async function bloquearCaixaNoMigadu(c: CredencialDoMigadu, buscar: Buscar, p: { dominio: string; endereco: string }): Promise<void> {
+  const local = parteLocal(p.endereco, p.dominio);
+  if (!local) throw new ErroDoMigadu("desativar", 400, `Endereço fora do domínio: ${p.endereco}`);
+  await pedir<Record<string, unknown>>(c, buscar, "desativar", "PUT", `/domains/${encodeURIComponent(p.dominio)}/mailboxes/${encodeURIComponent(local)}`, {
+    may_send: false,
+    may_receive: false,
+    may_access_imap: false,
+    may_access_pop3: false,
+    may_access_managesieve: false,
+  });
 }
