@@ -12,6 +12,8 @@
  */
 
 import { db } from '../../_shared/aceleriq-read-services.ts';
+// robustez.ts não importa nada daqui: sem import circular.
+import { ErroDaFerramenta } from './robustez.ts';
 
 export interface VinculoDaChave {
   operator_slug: string;
@@ -76,7 +78,12 @@ export function esquecerVinculos(principal?: string) {
   else cache.clear();
 }
 
-/** Vínculos da credencial, com cache de 1 min. Tabela ausente (migration não aplicada) = null = livre. */
+/**
+ * Vínculos da credencial, com cache de 1 min. Tabela ausente (migration não aplicada) = null = livre.
+ *
+ * MCP 2.37.0: qualquer OUTRO erro de leitura não libera mais a assinatura (antes virava null = livre, a falha
+ * aberta). Lança vinculos_indisponiveis transitório e não guarda a falha no cache: a próxima chamada lê de novo.
+ */
 export async function vinculosDaChave(principal: string, banco = db()): Promise<VinculoDaChave[] | null> {
   const guardado = cache.get(principal);
   if (guardado && Date.now() - guardado.em < CACHE_MS) return guardado.vinculos;
@@ -84,8 +91,12 @@ export async function vinculosDaChave(principal: string, banco = db()): Promise<
     .select('operator_slug, padrao').eq('principal', principal).limit(200);
   let vinculos: VinculoDaChave[] | null;
   if (error) {
-    // Sem a tabela, o comportamento antigo segue; outro erro não pode derrubar a escrita do agente.
-    console.error('[mcp autoria] leitura dos vinculos falhou', { code: (error as { code?: string }).code });
+    const code = (error as { code?: string }).code;
+    console.error('[mcp autoria] leitura dos vinculos falhou', { code });
+    if (code !== '42P01' && code !== 'PGRST205') {
+      throw new ErroDaFerramenta('vinculos_indisponiveis', 'Não deu para conferir a quem esta credencial pertence agora.', 'Tente de novo em instantes.', true);
+    }
+    // Sem a tabela, o comportamento antigo segue (livre).
     vinculos = null;
   } else {
     vinculos = ((data ?? []) as Array<Record<string, unknown>>)
@@ -99,6 +110,10 @@ export interface Autoria {
   args: unknown;
   aviso?: string;
   erro?: string;
+  /** 2.37.0: o erro é passageiro (a leitura dos vínculos falhou); vale repetir. */
+  transitorio?: boolean;
+  /** 2.37.0: os vínculos que esta autoria leu (a auditoria usa a mesma leitura). Ausente = não leu. */
+  vinculos?: VinculoDaChave[] | null | 'indisponivel';
 }
 
 /** Antes da ferramenta: confere (e troca, se preciso) o operador que assina. */
@@ -110,11 +125,20 @@ export async function prepararAutoria(
 ): Promise<Autoria> {
   const entrada = args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : null;
   if (!entrada || !assinaComoOperador(tool.name, entrada, tool.annotations?.readOnlyHint === true)) return { args };
-  const decisao = decidirAutoria(await carregar(principalDaChamada(ctx)), String(entrada.operator));
-  if (decisao.tipo === 'recusado') return { args, erro: decisao.erro };
-  if (decisao.tipo === 'trocado') return { args: { ...entrada, operator: decisao.operador }, aviso: decisao.aviso };
-  if (decisao.tipo === 'ok') return { args: { ...entrada, operator: decisao.operador } };
-  return { args };
+  let vinculos: VinculoDaChave[] | null;
+  try {
+    vinculos = await carregar(principalDaChamada(ctx));
+  } catch (e) {
+    // 2.37.0: sem conferir os vínculos não assina nem libera o operador pedido; a chamada pode repetir.
+    // Qualquer falha na leitura (também uma exceção de rede) recusa com transitorio:true; nunca libera.
+    const mensagem = e instanceof ErroDaFerramenta ? e.message : 'Não deu para conferir a quem esta credencial pertence agora.';
+    return { args, erro: mensagem, transitorio: true, vinculos: 'indisponivel' };
+  }
+  const decisao = decidirAutoria(vinculos, String(entrada.operator));
+  if (decisao.tipo === 'recusado') return { args, erro: decisao.erro, vinculos };
+  if (decisao.tipo === 'trocado') return { args: { ...entrada, operator: decisao.operador }, aviso: decisao.aviso, vinculos };
+  if (decisao.tipo === 'ok') return { args: { ...entrada, operator: decisao.operador }, vinculos };
+  return { args, vinculos };
 }
 
 /**

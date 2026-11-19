@@ -46,6 +46,16 @@ import { bridgeStatusPublic } from "../_shared/second-brain-github.ts";
 import { executarFerramenta, resultadoDeErro, segundoPlanoPadrao } from "./modulos/executar-ferramenta.ts";
 import { anexarAviso, depoisDaAutoria, prepararAutoria } from "./modulos/autoria.ts";
 import { CredencialEmCache } from "./modulos/credencial-em-cache.ts";
+import {
+  auditarChamada,
+  deveAuditar,
+  operadorDeclarado,
+  portaDoBancoDeAuditoria,
+  registrarAssinatura,
+  SEM_SINAIS,
+  sinaisDaRequisicao,
+  type SinaisDaRequisicao,
+} from "./modulos/auditoria-assinaturas.ts";
 import { descritorEnxuto, lerRecurso, montarPrompt, PROMPTS, RECURSOS } from "./modulos/guia-do-painel.ts";
 
 // MCP 2.17: a credencial conferida vale 45 s (no OAuth eram cinco idas ao servidor por chamada).
@@ -171,7 +181,7 @@ function isPublicRpc(msg: JsonRpcRequest): boolean {
 }
 
 // ─── JSON-RPC dispatch ────────────────────────────────────────
-async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcResponse | null> {
+async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaRequisicao = SEM_SINAIS): Promise<JsonRpcResponse | null> {
   const id: JsonRpcId = (msg?.id ?? null) as JsonRpcId;
   const method = String(msg?.method ?? "");
   const params = (msg?.params ?? {}) as Record<string, unknown>;
@@ -183,6 +193,22 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
   // bearer token. Protected tool execution still receives a real HTTP 401
   // challenge before any private data is touched.
   if (method === "initialize") {
+    // MCP 2.37.0: o initialize autenticado entra na auditoria das assinaturas (o que o cliente diz ser), em segundo plano.
+    if (auth.ok) {
+      const info = (params?.clientInfo ?? {}) as Record<string, unknown>;
+      const clienteInfo = `${String(info.name ?? "?")}/${String(info.version ?? "?")}`.slice(0, 120);
+      const protocolo = typeof params?.protocolVersion === "string" ? params.protocolVersion : sinais.protocolo;
+      segundoPlanoPadrao(registrarAssinatura({
+        ctx: auth.ctx,
+        toolName: "initialize",
+        correlationId: null,
+        declarado: null,
+        efetivo: null,
+        decisao: "initialize",
+        sinais: { ...sinais, protocolo },
+        clienteInfo,
+      }, portaDoBancoDeAuditoria()));
+    }
     return rpcResult(id, {
       protocolVersion: MCP_PROTOCOL_VERSION,
       // `listChanged: false` e a verdade, nao uma escolha: o transporte e
@@ -346,8 +372,29 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
     // MCP 2.17: validação, cache curto, prazo, nova tentativa (só leitura e só transitório),
     // erro claro com isError e registro leve. Ver modulos/executar-ferramenta.ts.
     // MCP 2.19: quem assina é a credencial que chama (modulos/autoria.ts).
+    // MCP 2.37.0: guarda o operador DECLARADO (antes da troca) na auditoria das assinaturas.
+    const declarado = operadorDeclarado(args);
+    const auditaAssinatura = deveAuditar(tool.name, args, tool.annotations?.readOnlyHint === true);
     const autoria = await prepararAutoria(tool, args, ctx);
+    // Em segundo plano (não atrasa a resposta) e com a mesma leitura dos vínculos (a da autoria ou o cache de 60 s).
+    const auditarAssinatura = (indisponivel: boolean) => {
+      if (!auditaAssinatura) return;
+      segundoPlanoPadrao(auditarChamada({
+        ctx,
+        toolName: tool.name,
+        correlationId,
+        declarado,
+        operadorFinal: operadorDeclarado(autoria.args),
+        vinculos: autoria.vinculos,
+        indisponivel,
+        sinais,
+      }));
+    };
     if (autoria.erro) {
+      auditarAssinatura(autoria.transitorio === true);
+      if (autoria.transitorio) {
+        return rpcResult(id, resultadoDeErro("vinculos_indisponiveis", autoria.erro, "Tente de novo em instantes.", true, correlationId));
+      }
       return rpcResult(id, resultadoDeErro("autoria", autoria.erro, "Assine com um operador desta credencial (aceleriq_operator_board mostra os slugs).", false, correlationId));
     }
     const desfecho = await executarFerramenta(tool, autoria.args, { ...ctx, correlationId }, {
@@ -355,6 +402,9 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
       emSegundoPlano: segundoPlanoPadrao,
       ehForaDoEscopo,
     });
+    // O Escritório lê os vínculos dentro da ferramenta: se lá a leitura falhou, a auditoria registra isso.
+    const codigoDoErro = ((desfecho.tipo === "ok" ? desfecho.result.structuredContent : null) as { erro?: { codigo?: string } } | null)?.erro?.codigo;
+    auditarAssinatura(codigoDoErro === "vinculos_indisponiveis");
     if (desfecho.tipo === "fora_do_escopo") {
       return rpcError(id, RpcErrors.forbidden, "Resource is outside this restricted client scope");
     }
@@ -471,6 +521,8 @@ Deno.serve(async (req) => {
     return prefersSse(req) ? sseResponse(pong) : jsonResponse(pong);
   }
   const auth = await authenticate(req);
+  // MCP 2.37.0: sinais para a auditoria das assinaturas (IP, user-agent, hash da sessão; nunca o authorization).
+  const sinais = await sinaisDaRequisicao(req).catch(() => SEM_SINAIS);
 
   // Discovery methods are public. A missing bearer on tools/call returns the
   // MCP result-level challenge ChatGPT needs to open OAuth. Invalid, expired
@@ -505,11 +557,11 @@ Deno.serve(async (req) => {
   if (auth.ok && message.method === "tools/call" && Object.prototype.hasOwnProperty.call(message, "id")) {
     const nome = String(((message.params ?? {}) as Record<string, unknown>).name ?? "");
     if (TOOL_MAP.get(nome)?.longRunning) {
-      return folegoResponse(() => dispatch(message, auth), prefersSse(req), (message.id ?? null) as JsonRpcId);
+      return folegoResponse(() => dispatch(message, auth, sinais), prefersSse(req), (message.id ?? null) as JsonRpcId);
     }
   }
 
-  const response = await dispatch(message, auth);
+  const response = await dispatch(message, auth, sinais);
 
   if (!response) {
     return new Response(null, { status: 202, headers: corsHeaders });
