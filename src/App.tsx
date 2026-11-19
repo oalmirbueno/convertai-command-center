@@ -64,6 +64,7 @@ const EmailLanding = rotas.lazy(() => import("@/pages/EmailLanding"));
 const EmailPedir = rotas.lazy(() => import("@/pages/EmailPedir"));
 const Correio = rotas.lazy(() => import("@/pages/Correio"));
 const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
+const AcessosDosClientes = rotas.lazy(() => import("@/pages/AcessosDosClientes"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
 const ClientDashboard = rotas.lazy(() => import("@/pages/ClientDashboard"));
@@ -456,6 +457,9 @@ export function AppRoutes() {
         <Route path="/ver-como-cliente" element={<StaffRoute><AdminViewAsClient /></StaffRoute>} />
         <Route path="/financeiro" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</>} />
         <Route path="/produto" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
+        {/* 19/11/2026: acessos dos clientes (links de entrada, convites) e Minha caixa. */}
+        <Route path="/produto/acessos" element={<>{profile?.role === "admin" ? <AcessosDosClientes /> : <Navigate to="/dashboard" replace />}</>} />
+        <Route path="/produto/acessos/:aba" element={<>{profile?.role === "admin" ? <AcessosDosClientes /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/produto/:produto" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/produto/:produto/:aba" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/comercial" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />

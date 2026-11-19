@@ -232,7 +232,27 @@ export interface MensagemAberta extends ResumoDaMensagem {
   anexos: Array<{ nome: string; tamanho: number }>;
 }
 
-async function chamarCorreio<T>(corpo: Record<string, unknown>): Promise<T> {
+/**
+ * Minha caixa (19/11/2026): a casa entra numa caixa com a senha dela para ver o correio como o cliente
+ * vê. A senha fica só na memória desta aba (nunca em armazenamento, nunca em log), vai junto de cada
+ * pedido para a função produto-correio e some ao sair da caixa ou recarregar a página.
+ */
+const senhasDaCasa: Record<string, string> = {};
+export const abertaPelaCasa = (caixaId: string) => Object.prototype.hasOwnProperty.call(senhasDaCasa, caixaId);
+export async function entrarPelaCasa(caixaId: string, senha: string): Promise<{ endereco: string }> {
+  const r = await chamarCorreio<{ ok: boolean; endereco: string }>({ acao: "entrar_pela_casa", caixa_id: caixaId, senha_da_casa: senha });
+  senhasDaCasa[caixaId] = senha;
+  return { endereco: r.endereco };
+}
+export function sairPelaCasa(caixaId?: string): void {
+  Object.keys(senhasDaCasa).forEach((id) => {
+    if (!caixaId || id === caixaId) delete senhasDaCasa[id];
+  });
+}
+
+async function chamarCorreio<T>(pedido: Record<string, unknown>): Promise<T> {
+  const id = typeof pedido.caixa_id === "string" ? pedido.caixa_id : "";
+  const corpo = id && abertaPelaCasa(id) && !pedido.senha_da_casa ? { ...pedido, senha_da_casa: senhasDaCasa[id] } : pedido;
   const { data, error } = await supabase.functions.invoke("produto-correio", { body: corpo });
   if (error) {
     let resposta: { error?: string; mensagem?: string } | null = null;
