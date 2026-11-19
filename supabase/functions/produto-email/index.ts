@@ -6,7 +6,12 @@
  *   conferir_migadu { dominio_id }  -> { resumo }  domínio, registros de DNS e caixas (leitura)
  *   montar_migadu { dominio_id }    -> cria o domínio, as caixas por convite e os apelidos (pode repetir)
  *   ativar_migadu { dominio_id }    -> pede ao Migadu para conferir o DNS e ativar
- *   Segredos: MIGADU_USUARIO (e-mail da conta Migadu) e MIGADU_API_KEY. Nenhuma senha de caixa passa aqui.
+ * Central de acessos (19/11/2026; a senha da caixa mora no Vault e só volta em caixa_mostrar_senha):
+ *   caixa_criar { dominio_id, endereco, senha, pessoa? }  -> { caixa_id, guardada, extra, aviso }  (Migadu)
+ *   caixa_mostrar_senha { caixa_id }                      -> { senha }  cada vez fica no histórico
+ *   caixa_redefinir_senha { caixa_id, senha, so_guardar? } -> { redefinida, guardada }
+ *   caixa_desativar { caixa_id }                          -> { desativada, extra, aviso }
+ *   Segredos: MIGADU_USUARIO (e-mail da conta Migadu) e MIGADU_API_KEY. Fora da central de acessos, nenhuma senha de caixa passa aqui.
  *   conferir_cloudflare { dominio_id }        -> { resumo }  zona, proxy, MX, SPF, DKIM, DMARC
  *   conferir_zoho { dominio_id }              -> { resumo }  organização, caixas, apelidos, domínio e DKIM
  *   guardar_token_zoho { dominio_id, token }  -> { guardado } refresh token do cliente no Vault ("" apaga)
@@ -27,14 +32,19 @@ import { estadoDaCaixa, lerMensagens } from "./modulos/caixa.ts";
 import {
   ativarNoMigadu,
   caixasNoMigadu,
+  bloquearCaixaNoMigadu,
   credencialValida,
+  criarCaixaComSenhaNoMigadu,
   dominioNoMigadu,
   ErroDoMigadu,
   montarNoMigadu,
+  mudarSenhaNoMigadu,
+  parteLocal,
   registrosNoMigadu,
   type CaixaPedida,
   type CredencialDoMigadu,
 } from "./modulos/migadu.ts";
+import { problemaDaSenha, valorDoExtraDeEmail, type MudancaNaEquipe } from "../produto/modulos/acessos.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -276,7 +286,169 @@ async function ativarMigadu(_ator: string, corpo: Record<string, unknown>) {
   }
 }
 
-type Acao = (ator: string, corpo: Record<string, unknown>) => Promise<Response>;
+// ------------------------------------------------------------------ central de acessos (19/11/2026)
+//
+// A senha de cada caixa mora no Vault (produto_email_guardar_segredo_da_caixa, a mesma que o correio usa
+// para abrir a caixa por IMAP). Ela só sai daqui para o dono, na ação caixa_mostrar_senha, e cada vez fica
+// no histórico da empresa (quem e quando). Nunca vai para log, erro ou outra resposta.
+
+const semCache = { "Cache-Control": "no-store", Pragma: "no-cache" };
+
+/** Tira a senha de qualquer frase que vá para a tela (o Migadu não costuma repetir, mas não confiamos). */
+const semSenha = (frase: string, senha: string) => (senha ? frase.split(senha).join("•••") : frase);
+
+interface CaixaDaCentral {
+  id: string;
+  conta_id: string;
+  dominio_id: string;
+  endereco: string;
+  tipo: string;
+  estado: string;
+  pessoa: string | null;
+}
+
+async function lerCaixaDaCentral(id: unknown): Promise<{ caixa: CaixaDaCentral; dominio: Dominio }> {
+  if (typeof id !== "string" || !UUID.test(id)) throw new ErroHttp(400, "caixa_invalida", "Escolha a caixa de novo.");
+  const { data } = await servico().from("produto_email_caixas").select("id, conta_id, dominio_id, endereco, tipo, estado, pessoa").eq("id", id).maybeSingle();
+  const caixa = data as CaixaDaCentral | null;
+  if (!caixa || caixa.estado === "removida") throw new ErroHttp(404, "caixa_inexistente", "Essa caixa não está mais ativa.");
+  return { caixa, dominio: await lerDominio(caixa.dominio_id) };
+}
+
+async function historico(contaId: string, ator: string, acao: string, detalhe: Record<string, unknown>) {
+  const { error } = await servico().from("produto_historico").insert({ conta_id: contaId, ator, acao, detalhe });
+  if (error) console.error("[produto-email] histórico não gravado", error.message.slice(0, 160));
+}
+
+async function guardarNoCofre(caixaId: string, senha: string) {
+  const { error } = await servico().rpc("produto_email_guardar_segredo_da_caixa", { _caixa: caixaId, _segredo: senha });
+  if (error) throw new ErroHttp(500, "cofre", "A senha mudou no provedor, mas não foi guardada no cofre. Redefina de novo.");
+}
+
+/**
+ * Caixa adicional mexe no extra de e-mail do cliente (quando a empresa está ligada a um cliente com UM
+ * extra de e-mail mensal vivo): cada caixa além das do mensal soma o preço da caixa adicional. Pelo mesmo
+ * caminho da ficha (extra_editar com a sessão do dono). Falha aqui não desfaz a caixa: volta como aviso.
+ */
+async function acompanharExtraDeEmail(token: string, ator: string, contaId: string, mudanca: MudancaNaEquipe, caixasAntes: number): Promise<{ extra_id: string; valor: number } | null> {
+  const { data: c } = await servico().from("produto_contas").select("client_id").eq("id", contaId).maybeSingle();
+  const clientId = (c as { client_id?: string | null } | null)?.client_id;
+  if (!clientId) return null;
+  const [{ data: extras }, { data: cfg }] = await Promise.all([
+    servico().from("client_extras").select("id, valor, cobranca").eq("client_id", clientId).eq("categoria", "email").neq("status", "encerrado"),
+    servico().from("produto_config").select("email_caixas_no_mensal, email_caixa_extra").maybeSingle(),
+  ]);
+  const vivos = ((extras || []) as Array<{ id: string; valor: number | null; cobranca: string }>).filter((x) => x.cobranca === "mensal");
+  if (vivos.length !== 1) return null;
+  const g = (cfg || {}) as { email_caixas_no_mensal?: number; email_caixa_extra?: number };
+  const valor = valorDoExtraDeEmail({ valorAtual: Number(vivos[0].valor) || 0, caixasAntes, mudanca, caixasNoMensal: Number(g.email_caixas_no_mensal) || 0, precoDaCaixaExtra: Number(g.email_caixa_extra) || 0 });
+  if (valor === null) return null;
+  const comoDono = createClient(amb("SUPABASE_URL"), amb("SUPABASE_ANON_KEY"), { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+  const { error } = await comoDono.rpc("extra_editar", { _id: vivos[0].id, _dados: { valor } });
+  if (error) throw new ErroHttp(500, "extra", "A caixa ficou pronta, mas o extra de e-mail do cliente não acompanhou. Confira na ficha do cliente.");
+  await historico(contaId, ator, "extra_email_acompanhou", { valor, mudanca });
+  return { extra_id: vivos[0].id, valor };
+}
+
+const contarCaixas = async (contaId: string) => {
+  const { count } = await servico().from("produto_email_caixas").select("id", { count: "exact", head: true }).eq("conta_id", contaId).eq("tipo", "caixa").neq("estado", "removida");
+  return count || 0;
+};
+
+/** Cria a caixa no Migadu com a senha escolhida, guarda a senha no cofre e registra a caixa na empresa. */
+async function caixaCriar(ator: string, corpo: Record<string, unknown>, token: string) {
+  const d = await lerDominio(corpo.dominio_id);
+  if (d.provedor !== "migadu") throw new ErroHttp(409, "outro_provedor", "Só dá para criar caixa por aqui em domínio do Migadu. Nos outros provedores, crie lá e guarde a senha aqui.");
+  const endereco = typeof corpo.endereco === "string" ? corpo.endereco.trim().toLowerCase() : "";
+  if (!parteLocal(endereco, d.dominio)) throw new ErroHttp(400, "endereco_invalido", `O endereço precisa terminar em @${d.dominio}.`);
+  const senha = typeof corpo.senha === "string" ? corpo.senha : "";
+  const problema = problemaDaSenha(senha);
+  if (problema) throw new ErroHttp(400, "senha_fraca", problema);
+  const pessoa = typeof corpo.pessoa === "string" ? corpo.pessoa.trim().slice(0, 120) : "";
+  const { data: ja } = await servico().from("produto_email_caixas").select("id").eq("endereco", endereco).neq("estado", "removida").limit(1);
+  if (ja && ja.length) throw new ErroHttp(409, "caixa_existe", "Essa caixa já existe.");
+  const antes = await contarCaixas(d.conta_id);
+  try {
+    await criarCaixaComSenhaNoMigadu(credencialDoMigadu(), fetch, { dominio: d.dominio, endereco, nome: pessoa, senha });
+  } catch (e) {
+    const erro = erroDoMigadu(e);
+    throw new ErroHttp(erro.status, erro.codigo, semSenha(erro.message, senha));
+  }
+  const { data: linha, error } = await servico().from("produto_email_caixas").insert({
+    dominio_id: d.id, conta_id: d.conta_id, endereco, pessoa, tipo: "caixa", estado: "criada",
+  }).select("id").single();
+  if (error || !linha) throw new ErroHttp(500, "banco", "A caixa foi criada no Migadu, mas não foi registrada aqui. Recarregue e confira.");
+  const caixaId = String((linha as { id: string }).id);
+  await guardarNoCofre(caixaId, senha);
+  await historico(d.conta_id, ator, "caixa_criada_pela_casa", { caixa: caixaId, endereco });
+  let extra = null;
+  let aviso: string | null = null;
+  try {
+    extra = await acompanharExtraDeEmail(token, ator, d.conta_id, "entrou", antes);
+  } catch (e) {
+    aviso = e instanceof Error ? e.message : "O extra de e-mail não acompanhou.";
+  }
+  return json({ caixa_id: caixaId, endereco, guardada: true, extra, aviso });
+}
+
+/** Mostra a senha guardada da caixa. Só o dono; cada visualização fica no histórico da empresa. */
+async function caixaMostrarSenha(ator: string, corpo: Record<string, unknown>) {
+  const { caixa } = await lerCaixaDaCentral(corpo.caixa_id);
+  const { data, error } = await servico().rpc("produto_email_ler_segredo_da_caixa", { _caixa: caixa.id });
+  if (error) throw new ErroHttp(500, "cofre", "Não foi possível abrir o cofre agora.");
+  const senha = typeof data === "string" ? data : "";
+  if (!senha) throw new ErroHttp(404, "sem_senha", "A senha desta caixa ainda não está guardada. Redefina a senha ou guarde a atual.");
+  await historico(caixa.conta_id, ator, "senha_da_caixa_vista", { caixa: caixa.id, endereco: caixa.endereco });
+  return new Response(JSON.stringify({ senha, endereco: caixa.endereco }), { status: 200, headers: { ...corsHeaders, ...semCache, "Content-Type": "application/json" } });
+}
+
+/** Troca a senha da caixa no Migadu e no cofre. Fora do Migadu, só guarda (a casa trocou no provedor). */
+async function caixaRedefinirSenha(ator: string, corpo: Record<string, unknown>) {
+  const { caixa, dominio } = await lerCaixaDaCentral(corpo.caixa_id);
+  if (caixa.tipo !== "caixa") throw new ErroHttp(400, "nao_e_caixa", "Apelido e grupo não têm senha.");
+  const senha = typeof corpo.senha === "string" ? corpo.senha : "";
+  const problema = problemaDaSenha(senha);
+  if (problema) throw new ErroHttp(400, "senha_fraca", problema);
+  const noProvedor = dominio.provedor === "migadu" && corpo.so_guardar !== true;
+  if (noProvedor) {
+    try {
+      await mudarSenhaNoMigadu(credencialDoMigadu(), fetch, { dominio: dominio.dominio, endereco: caixa.endereco, senha });
+    } catch (e) {
+      const erro = erroDoMigadu(e);
+      throw new ErroHttp(erro.status, erro.codigo, semSenha(erro.message, senha));
+    }
+  }
+  await guardarNoCofre(caixa.id, senha);
+  await historico(caixa.conta_id, ator, noProvedor ? "senha_da_caixa_redefinida" : "senha_da_caixa_guardada", { caixa: caixa.id, endereco: caixa.endereco });
+  return json({ redefinida: noProvedor, guardada: true });
+}
+
+/** Desativa a caixa: bloqueia no Migadu (sem apagar mensagens), tira da empresa e acompanha o extra de e-mail. */
+async function caixaDesativar(ator: string, corpo: Record<string, unknown>, token: string) {
+  const { caixa, dominio } = await lerCaixaDaCentral(corpo.caixa_id);
+  const antes = await contarCaixas(caixa.conta_id);
+  if (dominio.provedor === "migadu" && caixa.tipo === "caixa" && caixa.estado !== "pedida") {
+    try {
+      await bloquearCaixaNoMigadu(credencialDoMigadu(), fetch, { dominio: dominio.dominio, endereco: caixa.endereco });
+    } catch (e) {
+      throw erroDoMigadu(e);
+    }
+  }
+  await servico().from("produto_email_caixas").update({ estado: "removida", atualizado_em: new Date().toISOString() }).eq("id", caixa.id);
+  await historico(caixa.conta_id, ator, "caixa_desativada_pela_casa", { caixa: caixa.id, endereco: caixa.endereco, provedor: dominio.provedor });
+  let extra = null;
+  let aviso: string | null = dominio.provedor === "migadu" ? null : "A caixa saiu daqui. No provedor dela, desative à mão.";
+  if (caixa.tipo === "caixa") {
+    try {
+      extra = await acompanharExtraDeEmail(token, ator, caixa.conta_id, "saiu", antes);
+    } catch (e) {
+      aviso = e instanceof Error ? e.message : "O extra de e-mail não acompanhou.";
+    }
+  }
+  return json({ desativada: true, extra, aviso });
+}
+
+type Acao = (ator: string, corpo: Record<string, unknown>, token: string) => Promise<Response>;
 const ACOES: Record<string, Acao> = {
   conferir_migadu: conferirMigadu,
   montar_migadu: montarMigadu,
@@ -286,6 +458,10 @@ const ACOES: Record<string, Acao> = {
   guardar_token_zoho: guardarTokenZoho,
   caixa_estado: () => caixaEstado(),
   caixa_listar: () => caixaListar(),
+  caixa_criar: caixaCriar,
+  caixa_mostrar_senha: caixaMostrarSenha,
+  caixa_redefinir_senha: caixaRedefinirSenha,
+  caixa_desativar: caixaDesativar,
 };
 
 if (import.meta.main) {
@@ -296,7 +472,8 @@ if (import.meta.main) {
       const corpo = ((await req.json().catch(() => ({}))) || {}) as Record<string, unknown>;
       const fn = ACOES[String(corpo.acao || "")];
       if (!fn) return json({ error: "acao_desconhecida", mensagem: "Ação desconhecida." }, 400);
-      return await fn(await exigirDono(req), corpo);
+      const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+      return await fn(await exigirDono(req), corpo, token);
     } catch (err) {
       if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message }, err.status);
       console.error("[produto-email] erro inesperado", err instanceof Error ? err.message.slice(0, 200) : "");
