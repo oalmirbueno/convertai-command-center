@@ -3273,6 +3273,14 @@
       "remote_name": "automacoes_por_cliente",
       "remote_statements_sha256": "44d739fb58b65973b44aa37eee531c7487909724c734c00e4c1f3a2a9ad5a598",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261119233000",
+      "path": "supabase/migrations/20261119233000_auditoria_de_assinaturas_do_mcp.sql",
+      "local_sha256": "a5d54b334806893a093f00f32385bcccb6a8fe0aa0c14e9d20b6613e03662890",
+      "remote_name": "auditoria_de_assinaturas_do_mcp",
+      "remote_statements_sha256": "90db9969220d2c703cdce0ec6bd9e22259593dcabc0ce456181b3dd8cae0dc0d",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

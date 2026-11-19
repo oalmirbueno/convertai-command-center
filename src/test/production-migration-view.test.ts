@@ -134,13 +134,13 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(409);
-    expect(plan.forwardMigrations).toHaveLength(409);
+    expect(plan.manifest.forward_migrations).toHaveLength(410);
+    expect(plan.forwardMigrations).toHaveLength(410);
     expect(plan.manifest.applied_forward_aliases).toHaveLength(12);
     expect(plan.appliedAliases).toHaveLength(12);
     expect(plan.shadowPaths).toHaveLength(12);
-    expect(plan.forwardLedger).toHaveLength(409);
-    expect(versions).toHaveLength(505);
+    expect(plan.forwardLedger).toHaveLength(410);
+    expect(versions).toHaveLength(506);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
     // Aliased canonical versions are never remote rows; the unaliased forward
@@ -149,7 +149,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
       expect(versions).not.toContain(alias.canonical.version);
     }
     const unaliased = plan.forwardLedger.filter((entry) => entry.alias === null);
-    expect(unaliased).toHaveLength(397);
+    expect(unaliased).toHaveLength(398);
     for (const forward of unaliased) {
       expect(versions).toContain(forward.canonical.version);
     }
@@ -174,7 +174,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     expect(shadowCli.stdout).toBe(`${plan.shadowPaths.join("\n")}\n`);
 
     const sqlValues = formatProductionLedgerSqlValues();
-    expect(sqlValues.split("\n")).toHaveLength(505);
+    expect(sqlValues.split("\n")).toHaveLength(506);
     expect(sqlValues).toMatch(/^\('20260223193632','',[0-9a-f']+\),/);
     const lastAlias = plan.appliedAliases.at(-1)!;
     expect(sqlValues).toContain(`'${lastAlias.remoteVersion}','${lastAlias.remoteName}'`);
@@ -310,10 +310,10 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
   it("accepts the complete declared 440-row raw ledger and rejects normalized rows", () => {
     const plan = loadProductionMigrationPlan();
     const rows = remoteRows(409);
-    expect(rows).toHaveLength(505);
+    expect(rows).toHaveLength(506);
     const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
     expect(reconciliation.pendingForward).toHaveLength(0);
-    expect(reconciliation.appliedForward).toHaveLength(409);
+    expect(reconciliation.appliedForward).toHaveLength(410);
     expect(reconciliation.appliedAliases).toHaveLength(12);
 
     const normalizedAlias = structuredClone(rows);
@@ -347,7 +347,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
       pendingForward: 409,
       files: 505,
     });
-    expect(filenames).toHaveLength(505);
+    expect(filenames).toHaveLength(506);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(96);
     for (const attestation of plan.attestations) {
@@ -373,7 +373,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
       pendingForward: 0,
       files: 505,
     });
-    expect(filenames).toHaveLength(505);
+    expect(filenames).toHaveLength(506);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(108);
     // The unaliased forwards keep their canonical filenames, but its content must
@@ -461,7 +461,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     const root = temporaryRoot();
     const sourceDir = join(root, "repository-migrations");
     cpSync(resolve(repoRoot, "supabase/migrations"), sourceDir, { recursive: true });
-    expect(listProductionVersions({ sourceDir })).toHaveLength(505);
+    expect(listProductionVersions({ sourceDir })).toHaveLength(506);
   });
 
   it("applies canonical-only migrations when the shadow files are excluded in CI", () => {
@@ -555,7 +555,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     };
 
     const reconciliation = validateRemoteLedger(syntheticPlan, rows);
-    expect(reconciliation.appliedForward).toHaveLength(409);
+    expect(reconciliation.appliedForward).toHaveLength(410);
     expect(reconciliation.appliedAliases).toHaveLength(12);
     expect(reconciliation.pendingForward).toHaveLength(1);
     expect(reconciliation.pendingForward[0].version).toBe("20260915120000");
