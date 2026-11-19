@@ -112,6 +112,7 @@ const ProfilePage = rotas.lazy(() => import("@/pages/ProfilePage"));
 const SettingsPage = rotas.lazy(() => import("@/pages/SettingsPage"));
 const BaseDosAgentes = rotas.lazy(() => import("@/pages/BaseDosAgentes"));
 const CentralDeSkills = rotas.lazy(() => import("@/pages/CentralDeSkills"));
+const CentralDeAutomacoes = rotas.lazy(() => import("@/pages/CentralDeAutomacoes"));
 const GruposAoVivo = rotas.lazy(() => import("@/pages/GruposAoVivo"));
 const AdminViewAsClient = rotas.lazy(() => import("@/pages/AdminViewAsClient"));
 const ApiDocs = rotas.lazy(() => import("@/pages/ApiDocs"));
@@ -433,6 +434,8 @@ export function AppRoutes() {
         <Route path="/base-dos-agentes" element={<StaffRoute><BaseDosAgentes /></StaffRoute>} />
         {/* 18/11/2026: Central de Skills e segundo cérebro (todas as skills de todos os agentes). */}
         <Route path="/skills" element={<StaffRoute><CentralDeSkills /></StaffRoute>} />
+        {/* 19/11/2026: Central de Automações (fluxos do n8n, saúde do servidor, execuções e o botão do dono). */}
+        <Route path="/automacoes" element={<StaffRoute><CentralDeAutomacoes /></StaffRoute>} />
         <Route path="/grupos" element={<StaffRoute><GruposAoVivo /></StaffRoute>} />
         <Route path="/metricas" element={<StaffRoute><AdminMetricas /></StaffRoute>} />
         <Route path="/anuncios" element={<StaffRoute><AdminAds /></StaffRoute>} />
