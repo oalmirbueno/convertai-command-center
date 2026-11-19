@@ -153,7 +153,7 @@ function Desenho({ detalhe, execucao }: { detalhe: DetalheDoFluxo; execucao: Exe
                 <text x={12} y={18} className="fill-foreground text-[12px] font-medium">{no.nome.length > 22 ? `${no.nome.slice(0, 21)}…` : no.nome}</text>
                 <text x={12} y={33} className="fill-muted-foreground text-[11px]">{no.tipo.length > 24 ? `${no.tipo.slice(0, 23)}…` : no.tipo}</text>
                 {p && <circle cx={NO_LARGURA - 12} cy={12} r={8} className={p.estado === "error" ? "fill-destructive" : "fill-success"} />}
-                {p && <text x={NO_LARGURA - 12} y={15.5} textAnchor="middle" className="fill-white text-[10px] font-medium">{p.ordem}</text>}
+                {p && <text x={NO_LARGURA - 12} y={15.5} textAnchor="middle" className="fill-white text-[11px] font-medium">{p.ordem}</text>}
               </g>
             );
           })}

@@ -6,7 +6,7 @@ import {
   montarConfirmacao,
   separarFluxos,
   validarRetrato,
-} from './automacoes.ts';
+} from '../_shared/automacoes.ts';
 
 const RETRATO = {
   coletado_em: '2026-11-19T10:05:00-03:00',
