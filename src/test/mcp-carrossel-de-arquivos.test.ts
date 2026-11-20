@@ -11,7 +11,7 @@ import {
   ordenarComoOPainel,
   planoDoAgrupamento,
   tipoDoPostDoArquivo,
-} from "../../supabase/functions/_shared/carrossel-de-arquivos";
+} from "../../supabase/functions/mcp-server/modulos/carrossel-de-arquivos";
 
 const casos = [
   { file_name: "x", storage_path: "c/r/v1/3-card-03.png" },

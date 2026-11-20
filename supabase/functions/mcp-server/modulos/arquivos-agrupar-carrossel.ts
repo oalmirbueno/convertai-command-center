@@ -4,7 +4,7 @@
  * Caso real (agente Orion): o upload do MCP cria cada card como arquivo
  * solto; dois carrosséis de 5 chegaram ao cliente como 5 aprovações
  * separadas. Esta tool agrupa arquivos JÁ existentes sob uma raiz, no
- * mesmo modelo do painel (ver _shared/carrossel-de-arquivos.ts).
+ * mesmo modelo do painel (ver carrossel-de-arquivos.ts).
  *
  * Por que a validação mora aqui: o files_secure_guard do banco confere
  * parent_file_id só no INSERT (mesmo cliente, sem aninhar, raiz editável).
@@ -38,7 +38,7 @@ import {
   type PlanoDoAgrupamento,
   rotuloDoEnvio,
   TIPO_DO_CARROSSEL,
-} from '../../_shared/carrossel-de-arquivos.ts';
+} from './carrossel-de-arquivos.ts';
 
 export const NOME_AGRUPAR = 'aceleriq_arquivos_agrupar_carrossel';
 const ESCRITA = { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false };

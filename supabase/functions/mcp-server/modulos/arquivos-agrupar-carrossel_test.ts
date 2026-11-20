@@ -9,7 +9,7 @@ import {
   nomeDoCard,
   ordenarComoOPainel,
   planoDoAgrupamento,
-} from '../../_shared/carrossel-de-arquivos.ts';
+} from './carrossel-de-arquivos.ts';
 import { agruparCarrossel, agruparCarrosselSchema, type DependenciasDoAgrupar } from './arquivos-agrupar-carrossel.ts';
 import { bancoFalso, type Linha, type OpcoesDoBanco, type Tabelas, umaVezFalso } from './banco-falso-de-arquivos_test_util.ts';
 

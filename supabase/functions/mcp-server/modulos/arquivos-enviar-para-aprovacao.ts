@@ -32,7 +32,7 @@ import {
   MIN_CARDS,
   ordenarComoOPainel,
   rotuloDoEnvio,
-} from '../../_shared/carrossel-de-arquivos.ts';
+} from './carrossel-de-arquivos.ts';
 import { COLUNAS_DO_ARQUIVO } from './arquivos-agrupar-carrossel.ts';
 
 export const NOME_ENVIAR_ARQUIVO = 'aceleriq_arquivos_enviar_para_aprovacao';

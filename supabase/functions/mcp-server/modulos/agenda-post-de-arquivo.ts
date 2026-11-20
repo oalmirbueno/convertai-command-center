@@ -41,7 +41,7 @@ import {
   rotuloDoEnvio,
   tipoDoPostDoArquivo,
   tituloDoArquivo,
-} from '../../_shared/carrossel-de-arquivos.ts';
+} from './carrossel-de-arquivos.ts';
 import { traduzirErroDaCriacao } from './criar-publicacao-de-aprovado.ts';
 
 export const NOME_POST_DE_ARQUIVO = 'aceleriq_agenda_criar_post_de_arquivo';

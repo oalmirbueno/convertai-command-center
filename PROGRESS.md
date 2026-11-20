@@ -6,11 +6,11 @@ Retomar: `git log --oneline origin/main..HEAD` + este arquivo.
 - [x] Tool 1 aceleriq_arquivos_agrupar_carrossel (commit "MCP 2.38.0: agrupar carrossel")
 - [x] Tool 2 aceleriq_agenda_criar_post_de_arquivo (commit "MCP 2.38.0: post da Agenda de arquivo")
 - [x] Tool 3 aceleriq_arquivos_enviar_para_aprovacao (commit "MCP 2.38.0: enviar arquivo para aprovação")
-- [ ] Versão 2.38.0, contagem de tools em mcp_test.ts (226 -> 229), guia
+- [x] Versão 2.38.0, contagem de tools em mcp_test.ts (226 -> 229), guia (commit "MCP 2.38.0: versão")
 - [ ] (Almir) PR, merge, bundle, deploy, prova — fora deste executor
 
 ## Decisões
-- Regras puras em `supabase/functions/_shared/carrossel-de-arquivos.ts` (sem import): Deno e vitest leem o mesmo arquivo.
+- Regras puras em `supabase/functions/mcp-server/modulos/carrossel-de-arquivos.ts` (sem import): Deno e vitest leem o mesmo arquivo.
   A ordem é cópia fiel de `src/lib/editorialMedia.ts`; `src/test/mcp-carrossel-de-arquivos.test.ts` compara as duas.
 - Agrupar: escrita com db() (service role), UPDATE por linha com todos os filtros de estado na cláusula
   (id, client_id, project_id/null, parent_file_id null, internal, not_requested, none, locked_at null, archived_at null)
@@ -44,6 +44,22 @@ Retomar: `git log --oneline origin/main..HEAD` + este arquivo.
 - Recusa de estado fica DENTRO do umaVez: repetir a chave de um envio que deu certo volta replay, não "já em aprovação".
 - aceleriq_mesa_enviar_para_aprovacao: só a descrição ganhou a frase apontando para a tool irmã.
 
-## Testes
-- `deno test --no-lock --allow-env --allow-read --allow-net <arquivos>` (o deno.lock do repo dá conflito de integridade no esm.sh; --no-lock contorna; baseline mcp_test.ts: 91 ok).
-- agrupar: 12 ok. post de arquivo: 9 ok. enviar: 8 ok. vitest mcp-carrossel-de-arquivos: 4 ok.
+## Testes (20/11/2026, rodados neste worktree)
+Obs.: o deno.lock do repo dá conflito de integridade no esm.sh; usei `--no-lock`.
+- `deno test --no-lock --allow-env --allow-read --allow-net supabase/functions/mcp-server/mcp_test.ts` -> 92 ok (baseline 91 + teste 2.38).
+- módulos novos: agrupar 12 ok, post de arquivo 9 ok, enviar 8 ok.
+- `deno test ... supabase/functions/mcp-server/` -> 279 ok, 2 falhas JÁ existentes em origin/main (painel_test.ts: espera versão 2.23.0;
+  _shared > 4 MB, baseline 4.290.567 bytes). As regras do carrossel foram para mcp-server/modulos para não engordar _shared.
+- vitest (src/test/mcp-* + production-migration-view + mesa-entrega + entrega-na-agenda + reagendar + editar-legenda + comercial/mercurio +
+  painel-conversa + centro-de-comando + ritual + pedidos-de-acesso + ciclo-extras): 24 falhas idênticas ao baseline origin/main
+  (testes antigos que fixam versão 2.36.0/2.23/2.13, migrations do production-migration-view, z.number em mcp-erros-que-ensinam);
+  534 ok (baseline 530 + 4 novos de src/test/mcp-carrossel-de-arquivos.test.ts).
+- `npm run typecheck`: 1 erro já existente (_shared/cores/oklch.ts:223), igual ao baseline. `git diff --check` ok.
+- `npm --prefix integrations/lovable-mcp-compat run verify`: não roda aqui (dependência @lovable.dev/mcp-js não instalada); não toquei nessa pasta.
+
+## Falta / riscos (para o Almir)
+- Nada de migration: tudo cabe no schema atual (files, tasks, editorial_posts via save_editorial_post, RPCs existentes).
+- Smoke no Preview depois do deploy (sem Deno local contra banco real): simular agrupar com os 5 cards da Stop/Thainá
+  (hoje em aprovação -> a simulação deve recusar e mandar retirar), retirar, agrupar, criar post e enviar; conferir "Carrossel · 5" no portal.
+- Agrupar escreve com a chave de serviço (não há RPC de agrupar); a guarda do banco ainda barra linha fora do estado interno.
+- Post de arquivo: se o save_editorial_post falhar depois do item criado, fica a tarefa sem post (repetir com a mesma entrada reaproveita).
