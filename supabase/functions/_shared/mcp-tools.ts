@@ -70,6 +70,9 @@ import { FERRAMENTA_DO_DONO_NO_ESCRITORIO } from '../mcp-server/modulos/escritor
 import { FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS } from '../mcp-server/modulos/auditoria-assinaturas.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
+import { FERRAMENTA_DE_AGRUPAR_CARROSSEL } from '../mcp-server/modulos/arquivos-agrupar-carrossel.ts';
+import { FERRAMENTA_DE_POST_DE_ARQUIVO } from '../mcp-server/modulos/agenda-post-de-arquivo.ts';
+import { FERRAMENTA_DE_ENVIAR_ARQUIVO } from '../mcp-server/modulos/arquivos-enviar-para-aprovacao.ts';
 import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
 import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
@@ -395,6 +398,10 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_reagendar_publicacao: 'editorial:write',
   // MCP 2.30 (18/11/2026): publicação planejada de post já aprovado, para depois o reagendar.
   aceleriq_criar_publicacao_de_aprovado: 'editorial:write',
+  // MCP 2.38 (20/11/2026): carrossel de Arquivos.
+  aceleriq_arquivos_agrupar_carrossel: 'files:write',
+  aceleriq_agenda_criar_post_de_arquivo: 'editorial:write',
+  aceleriq_arquivos_enviar_para_aprovacao: 'files:write',
   // MCP 2.33 (18/11/2026): e-mail profissional (entradas, migração, avanço, pagamento e conferência).
   aceleriq_email_entradas: 'clients:read',
   aceleriq_email_migracao: 'clients:read',
@@ -2802,7 +2809,7 @@ const adsOfertaDoContextoTool = ferramentaDeMesa(
 const enviarParaAprovacaoTool = ferramentaDeMesa(
   'aceleriq_mesa_enviar_para_aprovacao',
   'Mesa: mandar peça do Estúdio para aprovação',
-  'Manda artes prontas do Estúdio para aprovação pelo mesmo caminho da tela: entrega em Arquivos o que ainda não foi entregue e libera para aprovação (com papel de admin ou gestor vai direto ao cliente, que é avisado; com papel de design pede antes a revisão da agência). Efeito visível ao cliente: exige confirmar=true e motivo. Criativo de anúncio não passa por aqui (segue pela Mesa Ads para o gestor). Não agenda nem publica. Até 5 trabalhos por vez; pode levar alguns minutos.',
+  'Manda artes prontas do Estúdio para aprovação pelo mesmo caminho da tela: entrega em Arquivos o que ainda não foi entregue e libera para aprovação (com papel de admin ou gestor vai direto ao cliente, que é avisado; com papel de design pede antes a revisão da agência). Efeito visível ao cliente: exige confirmar=true e motivo. Criativo de anúncio não passa por aqui (segue pela Mesa Ads para o gestor). Não agenda nem publica. Até 5 trabalhos por vez; pode levar alguns minutos. Arquivo ou carrossel que já está em Arquivos (subido pelo upload, sem trabalho do Estúdio) vai por aceleriq_arquivos_enviar_para_aprovacao.',
   z.object({
     trabalho_ids: z.array(UUID).min(1).max(5),
     confirmar: z.literal(true),
@@ -5147,6 +5154,10 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTA_DO_DONO_NO_ESCRITORIO,
   // MCP 2.37: auditoria das assinaturas dos agentes (quem assinou como quem; log e alerta, só leitura).
   ...FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS,
+  // MCP 2.38: carrossel de Arquivos (agrupar cards soltos sob a raiz).
+  ...FERRAMENTA_DE_AGRUPAR_CARROSSEL,
+  ...FERRAMENTA_DE_POST_DE_ARQUIVO,
+  ...FERRAMENTA_DE_ENVIAR_ARQUIVO,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

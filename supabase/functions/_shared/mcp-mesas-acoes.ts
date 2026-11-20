@@ -24,7 +24,7 @@ import { auditLog } from './mcp-audit.ts';
 import { assertClientAccess, type AuthContext } from './mcp-auth.ts';
 import { exigirClienteExistente } from './mcp-client-id-guard.ts';
 import { getMcpRuntimeConfig } from './mcp-runtime.ts';
-import { findIdempotentResult } from './mcp-write-services.ts';
+import { type EscopoDeIdempotencia, findIdempotentResult } from './mcp-write-services.ts';
 import {
   acaoPermitida,
   AVISO_ACAO_SO_COM_PESSOA,
@@ -224,7 +224,7 @@ export async function umaVez(
   ctx: AuthContext,
   idempotencyKey: string,
   fazer: () => Promise<{ ref: string | null; resultado: Record<string, unknown> }>,
-  escopo?: Record<string, string>,
+  escopo?: EscopoDeIdempotencia,
 ): Promise<Record<string, unknown>> {
   const anterior = await findIdempotentResult(ferramenta, ctx.keyId, idempotencyKey, escopo).catch(() => null);
   if (anterior) {

@@ -77,6 +77,10 @@ export const RPCS_DA_PONTE = [
   'marcar_precisa_do_dono',
   // MCP 2.30: cria a publicação planejada (sem data) de post já aprovado. O banco confere aprovação, conta e projeto; não agenda nem publica.
   'save_editorial_post',
+  // MCP 2.38: envio de arquivo ou carrossel de Arquivos pela raiz, a mesma regra de mesa_enviar_para_aprovacao
+  // (admin/gestor libera ao cliente; design/tráfego pede a revisão da agência). Não agenda nem publica.
+  'admin_release_file_now',
+  'request_file_agency_review',
 ] as const;
 export type RpcDaPonte = (typeof RPCS_DA_PONTE)[number];
 
