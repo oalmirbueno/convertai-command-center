@@ -5,7 +5,7 @@ Retomar: `git log --oneline origin/main..HEAD` + este arquivo.
 - [x] Investigação do modelo real (banco, somente leitura) — ver prompt
 - [x] Tool 1 aceleriq_arquivos_agrupar_carrossel (commit "MCP 2.38.0: agrupar carrossel")
 - [x] Tool 2 aceleriq_agenda_criar_post_de_arquivo (commit "MCP 2.38.0: post da Agenda de arquivo")
-- [ ] Tool 3 aceleriq_arquivos_enviar_para_aprovacao
+- [x] Tool 3 aceleriq_arquivos_enviar_para_aprovacao (commit "MCP 2.38.0: enviar arquivo para aprovação")
 - [ ] Versão 2.38.0, contagem de tools em mcp_test.ts (226 -> 229), guia
 - [ ] (Almir) PR, merge, bundle, deploy, prova — fora deste executor
 
@@ -37,6 +37,13 @@ Retomar: `git log --oneline origin/main..HEAD` + este arquivo.
 - Chave do item: `mcp-post-de-arquivo:<raiz>:<hash(projeto|data|título)>`; falha no save deixa o item criado e a repetição com a mesma entrada o reaproveita.
 - `ja_existia`: post com primary_file_id = raiz, mesmo cliente, archived_at nulo.
 
+## Envio de Arquivos para aprovação
+- Papel lido em user_roles do principalUserId (OAuth = a pessoa; chave = o dono): admin/manager -> admin_release_file_now(raiz,'approval')
+  (aguardando_cliente); design/traffic -> request_file_agency_review(raiz) (aguardando_agencia); outro papel = recusa. Mesma regra da RPC
+  mesa_enviar_para_aprovacao. As duas RPCs entraram em RPCS_DA_PONTE (_shared/mcp-mesas-ponte.ts); os testes não fixam a lista inteira.
+- Recusa de estado fica DENTRO do umaVez: repetir a chave de um envio que deu certo volta replay, não "já em aprovação".
+- aceleriq_mesa_enviar_para_aprovacao: só a descrição ganhou a frase apontando para a tool irmã.
+
 ## Testes
 - `deno test --no-lock --allow-env --allow-read --allow-net <arquivos>` (o deno.lock do repo dá conflito de integridade no esm.sh; --no-lock contorna; baseline mcp_test.ts: 91 ok).
-- agrupar: 12 ok. post de arquivo: 9 ok. vitest mcp-carrossel-de-arquivos: 4 ok.
+- agrupar: 12 ok. post de arquivo: 9 ok. enviar: 8 ok. vitest mcp-carrossel-de-arquivos: 4 ok.
