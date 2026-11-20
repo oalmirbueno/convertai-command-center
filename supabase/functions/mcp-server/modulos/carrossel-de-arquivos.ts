@@ -1,5 +1,5 @@
 /**
- * MCP 2.38.0 (20/11/2026): regras puras do carrossel de Arquivos (sem Deno,
+ * MCP 2.38.0 (20/11/2026), 2.38.1 (nomes com extensão): regras puras do carrossel de Arquivos (sem Deno,
  * sem banco, sem import): o MCP (Deno) e o teste do painel (vitest) leem o
  * mesmo arquivo.
  *
@@ -83,29 +83,45 @@ export function ordenarComoOPainel<T extends ArquivoParaOrdem>(raiz: T, filhos: 
 
 // ------------------------------------------------------------------ nomes
 
-const SUFIXO_DE_CARD = /\s*\(\s*\d+\s*\/\s*\d+\s*\)\s*$/;
-const EXTENSAO_DE_IMAGEM = /\.(png|jpe?g|webp)$/i;
+// 2.38.1: o sufixo só está no fim depois de tirar a extensão ("Post (1/3).png").
+// Tira a extensão PRIMEIRO, depois todos os " (i/N)" do fim (tolera repetido).
+const SUFIXOS_DE_CARD = /(?:\s*\(\s*\d+\s*\/\s*\d+\s*\))+\s*$/;
+const EXTENSAO_DE_IMAGEM = /\.(png|jpe?g|webp)\s*$/i;
 
-/** Nome sem o sufixo "(i/N)" do fim. */
+/** Nome sem extensão de imagem e sem o(s) sufixo(s) "(i/N)" do fim. */
 export function nomeSemSufixo(nome: string): string {
-  return String(nome || '').replace(SUFIXO_DE_CARD, '').trim();
+  return String(nome || '').trim().replace(EXTENSAO_DE_IMAGEM, '').replace(SUFIXOS_DE_CARD, '').trim();
 }
 
-/** Base dos nomes dos filhos: o nome da raiz sem sufixo e sem extensão de imagem. */
+/** Base dos nomes dos cards: o nome da raiz sem extensão e sem sufixo (ou "Carrossel" se não sobrar nada). */
 export function baseDoCarrossel(nomeDaRaiz: string): string {
-  const limpo = nomeSemSufixo(nomeDaRaiz).replace(EXTENSAO_DE_IMAGEM, '').trim();
-  return limpo || 'Carrossel';
+  return nomeSemSufixo(nomeDaRaiz) || 'Carrossel';
 }
 
-/** Nome do card no padrão do painel: a raiz sem sufixo, o filho "<base> (i/N)". */
+/** Nome do card no padrão do painel, sem extensão: a raiz "<base>", o filho "<base> (i/N)". */
 export function nomeDoCard(nomeDaRaiz: string, ordem: number, total: number): string {
-  if (ordem === 1) return nomeSemSufixo(nomeDaRaiz) || baseDoCarrossel(nomeDaRaiz);
-  return `${baseDoCarrossel(nomeDaRaiz)} (${ordem}/${total})`;
+  const base = baseDoCarrossel(nomeDaRaiz);
+  return ordem === 1 ? base : `${base} (${ordem}/${total})`;
 }
 
 /** Título do post a partir do nome da raiz (o painel usa file_name.trim(); aqui sem sufixo e sem extensão). */
 export function tituloDoArquivo(nomeDaRaiz: string): string {
   return baseDoCarrossel(nomeDaRaiz).slice(0, 200);
+}
+
+/**
+ * A ordem dos filhos sai só do número (storage, depois a PRIMEIRA "(a/b)" do
+ * nome), sem cair no desempate por created_at/id? Vale se os números vêm
+ * estritamente crescentes na ordem pedida; um filho sem número só não depende
+ * do desempate se for o único sem número e o último.
+ */
+export function ordemSemDesempate(filhos: ReadonlyArray<Pick<ArquivoParaOrdem, 'file_name' | 'storage_path'>>): boolean {
+  const indices = filhos.map((f) => indiceDaOrdem(f));
+  const semNumero = indices.filter((n) => n == null).length;
+  if (semNumero > 1) return false;
+  if (semNumero === 1 && indices[indices.length - 1] != null) return false;
+  const numeros = indices.filter((n): n is number => n != null);
+  return numeros.every((n, i) => i === 0 || n > numeros[i - 1]);
 }
 
 // ------------------------------------------------------------------ tipo de mídia
@@ -311,8 +327,21 @@ export function planoDoAgrupamento(
   // Ordem que o painel vai mostrar: os filhos com o nome novo, pela mesma regra.
   const depois = arquivos.map((f, i) => ({ ...f, file_name: cards[i].nome_depois }));
   const resultante = ordenarComoOPainel(depois[0], depois.slice(1)).map((f) => f.id);
-  const confere = resultante.every((id, i) => id === pedidos[i]);
-  if (!confere) {
+  const bate = resultante.every((id, i) => id === pedidos[i]);
+  const semDesempate = ordemSemDesempate(depois.slice(1));
+  // 2.38.1: só confere se a ordem sai dos números, não do desempate por created_at.
+  const confere = bate && semDesempate;
+  const fracaoNaBase = /\(\d+\s*\/\s*\d+\)/.test(baseDoCarrossel(raiz.file_name));
+  const dicaDaBase = fracaoNaBase
+    ? ` O nome base "${baseDoCarrossel(raiz.file_name)}" tem "(a/b)" no meio e o painel lê a PRIMEIRA ocorrência: renomeie a raiz sem esse trecho antes.`
+    : '';
+  if (bate && !semDesempate) {
+    avisos.push(
+      'A ordem pedida só aparece no painel por desempate (created_at/id): os números lidos (storage, depois a primeira "(a/b)" do nome) não bastam para fixá-la. ' +
+        'Confira os nomes e o storage dos cards; se algum card for mexido ou subido de novo, a ordem pode mudar.' + dicaDaBase,
+    );
+  }
+  if (!bate) {
     const doCaminho = arquivos.slice(1)
       .map((f) => ({ f, n: indicePeloCaminho(f) }))
       .filter((x) => x.n != null)
@@ -320,7 +349,7 @@ export function planoDoAgrupamento(
     problemas.push(
       'A ordem pedida não bate com a ordem que o painel vai mostrar, e só o nome não corrige: o número no início do nome do arquivo no storage vale antes do nome' +
         (doCaminho.length ? ` (${doCaminho.join('; ')})` : '') +
-        `. O painel mostraria: ${resultante.join(', ')}. Mande os file_ids na ordem desses números ou suba os cards de novo com nomes na ordem (nada é movido no storage).`,
+        `. O painel mostraria: ${resultante.join(', ')}. Mande os file_ids na ordem desses números ou suba os cards de novo com nomes na ordem (nada é movido no storage).` + dicaDaBase,
     );
   }
   if (total > MAX_CARDS_DO_INSTAGRAM) {

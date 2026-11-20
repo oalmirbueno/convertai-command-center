@@ -7,8 +7,11 @@ import {
   ehImagemDoCarrossel,
   indiceDaOrdem,
   nomeDoCard,
+  nomeSemSufixo,
+  ordemSemDesempate,
   ordenarComoOPainel,
   planoDoAgrupamento,
+  tituloDoArquivo,
 } from './carrossel-de-arquivos.ts';
 import { agruparCarrossel, agruparCarrosselSchema, type DependenciasDoAgrupar } from './arquivos-agrupar-carrossel.ts';
 import { bancoFalso, type Linha, type OpcoesDoBanco, type Tabelas, trilhaDeAuditoria, umaVezFalso } from './banco-falso-de-arquivos_test_util.ts';
@@ -77,6 +80,66 @@ Deno.test('nomes: raiz sem sufixo, filhos "<base> (i/N)" sem extensão e sem suf
   assertEquals(baseDoCarrossel('(1/3)'), 'Carrossel');
 });
 
+// 2.38.1: caso real do teste da 2.38.0 ("[teste] carrossel (1/3).png" virava raiz com .png e filhos "(1/3) (2/3)").
+Deno.test('2.38.1 nomes: tira a extensão ANTES do sufixo; raiz "<base>", filhos "<base> (i/N)", sem extensão', () => {
+  const raiz = '[teste] carrossel (1/3).png';
+  assertEquals(nomeSemSufixo(raiz), '[teste] carrossel');
+  assertEquals(baseDoCarrossel(raiz), '[teste] carrossel');
+  assertEquals(nomeDoCard(raiz, 1, 3), '[teste] carrossel');
+  assertEquals(nomeDoCard(raiz, 2, 3), '[teste] carrossel (2/3)');
+  assertEquals(nomeDoCard(raiz, 3, 3), '[teste] carrossel (3/3)');
+  assertEquals(tituloDoArquivo(raiz), '[teste] carrossel');
+  // sem extensão: igual à 2.38.0
+  assertEquals(nomeDoCard('[teste] carrossel (1/3)', 1, 3), '[teste] carrossel');
+  assertEquals(nomeDoCard('[teste] carrossel (1/3)', 2, 3), '[teste] carrossel (2/3)');
+  // caso real da Stop, sem extensão: continua igual ("(carrossel)" não é sufixo de card)
+  assertEquals(nomeDoCard('Stop Thainá (carrossel) (1/5)', 1, 5), 'Stop Thainá (carrossel)');
+  assertEquals(nomeDoCard('Stop Thainá (carrossel) (1/5)', 4, 5), 'Stop Thainá (carrossel) (4/5)');
+  // sufixo repetido no fim (o bug gravou "(1/3) (2/3)"): tira todos
+  assertEquals(nomeSemSufixo('[teste] carrossel (1/3) (2/3)'), '[teste] carrossel');
+  assertEquals(nomeDoCard('[teste] carrossel (1/3) (3/3).png', 2, 3), '[teste] carrossel (2/3)');
+  // jpg, jpeg, webp, maiúscula
+  assertEquals(nomeDoCard('Promo (1/4).jpg', 2, 4), 'Promo (2/4)');
+  assertEquals(nomeDoCard('Promo (1/4).JPEG', 1, 4), 'Promo');
+  assertEquals(nomeDoCard('Promo (1/4).webp', 4, 4), 'Promo (4/4)');
+  // extensão que não é de imagem fica
+  assertEquals(nomeSemSufixo('Roteiro.pdf'), 'Roteiro.pdf');
+});
+
+Deno.test('2.38.1 ordem: só confere sem depender do desempate por created_at; se depender, avisa', () => {
+  assert(ordemSemDesempate([{ file_name: 'X (2/3)' }, { file_name: 'X (3/3)' }]));
+  assert(!ordemSemDesempate([{ file_name: 'X (1/3) (2/3)' }, { file_name: 'X (1/3) (3/3)' }]), 'o painel lê a primeira "(a/b)": empate');
+  assert(!ordemSemDesempate([{ file_name: 'sem' }, { file_name: 'sem' }]));
+  assert(ordemSemDesempate([{ file_name: 'X (2/3)' }, { file_name: 'sem' }]), 'um sem número no fim não depende do desempate');
+  assert(!ordemSemDesempate([{ file_name: 'sem' }, { file_name: 'X (3/3)' }]));
+
+  // O caso real: com a extensão, a 2.38.0 dava filhos "(1/3) (2/3)"; agora os nomes fixam a ordem sozinhos.
+  const nomes = ['[teste] carrossel (1/3).png', '[teste] carrossel (2/3).png', '[teste] carrossel (3/3).png'];
+  const lidos = nomes.map((nome, i) => arquivo(i + 1, {
+    file_name: nome, storage_path: `${CLIENTE_A}/${id(i + 1)}/v1/carrossel.png`, created_at: `2026-11-20T10:0${3 - i}:00Z`,
+  })) as never[];
+  const p = planoDoAgrupamento([id(1), id(2), id(3)], lidos, new Set(), () => true);
+  assertEquals(p.problemas, []);
+  assertEquals(p.cards.map((c) => c.nome_depois), ['[teste] carrossel', '[teste] carrossel (2/3)', '[teste] carrossel (3/3)']);
+  assertEquals(p.ordem_confere, true);
+  assertEquals(p.avisos, []);
+
+  // Base com "(a/b)" no meio: todo filho lê 1; a ordem só sai certa pelo created_at -> confere false + aviso.
+  const meio = [1, 2, 3].map((n) => arquivo(n, {
+    file_name: `Promo (1/2) verão ${n}.png`, storage_path: `${CLIENTE_A}/${id(n)}/v1/promo.png`, created_at: `2026-11-20T10:0${n}:00Z`,
+  })) as never[];
+  const q = planoDoAgrupamento([id(1), id(2), id(3)], meio, new Set(), () => true);
+  assertEquals(q.ordem_resultante, [id(1), id(2), id(3)]);
+  assertEquals(q.ordem_confere, false);
+  assertEquals(q.problemas, []);
+  assert(q.avisos.some((a) => a.includes('desempate') && a.includes('PRIMEIRA ocorrência')));
+  // Mesmo caso com created_at invertido: a ordem não bate -> problema.
+  const invertido = meio.map((f: Linha, i: number) => ({ ...f, created_at: `2026-11-20T10:0${5 - i}:00Z` })) as never[];
+  const r = planoDoAgrupamento([id(1), id(2), id(3)], invertido, new Set(), () => true);
+  assertEquals(r.ordem_confere, false);
+  assert(r.problemas.length > 0);
+});
+
 Deno.test('imagem do carrossel: png, jpg e webp; gif, vídeo e pdf não', () => {
   assert(ehImagemDoCarrossel({ file_name: 'a', mime_type: 'image/webp' }));
   assert(ehImagemDoCarrossel({ file_name: 'a.JPG', mime_type: null }));
@@ -138,7 +201,7 @@ Deno.test('simulação não escreve e devolve o plano com nomes antes e depois',
   assertEquals(r.pode_agrupar, true);
   assertEquals(banco.updates.length, 0, 'nada escrito');
   const plano = r.plano as { cards: Array<{ nome_antes: string; nome_depois: string; folder?: unknown }>; ordem_resultante: string[] };
-  assertEquals(plano.cards[0].nome_depois, 'card-01.png');
+  assertEquals(plano.cards[0].nome_depois, 'card-01', 'raiz sem extensão (2.38.1)');
   assertEquals(plano.cards[2].nome_depois, 'card-01 (3/5)');
   assertEquals(plano.cards[2].nome_antes, 'card-03.png');
   assert(plano.cards[0].folder, 'avisa a troca de pasta');
