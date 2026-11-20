@@ -16,6 +16,8 @@ export interface OpcoesDoBanco {
   updateNaoCasa?: Set<string>;
   /** Erro de leitura nesta tabela. */
   leituraFalha?: string;
+  /** Roda antes de cada UPDATE (n = 1, 2, ...): muda o estado entre a leitura e a escrita. */
+  antesDoUpdate?: (n: number, tabelas: Tabelas) => void;
 }
 
 export interface BancoFalso {
@@ -37,6 +39,10 @@ export function bancoFalso(tabelas: Tabelas, opcoes: OpcoesDoBanco = {}): BancoF
         const linhas = tabelas[tabela] ?? (tabelas[tabela] = []);
         let casadas = linhas.filter((l) => filtros.every((f) => f(l)));
         if (patch) {
+          if (opcoes.antesDoUpdate) {
+            opcoes.antesDoUpdate(updates.length + 1, tabelas);
+            casadas = linhas.filter((l) => filtros.every((f) => f(l)));
+          }
           casadas = casadas.filter((l) => !opcoes.updateNaoCasa?.has(String(l.id)));
           for (const l of casadas) Object.assign(l, patch);
           updates.push({ tabela, patch: { ...patch }, ids: casadas.map((l) => String(l.id)) });

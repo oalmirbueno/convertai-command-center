@@ -8,7 +8,7 @@ Retomar: `git log --oneline origin/main..HEAD` + este arquivo.
 - [x] Tool 3 aceleriq_arquivos_enviar_para_aprovacao (commit "MCP 2.38.0: enviar arquivo para aprovação")
 - [x] Versão 2.38.0, contagem de tools em mcp_test.ts (226 -> 229), guia (commit "MCP 2.38.0: versão")
 - [x] P1-A (revisão Codex): simulação com idempotency_key virava replay da chamada confirmada (commit "MCP 2.38.0: P1-A")
-- [ ] P1-B (revisão Codex): agrupar sem mudança de metadado na raiz não revalidava a raiz antes de vincular os filhos
+- [x] P1-B (revisão Codex): agrupar sem mudança de metadado na raiz não revalidava a raiz antes de vincular os filhos (commit "MCP 2.38.0: P1-B")
 - [ ] (Almir) PR, merge, bundle, deploy, prova — fora deste executor
 
 ## Decisões
@@ -16,7 +16,7 @@ Retomar: `git log --oneline origin/main..HEAD` + este arquivo.
   A ordem é cópia fiel de `src/lib/editorialMedia.ts`; `src/test/mcp-carrossel-de-arquivos.test.ts` compara as duas.
 - Agrupar: escrita com db() (service role), UPDATE por linha com todos os filtros de estado na cláusula
   (id, client_id, project_id/null, parent_file_id null, internal, not_requested, none, locked_at null, archived_at null)
-  e contagem = 1; filhos primeiro, raiz por último; falhou = desfaz as já alteradas. Depois confere que nenhum filho
+  e contagem = 1; RAIZ PRIMEIRO (desde o P1-B), depois os filhos; falhou = desfaz as já alteradas. Depois confere que nenhum filho
   ganhou neto. Nomes antigos vão na resposta e numa linha própria de auditoria (`aceleriq_arquivos_agrupar_carrossel.antes`).
 - Nomes: raiz = nome sem sufixo "(i/N)" (mantém extensão se tinha); filhos = "<nome da raiz sem sufixo e sem extensão> (i/N)".
 - Ordem: confere com a regra do painel depois do rename; se o número no início do nome no storage contradiz o pedido, recusa (não move blob).
@@ -74,3 +74,14 @@ Obs.: o deno.lock do repo dá conflito de integridade no esm.sh; usei `--no-lock
   nunca casava. Agora `{ confirmar: true }` (chave + ferramenta + principal, como as tools sem escopo).
   Teste: `trilhaDeAuditoria()` (banco-falso util) grava com buildAuditInput, procura com filtroDeIdempotencia + `@>` do jsonb
   e roda pelo executarFerramenta real. Sem a correção os 3 testes P1-A falham; com ela passam.
+- P1-B: o `continue` pulava o UPDATE da raiz quando nada mudava nela, e o files_secure_guard do UPDATE do filho olha a raiz
+  antiga do filho, não o novo parent_file_id. Agora: a raiz vai PRIMEIRO e SEMPRE leva um UPDATE condicional com os filtros
+  de estado (grava nome/tipo/pasta finais, iguais aos atuais quando nada muda; legenda se pedida) e contagem = 1; depois os
+  filhos; depois da conferência de netos, um SELECT da raiz com os mesmos filtros (1 linha). Falhou = desfaz na ordem inversa
+  (filhos soltos primeiro, raiz por último, com os valores originais). Janela que sobra: entre o último filho e o SELECT final
+  (detectada e desfeita, não evitada; sem transação no PostgREST).
+  Teste: `antesDoUpdate` no banco falso muda a raiz para aprovação (a) antes do UPDATE da raiz -> nenhuma escrita;
+  (b) antes do último filho -> conferência acusa, filhos desfeitos. Os dois falham no código anterior.
+- Testes depois das correções: modulos/ + mcp_test.ts 233 ok; pasta mcp-server 284 ok + as 2 falhas antigas (painel_test 2.23.0;
+  _shared 4.292.714 bytes, já acima do limite antes; este lote soma ~300 bytes de tipo/comentário no _shared);
+  vitest src/test/mcp-carrossel-de-arquivos.test.ts 4 ok; git diff --check ok.

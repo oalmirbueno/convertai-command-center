@@ -174,8 +174,8 @@ Deno.test('confirmar agrupa: filhos apontam para a raiz, nomes do painel, tipo e
       assert(!(campo in u.patch), `não mexe em ${campo}`);
     }
   }
-  // A raiz é escrita por último.
-  assertEquals(banco.updates[banco.updates.length - 1].ids, [id(1)]);
+  // A raiz é escrita primeiro (UPDATE condicional que revalida o estado dela antes dos filhos).
+  assertEquals(banco.updates[0].ids, [id(1)]);
   // Os nomes de antes vão para a trilha.
   assertEquals(auditorias.length, 1);
   assertStringIncludes(JSON.stringify(auditorias[0]), 'card-03.png');
@@ -255,4 +255,42 @@ Deno.test('P1-A: simulação com a chave não vira replay; confirmar=true com a 
   for (const f of t2.files) Object.assign(f, { parent_file_id: null });
   const replay = await outraTrilha.chamar('aceleriq_arquivos_agrupar_carrossel', h2, { file_ids: ids5, confirmar: true, idempotency_key: 'agrupar-p1a-02' }, ctx);
   assertEquals(replay.replay, true);
+});
+
+// P1-B (revisão do Codex): raiz que não muda metadado nenhum ainda é revalidada perto da escrita.
+const raizLimpa = () => ({
+  files: [1, 2, 3].map((n) => arquivo(n, n === 1 ? { file_name: 'Stop', file_type: 'carrossel', folder: 'materiais' } : {})),
+});
+const ids3 = [1, 2, 3].map(id);
+const entrarNaAprovacao = (t: Tabelas) => {
+  Object.assign(t.files.find((f) => f.id === id(1))!, { visibility: 'approval', agency_approval_status: 'approved', approval_status: 'pending' });
+};
+
+Deno.test('P1-B: raiz sem mudança de metadado entra na aprovação entre a leitura e a escrita: nada fica vinculado', async () => {
+  const t = raizLimpa();
+  const { banco, deps } = montar(t, { antesDoUpdate: (n, tab) => { if (n === 1) entrarNaAprovacao(tab); } });
+  const sim = await agruparCarrossel({ file_ids: ids3 }, ctx, montar(structuredClone(raizLimpa())).deps);
+  const cardRaiz = ((sim.plano as { cards: Array<{ papel: string; nome_antes: string; nome_depois: string }> }).cards)[0];
+  assertEquals(cardRaiz.nome_antes, cardRaiz.nome_depois, 'a raiz não precisa mudar nada');
+  await assertRejects(
+    () => agruparCarrossel({ file_ids: ids3, confirmar: true, idempotency_key: 'agrupar-p1b-01' }, ctx, deps),
+    Error,
+    'mudou de estado',
+  );
+  assertEquals(t.files.filter((f) => f.parent_file_id === id(1)).length, 0, 'nenhum filho vinculado');
+  assertEquals(banco.updates.flatMap((u) => u.ids), [], 'o UPDATE condicional da raiz não casou e nada mais foi escrito');
+});
+
+Deno.test('P1-B: raiz entra na aprovação depois do UPDATE dela e antes da conferência: desfaz os filhos', async () => {
+  const t = raizLimpa();
+  const antes = structuredClone(t.files);
+  // 1 = raiz, 2 e 3 = filhos; antes do UPDATE 3 (último filho) a raiz muda; os filhos chegam a ser vinculados.
+  const { deps } = montar(t, { antesDoUpdate: (n, tab) => { if (n === 3) entrarNaAprovacao(tab); } });
+  await assertRejects(
+    () => agruparCarrossel({ file_ids: ids3, confirmar: true, idempotency_key: 'agrupar-p1b-02' }, ctx, deps),
+    Error,
+    'A raiz',
+  );
+  assertEquals(t.files.filter((f) => f.parent_file_id === id(1)).length, 0, 'nenhum filho ficou vinculado');
+  for (const [i, f] of t.files.slice(1).entries()) assertEquals(f.file_name, antes[i + 1].file_name, 'nomes dos filhos voltaram');
 });

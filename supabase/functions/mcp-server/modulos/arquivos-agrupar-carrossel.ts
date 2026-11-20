@@ -138,9 +138,14 @@ function comFiltros(q: Consulta, id: string, plano: PlanoDoAgrupamento): Consult
 type Original = Pick<ArquivoDoCarrossel, 'id' | 'file_name' | 'file_type' | 'folder' | 'caption'>;
 
 /**
- * Executa o plano: filhos primeiro (parent_file_id, nome, tipo, pasta), a raiz
- * por último (nome, tipo, pasta e legenda opcional). Cada linha tem que casar
- * exatamente uma vez; senão desfaz as já alteradas e lança o erro.
+ * Executa o plano: a raiz PRIMEIRO, sempre com um UPDATE condicional (nome, tipo e
+ * pasta finais, que são os atuais quando nada muda, e legenda opcional) com os filtros
+ * de estado; depois os filhos (parent_file_id, nome, tipo, pasta); por fim confere de
+ * novo a raiz com os mesmos filtros. O files_secure_guard do UPDATE do filho olha a raiz
+ * antiga do filho, não o novo parent_file_id, então só o UPDATE e a conferência da raiz
+ * barram vincular cards a uma raiz que entrou na aprovação no meio do caminho.
+ * Cada linha tem que casar exatamente uma vez; senão desfaz as já alteradas (filhos
+ * primeiro, raiz por último) e lança o erro.
  */
 export async function executarAgrupamento(
   banco: DependenciasDoAgrupar['banco'],
@@ -175,8 +180,7 @@ export async function executarAgrupamento(
     throw new Error(`${motivo}${sufixo}`);
   };
 
-  const ordem = [...plano.cards.slice(1), plano.cards[0]];
-  for (const card of ordem) {
+  for (const card of plano.cards) {
     const patch: Record<string, unknown> = {};
     if (card.muda_nome) patch.file_name = card.nome_depois;
     if (card.muda_file_type) patch.file_type = TIPO_DO_CARROSSEL;
@@ -184,10 +188,13 @@ export async function executarAgrupamento(
     if (card.papel === 'filho') {
       patch.parent_file_id = raizId;
       // O filho não carrega legenda (o modelo do painel): a legenda é da raiz.
-    } else if (legenda !== undefined) {
-      patch.caption = legenda;
+    } else {
+      // A raiz SEMPRE passa por um UPDATE com os filtros de estado, mesmo sem metadado novo:
+      // grava o estado final (igual ao atual quando nada muda). É a revalidação da raiz antes
+      // de vincular os filhos.
+      Object.assign(patch, { file_name: card.nome_depois, file_type: TIPO_DO_CARROSSEL, folder: PASTA_DO_CARROSSEL });
+      if (legenda !== undefined) patch.caption = legenda;
     }
-    if (!Object.keys(patch).length) continue;
     const r: Resultado = await comFiltros(banco.from('files').update(patch), card.file_id, plano)
       .select('id')
       .then((x: Resultado) => x, (e: unknown) => ({ data: null, error: { message: String(e) } }));
@@ -205,6 +212,14 @@ export async function executarAgrupamento(
   if (netos.error) await falhar('Não deu para conferir o carrossel depois de agrupar.');
   if (Array.isArray(netos.data) && netos.data.length) {
     await falhar('Um dos cards ganhou cards próprios enquanto isso (carrossel dentro de carrossel não vale).');
+  }
+
+  // Conferência depois: a raiz continua interna, fora da aprovação e sem pai (os mesmos filtros do UPDATE).
+  const raiz = await comFiltros(banco.from('files').select('id'), raizId, plano)
+    .then((x: Resultado) => x, (e: unknown) => ({ data: null, error: { message: String(e) } }));
+  if (raiz.error) await falhar('Não deu para conferir a raiz depois de agrupar.');
+  if (!Array.isArray(raiz.data) || raiz.data.length !== 1) {
+    await falhar(`A raiz (${raizId}) mudou de estado enquanto isso (entrou na aprovação, foi arquivada ou virou card de outro).`);
   }
 }
 
