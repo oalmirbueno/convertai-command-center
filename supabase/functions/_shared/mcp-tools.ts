@@ -71,6 +71,7 @@ import { FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS } from '../mcp-server/modulos/a
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
 import { FERRAMENTA_DE_AGRUPAR_CARROSSEL } from '../mcp-server/modulos/arquivos-agrupar-carrossel.ts';
+import { FERRAMENTA_DE_POST_DE_ARQUIVO } from '../mcp-server/modulos/agenda-post-de-arquivo.ts';
 import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
 import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
@@ -398,6 +399,7 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_criar_publicacao_de_aprovado: 'editorial:write',
   // MCP 2.38 (20/11/2026): carrossel de Arquivos.
   aceleriq_arquivos_agrupar_carrossel: 'files:write',
+  aceleriq_agenda_criar_post_de_arquivo: 'editorial:write',
   // MCP 2.33 (18/11/2026): e-mail profissional (entradas, migração, avanço, pagamento e conferência).
   aceleriq_email_entradas: 'clients:read',
   aceleriq_email_migracao: 'clients:read',
@@ -5152,6 +5154,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS,
   // MCP 2.38: carrossel de Arquivos (agrupar cards soltos sob a raiz).
   ...FERRAMENTA_DE_AGRUPAR_CARROSSEL,
+  ...FERRAMENTA_DE_POST_DE_ARQUIVO,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so
