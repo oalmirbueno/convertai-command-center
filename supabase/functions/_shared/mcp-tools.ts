@@ -70,6 +70,7 @@ import { FERRAMENTA_DO_DONO_NO_ESCRITORIO } from '../mcp-server/modulos/escritor
 import { FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS } from '../mcp-server/modulos/auditoria-assinaturas.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
+import { FERRAMENTA_DE_AGRUPAR_CARROSSEL } from '../mcp-server/modulos/arquivos-agrupar-carrossel.ts';
 import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
 import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
@@ -395,6 +396,8 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_reagendar_publicacao: 'editorial:write',
   // MCP 2.30 (18/11/2026): publicação planejada de post já aprovado, para depois o reagendar.
   aceleriq_criar_publicacao_de_aprovado: 'editorial:write',
+  // MCP 2.38 (20/11/2026): carrossel de Arquivos.
+  aceleriq_arquivos_agrupar_carrossel: 'files:write',
   // MCP 2.33 (18/11/2026): e-mail profissional (entradas, migração, avanço, pagamento e conferência).
   aceleriq_email_entradas: 'clients:read',
   aceleriq_email_migracao: 'clients:read',
@@ -5147,6 +5150,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTA_DO_DONO_NO_ESCRITORIO,
   // MCP 2.37: auditoria das assinaturas dos agentes (quem assinou como quem; log e alerta, só leitura).
   ...FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS,
+  // MCP 2.38: carrossel de Arquivos (agrupar cards soltos sob a raiz).
+  ...FERRAMENTA_DE_AGRUPAR_CARROSSEL,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

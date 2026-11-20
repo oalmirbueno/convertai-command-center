@@ -40,7 +40,7 @@ export const FERRAMENTAS_POR_AREA: Record<string, string[]> = {
   pedidos: ['aceleriq_panorama_do_cliente', 'aceleriq_get_client_context'],
   briefings: ['aceleriq_list_briefings', 'aceleriq_get_briefing'],
   contratos: ['aceleriq_list_contracts', 'aceleriq_get_contract', 'aceleriq_create_contract', 'aceleriq_update_contract', 'aceleriq_cancel_contract'],
-  arquivos: ['aceleriq_list_files', 'aceleriq_get_file', 'aceleriq_get_file_content', 'aceleriq_search_file_content', 'aceleriq_get_file_processing_status', 'aceleriq_upload_file', 'aceleriq_upload_file_inline', 'aceleriq_prepare_file_upload', 'aceleriq_finalize_file_upload', 'aceleriq_update_file_metadata', 'aceleriq_create_file_version', 'aceleriq_archive_file', 'aceleriq_restore_file'],
+  arquivos: ['aceleriq_list_files', 'aceleriq_get_file', 'aceleriq_get_file_content', 'aceleriq_search_file_content', 'aceleriq_get_file_processing_status', 'aceleriq_upload_file', 'aceleriq_upload_file_inline', 'aceleriq_prepare_file_upload', 'aceleriq_finalize_file_upload', 'aceleriq_update_file_metadata', 'aceleriq_create_file_version', 'aceleriq_archive_file', 'aceleriq_restore_file', 'aceleriq_arquivos_agrupar_carrossel'],
   workspace: ['aceleriq_list_workspace_nodes', 'aceleriq_get_workspace_node', 'aceleriq_studio_read', 'aceleriq_studio_draft', 'aceleriq_workspace_mover_arquivo', 'aceleriq_workspace_criar_arquivo', 'aceleriq_workspace_link_arquivo', 'aceleriq_workspace_retirar_aprovacao'],
   metricas: ['aceleriq_get_social_metrics', 'aceleriq_list_social_posts', 'aceleriq_instagram_diagnostico'],
   anuncios: ['aceleriq_get_ads_campaigns', 'aceleriq_get_ads_creatives', 'aceleriq_get_ads_performance', 'aceleriq_ads_registrar_acao', 'aceleriq_ads_boletim'],
