@@ -85,3 +85,7 @@ Obs.: o deno.lock do repo dá conflito de integridade no esm.sh; usei `--no-lock
 - Testes depois das correções: modulos/ + mcp_test.ts 233 ok; pasta mcp-server 284 ok + as 2 falhas antigas (painel_test 2.23.0;
   _shared 4.292.714 bytes, já acima do limite antes; este lote soma ~300 bytes de tipo/comentário no _shared);
   vitest src/test/mcp-carrossel-de-arquivos.test.ts 4 ok; git diff --check ok.
+
+## Revisão do Codex (20/11)
+- 1ª rodada: 2 P1 (replay após simulação; raiz sem revalidação) — corrigidos (cf12b0bd, 760d5b45).
+- 2ª rodada: 1 P1 residual: sem transação, há janela curta entre os UPDATEs em que alguém libere a MESMA raiz pelo painel; a conferência final detecta e desfaz, mas o desfazer pode ser recusado pela guarda se a raiz já estiver em aprovação. Correção definitiva = RPC SECURITY DEFINER com FOR UPDATE na raiz (migration; exige autorização do Almir, AGENTS.md). NÃO feita; risco aceito e informado.
