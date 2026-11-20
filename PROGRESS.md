@@ -89,3 +89,24 @@ Obs.: o deno.lock do repo dá conflito de integridade no esm.sh; usei `--no-lock
 ## Revisão do Codex (20/11)
 - 1ª rodada: 2 P1 (replay após simulação; raiz sem revalidação) — corrigidos (cf12b0bd, 760d5b45).
 - 2ª rodada: 1 P1 residual: sem transação, há janela curta entre os UPDATEs em que alguém libere a MESMA raiz pelo painel; a conferência final detecta e desfaz, mas o desfazer pode ser recusado pela guarda se a raiz já estiver em aprovação. Correção definitiva = RPC SECURITY DEFINER com FOR UPDATE na raiz (migration; exige autorização do Almir, AGENTS.md). NÃO feita; risco aceito e informado.
+
+## 2.38.1 (20/11/2026): nome do carrossel com extensão
+- Bug do teste real da 2.38.0: cards "[teste] carrossel (1/3).png", "(2/3).png", "(3/3).png" viraram raiz
+  "[teste] carrossel (1/3).png" e filhos "[teste] carrossel (1/3) (2/3)" / "(1/3) (3/3)". Causa: o sufixo "(i/N)" era tirado
+  antes da extensão (com extensão ele não está no fim). O painel (editorialMedia.ts numericOrderFromName) lê a PRIMEIRA "(a/b)",
+  então os dois filhos liam 1 e a ordem saía do created_at por acaso.
+- Correção (carrossel-de-arquivos.ts): nomeSemSufixo/baseDoCarrossel/nomeDoCard/tituloDoArquivo tiram PRIMEIRO a extensão
+  (.png/.jpg/.jpeg/.webp, qualquer caixa), DEPOIS todos os " (i/N)" do fim (tolera repetido). Raiz "<base>", filhos
+  "<base> (i/N)", sem extensão. Sem extensão e caso Stop "... (carrossel) (1/5)": igual à 2.38.0.
+- ordem_confere só é true se a ordem sai dos números (storage primeiro, depois a primeira "(a/b)" do nome), sem o desempate
+  por created_at/id (ordemSemDesempate). Se bate só pelo desempate: ordem_confere false + aviso (não bloqueia); se não bate:
+  problema, como antes. Base com "(a/b)" no meio ganha dica de renomear a raiz.
+- Mudança visível: a raiz agrupada perde a extensão no file_name ("card-01.png" -> "card-01"); teste ajustado.
+- Versão 2.38.1 (mcp-release.ts com changelog; mcp_test.ts). 3 vitest presos em "2.36.0" (já falhavam desde a 2.37) subiram para 2.38.1.
+  Tools continuam 229.
+- Testes: deno mcp_test.ts + agrupar/agenda/enviar 128 ok; vitest carrossel 5 ok (compara com editorialMedia.ts nos casos:
+  com/sem extensão, Stop, "(1/3)" repetido, jpg/webp/jpeg, created_at invertido); git diff --check ok.
+- Falha antiga fora do lote: src/test/mcp-precisa-de-voce.test.ts "versão, catálogo..." espera um trecho em mcp-tools.ts
+  que não existe mais (antes escondida pela asserção de versão).
+- Dados já gravados pela 2.38.0 com nome errado: não mexidos (sem escrita em produção). Re-agrupar não renomeia raiz já
+  agrupada (jaAgrupado); corrigir esses nomes exige update manual ou retirar e agrupar de novo.
