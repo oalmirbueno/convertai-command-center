@@ -262,6 +262,8 @@ export async function agruparCarrossel(
     id: f.id, file_name: f.file_name, file_type: f.file_type ?? null, folder: f.folder ?? null, caption: f.caption ?? null,
   }]));
 
+  // Replay só de chamada confirmada (escopo { confirmar: true }): a simulação também é auditada com a
+  // chave. Sem escopo por raiz: o input auditado tem file_ids, e { root_file_id } nunca casaria.
   return await deps.umaVez(NOME_AGRUPAR, ctx, input.idempotency_key!, async () => {
     if (ctx.resultRefHolder) ctx.resultRefHolder.value = `files:${raizId}`;
     await executarAgrupamento(banco, plano, originais, input.legenda);
@@ -308,7 +310,7 @@ export async function agruparCarrossel(
         proximo_passo: proximoPasso(raizId),
       },
     };
-  }, { root_file_id: raizId });
+  }, { confirmar: true });
 }
 
 function erroDeEntrada(e: z.ZodError): Error {

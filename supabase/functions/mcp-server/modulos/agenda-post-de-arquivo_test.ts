@@ -3,7 +3,7 @@ import { assert, assertEquals, assertRejects, assertStringIncludes } from 'https
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { DataScopeError } from '../../_shared/mcp-auth.ts';
 import { criarPostDeArquivo, type DependenciasDoPost, postDeArquivoSchema } from './agenda-post-de-arquivo.ts';
-import { bancoFalso, type Linha, type Tabelas, umaVezFalso } from './banco-falso-de-arquivos_test_util.ts';
+import { bancoFalso, type Linha, type Tabelas, trilhaDeAuditoria, umaVezFalso } from './banco-falso-de-arquivos_test_util.ts';
 
 const CLIENTE_A = '00000000-0000-4000-8000-0000000000aa';
 const CLIENTE_B = '00000000-0000-4000-8000-0000000000bb';
@@ -177,4 +177,25 @@ Deno.test('recusa da Agenda volta traduzida e não esconde a falha da sessão', 
   await assertRejects(() => criarPostDeArquivo({ ...base, confirmar: true, idempotency_key: 'post-0005' }, ctx, deps), Error, 'não tem permissão');
   const sessao = montar(tabelas(), { rpcErro: new Error('mesa:exige_oauth Agir nas mesas...') });
   await assertRejects(() => criarPostDeArquivo({ ...base, confirmar: true, idempotency_key: 'post-0006' }, ctx, sessao.deps), Error, 'mesa:exige_oauth');
+});
+
+Deno.test('P1-A: simulação com a chave não vira replay; confirmar=true com a mesma chave cria; repetir é replay', async () => {
+  const t = tabelas();
+  const { deps, rpcs, itens } = montar(t);
+  const trilha = trilhaDeAuditoria();
+  deps.umaVez = trilha.umaVez;
+  const handler = (a: unknown, c: AuthContext) => criarPostDeArquivo(postDeArquivoSchema.parse(a), c, deps);
+  const chamar = (args: Record<string, unknown>) => trilha.chamar('aceleriq_agenda_criar_post_de_arquivo', handler, args, ctx);
+  const sim = await chamar({ ...base, idempotency_key: 'post-p1a-01' });
+  assertEquals(sim.simulacao, true);
+  assertEquals(itens.length + rpcs.length, 0);
+  const r = await chamar({ ...base, confirmar: true, idempotency_key: 'post-p1a-01' });
+  assertEquals(r.replay, undefined, 'não é replay da simulação');
+  assertEquals(r.post_id, POST);
+  assertEquals(itens.length, 1);
+  assertEquals(rpcs.length, 1);
+  const de_novo = await chamar({ ...base, confirmar: true, idempotency_key: 'post-p1a-01' });
+  assertEquals(de_novo.replay, true);
+  assertEquals(itens.length, 1, 'não cria de novo');
+  assertEquals(rpcs.length, 1);
 });

@@ -262,6 +262,7 @@ export async function criarPostDeArquivo(
     };
   }
 
+  // Replay só de chamada confirmada (escopo com confirmar: true): a simulação também é auditada com a chave.
   return await deps.umaVez(NOME_POST_DE_ARQUIVO, ctx, input.idempotency_key!, async () => {
     if (ctx.resultRefHolder) ctx.resultRefHolder.value = `files:${root.id}`;
     if (adotar.length) {
@@ -303,7 +304,7 @@ export async function criarPostDeArquivo(
         proximo_passo: `Para o cliente aprovar, chame aceleriq_arquivos_enviar_para_aprovacao com file_id ${root.id}. A data de publicação é programada pela Agenda depois da aprovação.`,
       },
     };
-  }, { file_id: root.id });
+  }, { file_id: root.id, confirmar: true });
 }
 
 function erroDeEntrada(e: z.ZodError): Error {

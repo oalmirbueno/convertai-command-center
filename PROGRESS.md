@@ -7,6 +7,8 @@ Retomar: `git log --oneline origin/main..HEAD` + este arquivo.
 - [x] Tool 2 aceleriq_agenda_criar_post_de_arquivo (commit "MCP 2.38.0: post da Agenda de arquivo")
 - [x] Tool 3 aceleriq_arquivos_enviar_para_aprovacao (commit "MCP 2.38.0: enviar arquivo para aprovação")
 - [x] Versão 2.38.0, contagem de tools em mcp_test.ts (226 -> 229), guia (commit "MCP 2.38.0: versão")
+- [x] P1-A (revisão Codex): simulação com idempotency_key virava replay da chamada confirmada (commit "MCP 2.38.0: P1-A")
+- [ ] P1-B (revisão Codex): agrupar sem mudança de metadado na raiz não revalidava a raiz antes de vincular os filhos
 - [ ] (Almir) PR, merge, bundle, deploy, prova — fora deste executor
 
 ## Decisões
@@ -63,3 +65,12 @@ Obs.: o deno.lock do repo dá conflito de integridade no esm.sh; usei `--no-lock
   (hoje em aprovação -> a simulação deve recusar e mandar retirar), retirar, agrupar, criar post e enviar; conferir "Carrossel · 5" no portal.
 - Agrupar escreve com a chave de serviço (não há RPC de agrupar); a guarda do banco ainda barra linha fora do estado interno.
 - Post de arquivo: se o save_editorial_post falhar depois do item criado, fica a tarefa sem post (repetir com a mesma entrada reaproveita).
+
+## Correções da revisão cruzada do Codex (20/11/2026)
+- P1-A: executarFerramenta audita a simulação como sucesso com o input cru (idempotency_key inclusa) e umaVez casava
+  por `sanitized_input @> {__principal?, idempotency_key, escopo}`. Correção: o escopo das 3 tools inclui `confirmar: true`
+  (EscopoDeIdempotencia agora aceita boolean; tipo só alargado, as outras tools não mudam). Só chamada confirmada vira replay.
+  Achado junto: o agrupar usava escopo `{ root_file_id }`, que nunca existe no input auditado (só file_ids) -> o replay dele
+  nunca casava. Agora `{ confirmar: true }` (chave + ferramenta + principal, como as tools sem escopo).
+  Teste: `trilhaDeAuditoria()` (banco-falso util) grava com buildAuditInput, procura com filtroDeIdempotencia + `@>` do jsonb
+  e roda pelo executarFerramenta real. Sem a correção os 3 testes P1-A falham; com ela passam.

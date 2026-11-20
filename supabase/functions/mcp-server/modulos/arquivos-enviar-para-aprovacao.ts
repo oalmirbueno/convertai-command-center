@@ -170,6 +170,7 @@ export async function enviarArquivoParaAprovacao(
     };
   }
   // A recusa mora dentro do umaVez: repetir a chave de um envio que deu certo volta replay, não "já em aprovação".
+  // Replay só de chamada confirmada (escopo com confirmar: true): a simulação também é auditada com a chave.
   return await deps.umaVez(NOME_ENVIAR_ARQUIVO, ctx, input.idempotency_key!, async () => {
     if (problemas.length) throw new Error(`Não dá para enviar: ${problemas.join(' ')}`);
     if (ctx.resultRefHolder) ctx.resultRefHolder.value = `files:${arquivo.id}`;
@@ -197,7 +198,7 @@ export async function enviarArquivoParaAprovacao(
           : `Pedida a revisão da agência (${rotuloDoEnvio(cards)}). Um admin ou gestor libera ao cliente depois. Nada foi agendado nem publicado.`,
       },
     };
-  }, { file_id: arquivo.id });
+  }, { file_id: arquivo.id, confirmar: true });
 }
 
 function erroDeEntrada(e: z.ZodError): Error {

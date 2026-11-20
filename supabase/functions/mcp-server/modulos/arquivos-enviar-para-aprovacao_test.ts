@@ -9,7 +9,7 @@ import {
   enviarArquivoParaAprovacao,
   enviarArquivoSchema,
 } from './arquivos-enviar-para-aprovacao.ts';
-import { bancoFalso, type Linha, type Tabelas, umaVezFalso } from './banco-falso-de-arquivos_test_util.ts';
+import { bancoFalso, type Linha, type Tabelas, trilhaDeAuditoria, umaVezFalso } from './banco-falso-de-arquivos_test_util.ts';
 
 const CLIENTE_A = '00000000-0000-4000-8000-0000000000aa';
 const CLIENTE_B = '00000000-0000-4000-8000-0000000000bb';
@@ -143,4 +143,25 @@ Deno.test('falha da sessão sobe intacta (exige_oauth)', async () => {
   const { deps } = montar(tabelas(), new Error('mesa:exige_oauth Agir nas mesas pelo MCP exige a sessão de uma pessoa'));
   const e = await assertRejects(() => enviarArquivoParaAprovacao(conf('enviar-0009'), ctx, deps), Error);
   assertStringIncludes(e.message, 'mesa:exige_oauth');
+});
+
+Deno.test('P1-A: simulação com a chave não vira replay; confirmar=true com a mesma chave envia; repetir é replay', async () => {
+  const t = tabelas('admin');
+  const { deps, rpcs } = montar(t);
+  const trilha = trilhaDeAuditoria();
+  deps.umaVez = trilha.umaVez;
+  const handler = (a: unknown, c: AuthContext) => enviarArquivoParaAprovacao(enviarArquivoSchema.parse(a), c, deps);
+  const chamar = (args: Record<string, unknown>) => trilha.chamar('aceleriq_arquivos_enviar_para_aprovacao', handler, args, ctx);
+  const sim = await chamar({ file_id: id(1), confirmar: false, idempotency_key: 'enviar-p1a-01' });
+  assertEquals(sim.simulacao, true);
+  await chamar({ file_id: id(1), idempotency_key: 'enviar-p1a-01' });
+  assertEquals(trilha.linhas.filter((l) => l.success).length, 2, 'as simulações ficam na trilha com a chave, como no real');
+  assertEquals(rpcs.length, 0);
+  const r = await chamar(conf('enviar-p1a-01'));
+  assertEquals(r.replay, undefined, 'não é replay da simulação');
+  assertEquals(r.estado, 'aguardando_cliente');
+  assertEquals(rpcs.length, 1);
+  const de_novo = await chamar(conf('enviar-p1a-01'));
+  assertEquals(de_novo.replay, true);
+  assertEquals(rpcs.length, 1, 'não reenvia');
 });

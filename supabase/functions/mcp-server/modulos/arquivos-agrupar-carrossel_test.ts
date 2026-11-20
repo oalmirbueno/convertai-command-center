@@ -11,7 +11,7 @@ import {
   planoDoAgrupamento,
 } from './carrossel-de-arquivos.ts';
 import { agruparCarrossel, agruparCarrosselSchema, type DependenciasDoAgrupar } from './arquivos-agrupar-carrossel.ts';
-import { bancoFalso, type Linha, type OpcoesDoBanco, type Tabelas, umaVezFalso } from './banco-falso-de-arquivos_test_util.ts';
+import { bancoFalso, type Linha, type OpcoesDoBanco, type Tabelas, trilhaDeAuditoria, umaVezFalso } from './banco-falso-de-arquivos_test_util.ts';
 
 const CLIENTE_A = '00000000-0000-4000-8000-0000000000aa';
 const CLIENTE_B = '00000000-0000-4000-8000-0000000000bb';
@@ -225,4 +225,34 @@ Deno.test('cliente fora do escopo: DataScopeError antes de qualquer detalhe ou e
   await assertRejects(() => agruparCarrossel({ file_ids: ids5 }, ctxDeOutro, deps), DataScopeError);
   await assertRejects(() => agruparCarrossel({ file_ids: ids5, confirmar: true, idempotency_key: 'agrupar-0005' }, ctxDeOutro, deps), DataScopeError);
   assertEquals(banco.updates.length, 0);
+});
+
+Deno.test('P1-A: simulação com a chave não vira replay; confirmar=true com a mesma chave agrupa; repetir não refaz', async () => {
+  const t = cinco();
+  const { banco, deps } = montar(t);
+  const trilha = trilhaDeAuditoria();
+  deps.umaVez = trilha.umaVez;
+  const handler = (a: unknown, c: AuthContext) => agruparCarrossel(agruparCarrosselSchema.parse(a), c, deps);
+  const chamar = (args: Record<string, unknown>) => trilha.chamar('aceleriq_arquivos_agrupar_carrossel', handler, args, ctx);
+  const sim = await chamar({ file_ids: ids5, idempotency_key: 'agrupar-p1a-01' });
+  assertEquals(sim.simulacao, true);
+  assertEquals(banco.updates.length, 0);
+  const r = await chamar({ file_ids: ids5, confirmar: true, idempotency_key: 'agrupar-p1a-01' });
+  assertEquals(r.replay, undefined, 'não é replay da simulação');
+  assertEquals(r.ja_agrupado, false);
+  assertEquals(t.files.filter((f) => f.parent_file_id === id(1)).length, 4);
+  const n = banco.updates.length;
+  const de_novo = await chamar({ file_ids: ids5, confirmar: true, idempotency_key: 'agrupar-p1a-01' });
+  assert(de_novo.replay === true || de_novo.ja_agrupado === true);
+  assertEquals(banco.updates.length, n, 'nada novo escrito');
+  // O replay em si (chave confirmada, conjunto mudou depois): volta replay, não refaz.
+  const outraTrilha = trilhaDeAuditoria();
+  const t2 = cinco();
+  const m2 = montar(t2);
+  m2.deps.umaVez = outraTrilha.umaVez;
+  const h2 = (a: unknown, c: AuthContext) => agruparCarrossel(agruparCarrosselSchema.parse(a), c, m2.deps);
+  await outraTrilha.chamar('aceleriq_arquivos_agrupar_carrossel', h2, { file_ids: ids5, confirmar: true, idempotency_key: 'agrupar-p1a-02' }, ctx);
+  for (const f of t2.files) Object.assign(f, { parent_file_id: null });
+  const replay = await outraTrilha.chamar('aceleriq_arquivos_agrupar_carrossel', h2, { file_ids: ids5, confirmar: true, idempotency_key: 'agrupar-p1a-02' }, ctx);
+  assertEquals(replay.replay, true);
 });
