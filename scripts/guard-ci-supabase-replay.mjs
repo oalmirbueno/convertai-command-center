@@ -20,6 +20,73 @@ const CHAINS = ["INPUT", "FORWARD"];
 // Published by Docker Official Images for linux/amd64, busybox:1.37.0-musl.
 const CANARY_IMAGE = "docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835";
 const CANARY_RESPONSE = "aceleriq-ci-replay-canary";
+export const CanaryStage = Object.freeze({
+  GatewayListener: "gateway-listener",
+  ComparisonBridge: "comparison-bridge",
+  ComparisonServer: "comparison-server",
+  DbServer: "db-server",
+  DbProxy: "db-loopback",
+  KongServer: "kong-server",
+  KongProxy: "kong-loopback",
+  ComparisonAddress: "comparison-address",
+  ComparisonHttp: "comparison-http",
+  InternalDns: "internal-dns",
+  GatewayHttp: "gateway-http",
+  Ipv4Route: "ipv4-default-route",
+  Ipv6Route: "ipv6-default-route",
+  BlockComparison: "comparison-bridge-block",
+  BlockGateway: "gateway-block",
+  RemoveContainers: "remove-synthetic-containers",
+  RemoveBridge: "remove-synthetic-bridge",
+});
+
+class ReplayCommandError extends Error {
+  constructor(command, code) {
+    const exitCode = Number.isInteger(code) ? code : null;
+    super(`${command} replay isolation check failed (exit ${exitCode ?? "unknown"}).`);
+    this.exitCode = exitCode;
+  }
+}
+
+class CanaryError extends Error {
+  constructor(stage, cause) {
+    const socketCodes = ["EADDRINUSE", "EADDRNOTAVAIL", "ECONNREFUSED", "ETIMEDOUT"];
+    const code = cause instanceof ReplayCommandError && cause.exitCode !== null ? `exit ${cause.exitCode}`
+      : socketCodes.includes(cause?.code) ? cause.code
+      : cause?.code === "ERR_ASSERTION" ? "unexpected result" : "probe failed";
+    super(`Synthetic network canary failed at ${stage} (${code}).`, { cause });
+    this.stage = stage;
+  }
+}
+
+export async function runCanaryStage(stage, run) {
+  assert(Object.values(CanaryStage).includes(stage), "Unknown synthetic canary stage.");
+  try {
+    return await run();
+  } catch (error) {
+    throw new CanaryError(stage, error);
+  }
+}
+
+export async function runWithCanaryCleanup(run, cleanup) {
+  let primary;
+  try {
+    return await run();
+  } catch (error) {
+    primary = error;
+    throw error;
+  } finally {
+    try {
+      await cleanup();
+    } catch (error) {
+      if (!primary) throw error;
+      if (primary instanceof CanaryError) {
+        const stage = error instanceof CanaryError ? error.stage : "cleanup";
+        primary.message += ` Cleanup also failed at ${stage}.`;
+      }
+    }
+  }
+}
 const CONTAINER_FIELDS = '{"Id":{{json .Id}},"Name":{{json .Name}},"Running":{{json .State.Running}},"Privileged":{{json .HostConfig.Privileged}},"NetworkMode":{{json .HostConfig.NetworkMode}},"Mounts":{{json .Mounts}},"Labels":{{json .Config.Labels}},"Networks":{{json .NetworkSettings.Networks}}}';
 
 function bridgeName(networkId) {
@@ -235,45 +302,74 @@ async function proveLocalCanary(runtime, state) {
   const gatewayCanary = createHttpServer((_request, response) => response.end(CANARY_RESPONSE));
   const containers = [];
   let outsideId;
-  await listen(gatewayCanary, { host: gateway, port: 0 });
-  try {
-    outsideId = await runtime.checked("docker", ["network", "create", "--driver", "bridge", "--internal", "--ipv6=false", outsideName]);
-    assert(ID.test(outsideId), "Malformed synthetic comparison network.");
-    const outside = await startServer(outsideName, outsideName, 18080, "replay-outside");
-    assert(ID.test(outside), "Malformed synthetic comparison container.");
+  await runWithCanaryCleanup(async () => {
+    await runCanaryStage(CanaryStage.GatewayListener, () => listen(gatewayCanary, { host: gateway, port: 0 }));
+    outsideId = await runCanaryStage(CanaryStage.ComparisonBridge, async () => {
+      const id = await runtime.checked("docker", ["network", "create", "--driver", "bridge", "--internal", "--ipv6=false", outsideName]);
+      assert(ID.test(id), "Malformed synthetic comparison network.");
+      return id;
+    });
+    const outside = await runCanaryStage(CanaryStage.ComparisonServer, async () => {
+      const id = await startServer(outsideName, outsideName, 18080, "replay-outside");
+      assert(ID.test(id), "Malformed synthetic comparison container.");
+      return id;
+    });
     containers.push(outside);
     const dbName = `supabase_db_${state.projectId}`;
     for (const { service, hostPort, containerPort } of SERVICES) {
-      const server = await startServer(`supabase_${service}_${state.projectId}`, projectNetwork, containerPort, `replay-${service}`);
-      assert(ID.test(server), "Malformed isolated synthetic container.");
+      const serverStage = service === "db" ? CanaryStage.DbServer : CanaryStage.KongServer;
+      const proxyStage = service === "db" ? CanaryStage.DbProxy : CanaryStage.KongProxy;
+      const server = await runCanaryStage(serverStage, async () => {
+        const id = await startServer(`supabase_${service}_${state.projectId}`, projectNetwork, containerPort, `replay-${service}`);
+        assert(ID.test(id), "Malformed isolated synthetic container.");
+        return id;
+      });
       containers.push(server);
-      await expectLocalCanary(`http://127.0.0.1:${hostPort}/proof`);
+      await runCanaryStage(proxyStage, () => expectLocalCanary(`http://127.0.0.1:${hostPort}/proof`));
     }
-    const outsideNetwork = JSON.parse(await runtime.checked("docker", ["network", "inspect", outsideId]))[0];
-    assert(outsideNetwork?.Id === outsideId && outsideNetwork.Name === outsideName && outsideNetwork.Internal === true &&
-      outsideNetwork.EnableIPv6 === false && outsideNetwork.Driver === "bridge" && outsideNetwork.Scope === "local",
-      "Invalid synthetic comparison network.");
-    const outsideIP = outsideNetwork.Containers[outside]?.IPv4Address?.split("/")[0];
-    assert(isIPv4(outsideIP) && subnetContains(privateAllocation(outsideNetwork).cidr, outsideIP),
-      "Synthetic comparison target is missing from its private bridge.");
-    const outsideURL = `http://${outsideIP}:18080/proof`;
-    await expectLocalCanary(outsideURL);
-    const kongURL = "http://replay-kong:8000/proof";
-    assert.equal(await probe(dbName, [...wget, kongURL]), CANARY_RESPONSE, "The isolated Docker DNS positive control failed.");
+    const outsideURL = await runCanaryStage(CanaryStage.ComparisonAddress, async () => {
+      const outsideNetwork = JSON.parse(await runtime.checked("docker", ["network", "inspect", outsideId]))[0];
+      assert(outsideNetwork?.Id === outsideId && outsideNetwork.Name === outsideName && outsideNetwork.Internal === true &&
+        outsideNetwork.EnableIPv6 === false && outsideNetwork.Driver === "bridge" && outsideNetwork.Scope === "local",
+        "Invalid synthetic comparison network.");
+      const outsideIP = outsideNetwork.Containers[outside]?.IPv4Address?.split("/")[0];
+      assert(isIPv4(outsideIP) && subnetContains(privateAllocation(outsideNetwork).cidr, outsideIP),
+        "Synthetic comparison target is missing from its private bridge.");
+      return `http://${outsideIP}:18080/proof`;
+    });
+    await runCanaryStage(CanaryStage.ComparisonHttp, () => expectLocalCanary(outsideURL));
+    await runCanaryStage(CanaryStage.InternalDns, async () => {
+      assert.equal(await probe(dbName, [...wget, "http://replay-kong:8000/proof"]), CANARY_RESPONSE);
+    });
     const { port: gatewayPort } = gatewayCanary.address();
     const gatewayURL = `http://${gateway}:${gatewayPort}/proof`;
-    await expectLocalCanary(gatewayURL);
-    await probe(dbName, ["/bin/sh", "-ec", 'routes_v4="$(ip route show default)"; routes_v6="$(ip -6 route show default)"; test -z "$routes_v4$routes_v6"; for target do if wget -Y off -qO /dev/null -T 2 "$target"; then exit 1; fi; done',
-      "--", outsideURL, gatewayURL]);
-  } finally {
-    gatewayCanary.close();
-    gatewayCanary.closeAllConnections();
-    try {
-      if (containers.length) await runtime.checked("docker", ["container", "rm", "-f", ...containers]);
-    } finally {
-      if (outsideId && ID.test(outsideId)) await runtime.checked("docker", ["network", "rm", outsideId]);
+    await runCanaryStage(CanaryStage.GatewayHttp, () => expectLocalCanary(gatewayURL));
+    await runCanaryStage(CanaryStage.Ipv4Route, async () => {
+      assert.equal(await probe(dbName, ["ip", "route", "show", "default"]), "");
+    });
+    await runCanaryStage(CanaryStage.Ipv6Route, async () => {
+      assert.equal(await probe(dbName, ["ip", "-6", "route", "show", "default"]), "");
+    });
+    const requireBlocked = (target) => probe(dbName, ["/bin/sh", "-ec",
+      'if wget -Y off -qO /dev/null -T 2 "$1"; then exit 1; fi', "--", target]);
+    await runCanaryStage(CanaryStage.BlockComparison, () => requireBlocked(outsideURL));
+    await runCanaryStage(CanaryStage.BlockGateway, () => requireBlocked(gatewayURL));
+  }, async () => {
+    if (gatewayCanary.listening) {
+      gatewayCanary.close();
+      gatewayCanary.closeAllConnections();
     }
-  }
+    await runWithCanaryCleanup(async () => {
+      if (containers.length) {
+        await runCanaryStage(CanaryStage.RemoveContainers,
+          () => runtime.checked("docker", ["container", "rm", "-f", ...containers]));
+      }
+    }, async () => {
+      if (outsideId) {
+        await runCanaryStage(CanaryStage.RemoveBridge, () => runtime.checked("docker", ["network", "rm", outsideId]));
+      }
+    });
+  });
 }
 
 async function expectLocalCanary(url) {
@@ -381,7 +477,7 @@ function requestProxy(controlSocket, command) {
 function execute(command, args) {
   return new Promise((resolve, reject) => {
     execFile(command, args, { timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
-      if (error) reject(new Error(`${command} replay isolation check failed (exit ${error.code ?? "unknown"}).`));
+      if (error) reject(new ReplayCommandError(command, error.code));
       else resolve(stdout.trim());
     });
   });

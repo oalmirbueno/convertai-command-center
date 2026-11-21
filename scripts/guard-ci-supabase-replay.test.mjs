@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createConnection, createServer } from "node:net";
 import test from "node:test";
-import { createLoopbackProxy, prepareReplay, proveBeforeReplay, releaseReplay, runReplay, verifyNetwork } from "./guard-ci-supabase-replay.mjs";
+import { CanaryStage, createLoopbackProxy, prepareReplay, proveBeforeReplay, releaseReplay, runCanaryStage, runReplay, runWithCanaryCleanup, verifyNetwork } from "./guard-ci-supabase-replay.mjs";
 
 const projectId = "aceleriq-os";
 const owner = "123-1-db-tests";
@@ -233,6 +233,34 @@ test("rejects a subnet outside RFC 1918 and a gateway outside its subnet", () =>
     const network = { ...f.network, IPAM: { Driver: "default", Config } };
     assert.throws(() => verifyNetwork(network, f.state), /private IPv4/);
   }
+});
+
+test("reports the canary stage and a sanitized failure when cleanup also fails", async () => {
+  const sensitive = "synthetic do-not-log command output";
+  const order = [];
+  await assert.rejects(runWithCanaryCleanup(
+    () => runCanaryStage(CanaryStage.Ipv6Route, async () => {
+      order.push("probe");
+      throw new Error(sensitive);
+    }),
+    () => runCanaryStage(CanaryStage.RemoveBridge, async () => {
+      order.push("cleanup");
+      throw new Error(sensitive);
+    }),
+  ), (error) => {
+    assert.equal(error.stage, CanaryStage.Ipv6Route);
+    assert.equal(error.message, "Synthetic network canary failed at ipv6-default-route (probe failed). Cleanup also failed at remove-synthetic-bridge.");
+    assert(!error.message.includes(sensitive));
+    return true;
+  });
+  assert.deepEqual(order, ["probe", "cleanup"]);
+});
+
+test("blocks the proof when only cleanup fails", async () => {
+  await assert.rejects(runWithCanaryCleanup(
+    async () => "healthy probe",
+    () => runCanaryStage(CanaryStage.RemoveContainers, async () => { throw new Error("synthetic"); }),
+  ), (error) => error.stage === CanaryStage.RemoveContainers);
 });
 
 test("loopback proxy resolves each connection and rejects destinations on failed attestation", async (t) => {
