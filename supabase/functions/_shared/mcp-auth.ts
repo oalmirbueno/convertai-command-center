@@ -2,7 +2,7 @@
 // Reuses public.api_keys through the audience-aware validator, which filters
 // revoked_at + expires_at and prevents API-gateway keys from crossing into MCP.
 
-import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { createClient, type SupabaseClient, type User } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import {
   canGrantMcpOAuthAdmin,
   dataScopeAllowsClient,
@@ -10,7 +10,7 @@ import {
   validateOAuthJwtClaims,
 } from './mcp-security.ts';
 import { getMcpRuntimeConfig } from './mcp-runtime.ts';
-import { DOT_OFFICE_OPERATOR, dotOAuthDecision, parseDotOAuthBinding } from './mcp-dot-oauth.ts';
+import { DOT_OFFICE_CONSENT_METADATA_KEY, DOT_OFFICE_OPERATOR, dotOAuthDecision, hasDotOfficeConsent, parseDotOAuthBinding } from './mcp-dot-oauth.ts';
 
 export interface AuthContext {
   keyId: string;
@@ -295,14 +295,13 @@ function readUnexpiredJwtClaims(token: string): Record<string, any> | null {
   return validateOAuthJwtClaims(claims, getMcpRuntimeConfig().authIssuer) ? claims : null;
 }
 
-async function hasVerifiedSubject(token: string, expectedSubject: string): Promise<boolean> {
-  if (!expectedSubject) return false;
+async function readVerifiedSubject(token: string, expectedSubject: string): Promise<User | null> {
+  if (!expectedSubject) return null;
   try {
     const { data, error } = await admin().auth.getUser(token);
-    if (error || !data?.user) return false;
-    return String(data.user.id) === expectedSubject;
+    return !error && data?.user?.id === expectedSubject ? data.user : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -490,7 +489,8 @@ export async function authenticate(req: Request): Promise<AuthResult> {
     if (!oauthClientAllowed) {
       return { ok: false, error: { kind: 'invalid' } };
     }
-    if (!(await hasVerifiedSubject(token, sub))) {
+    const verifiedUser = await readVerifiedSubject(token, sub);
+    if (!verifiedUser) {
       return { ok: false, error: { kind: 'invalid' } };
     }
     const adminBindings = Deno.env.get('MCP_ADMIN_OAUTH_BINDINGS');
@@ -498,7 +498,10 @@ export async function authenticate(req: Request): Promise<AuthResult> {
     const dotAttempt = { clientId, subjectId: sub, verifiedClaims, staff: false, admin: false, legacyBinding: false };
     const dotDecision = dotOAuthDecision(dotBinding, dotAttempt);
     if (dotDecision !== 'unrelated') {
-      if (dotDecision !== 'allowed' || !dotBinding) return { ok: false, error: { kind: 'invalid' } };
+      const consent = verifiedUser.app_metadata?.[DOT_OFFICE_CONSENT_METADATA_KEY];
+      if (dotDecision !== 'allowed' || !dotBinding || !hasDotOfficeConsent(consent, dotBinding.clientId, claims.iat)) {
+        return { ok: false, error: { kind: 'invalid' } };
+      }
       // A conta dedicada fica sem papéis do Painel. Também não aproveita um cliente
       // OAuth já usado para autoria ou administração.
       const [roles, assignments, bindings] = await Promise.all([

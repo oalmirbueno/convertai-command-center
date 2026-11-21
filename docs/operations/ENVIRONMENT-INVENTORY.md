@@ -15,6 +15,9 @@ permanecem no gerenciador privado aprovado.
   gerenciador privado do ambiente;
 - `MCP_DOT_OAUTH_BINDING`, somente como nome e formato `client_uuid:subject_uuid`
   de um cliente OAuth e uma conta Auth dedicados à Dot;
+- `app_metadata.mcp_dot_office_read_v1`, somente como nome do campo
+  administrativo que registra a autorização explícita da conta dedicada para
+  as duas operações da Dot no MCP. A evidência e o valor ficam privados;
 - validações de formato, menor privilégio e ordem de release;
 - placeholders neutros em documentação e testes.
 

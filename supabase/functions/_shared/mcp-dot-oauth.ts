@@ -1,6 +1,16 @@
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const DOT_OFFICE_OPERATOR = 'dot' as const;
+// Registro administrativo da autorização explícita de leitura, distinto do consentimento OIDC.
+export const DOT_OFFICE_CONSENT_METADATA_KEY = 'mcp_dot_office_read_v1';
+
+export function hasDotOfficeConsent(consent: unknown, clientId: string, issuedAt: unknown): boolean {
+  if (!consent || typeof consent !== 'object') return false;
+  const { client_id, approved_at } = consent as { client_id?: unknown; approved_at?: unknown };
+  return client_id === clientId
+    && typeof approved_at === 'number' && Number.isSafeInteger(approved_at) && approved_at > 0
+    && typeof issuedAt === 'number' && Number.isSafeInteger(issuedAt) && issuedAt > approved_at;
+}
 
 export interface DotOAuthBinding {
   clientId: string;
