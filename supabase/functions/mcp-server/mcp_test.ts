@@ -8,7 +8,7 @@ import {
   assertRejects,
   assertThrows,
 } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { canInvoke, canUseToolWithDataScope, TOOL_MAP, TOOLS } from '../_shared/mcp-tools.ts';
+import { canInvoke, canUseToolWithDataScope, describeTool, TOOL_MAP, TOOLS } from '../_shared/mcp-tools.ts';
 import {
   fetchJwksDocument,
   hasScope,
@@ -1961,6 +1961,41 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
   // Regras permanentes do dono: uma ferramenta de leitura; a decisão mora no banco.
   assert(TOOL_MAP.get('aceleriq_regras_permanentes') && FERRAMENTAS_POR_AREA.execucao.includes('aceleriq_regras_permanentes'));
   assert(canInvoke(readCtx, TOOL_MAP.get('aceleriq_regras_permanentes')!));
+});
+
+Deno.test('OAuth dedicado da Dot enxerga somente entrada, caixa própria e ferramentas públicas', () => {
+  const dot: AuthContext = {
+    ...restrictedCtx,
+    scopes: [],
+    officeOperator: 'dot',
+    dataScope: { ...restrictedCtx.dataScope, clientIds: [], source: 'oauth' },
+  };
+  const privadas = TOOLS.filter((tool) => tool.scopes.length && canInvoke(dot, tool) && canUseToolWithDataScope(dot, tool));
+  assertEquals(privadas.map((tool) => tool.name).sort(), ['aceleriq_escritorio_caixa', 'aceleriq_escritorio_entrar']);
+  for (const tool of privadas) {
+    assertEquals(tool.annotations?.readOnlyHint, true);
+    assert(!canInvoke({ ...dot, officeOperator: undefined }, tool));
+    assert(!canUseToolWithDataScope({ ...dot, officeOperator: undefined }, tool));
+
+    const generic = describeTool(tool);
+    assertEquals(describeTool(tool, readCtx), generic);
+    const dedicated = describeTool(tool, dot);
+    assertEquals(dedicated.securitySchemes, generic.securitySchemes);
+    assertEquals(dedicated._meta, generic._meta);
+    assertEquals(dedicated.inputSchema.additionalProperties, false);
+    assert(dedicated.description.includes('Dot'));
+    const properties = dedicated.inputSchema.properties as Record<string, { enum?: string[] }>;
+    assertEquals(properties.operator.enum, ['dot']);
+    if (tool.name === 'aceleriq_escritorio_caixa') {
+      assertEquals(Object.keys(properties).sort(), ['desde', 'limite', 'operator', 'so_nao_lidas']);
+      assert(dedicated.description.includes('mensagens diretas internas'));
+      assert(Object.hasOwn(tool.inputSchema.properties as object, 'conversa_id'));
+    } else {
+      assertEquals(Object.keys(properties), ['operator']);
+    }
+  }
+  const health = TOOL_MAP.get('aceleriq_health')!;
+  assertEquals(describeTool(health, dot), describeTool(health));
 });
 
 // ─── MCP 2.35.0 (18/11/2026): o dono no Escritório pelo app do Hermes ───
