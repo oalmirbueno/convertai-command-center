@@ -65,6 +65,7 @@ import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro
 import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspace-e-perfis.ts';
 import { FERRAMENTAS_DA_CENTRAL } from '../mcp-server/modulos/central-de-skills.ts';
 import { FERRAMENTAS_DO_ESCRITORIO } from '../mcp-server/modulos/escritorio.ts';
+import { DESCRITORES_DO_ESCRITORIO_DOT } from '../mcp-server/modulos/escritorio-dot.ts';
 import { FERRAMENTAS_DAS_REGRAS } from '../mcp-server/modulos/regras-permanentes.ts';
 import { FERRAMENTAS_DAS_AUTOMACOES } from '../mcp-server/modulos/automacoes.ts';
 import { FERRAMENTA_DO_DONO_NO_ESCRITORIO } from '../mcp-server/modulos/escritorio-dono.ts';
@@ -5189,7 +5190,8 @@ export function canUseToolWithDataScope(ctx: AuthContext, tool: ToolDefinition):
   return dataScopeAllowsTool(ctx.dataScope, tool.name, tool.scopes.length === 0);
 }
 
-export function describeTool(t: ToolDefinition) {
+export function describeTool(t: ToolDefinition, ctx?: AuthContext) {
+  const descritorDot = ctx?.officeOperator === DOT_OFFICE_OPERATOR ? DESCRITORES_DO_ESCRITORIO_DOT[t.name] : undefined;
   const securitySchemes = t.scopes.length === 0
     ? [{ type: 'noauth' }]
     : [{
@@ -5201,8 +5203,8 @@ export function describeTool(t: ToolDefinition) {
   return {
     name: t.name,
     title: t.title,
-    description: t.description,
-    inputSchema: t.inputSchema,
+    description: descritorDot?.description ?? t.description,
+    inputSchema: descritorDot?.inputSchema ?? t.inputSchema,
     annotations: t.annotations,
     // Current ChatGPT plugin discovery reads securitySchemes from the tool
     // descriptor itself. Keep the _meta mirror for older MCP Apps clients.

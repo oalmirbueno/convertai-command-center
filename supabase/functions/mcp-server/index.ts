@@ -263,7 +263,8 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
       ? TOOLS.filter((t) => canInvoke(auth.ctx, t) && canUseToolWithDataScope(auth.ctx, t))
       : TOOLS;
     // MCP 2.17: descrição curta e segurança sem o parágrafo repetido (o manual inteiro fica em aceleriq_guia).
-    return rpcResult(id, { tools: visible.map((t) => descritorEnxuto(describeTool(t))) });
+    const context = auth.ok ? auth.ctx : undefined;
+    return rpcResult(id, { tools: visible.map((t) => descritorEnxuto(describeTool(t, context))) });
   }
 
   if (method === "resources/list") {
