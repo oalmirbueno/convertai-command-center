@@ -45,7 +45,7 @@ export class CredencialEmCache<R extends { ok: boolean }> {
   private readonly mapa = new Map<string, { resultado: R; ate: number }>();
   constructor(private readonly ttlMs = TTL_DA_CREDENCIAL_MS, private readonly agora: () => number = Date.now) {}
 
-  async autenticar(req: Request, conferir: (req: Request) => Promise<R>): Promise<R> {
+  async autenticar(req: Request, conferir: (req: Request) => Promise<R>, guardar = (_resultado: R) => true): Promise<R> {
     const token = bearerDe(req);
     if (!token) return await conferir(req);
     const chave = await sha256(token);
@@ -53,7 +53,7 @@ export class CredencialEmCache<R extends { ok: boolean }> {
     if (guardada && guardada.ate > this.agora()) return guardada.resultado;
     if (guardada) this.mapa.delete(chave);
     const resultado = await conferir(req);
-    if (resultado.ok) {
+    if (resultado.ok && guardar(resultado)) {
       const vence = vencimentoDoJwt(token);
       const ate = Math.min(this.agora() + this.ttlMs, vence ?? Number.POSITIVE_INFINITY);
       if (ate > this.agora()) {

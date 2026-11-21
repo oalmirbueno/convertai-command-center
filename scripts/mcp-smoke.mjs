@@ -29,6 +29,7 @@ function parseArgs(argv) {
     discoverRuntimeConfig: process.env.MCP_SMOKE_DISCOVER_RUNTIME_CONFIG === "true",
     operation: process.env.MCP_DEPLOY_OPERATION ?? "verification",
     includeCompat: process.env.MCP_SMOKE_COMPAT === "true",
+    expectedTools: [],
     selfTest: false,
   };
 
@@ -38,7 +39,11 @@ function parseArgs(argv) {
     else if (arg === "--require-authenticated") options.requireAuthenticated = true;
     else if (arg === "--discover-runtime-config") options.discoverRuntimeConfig = true;
     else if (arg === "--self-test") options.selfTest = true;
-    else if (arg === "--base-url") options.baseUrl = argv[++index] ?? "";
+    else if (arg === "--expect-tool") {
+      const name = argv[++index] ?? "";
+      assert.match(name, /^[A-Za-z0-9_.-]{1,128}$/, "--expect-tool requires an MCP tool name");
+      options.expectedTools.push(name);
+    } else if (arg === "--base-url") options.baseUrl = argv[++index] ?? "";
     else if (arg === "--project-ref") options.projectRef = argv[++index] ?? "";
     else if (arg === "--resource-url") options.resourceUrl = argv[++index] ?? "";
     else if (arg === "--metadata-url") options.metadataUrl = argv[++index] ?? "";
@@ -62,6 +67,7 @@ Options:
   --discover-runtime-config Discover the currently effective metadata/resource
                           endpoints from the native server challenge. Intended
                           for the pre-reconciliation candidate smoke only.
+  --expect-tool <name>   Require this name in the public tools/list (repeatable)
   --include-compat       Also validate the optional /mcp compatibility endpoint
   --self-test            Run against an in-process mock server
 `);
@@ -247,6 +253,7 @@ async function smokePortable({
   expectedKeyId = "",
   expectedClientId = "",
   expectedPublicUrl = "",
+  expectedTools = [],
   requireAuthenticated = false,
   discoverRuntimeConfig = false,
   allowHttp = false,
@@ -314,7 +321,12 @@ async function smokePortable({
   assert.equal(initialize.response.status, 200, "initialize must return HTTP 200");
   const initialized = rpcResult(initialize.body, "initialize");
   assert.equal(initialized.protocolVersion, "2025-06-18", "Unexpected MCP protocol version");
-  assert(initialized.serverInfo?.version, "initialize must expose serverInfo.version");
+  const version = initialized.serverInfo?.version;
+  assert(version, "initialize must expose serverInfo.version");
+  const metadataVersion = metadata.body?.mcp?.server_info?.version;
+  if (!discoverRuntimeConfig && metadataVersion != null) {
+    assert.equal(metadataVersion, version, "MCP version in OAuth metadata disagrees with initialize");
+  }
 
   const toolsResponse = await rpc(serverUrl, "tools/list", {});
   assert.equal(toolsResponse.response.status, 200, "tools/list must return HTTP 200");
@@ -324,6 +336,10 @@ async function smokePortable({
     tools.some((tool) => tool?.name === "aceleriq_list_clients"),
     "Protected smoke-test tool aceleriq_list_clients is missing",
   );
+
+  const publishedNames = new Set(tools.map((tool) => tool?.name));
+  const missingTools = expectedTools.filter((name) => !publishedNames.has(name));
+  assert(missingTools.length === 0, `MCP public catalog is missing: ${missingTools.join(", ")}`);
 
   const protectedCall = await rpc(serverUrl, "tools/call", {
     name: "aceleriq_list_clients",
@@ -380,7 +396,7 @@ async function smokePortable({
       oauthMetadata: runtimeMetadataUrl,
       authIssuer: authIssuer || runtimeAuthorizationServers[0],
     },
-    version: initialized.serverInfo.version,
+    version,
     protocol: initialized.protocolVersion,
     tools: tools.length,
     authenticated,
@@ -428,6 +444,7 @@ export async function runSmoke(options) {
     expectedKeyId: options.expectedKeyId,
     expectedClientId: options.expectedClientId,
     expectedPublicUrl,
+    expectedTools: options.expectedTools,
     requireAuthenticated: options.requireAuthenticated,
     discoverRuntimeConfig: options.discoverRuntimeConfig,
     allowHttp: options.allowHttp,
@@ -480,6 +497,7 @@ async function runSelfTest() {
   const expectedKeyId = "11111111-1111-4111-8111-111111111111";
   const expectedClientId = "22222222-2222-4222-8222-222222222222";
   const authenticatedCalls = [];
+  let metadataVersion = "1.8.1";
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", baseUrl);
     const portableUrl = `${baseUrl}/functions/v1/mcp-server`;
@@ -490,6 +508,7 @@ async function runSelfTest() {
         authorization_servers: [`${baseUrl}/auth/v1`],
         scopes_supported: ["openid", "email", "profile"],
         resource_documentation: `${baseUrl}/conectar-mcp`,
+        mcp: { server_info: { version: metadataVersion } },
       });
     }
 
@@ -649,6 +668,21 @@ async function runSelfTest() {
     assert.equal(discovered.publicEndpoints.resource, `${baseUrl}/functions/v1/mcp-server`);
     assert.equal(discovered.publicEndpoints.oauthMetadata, `${baseUrl}/functions/v1/mcp-oauth-metadata`);
     assert.equal(discovered.publicEndpoints.authIssuer, `${baseUrl}/auth/v1`);
+
+    const verifyCatalog = { baseUrl, expectedTools: ["aceleriq_health"], allowHttp: true };
+    assert.equal((await runSmoke(verifyCatalog)).portable.tools, 2);
+    await assert.rejects(
+      runSmoke({ ...verifyCatalog, expectedTools: ["aceleriq_health", "aceleriq_escritorio_entrar"] }),
+      /public catalog is missing: aceleriq_escritorio_entrar/,
+    );
+
+    metadataVersion = "1.7.0";
+    await assert.rejects(
+      runSmoke(verifyCatalog),
+      /MCP version in OAuth metadata disagrees with initialize/,
+    );
+    assert.equal((await runSmoke({ ...verifyCatalog, discoverRuntimeConfig: true })).portable.version, "1.8.1");
+    metadataVersion = "1.8.1";
 
     const validHealth = {
       key: { id: expectedKeyId, name: EXPECTED_SMOKE_KEY_NAME, origin: EXPECTED_SMOKE_ORIGIN },

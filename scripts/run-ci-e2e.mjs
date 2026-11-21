@@ -51,7 +51,7 @@ async function main() {
   }
   assert(process.platform === 'linux' && process.env.CI === 'true' && process.env.GITHUB_ACTIONS === 'true',
     'Real browser E2E requires the disposable Linux GitHub runner.');
-  run(process.execPath, ['scripts/guard-ci-e2e-network.mjs', '--guard']);
+  run(process.execPath, ['scripts/guard-ci-supabase-replay.mjs', '--verify']);
   let status;
   try { status = JSON.parse(run('supabase', ['status', '--output', 'json'], process.env, true)); }
   catch { throw new Error('Could not read ephemeral Supabase status; no credentials were logged.'); }

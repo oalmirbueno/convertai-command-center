@@ -458,6 +458,93 @@ MCP_BASE_URL=https://YOUR_PROJECT_REF.supabase.co \
 
 O smoke canônico valida o desafio `401` com `WWW-Authenticate`, metadata OAuth, `initialize`, `tools/list`, o desafio sem credencial e uma leitura protegida com a chave dedicada. O token nunca é impresso no resultado. `--include-compat` também testa `/mcp`, mas nunca substitui `/mcp-server`.
 
+Para conferir o catálogo público do Escritório sem credencial, use o projeto canônico. Para avaliar um endereço alternativo salvo no app, use `--resource-url` com a URL HTTPS pública. Se o endereço anunciar outro metadata OAuth ou emissor, informe as URLs esperadas com `--oauth-metadata-url` e `--auth-issuer`.
+
+```sh
+env -u MCP_SMOKE_TOKEN -u MCP_SMOKE_REQUIRE_AUTHENTICATED \
+  node scripts/mcp-smoke.mjs --project-ref "$SUPABASE_PROJECT_ID" \
+  --expect-tool aceleriq_escritorio_diretorio \
+  --expect-tool aceleriq_escritorio_entrar \
+  --expect-tool aceleriq_escritorio_caixa \
+  --expect-tool aceleriq_escritorio_enviar
+```
+
+A verificação compara a versão anunciada no metadata OAuth, quando presente, com a resposta de `initialize`. Se divergirem, confira a publicação do par `mcp-server` e `mcp-oauth-metadata`. A listagem pública confirma o catálogo servido pela URL consultada. Para confirmar a importação no ChatGPT ou a identidade do agente, verifique a sessão conectada. O modo `--discover-runtime-config` permite inspecionar a configuração antes de reconciliá-la.
+
+### OAuth dedicado da Dot no Escritório
+
+O vínculo fica desativado sem `MCP_DOT_OAUTH_BINDING`. O administrador registra
+explicitamente um único par `client_uuid:subject_uuid` no gerenciador privado do
+ambiente após confirmar que o cliente público OAuth aprovado é exclusivo da Dot
+e que a conta dedicada do Auth está sem papel de aplicativo, atribuição de cliente
+ou vínculo de autoria existente. Confira na fonte privada que nenhum fluxo ou
+consentimento de outro ator usa o cliente ou a conta antes de configurar o par.
+O vínculo, por si só, deixa as ferramentas do Escritório fechadas.
+
+Registre no fluxo privado aprovado a autorização explícita do titular da conta
+dedicada para o **app Aceleriq no ChatGPT entrar como Dot e ler somente as
+mensagens diretas internas da própria caixa**. Registre a conta, o cliente OAuth
+verificado, a decisão, a data e a evidência no ambiente privado. Somente depois
+o administrador autorizado marca essa aprovação em
+`app_metadata.mcp_dot_office_read_v1` daquela conta Auth, com o UUID do cliente
+aprovado em `client_id` e o instante dessa aprovação em `approved_at` (segundos
+Unix). O servidor confere a autorização na resposta atual de Auth e aceita
+somente JWT do par emitido depois desse segundo. A edição de
+`user_metadata` pelo titular e a cópia do marcador no próprio JWT ficam fora
+dessa decisão.
+
+O consentimento nativo do Supabase cobre OIDC. A autorização do Escritório é
+uma decisão explícita do Aceleriq. O procedimento requer as duas autorizações
+e preserva o fluxo OAuth dos demais sujeitos.
+
+O par exato recebe no MCP apenas `aceleriq_escritorio_entrar` e `aceleriq_escritorio_caixa`
+além da descoberta pública. A caixa cobre somente mensagens diretas à Dot em
+conversas internas sem vínculo com cliente ou tarefa. O servidor exige que
+o registro existente `dot` esteja ativo como executora do ChatGPT. A eventual
+reativação desse registro é uma operação administrativa separada, depois de validar o vínculo em homologação.
+
+No app Aceleriq já instalado, confirme a ação **Connected accounts → Connect
+another account**. Preserve a conexão existente. O consentimento do Painel usa
+a conta Auth com sessão ativa no navegador. Confirme a conta dedicada em
+**Conectado como** antes de autorizar. Na origem, verifique o emissor e o par
+`client_id`/`sub` efetivo, sem registrar o token. Adicionar outra conta no
+ChatGPT não comprova que o registro OAuth é exclusivo nem que o catálogo
+importado usa essa conta. Depois da autorização específica do Escritório,
+confirme que a conexão dedicada usa um token emitido depois da aprovação.
+
+Na homologação, espere exatamente cinco ferramentas na conexão da Dot. São as
+três públicas (`aceleriq_health`, `aceleriq_capabilities` e `aceleriq_guia`)
+e as duas do Escritório. Verifique `voce.slug=dot` na entrada e
+`de_quem_e_a_caixa=dot` na caixa, sem copiar conteúdo de mensagens. Confirme
+a recusa de caixa de outro operador e a ausência de ferramentas de escrita,
+automação, dono e clientes. Compare com a conexão anterior do app e verifique
+que ela conserva o escopo e o catálogo originais. Verifique a recusa do
+Escritório com autorização local ausente, removida ou vinculada a outro cliente.
+
+As restrições acima se aplicam ao MCP. O bearer de OAuth do Supabase conserva o
+papel `authenticated`. No Data API, por exemplo, o titular pode atualizar seu
+próprio perfil sob as políticas RLS do projeto. Na homologação isolada, verifique
+também as superfícies diretas de Auth e Data API. A conta pode administrar o
+próprio perfil conforme a política, e as operações de prova devem confirmar
+recusa de leitura ou edição do perfil alheio, de atribuição de papel e de acesso
+direto às mensagens do Escritório. Confira que atualizar `user_metadata`
+jamais autoriza a caixa e que o usuário não pode editar o marcador em
+`app_metadata`. Se a operação exigir um bearer globalmente somente leitura,
+mantenha o vínculo desativado até existir isolamento próprio no Auth/Data API.
+
+Após CI e revisão, publique o SHA aprovado pelo workflow **Deploy Supabase MCP**,
+que entrega `mcp-server` e `mcp-oauth-metadata`. Valide a conexão existente com
+o vínculo desativado antes de associar o par aprovado. Ative somente o cadastro
+existente da Dot como executora, sem habilitar automações, e repita as leituras.
+Para reverter, remova a aprovação em `app_metadata` e a configuração privada.
+Confirme que a sessão dedicada perde acesso ao Escritório. Depois, na sessão
+da conta dedicada, confira o cliente em `auth.oauth.getUserGrants()` e revogue
+somente a concessão da Dot com `auth.oauth.revokeGrant(clientId)`. Confirme que
+ela saiu da lista e que a conexão original continua funcionando. Restaure o
+estado anterior do cadastro se ele foi alterado. Se houver regressão do servidor,
+use o mesmo workflow para restaurar o SHA anterior homologado da `main`.
+Mantenha esse release e sua reversão separados de outros deploys.
+
 ### Backend migrado
 
 Além do smoke MCP, valide:

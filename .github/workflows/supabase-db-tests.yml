@@ -65,6 +65,17 @@ jobs:
         id: compat_dependencies
         run: npm ci --prefix integrations/lovable-mcp-compat
 
+      - name: Prepare isolated replay network and loopback proxies
+        id: replay_network
+        run: |
+          node --test scripts/guard-ci-supabase-replay.test.mjs
+          node scripts/guard-ci-supabase-replay.mjs --prepare
+          node scripts/guard-ci-supabase-replay.mjs --serve </dev/null >"$RUNNER_TEMP/aceleriq-replay-proxy.log" 2>&1 &
+          node scripts/guard-ci-supabase-replay.mjs --wait
+
+      - name: Prove replay isolation with synthetic local targets
+        run: node scripts/guard-ci-supabase-replay.mjs --prove
+
       - name: Verify append-only migration ledger
         shell: bash
         env:
@@ -119,16 +130,11 @@ jobs:
           node scripts/prepare-ci-brand-replay.mjs --stage
           node scripts/prepare-ci-n8n-replay.mjs --self-test
           node scripts/prepare-ci-n8n-replay.mjs --stage
-          supabase start
+          node scripts/guard-ci-supabase-replay.mjs --start
 
-      - name: Apply migrations
+      - name: Apply migrations within the isolated network
         id: db_reset
-        run: supabase db reset --local --no-seed
-
-      - name: Contain outbound traffic before synthetic database and browser tests
-        # db reset recreates the DB container. Attest the final topology once
-        # the reset has finished, before any test creates synthetic users.
-        run: node scripts/guard-ci-e2e-network.mjs --guard
+        run: node scripts/guard-ci-supabase-replay.mjs --reset
 
       - name: Refresh local Auth routing after container recreation
         # Backport only the official Kong reload, preserving its email template:
@@ -278,7 +284,7 @@ jobs:
 
       - name: Run MCP Deno unit tests
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
-        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/brain-client-context/modulos/brain-client-context-handler_test.ts supabase/testes-deno/notification-write-response_test.ts supabase/functions/vendas-webhook/nucleo_test.ts
+        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/testes-deno/mcp-dot-auth_test.ts supabase/functions/mcp-server/modulos/escritorio-dot_test.ts supabase/functions/brain-client-context/modulos/brain-client-context-handler_test.ts supabase/testes-deno/notification-write-response_test.ts supabase/functions/vendas-webhook/nucleo_test.ts
 
       - name: Type-check portable and public Edge Functions
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
@@ -329,10 +335,10 @@ jobs:
 
       - name: Stop Supabase local stack
         id: supabase_stop
-        if: always()
+        if: ${{ always() && steps.replay_network.outcome == 'success' }}
         run: supabase stop --no-backup
 
-      - name: Restore owned CI container firewall rule
+      - name: Release owned Supabase network guard
         # A failed stop leaves containment in place until this runner is retired.
         if: ${{ always() && steps.supabase_stop.outcome == 'success' }}
-        run: node scripts/guard-ci-e2e-network.mjs --restore
+        run: node scripts/guard-ci-supabase-replay.mjs --release
