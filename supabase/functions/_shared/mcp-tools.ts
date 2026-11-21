@@ -6,6 +6,7 @@
 import { z } from 'https://esm.sh/zod@3.23.8';
 import type { AuthContext } from './mcp-auth.ts';
 import { dataScopeAllowsTool } from './mcp-security.ts';
+import { DOT_OFFICE_OPERATOR, isDotOfficeTool } from './mcp-dot-oauth.ts';
 import { MCP_VERSION } from './mcp-release.ts';
 import {
   ALLOWED_ENTITY_TYPES,
@@ -5177,12 +5178,14 @@ ligarCatalogo(() => TOOLS);
 
 export function canInvoke(ctx: AuthContext, tool: ToolDefinition): boolean {
   if (tool.scopes.length === 0) return true;
+  if (ctx.officeOperator === DOT_OFFICE_OPERATOR) return isDotOfficeTool(tool.name);
   const expanded = expandScopes(ctx.scopes);
   if (expanded.has('admin')) return true;
   return tool.scopes.some(s => expanded.has(s));
 }
 
 export function canUseToolWithDataScope(ctx: AuthContext, tool: ToolDefinition): boolean {
+  if (ctx.officeOperator === DOT_OFFICE_OPERATOR) return tool.scopes.length === 0 || isDotOfficeTool(tool.name);
   return dataScopeAllowsTool(ctx.dataScope, tool.name, tool.scopes.length === 0);
 }
 

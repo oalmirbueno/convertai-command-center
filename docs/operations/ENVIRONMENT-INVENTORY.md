@@ -13,6 +13,8 @@ permanecem no gerenciador privado aprovado.
 - `MCP_ADMIN_OAUTH_BINDINGS`, somente como nome e formato público
   `user_uuid:client_uuid[,user_uuid:client_uuid]`; os pares reais ficam no
   gerenciador privado do ambiente;
+- `MCP_DOT_OAUTH_BINDING`, somente como nome e formato `client_uuid:subject_uuid`
+  de um cliente OAuth e uma conta Auth dedicados à Dot;
 - validações de formato, menor privilégio e ordem de release;
 - placeholders neutros em documentação e testes.
 

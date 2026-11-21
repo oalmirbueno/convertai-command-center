@@ -10,12 +10,15 @@ import {
   validateOAuthJwtClaims,
 } from './mcp-security.ts';
 import { getMcpRuntimeConfig } from './mcp-runtime.ts';
+import { DOT_OFFICE_OPERATOR, dotOAuthDecision, parseDotOAuthBinding } from './mcp-dot-oauth.ts';
 
 export interface AuthContext {
   keyId: string;
   keyName: string;
   scopes: string[];
   origin: string | null;
+  // Só definido no ramo OAuth dedicado depois de validar o par no servidor.
+  officeOperator?: typeof DOT_OFFICE_OPERATOR;
   // The legacy MCP uses service_role-backed handlers, so every data query
   // must also apply this explicit client boundary. `unrestricted` is granted
   // only to admins (role or scope). Empty clientIds means fail closed.
@@ -478,6 +481,7 @@ export async function authenticate(req: Request): Promise<AuthResult> {
     // JWKS can be temporarily unavailable. Supabase Auth remains the source of
     // truth below and verifies the token before any claim is trusted.
   }
+  const verifiedClaims = claims !== null;
   claims ??= readUnexpiredJwtClaims(token);
   if (claims) {
     const sub = String(claims.sub ?? '');
@@ -488,6 +492,44 @@ export async function authenticate(req: Request): Promise<AuthResult> {
     }
     if (!(await hasVerifiedSubject(token, sub))) {
       return { ok: false, error: { kind: 'invalid' } };
+    }
+    const adminBindings = Deno.env.get('MCP_ADMIN_OAUTH_BINDINGS');
+    const dotBinding = parseDotOAuthBinding(Deno.env.get('MCP_DOT_OAUTH_BINDING'));
+    const dotAttempt = { clientId, subjectId: sub, verifiedClaims, staff: false, admin: false, legacyBinding: false };
+    const dotDecision = dotOAuthDecision(dotBinding, dotAttempt);
+    if (dotDecision !== 'unrelated') {
+      if (dotDecision !== 'allowed' || !dotBinding) return { ok: false, error: { kind: 'invalid' } };
+      // A conta dedicada fica sem papéis do Painel. Também não aproveita um cliente
+      // OAuth já usado para autoria ou administração.
+      const [roles, assignments, bindings] = await Promise.all([
+        admin().from('user_roles').select('role').eq('user_id', sub).limit(1),
+        admin().from('team_client_assignments').select('client_id').eq('user_id', sub).limit(1),
+        admin().from('operator_key_bindings').select('principal')
+          .in('principal', [`oauth:${dotBinding.clientId}`, `oauth:${dotBinding.subjectId}`]).limit(1),
+      ]);
+      if (roles.error || assignments.error || bindings.error || !roles.data || !assignments.data || !bindings.data) {
+        return { ok: false, error: { kind: 'invalid' } };
+      }
+      const adminClientInUse = adminBindings?.split(',').some((pair) =>
+        pair.split(':')[1]?.trim().toLowerCase() === dotBinding.clientId);
+      const isolated = dotOAuthDecision(dotBinding, {
+        ...dotAttempt,
+        staff: roles.data.length > 0 || assignments.data.length > 0,
+        admin: adminClientInUse === true,
+        legacyBinding: bindings.data.length > 0,
+      });
+      if (isolated !== 'allowed') return { ok: false, error: { kind: 'invalid' } };
+      return {
+        ok: true,
+        ctx: {
+          keyId: `oauth:${sub}`,
+          keyName: 'Dot (OAuth do Escritório)',
+          scopes: [],
+          origin: `oauth:${clientId}:${sub}`,
+          officeOperator: DOT_OFFICE_OPERATOR,
+          dataScope: { unrestricted: false, clientIds: [], principalUserId: sub, source: 'oauth' },
+        },
+      };
     }
     const hasScopeClaim = Object.prototype.hasOwnProperty.call(claims, 'scope');
     const hasScopesClaim = Object.prototype.hasOwnProperty.call(claims, 'scopes');
@@ -501,7 +543,7 @@ export async function authenticate(req: Request): Promise<AuthResult> {
     // server-side user/client binding. The setting is portable across hosts
     // and fails closed when absent or malformed.
     const exactAdminBinding = canGrantMcpOAuthAdmin(
-      Deno.env.get('MCP_ADMIN_OAUTH_BINDINGS'),
+      adminBindings,
       {
         userId: sub,
         clientId,

@@ -60,7 +60,8 @@ import { descritorEnxuto, lerRecurso, montarPrompt, PROMPTS, RECURSOS } from "./
 
 // MCP 2.17: a credencial conferida vale 45 s (no OAuth eram cinco idas ao servidor por chamada).
 const credenciais = new CredencialEmCache<AuthResult>();
-const authenticate = (req: Request) => credenciais.autenticar(req, conferirCredencial);
+const authenticate = (req: Request) => credenciais.autenticar(req, conferirCredencial,
+  (resultado) => resultado.ok && !resultado.ctx.officeOperator);
 const ehForaDoEscopo = (e: unknown) => {
   const message = (e as Error)?.message ?? String(e);
   return e instanceof DataScopeError || message.startsWith("write:forbidden") || message.includes("outside this MCP principal data scope");
@@ -385,7 +386,7 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
         correlationId,
         declarado,
         operadorFinal: operadorDeclarado(autoria.args),
-        vinculos: autoria.vinculos,
+        vinculos: ctx.officeOperator ? [{ operator_slug: ctx.officeOperator, padrao: true }] : autoria.vinculos,
         indisponivel,
         sinais,
       }));

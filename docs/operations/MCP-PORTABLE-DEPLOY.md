@@ -458,6 +458,42 @@ MCP_BASE_URL=https://YOUR_PROJECT_REF.supabase.co \
 
 O smoke canônico valida o desafio `401` com `WWW-Authenticate`, metadata OAuth, `initialize`, `tools/list`, o desafio sem credencial e uma leitura protegida com a chave dedicada. O token nunca é impresso no resultado. `--include-compat` também testa `/mcp`, mas nunca substitui `/mcp-server`.
 
+Para conferir o catálogo público do Escritório sem credencial, use o projeto canônico. Para avaliar um endereço alternativo salvo no app, use `--resource-url` com a URL HTTPS pública. Se o endereço anunciar outro metadata OAuth ou emissor, informe as URLs esperadas com `--oauth-metadata-url` e `--auth-issuer`.
+
+```sh
+env -u MCP_SMOKE_TOKEN -u MCP_SMOKE_REQUIRE_AUTHENTICATED \
+  node scripts/mcp-smoke.mjs --project-ref "$SUPABASE_PROJECT_ID" \
+  --expect-tool aceleriq_escritorio_diretorio \
+  --expect-tool aceleriq_escritorio_entrar \
+  --expect-tool aceleriq_escritorio_caixa \
+  --expect-tool aceleriq_escritorio_enviar
+```
+
+A verificação compara a versão anunciada no metadata OAuth, quando presente, com a resposta de `initialize`. Se divergirem, confira a publicação do par `mcp-server` e `mcp-oauth-metadata`. A listagem pública confirma o catálogo servido pela URL consultada. Para confirmar a importação no ChatGPT ou a identidade do agente, verifique a sessão conectada. O modo `--discover-runtime-config` permite inspecionar a configuração antes de reconciliá-la.
+
+### OAuth dedicado da Dot no Escritório
+
+O vínculo fica desativado sem `MCP_DOT_OAUTH_BINDING`. O administrador registra
+explicitamente um único par `client_uuid:subject_uuid` no gerenciador privado do
+ambiente após confirmar que o cliente público OAuth aprovado é exclusivo da Dot
+e que a conta dedicada do Auth está sem papel de aplicativo, atribuição de cliente
+ou vínculo de autoria existente. Confira na fonte privada que nenhum fluxo ou
+consentimento de outro ator usa o cliente ou a conta antes de configurar o par.
+Isso não cria credenciais nem altera o cadastro de operadores.
+
+O par exato recebe apenas `aceleriq_escritorio_entrar` e `aceleriq_escritorio_caixa`
+além da descoberta pública. A caixa cobre somente mensagens diretas à Dot em
+conversas internas sem vínculo com cliente ou tarefa. O servidor exige que
+o registro existente `dot` esteja ativo como executora do ChatGPT. A eventual
+reativação desse registro é uma operação administrativa separada, depois de validar o vínculo em homologação.
+
+Na homologação, use o OAuth dedicado no cliente aprovado e confira que a entrada
+retorna `voce.slug=dot`, a caixa retorna `de_quem_e_a_caixa=dot` e as ferramentas
+de escrita, automação, dono e clientes ficam indisponíveis. Confirme que a caixa
+de outro operador é recusada e que as conexões existentes continuam funcionando.
+Para reverter, remova a configuração privada e confirme a recusa da entrada com
+a mesma sessão. Se o cadastro foi reativado durante esse lote, restaure o estado anterior pelo Painel.
+
 ### Backend migrado
 
 Além do smoke MCP, valide:

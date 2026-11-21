@@ -16,6 +16,8 @@
  */
 
 import { z } from 'https://esm.sh/zod@3.23.8';
+import { DOT_OFFICE_OPERATOR } from '../../_shared/mcp-dot-oauth.ts';
+import { escritorioDotCaixa, escritorioDotEntrar } from './escritorio-dot.ts';
 import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
 import { db } from '../../_shared/aceleriq-read-services.ts';
@@ -653,7 +655,9 @@ export const FERRAMENTAS_DO_ESCRITORIO: readonly ToolDefinition[] = [
     scopes: ['aceleriq:read'],
     annotations: LEITURA,
     inputSchema: { type: 'object', additionalProperties: false, properties: { operator: OPERATOR } },
-    handler: (input, ctx) => escritorioEntrar(input, ctx),
+    handler: (input, ctx) => ctx.officeOperator === DOT_OFFICE_OPERATOR
+      ? escritorioDotEntrar(input, ctx)
+      : escritorioEntrar(input, ctx),
   },
   {
     name: 'aceleriq_escritorio_diretorio',
@@ -721,7 +725,9 @@ export const FERRAMENTAS_DO_ESCRITORIO: readonly ToolDefinition[] = [
         limite: { type: 'integer', minimum: 1, maximum: 100, description: 'Padrão 30.' },
       },
     },
-    handler: (input, ctx) => escritorioCaixa(input, ctx),
+    handler: (input, ctx) => ctx.officeOperator === DOT_OFFICE_OPERATOR
+      ? escritorioDotCaixa(input, ctx)
+      : escritorioCaixa(input, ctx),
   },
   {
     name: 'aceleriq_escritorio_marcar_lida',

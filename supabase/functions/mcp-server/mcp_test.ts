@@ -1963,6 +1963,22 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
   assert(canInvoke(readCtx, TOOL_MAP.get('aceleriq_regras_permanentes')!));
 });
 
+Deno.test('OAuth dedicado da Dot enxerga somente entrada, caixa própria e ferramentas públicas', () => {
+  const dot: AuthContext = {
+    ...restrictedCtx,
+    scopes: [],
+    officeOperator: 'dot',
+    dataScope: { ...restrictedCtx.dataScope, clientIds: [], source: 'oauth' },
+  };
+  const privadas = TOOLS.filter((tool) => tool.scopes.length && canInvoke(dot, tool) && canUseToolWithDataScope(dot, tool));
+  assertEquals(privadas.map((tool) => tool.name).sort(), ['aceleriq_escritorio_caixa', 'aceleriq_escritorio_entrar']);
+  for (const tool of privadas) {
+    assertEquals(tool.annotations?.readOnlyHint, true);
+    assert(!canInvoke({ ...dot, officeOperator: undefined }, tool));
+    assert(!canUseToolWithDataScope({ ...dot, officeOperator: undefined }, tool));
+  }
+});
+
 // ─── MCP 2.35.0 (18/11/2026): o dono no Escritório pelo app do Hermes ───
 
 Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nenhum outro escopo concede', async () => {
