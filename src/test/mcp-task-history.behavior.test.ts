@@ -7,6 +7,7 @@ import * as clientScope from "@/lib/mcp/client-scope";
 import * as editorial from "@/lib/mcp/editorial";
 import * as compat from "@/lib/mcp/compat";
 import * as security from "../../supabase/functions/_shared/mcp-security";
+import * as dotOAuth from "../../supabase/functions/_shared/mcp-dot-oauth";
 
 // Execute the actual modules with transport/SDK adapters. No source matching,
 // credentials, network calls or product writes are used by these scenarios.
@@ -101,6 +102,7 @@ function edgeHarness(scope: Scope) {
   const auth = loadModule("supabase/functions/_shared/mcp-auth.ts", {
     "https://esm.sh/@supabase/supabase-js@2.45.4": sdk,
     "./mcp-security.ts": security,
+    "./mcp-dot-oauth.ts": dotOAuth,
     "./mcp-runtime.ts": {},
   });
   const service = loadModule("supabase/functions/_shared/aceleriq-read-services.ts", {

@@ -487,12 +487,30 @@ conversas internas sem vínculo com cliente ou tarefa. O servidor exige que
 o registro existente `dot` esteja ativo como executora do ChatGPT. A eventual
 reativação desse registro é uma operação administrativa separada, depois de validar o vínculo em homologação.
 
-Na homologação, use o OAuth dedicado no cliente aprovado e confira que a entrada
-retorna `voce.slug=dot`, a caixa retorna `de_quem_e_a_caixa=dot` e as ferramentas
-de escrita, automação, dono e clientes ficam indisponíveis. Confirme que a caixa
-de outro operador é recusada e que as conexões existentes continuam funcionando.
-Para reverter, remova a configuração privada e confirme a recusa da entrada com
-a mesma sessão. Se o cadastro foi reativado durante esse lote, restaure o estado anterior pelo Painel.
+No app Aceleriq já instalado, confirme a ação **Connected accounts → Connect
+another account**. Preserve a conexão existente. O consentimento do Painel usa
+a conta Auth com sessão ativa no navegador. Confirme a conta dedicada em
+**Conectado como** antes de autorizar. Na origem, verifique o emissor e o par
+`client_id`/`sub` efetivo, sem registrar o token. Adicionar outra conta no
+ChatGPT não comprova que o registro OAuth é exclusivo nem que o catálogo
+importado usa essa conta.
+
+Na homologação, espere exatamente cinco ferramentas na conexão da Dot. São as
+três públicas (`aceleriq_health`, `aceleriq_capabilities` e `aceleriq_guia`)
+e as duas do Escritório. Verifique `voce.slug=dot` na entrada e
+`de_quem_e_a_caixa=dot` na caixa, sem copiar conteúdo de mensagens. Confirme
+a recusa de caixa de outro operador e a ausência de ferramentas de escrita,
+automação, dono e clientes. Compare com a conexão anterior do app e verifique
+que ela conserva o escopo e o catálogo originais.
+
+Após CI e revisão, publique o SHA aprovado pelo workflow **Deploy Supabase MCP**,
+que entrega `mcp-server` e `mcp-oauth-metadata`. Valide a conexão existente com
+o vínculo desativado antes de associar o par aprovado. Ative somente o cadastro
+existente da Dot como executora, sem habilitar automações, e repita as leituras.
+Para reverter o vínculo, remova a configuração privada e, após a atualização do
+runtime, confirme que a mesma sessão dedicada recebe recusa. Restaure o estado
+anterior do cadastro se ele foi alterado. Se houver regressão do servidor,
+use o mesmo workflow para restaurar o SHA anterior homologado da `main`.
 
 ### Backend migrado
 
