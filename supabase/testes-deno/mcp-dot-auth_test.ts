@@ -1,6 +1,6 @@
 import { assert, assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { authenticate } from './mcp-auth.ts';
-import { DOT_OFFICE_CONSENT_METADATA_KEY } from './mcp-dot-oauth.ts';
+import { authenticate } from '../functions/_shared/mcp-auth.ts';
+import { DOT_OFFICE_CONSENT_METADATA_KEY } from '../functions/_shared/mcp-dot-oauth.ts';
 
 const subject = '23456789-2345-4abc-8abd-23456789abcd';
 const client = '12345678-1234-4abc-8abd-123456789abc';
