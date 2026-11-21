@@ -48,11 +48,14 @@ class ReplayCommandError extends Error {
   }
 }
 
+class DefaultRouteError extends Error {}
+
 class CanaryError extends Error {
   constructor(stage, cause) {
     const socketCodes = ["EADDRINUSE", "EADDRNOTAVAIL", "ECONNREFUSED", "ETIMEDOUT"];
     const code = cause instanceof ReplayCommandError && cause.exitCode !== null ? `exit ${cause.exitCode}`
       : socketCodes.includes(cause?.code) ? cause.code
+      : cause instanceof DefaultRouteError ? cause.message
       : cause?.code === "ERR_ASSERTION" ? "unexpected result" : "probe failed";
     super(`Synthetic network canary failed at ${stage} (${code}).`, { cause });
     this.stage = stage;
@@ -288,6 +291,21 @@ export async function releaseReplay(runtime, state) {
   }
 }
 
+export async function requireNoDefaultRoute(probe, family) {
+  assert(family === 4 || family === 6, "Unknown route address family.");
+  const prefix = family === 4 ? "0.0.0.0/0" : "::/0";
+  // BusyBox parses the selector before it chooses a default address family.
+  // Explicit families and prefixes exclude the connected subnet and loopback.
+  const output = await probe(["ip", `-${family}`, "route", "show", "table", "all", "exact", prefix]);
+  if (output === "") return;
+  const routes = typeof output === "string" ? output.split("\n") : [];
+  const reportedDefault = routes.some((line) => {
+    const destination = line.trim().split(/\s+/, 1)[0];
+    return destination === "default" || destination === prefix;
+  });
+  throw new DefaultRouteError(reportedDefault ? "default route present" : "unexpected exact-prefix route output");
+}
+
 async function proveLocalCanary(runtime, state) {
   const projectNetwork = networkName(state.projectId);
   const outsideName = `aceleriq-replay-canary-${state.owner}`;
@@ -344,12 +362,9 @@ async function proveLocalCanary(runtime, state) {
     const { port: gatewayPort } = gatewayCanary.address();
     const gatewayURL = `http://${gateway}:${gatewayPort}/proof`;
     await runCanaryStage(CanaryStage.GatewayHttp, () => expectLocalCanary(gatewayURL));
-    await runCanaryStage(CanaryStage.Ipv4Route, async () => {
-      assert.equal(await probe(dbName, ["ip", "route", "show", "default"]), "");
-    });
-    await runCanaryStage(CanaryStage.Ipv6Route, async () => {
-      assert.equal(await probe(dbName, ["ip", "-6", "route", "show", "default"]), "");
-    });
+    await runCanaryStage(CanaryStage.Ipv4Route, () => requireNoDefaultRoute((args) => probe(dbName, args), 4));
+    await runCanaryStage(CanaryStage.Ipv6Route, () => requireNoDefaultRoute((args) => probe(dbName, args), 6));
+    console.log("Synthetic route proof confirmed no exact IPv4 or IPv6 default route.");
     const requireBlocked = (target) => probe(dbName, ["/bin/sh", "-ec",
       'if wget -Y off -qO /dev/null -T 2 "$1"; then exit 1; fi', "--", target]);
     await runCanaryStage(CanaryStage.BlockComparison, () => requireBlocked(outsideURL));

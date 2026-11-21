@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createConnection, createServer } from "node:net";
 import test from "node:test";
-import { CanaryStage, createLoopbackProxy, prepareReplay, proveBeforeReplay, releaseReplay, runCanaryStage, runReplay, runWithCanaryCleanup, verifyNetwork } from "./guard-ci-supabase-replay.mjs";
+import { CanaryStage, createLoopbackProxy, prepareReplay, proveBeforeReplay, releaseReplay, requireNoDefaultRoute, runCanaryStage, runReplay, runWithCanaryCleanup, verifyNetwork } from "./guard-ci-supabase-replay.mjs";
 
 const projectId = "aceleriq-os";
 const owner = "123-1-db-tests";
@@ -232,6 +232,44 @@ test("rejects a subnet outside RFC 1918 and a gateway outside its subnet", () =>
   ]) {
     const network = { ...f.network, IPAM: { Driver: "default", Config } };
     assert.throws(() => verifyNetwork(network, f.state), /private IPv4/);
+  }
+});
+
+test("queries exact default prefixes in both families on a bridge with connected routes", async () => {
+  const calls = [];
+  const probe = async (args) => {
+    calls.push(args);
+    // The legacy BusyBox selector exposed the connected subnet and failed the canary.
+    if (args.join(" ") === "ip route show default") return "172.28.0.0/16 dev eth0";
+    return "";
+  };
+  await requireNoDefaultRoute(probe, 4);
+  await requireNoDefaultRoute(probe, 6);
+  assert.deepEqual(calls, [
+    ["ip", "-4", "route", "show", "table", "all", "exact", "0.0.0.0/0"],
+    ["ip", "-6", "route", "show", "table", "all", "exact", "::/0"],
+  ]);
+});
+
+test("rejects reachable default routes without including raw addresses in the diagnostic", async () => {
+  for (const [family, stage, route] of [
+    [4, CanaryStage.Ipv4Route, "default via 192.0.2.1 dev eth0"],
+    [6, CanaryStage.Ipv6Route, "::/0 via 2001:db8::1 dev eth0"],
+  ]) {
+    await assert.rejects(runCanaryStage(stage, () => requireNoDefaultRoute(async () => route, family)), (error) => {
+      assert.equal(error.stage, stage);
+      assert.match(error.message, /\(default route present\)/);
+      assert(!error.message.includes(route));
+      return true;
+    });
+  }
+});
+
+test("rejects malformed or ambiguous exact-prefix output without printing it", async () => {
+  for (const output of [null, "172.28.0.0/16 dev eth0", "unreachable default dev lo metric -1", "unexpected probe output"]) {
+    await assert.rejects(requireNoDefaultRoute(async () => output, 4), {
+      message: "unexpected exact-prefix route output",
+    });
   }
 });
 
