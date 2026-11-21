@@ -3281,6 +3281,14 @@
       "remote_name": "auditoria_de_assinaturas_do_mcp",
       "remote_statements_sha256": "90db9969220d2c703cdce0ec6bd9e22259593dcabc0ce456181b3dd8cae0dc0d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261120090000",
+      "path": "supabase/migrations/20261120090000_licencas_dk_financeiro.sql",
+      "local_sha256": "e08451a94692c1d8c608507e620ec1ef615173d776f64be88e2dd9d8224ffcfe",
+      "remote_name": "licencas_dk_financeiro",
+      "remote_statements_sha256": "00aa9c15ceb0d422901f21db9dbbeed580c1760f73b65797c4f5df0e58a37d99",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
