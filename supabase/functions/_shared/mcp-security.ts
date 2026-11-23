@@ -194,15 +194,45 @@ export const GLOBAL_SAFE_LEGACY_TOOLS = [
 
 const GLOBAL_SAFE_LEGACY_TOOL_SET = new Set<string>(GLOBAL_SAFE_LEGACY_TOOLS);
 
+// Só identidade: a chave API restrita (dono não-admin) confere QUEM ela é e nada mais. O handler
+// (escritorio.ts, entrarRestrito) exige vínculo único e ativo e não devolve caixa, organograma nem
+// outros slugs. OAuth restrito continua fora.
+export const RESTRICTED_API_KEY_IDENTITY_TOOLS = ['aceleriq_escritorio_entrar'] as const;
+const RESTRICTED_API_KEY_IDENTITY_TOOL_SET = new Set<string>(RESTRICTED_API_KEY_IDENTITY_TOOLS);
+
+type ScopeLike = {
+  unrestricted?: unknown;
+  source?: unknown;
+  principalUserId?: unknown;
+  clientIds?: unknown;
+};
+
+/**
+ * Predicado único da identidade restrita (despachante e handler usam este mesmo).
+ * Só passa chave API, explicitamente restrita (unrestricted === false), com dono efetivo
+ * e ao menos um cliente atribuído. Contexto ausente ou incompleto nega.
+ */
+export function isRestrictedApiKeyIdentityScope(scope: ScopeLike | null | undefined): boolean {
+  return !!scope
+    && scope.source === 'api_key'
+    && scope.unrestricted === false
+    && typeof scope.principalUserId === 'string'
+    && scope.principalUserId.trim() !== ''
+    && Array.isArray(scope.clientIds)
+    && scope.clientIds.length > 0;
+}
+
 export function dataScopeAllowsTool(
-  scope: { unrestricted: boolean },
+  scope: ScopeLike | null | undefined,
   toolName: string,
   isPublic = false,
 ): boolean {
-  return isPublic
-    || scope.unrestricted
+  if (isPublic) return true;
+  if (!scope) return false;
+  return scope.unrestricted === true
     || CLIENT_SCOPED_LEGACY_TOOL_SET.has(toolName)
-    || GLOBAL_SAFE_LEGACY_TOOL_SET.has(toolName);
+    || GLOBAL_SAFE_LEGACY_TOOL_SET.has(toolName)
+    || (RESTRICTED_API_KEY_IDENTITY_TOOL_SET.has(toolName) && isRestrictedApiKeyIdentityScope(scope));
 }
 
 /**
