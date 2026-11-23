@@ -248,6 +248,28 @@ SELECT is(pg_temp.tentar('UPDATE public.tasks SET status = ''review'' WHERE id =
   'mcp_video:tarefa', 'tarefa alterada depois da finalização: pedido negado');
 
 -- ─── Pedido de revisão da agência ────────────────────────────────────────────
+-- O pedido legado agrupa filhos da raiz. A rota restrita deve recusar o grupo inteiro.
+INSERT INTO public.files (id, client_id, project_id, parent_file_id, uploaded_by,
+  file_name, file_url, storage_bucket, storage_path, status, file_type, folder)
+SELECT 'f7000000-0000-4000-8000-0000000000ab', 'a7000000-0000-4000-8000-00000000000a',
+  'b7000000-0000-4000-8000-0000000000a2', file_id, 'a7000000-0000-4000-8000-000000000003',
+  'filho.mp4', 'mcp-files://a7000000-0000-4000-8000-00000000000a/humano/filho.mp4',
+  'mcp-files', 'a7000000-0000-4000-8000-00000000000a/humano/filho.mp4', 'ready', 'video', 'materiais'
+FROM f1;
+SELECT is(pg_temp.tentar(NULL,
+  format($$SELECT public.mcp_project_video_request_review('d7000000-0000-4000-8000-000000000001', %L, 'pgtap-idem-s1')$$, (SELECT upload_id FROM s1))),
+  'mcp_video:estado', 'filho de outro projeto do mesmo cliente impede o pedido de revisão');
+SELECT is((SELECT count(*) FROM public.files
+  WHERE id IN ((SELECT file_id FROM f1), 'f7000000-0000-4000-8000-0000000000ab')
+    AND agency_approval_status = 'not_requested' AND approval_status = 'none' AND visibility = 'internal'),
+  2::bigint, 'a recusa preserva a etapa de revisão dos dois arquivos');
+SELECT is((SELECT count(*) FROM public.file_approval_events
+  WHERE file_id IN ((SELECT file_id FROM f1), 'f7000000-0000-4000-8000-0000000000ab')),
+  0::bigint, 'a recusa não grava eventos de revisão');
+SELECT is((SELECT status FROM public.mcp_project_video_uploads WHERE id = (SELECT upload_id FROM s1)),
+  'finalized', 'a sessão continua finalizada após recusar a revisão do grupo');
+DELETE FROM public.files WHERE id = 'f7000000-0000-4000-8000-0000000000ab';
+
 CREATE TEMP TABLE antes AS SELECT
   (SELECT count(*) FROM public.notifications) AS avisos,
   (SELECT count(*) FROM public.file_approval_events) AS eventos,

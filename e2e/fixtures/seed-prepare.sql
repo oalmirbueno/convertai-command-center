@@ -45,6 +45,7 @@ BEGIN
       ('auth.users','public','handle_new_user'),
       ('profiles','public','notify_ops_sync'),('profiles','public','update_updated_at_column'),
       ('profiles','app_private','capture_legacy_first_access_token'),('profiles','app_private','guard_profile_editable_fields'),
+      ('profiles','public','plano_mudou_atualiza_cobranca_e_crm'),
       ('projects','public','notify_ops_sync'),('projects','public','update_updated_at_column'),
       ('tasks','public','notify_ops_sync'),('tasks','public','update_updated_at_column'),
       ('tasks','public','update_milestone_progress'),('tasks','public','editorial_lock_task_sync_trigger'),
@@ -57,6 +58,21 @@ BEGIN
       ('projects','public','mcp_project_grants_revoke_on_project_change')
     )
   ) THEN RAISE EXCEPTION 'E2E_UNREVIEWED_FIXTURE_TRIGGER'; END IF;
+  -- The canonical billing/CRM trigger stays active. The seed never updates
+  -- plan_value, so reject any binding that would broaden its firing events.
+  IF EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+    JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE t.tgrelid='public.profiles'::regclass AND NOT t.tgisinternal
+      AND (t.tgname='profiles_plano_mudou_trg'
+        OR (n.nspname='public' AND p.proname='plano_mudou_atualiza_cobranca_e_crm'))
+      AND (t.tgname<>'profiles_plano_mudou_trg'
+        OR t.tgfoid IS DISTINCT FROM to_regprocedure('public.plano_mudou_atualiza_cobranca_e_crm()')::oid
+        OR t.tgtype<>17 OR t.tgenabled<>'O' OR t.tgqual IS NOT NULL
+        OR t.tgattr::text IS DISTINCT FROM (
+          SELECT a.attnum::text FROM pg_attribute a WHERE a.attrelid=t.tgrelid AND a.attname='plan_value'
+        ))) THEN
+    RAISE EXCEPTION 'E2E_PROFILE_PLAN_TRIGGER_BINDING_CHANGED';
+  END IF;
   -- Reviewed MCP Corte triggers (20261123120000/20261123130000). Without HTTP:
   -- mcp_agent_author_serializa only locks matching mcp_agent_author_attestations
   -- rows (none in this empty stack); the grant revocation reacts only to an
