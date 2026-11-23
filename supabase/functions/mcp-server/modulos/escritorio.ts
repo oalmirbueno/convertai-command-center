@@ -288,8 +288,9 @@ const entrarSchema = z.object({ operator: z.string().max(40).optional() }).stric
  * agente ativo. Lê só o vínculo e o próprio operador pelo slug: não lê caixa, salas nem organograma,
  * não lista operadores e não devolve outro slug. Qualquer outro `operator` é recusado.
  *
- * Esta rota consulta o vínculo sem o cache da autoria. Mudanças na chave e nas atribuições de clientes
- * estão sujeitas ao cache de autenticação do MCP. As demais ferramentas mantêm o cache de vínculos.
+ * O mcp-server legado guarda a credencial autenticada por até 45 s. A revogação da chave e as
+ * mudanças na carteira podem levar esse tempo para surtir efeito. Esta rota consulta o vínculo de
+ * autoria direto no banco a cada chamada. As demais ferramentas mantêm o cache de vínculos.
  */
 async function entrarRestrito(pedido: string | undefined, ctx: AuthContext, porta: PortaDoEscritorio) {
   const negar = (codigo: string, msg: string): never => {
