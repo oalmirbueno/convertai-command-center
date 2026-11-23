@@ -149,7 +149,8 @@ SELECT is(pg_temp.tentar(NULL, $$SELECT public.mcp_project_video_prepare('d70000
 SELECT is(pg_temp.tentar('DELETE FROM public.team_client_assignments WHERE user_id = ''a7000000-0000-4000-8000-000000000002''',
   $$SELECT public.mcp_project_video_prepare('d7000000-0000-4000-8000-000000000001', 'c7000000-0000-4000-8000-000000000001', 2048, repeat('a', 64), 'pgtap-idem-0008')$$),
   'mcp_video:autoria', 'perfil dedicado sem carteira do cliente é negado');
-SELECT is(pg_temp.tentar('INSERT INTO public.user_roles (user_id, role) VALUES (''a7000000-0000-4000-8000-000000000002'', ''admin'')',
+-- user_roles tem UNIQUE (user_id): um papel por usuário. Promover é trocar o papel, não somar outro.
+SELECT is(pg_temp.tentar('UPDATE public.user_roles SET role = ''admin'' WHERE user_id = ''a7000000-0000-4000-8000-000000000002''',
   $$SELECT public.mcp_project_video_prepare('d7000000-0000-4000-8000-000000000001', 'c7000000-0000-4000-8000-000000000001', 2048, repeat('a', 64), 'pgtap-idem-0009')$$),
   'mcp_video:autoria', 'perfil que ganhou admin deixa de ser autor (sem escalar privilégio)');
 

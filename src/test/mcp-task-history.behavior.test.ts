@@ -98,10 +98,13 @@ function fixture(scope: Scope) {
 function edgeHarness(scope: Scope) {
   const { sb, state } = fixture(scope);
   const sdk = { createClient: () => sb };
+  // mcp-project-access.ts não tem dependências: carrega o módulo real (chaves legadas não passam por ele).
+  const projectAccess = loadModule("supabase/functions/_shared/mcp-project-access.ts", {});
   const auth = loadModule("supabase/functions/_shared/mcp-auth.ts", {
     "https://esm.sh/@supabase/supabase-js@2.45.4": sdk,
     "./mcp-security.ts": security,
     "./mcp-runtime.ts": {},
+    "./mcp-project-access.ts": projectAccess,
   });
   const service = loadModule("supabase/functions/_shared/aceleriq-read-services.ts", {
     "https://esm.sh/@supabase/supabase-js@2.45.4": sdk,
