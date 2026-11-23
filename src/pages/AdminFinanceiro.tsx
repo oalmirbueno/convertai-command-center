@@ -1602,7 +1602,7 @@ function LegacyFinanceiro() {
                   <Secao
                     titulo="Cobranças pendentes"
                     descricao={`${pendingBillsInActivePeriod.length} ${pendingBillsInActivePeriod.length === 1 ? "cobrança" : "cobranças"} · ${fmt(pendingBillsInActivePeriod.reduce((s: number, b: any) => s + Number(b.amount || 0), 0))}`}
-                    ajuda="Marcar como pago registra o valor total, avança a renovação do plano e gera a cobrança do mês seguinte."
+                    ajuda="Marcar como pago pergunta se entrou o valor total ou só uma parte. Total avança a renovação do plano e gera a cobrança do mês seguinte; parte registra o que entrou e cria o saldo restante como pendente."
                     divisoria
                   >
                     <ListaDoFinanceiro memoria="financeiro:pendentes" rotulo="Cobranças pendentes">
@@ -1628,7 +1628,26 @@ function LegacyFinanceiro() {
                               </Link>
                             ) : (
                               <>
-                                <button type="button" onClick={() => handleMarkPaid(b.id)} className={acaoPrincipalDaLinha} aria-label="Marcar como pago">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // 23/11 (dono): marcar como pago pergunta se entrou tudo ou só uma parte.
+                                    setPayModal({
+                                      id: b.id,
+                                      type: "billing",
+                                      label: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Cobrança"),
+                                      amount: Number(b.amount) || 0,
+                                      clientId: b.client_id || undefined,
+                                      billingType: b.type || "renewal",
+                                      paidSoFar: 0,
+                                      totalAmount: Number(b.amount) || 0,
+                                    });
+                                    setPayType("full");
+                                    setPayPartialAmount("");
+                                  }}
+                                  className={acaoPrincipalDaLinha}
+                                  aria-label="Marcar como pago"
+                                >
                                   <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
                                   <span className="hidden sm:inline">Marcar como pago</span>
                                 </button>
