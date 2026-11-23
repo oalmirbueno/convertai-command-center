@@ -272,6 +272,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+      - name: Verify Corte MP4 immutability in disposable Supabase Storage
+        if: ${{ !cancelled() && steps.db_reset.outcome == 'success' && steps.npm_dependencies.outcome == 'success' }}
+        env:
+          PGPASSWORD: postgres
+        run: |
+          node scripts/test-ci-corte-storage.mjs --self-test
+          node scripts/test-ci-corte-storage.mjs
+
       - name: Run unit tests
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm test -- --run

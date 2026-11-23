@@ -73,6 +73,8 @@ import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publ
 import { FERRAMENTA_DE_AGRUPAR_CARROSSEL } from '../mcp-server/modulos/arquivos-agrupar-carrossel.ts';
 import { FERRAMENTA_DE_POST_DE_ARQUIVO } from '../mcp-server/modulos/agenda-post-de-arquivo.ts';
 import { FERRAMENTA_DE_ENVIAR_ARQUIVO } from '../mcp-server/modulos/arquivos-enviar-para-aprovacao.ts';
+import { FERRAMENTAS_DO_PROJETO_RESTRITO } from '../mcp-server/modulos/projeto-restrito.ts';
+import { isProjectOnlyTool, projectGrantAllowsTool } from './mcp-project-access.ts';
 import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
 import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
@@ -617,8 +619,8 @@ const capabilitiesTool: ToolDefinition = {
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: READ_ANNOTATIONS,
   handler: (_input, ctx) => {
-    const visible = TOOLS
-      .filter(t => canInvoke(ctx, t) && canUseToolWithDataScope(ctx, t))
+    const visible = catalogoDe(ctx)
+      .filter(t => authorizeTool(ctx, t))
       .map(t => ({ name: t.name, description: t.description, requiredScopes: t.scopes }));
     const counts = {
       total: TOOLS.length,
@@ -5175,11 +5177,37 @@ export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(
 );
 ligarCatalogo(() => TOOLS);
 
+// Catálogo RESTRITO (chave presa a projeto/operador): separado do legado. TOOLS/TOOL_MAP continuam sendo o
+// contrato legado (229) em descoberta, initialize e contagens; estas tools só são roteáveis com concessão.
+export const PROJECT_TOOLS: readonly ToolDefinition[] = FERRAMENTAS_DO_PROJETO_RESTRITO;
+export const PROJECT_TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(PROJECT_TOOLS.map(t => [t.name, t]));
+
+/** Catálogo visível à credencial: com concessão, só o restrito; sem ela, só o legado. */
+export function catalogoDe(ctx: { projectGrant?: unknown }): readonly ToolDefinition[] {
+  return ctx.projectGrant ? PROJECT_TOOLS : TOOLS;
+}
+
+/** Roteamento por credencial. Com concessão o nome legado ainda resolve, para a autorização central negá-lo e auditá-lo. */
+export function toolFor(ctx: { projectGrant?: unknown }, name: string): ToolDefinition | undefined {
+  return ctx.projectGrant ? (PROJECT_TOOL_MAP.get(name) ?? TOOL_MAP.get(name)) : TOOL_MAP.get(name);
+}
+
 export function canInvoke(ctx: AuthContext, tool: ToolDefinition): boolean {
   if (tool.scopes.length === 0) return true;
   const expanded = expandScopes(ctx.scopes);
   if (expanded.has('admin')) return true;
   return tool.scopes.some(s => expanded.has(s));
+}
+
+/**
+ * Autorização central (tools/list e tools/call), antes de cache e handler.
+ * - Chave com concessão de projeto: SÓ as tools preparadas (nega por padrão o resto, inclusive públicas e novas).
+ * - Demais credenciais: regras de sempre, e as tools de projeto restrito não aparecem nem rodam (sem concessão).
+ */
+export function authorizeTool(ctx: AuthContext, tool: ToolDefinition): boolean {
+  if (ctx.projectGrant) return projectGrantAllowsTool(tool.name, ctx.projectGrant) && canInvoke(ctx, tool);
+  if (isProjectOnlyTool(tool.name)) return false;
+  return canInvoke(ctx, tool) && canUseToolWithDataScope(ctx, tool);
 }
 
 export function canUseToolWithDataScope(ctx: AuthContext, tool: ToolDefinition): boolean {
