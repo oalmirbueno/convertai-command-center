@@ -45,6 +45,8 @@ CROSS JOIN s1 CROSS JOIN f1
 CROSS JOIN pg_proc AS p
 WHERE p.oid = 'pg_temp.fixture_filho_entre_projetos()'::regprocedure;
 
+SELECT dblink_exec(name, 'SET SESSION AUTHORIZATION authenticator')
+FROM unnest(ARRAY['corte_a', 'corte_b']) AS workers(name);
 SELECT dblink_exec('corte_a', 'SET ROLE service_role');
 SELECT dblink_exec('corte_b', 'SET ROLE authenticated');
 SELECT dblink_exec('corte_b', $$SET request.jwt.claim.sub = 'a7000000-0000-4000-8000-000000000003'$$);
