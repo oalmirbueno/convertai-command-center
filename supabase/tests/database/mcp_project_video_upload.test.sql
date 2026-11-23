@@ -249,11 +249,13 @@ SELECT is(pg_temp.tentar('UPDATE public.tasks SET status = ''review'' WHERE id =
 
 -- ─── Pedido de revisão da agência ────────────────────────────────────────────
 -- O pedido legado agrupa filhos da raiz. A rota restrita deve recusar o grupo inteiro.
--- A guarda legada só lê a raiz quando o ator pode vê-la. O SET da função
--- fornece o ator sintético somente durante o INSERT, com o gatilho ativo.
+-- A guarda legada só lê a raiz quando o ator pode vê-la. A fixture é SQL puro,
+-- sem SET de função: o papel do pgTAP não pode fixar o placeholder
+-- request.jwt.claim.sub em CREATE FUNCTION, e o teste concorrente reaproveita
+-- pg_proc.prosrc como INSERT. O ator sintético entra por set_config local só
+-- em volta da chamada, com o gatilho ativo, e o sub anterior volta em seguida.
 CREATE FUNCTION pg_temp.fixture_filho_entre_projetos() RETURNS void
 LANGUAGE sql
-SET "request.jwt.claim.sub" = 'a7000000-0000-4000-8000-000000000003'
 AS $$
   INSERT INTO public.files (id, client_id, project_id, parent_file_id, uploaded_by,
     file_name, file_url, storage_bucket, storage_path, status, file_type, folder)
@@ -264,7 +266,12 @@ AS $$
   FROM f1;
 $$;
 -- CI_CORTE_CONCURRENCY_SETUP_END
+CREATE TEMP TABLE ator_antes_do_filho AS SELECT current_setting('request.jwt.claim.sub', true) AS sub;
+SELECT set_config('request.jwt.claim.sub', 'a7000000-0000-4000-8000-000000000003', true);
 SELECT pg_temp.fixture_filho_entre_projetos();
+SELECT set_config('request.jwt.claim.sub', coalesce((SELECT sub FROM ator_antes_do_filho), ''), true);
+SELECT is(coalesce(current_setting('request.jwt.claim.sub', true), ''), coalesce((SELECT sub FROM ator_antes_do_filho), ''),
+  'ator sintético restaurado depois da fixture');
 SELECT is(pg_temp.tentar(NULL,
   format($$SELECT public.mcp_project_video_request_review('d7000000-0000-4000-8000-000000000001', %L, 'pgtap-idem-s1')$$, (SELECT upload_id FROM s1))),
   'mcp_video:estado', 'filho de outro projeto do mesmo cliente impede o pedido de revisão');

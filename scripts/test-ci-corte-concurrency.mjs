@@ -5,8 +5,18 @@ import { readFileSync } from 'node:fs';
 const marker = '-- CI_CORTE_CONCURRENCY_SETUP_END';
 const readSql = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const [setup, remaining, ...duplicates] = readSql('../supabase/tests/database/mcp_project_video_upload.test.sql').split(marker);
-assert(remaining?.startsWith('\nSELECT pg_temp.fixture_filho_entre_projetos();') && duplicates.length === 0,
-  'Expected one Corte fixture boundary immediately before the child insertion.');
+// pgTAP invokes the fixture with a local, restored actor. The race reuses only
+// pg_proc.prosrc, so the function must stay pure SQL without SET clauses.
+const invocation = [
+  "CREATE TEMP TABLE ator_antes_do_filho AS SELECT current_setting('request.jwt.claim.sub', true) AS sub;",
+  "SELECT set_config('request.jwt.claim.sub', 'a7000000-0000-4000-8000-000000000003', true);",
+  'SELECT pg_temp.fixture_filho_entre_projetos();',
+  "SELECT set_config('request.jwt.claim.sub', coalesce((SELECT sub FROM ator_antes_do_filho), ''), true);",
+].join('\n');
+assert(remaining?.startsWith('\n' + invocation + '\n') && duplicates.length === 0,
+  'Expected one Corte fixture boundary immediately before the restored child insertion.');
+assert(/\nCREATE FUNCTION pg_temp\.fixture_filho_entre_projetos\(\) RETURNS void\nLANGUAGE sql\nAS \$\$\n/.test(setup),
+  'Corte fixture must stay a pure SQL function without SET clauses.');
 
 if (process.argv[2] === '--self-test') {
   console.log('Corte concurrency: shared fixture boundary verified.');
