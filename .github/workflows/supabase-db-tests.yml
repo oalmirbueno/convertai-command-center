@@ -206,6 +206,7 @@ jobs:
           node scripts/test-isolated-db.mjs
           node scripts/test-ci-editorial-replay.mjs
           node scripts/test-ci-milestones-read-access.mjs
+          node scripts/test-ci-corte-concurrency.mjs
 
       - name: Restore editorial CI compatibility staging
         if: always()

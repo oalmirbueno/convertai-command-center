@@ -249,13 +249,22 @@ SELECT is(pg_temp.tentar('UPDATE public.tasks SET status = ''review'' WHERE id =
 
 -- ─── Pedido de revisão da agência ────────────────────────────────────────────
 -- O pedido legado agrupa filhos da raiz. A rota restrita deve recusar o grupo inteiro.
-INSERT INTO public.files (id, client_id, project_id, parent_file_id, uploaded_by,
-  file_name, file_url, storage_bucket, storage_path, status, file_type, folder)
-SELECT 'f7000000-0000-4000-8000-0000000000ab', 'a7000000-0000-4000-8000-00000000000a',
-  'b7000000-0000-4000-8000-0000000000a2', file_id, 'a7000000-0000-4000-8000-000000000003',
-  'filho.mp4', 'mcp-files://a7000000-0000-4000-8000-00000000000a/humano/filho.mp4',
-  'mcp-files', 'a7000000-0000-4000-8000-00000000000a/humano/filho.mp4', 'ready', 'video', 'materiais'
-FROM f1;
+-- A guarda legada só lê a raiz quando o ator pode vê-la. O SET da função
+-- fornece o ator sintético somente durante o INSERT, com o gatilho ativo.
+CREATE FUNCTION pg_temp.fixture_filho_entre_projetos() RETURNS void
+LANGUAGE sql
+SET "request.jwt.claim.sub" = 'a7000000-0000-4000-8000-000000000003'
+AS $$
+  INSERT INTO public.files (id, client_id, project_id, parent_file_id, uploaded_by,
+    file_name, file_url, storage_bucket, storage_path, status, file_type, folder)
+  SELECT 'f7000000-0000-4000-8000-0000000000ab', 'a7000000-0000-4000-8000-00000000000a',
+    'b7000000-0000-4000-8000-0000000000a2', file_id, 'a7000000-0000-4000-8000-000000000003',
+    'filho.mp4', 'mcp-files://a7000000-0000-4000-8000-00000000000a/humano/filho.mp4',
+    'mcp-files', 'a7000000-0000-4000-8000-00000000000a/humano/filho.mp4', 'ready', 'video', 'materiais'
+  FROM f1;
+$$;
+-- CI_CORTE_CONCURRENCY_SETUP_END
+SELECT pg_temp.fixture_filho_entre_projetos();
 SELECT is(pg_temp.tentar(NULL,
   format($$SELECT public.mcp_project_video_request_review('d7000000-0000-4000-8000-000000000001', %L, 'pgtap-idem-s1')$$, (SELECT upload_id FROM s1))),
   'mcp_video:estado', 'filho de outro projeto do mesmo cliente impede o pedido de revisão');
@@ -301,6 +310,9 @@ SELECT ok(pg_temp.tentar(NULL, format($$SELECT public.review_file_agency(%L, 'ap
   (SELECT file_id FROM f1))) <> 'ok', 'Corte não aprova na agência');
 SELECT ok(pg_temp.tentar(NULL, format($$SELECT public.release_file_to_client(%L, 'approval')$$,
   (SELECT file_id FROM f1))) <> 'ok', 'Corte não libera ao cliente');
+SELECT is(pg_temp.tentar(NULL, format($$SELECT public.admin_release_file_now(%L, 'approval')$$,
+  (SELECT file_id FROM f1))), 'somente admin ou manager pode liberar ao cliente',
+  'Corte não pode usar a liberação administrativa');
 
 SELECT set_config('request.jwt.claim.sub', 'a7000000-0000-4000-8000-00000000000a', true);
 SELECT is(public.can_read_file((SELECT file_id FROM f1)), false, 'cliente não lê antes da aprovação da agência');
