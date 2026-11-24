@@ -13,9 +13,11 @@ import {
   CASO_DO_PC,
   lerJanelaDoEgo,
   MENSAGEM_PC_INDISPONIVEL,
+  motivoParaRecusarUrlNoPc,
   normalizarPedidoDoPc,
   pcDisponivel,
   PC_ONLINE_S,
+  textoDaUrlParaChecarCredencial,
 } from "../../../supabase/functions/computador-do-agente/modulos/navegador-do-pc.ts";
 import { acharEgo, lerSaidaDoEgo, MARCA_DO_RESULTADO, modoDoEgo, type MotorDoEgo, motorDoPedido, REGRAS_DO_EGO, type SaidaDoEgo, scriptDoPedido } from "../ego.ts";
 // @ts-ignore: módulo JavaScript puro (roda dentro do Ego).
@@ -104,6 +106,47 @@ describe("regras do pedido do PC", () => {
     for (const url of ["https://mail.google.com/mail/u/0", "https://accounts.google.com/", "https://business.facebook.com/billing_hub/payment_settings", "https://www.meubanco.com.br/", "http://www.facebook.com/", "https://www.facebook.com/?access_token=abc", "https://www.facebook.com/login/"]) {
       assert.equal(normalizarPedidoDoPc({ url }).ok, false, url);
     }
+  });
+  it("IDs públicos da Meta (business_id e act numéricos) nos hosts exatos não contam como credencial", () => {
+    // IDs sintéticos de 16 a 19 dígitos (antes caíam na heurística de número de cartão).
+    for (const url of [
+      "https://business.facebook.com/latest/home?business_id=1111222233334444",
+      "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1111222233334444555",
+      "https://adsmanager.facebook.com/adsmanager/manage/ads?act=1111222233334444&business_id=9999888877776666&nav_entry_point=lep",
+    ]) {
+      assert.equal(motivoParaRecusarUrlNoPc(url), null, url);
+      assert.equal(normalizarPedidoDoPc({ url, passos: [{ acao: "ler" }] }).ok, true, url);
+    }
+  });
+  it("a exceção dos IDs da Meta não abre segredo, valor não numérico, outro parâmetro, outro host, fragmento nem rota proibida", () => {
+    for (const url of [
+      "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1111222233334444&access_token=abc", // parâmetro de credencial nomeado
+      "https://business.facebook.com/latest/home?business_id=1111222233334444&x=sk-abcdefghijklmnopqrstu", // chave no restante
+      "https://business.facebook.com/latest/home?business_id=eyJabcdefghijklmnopqrstuvwxyz.abc.def", // valor não numérico (JWT)
+      "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1111-2222-3333-4444", // separadores
+      "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=-1111222233334444", // sinal
+      "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1111222233334444&ref=1111222233334444", // parâmetro anônimo numérico
+      "https://adsmanager.facebook.com/adsmanager/manage/campaigns?1111222233334444", // parâmetro sem nome
+      "https://adsmanager.facebook.com/adsmanager/1111222233334444/campaigns?act=1", // número no caminho
+      "https://www.facebook.com/ads/manager?act=1111222233334444", // outro host da Meta
+      "https://m.business.facebook.com/latest/home?business_id=1111222233334444", // subdomínio não exato
+      "https://www.instagram.com/?business_id=1111222233334444", // outro domínio
+      "https://business.facebook.com/latest/home?business_id=1#act=1111222233334444", // fragmento
+      "https://business.facebook.com/latest/home?business_id=1#token=abc", // credencial no fragmento
+      "https://business.facebook.com/billing_hub/payment_settings?business_id=1111222233334444", // rota proibida
+      "https://adsmanager.facebook.com/login/?act=1111222233334444", // login
+      "https://user:x@business.facebook.com/latest/home?business_id=1111222233334444", // userinfo
+    ]) {
+      assert.notEqual(motivoParaRecusarUrlNoPc(url), null, url);
+      assert.equal(normalizarPedidoDoPc({ url, passos: [{ acao: "ler" }] }).ok, false, url);
+    }
+  });
+  it("o normalizador só troca business_id e act numéricos nos hosts exatos", () => {
+    const t = (s: string) => textoDaUrlParaChecarCredencial(new URL(s));
+    assert.equal(t("https://business.facebook.com/x?business_id=1111222233334444&act=12&q=1111222233334444#f"), "https://business.facebook.com/x?business_id=0&act=0&q=1111222233334444#f");
+    assert.equal(t("https://adsmanager.facebook.com/x?act=abc&Act=1111222233334444"), "https://adsmanager.facebook.com/x?act=abc&Act=1111222233334444");
+    assert.equal(t("https://adsmanager.facebook.com/x?act=11112222333344445555&business_id=1%202"), "https://adsmanager.facebook.com/x?act=11112222333344445555&business_id=1%202");
+    assert.equal(t("https://www.facebook.com/x?act=1111222233334444"), "https://www.facebook.com/x?act=1111222233334444");
   });
   it("senha, código e e-mail nunca são digitados", () => {
     assert.equal(normalizarPedidoDoPc({ url: "https://www.facebook.com/", passos: [{ acao: "digitar", campo: "Senha", valor: "x" }] }).ok, false);

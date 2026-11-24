@@ -103,6 +103,34 @@ export function hostPermitidoNoPc(url: string): string | null {
   return dominio || null;
 }
 
+/** Hosts da Meta em que `business_id` e `act` são IDs públicos de conta (não credencial). Só hosts exatos. */
+const HOSTS_COM_IDS_PUBLICOS_DA_META = new Set(["business.facebook.com", "adsmanager.facebook.com"]);
+const PARAMETROS_DE_ID_PUBLICO_DA_META = new Set(["business_id", "act"]);
+const ID_PUBLICO_DA_META = /^\d{1,19}$/;
+
+/**
+ * Texto da URL para a checagem heurística `pareceCredencial`: nos hosts exatos da Meta, o valor de
+ * `business_id`/`act` só numérico (até 19 dígitos, sem espaço, sinal ou codificação) vira "0", porque
+ * um ID de conta parece número de cartão. Todo o resto (caminho, outros parâmetros, fragmento) segue igual.
+ */
+export function textoDaUrlParaChecarCredencial(u: URL): string {
+  const bruto = u.toString();
+  const host = u.hostname.toLowerCase();
+  if (!HOSTS_COM_IDS_PUBLICOS_DA_META.has(host) || u.search.length < 2) return bruto;
+  const query = u.search
+    .slice(1)
+    .split("&")
+    .map((par) => {
+      const i = par.indexOf("=");
+      if (i < 0) return par;
+      const nome = par.slice(0, i);
+      const valor = par.slice(i + 1);
+      return PARAMETROS_DE_ID_PUBLICO_DA_META.has(nome) && ID_PUBLICO_DA_META.test(valor) ? `${nome}=0` : par;
+    })
+    .join("&");
+  return `${u.protocol}//${u.host}${u.pathname}?${query}${u.hash}`;
+}
+
 /** Motivo para recusar uma URL no navegador do PC (null = pode). */
 export function motivoParaRecusarUrlNoPc(bruto: unknown): string | null {
   const texto = String(bruto ?? "").trim();
@@ -117,7 +145,7 @@ export function motivoParaRecusarUrlNoPc(bruto: unknown): string | null {
     return `O navegador do PC só abre ${DOMINIOS_DO_PC.join(", ")} (https), e nunca e-mail, conta, senhas ou pagamento do dono.`;
   }
   if (CAMINHO_PROIBIDO_DO_PC.test(`${u.pathname}${u.search}`)) return "O navegador do PC não entra em login, senha, segurança, cobrança ou pagamento. Esse passo é do dono.";
-  if (PARAMETRO_DE_CREDENCIAL.test(u.toString()) || pareceCredencial(u.toString())) return "O endereço leva token, chave ou código. Credencial nunca passa pelo navegador do PC.";
+  if (PARAMETRO_DE_CREDENCIAL.test(u.toString()) || pareceCredencial(textoDaUrlParaChecarCredencial(u))) return "O endereço leva token, chave ou código. Credencial nunca passa pelo navegador do PC.";
   return null;
 }
 
