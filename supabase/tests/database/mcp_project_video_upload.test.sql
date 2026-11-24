@@ -213,7 +213,7 @@ SELECT is(pg_temp.tentar('UPDATE public.internal_operators SET status = ''inacti
 SELECT is(pg_temp.tentar('UPDATE public.projects SET status = ''archived'' WHERE id = ''b7000000-0000-4000-8000-0000000000a1''',
   format($$SELECT public.mcp_project_video_finalize('d7000000-0000-4000-8000-000000000001', %L, 'pgtap-idem-s1', 2048, repeat('a', 64), true, 'e7000000-0000-4000-8000-000000000001', 'e7000000-0000-4000-8000-000000000002')$$, (SELECT upload_id FROM s1))),
   'mcp_video:negado', 'projeto arquivado nega');
-SELECT is(pg_temp.tentar('UPDATE public.mcp_operator_author_profiles SET revoked_at = now() WHERE operator_slug = ''corte''',
+SELECT is(pg_temp.tentar('UPDATE public.mcp_operator_author_profiles SET revoked_at = now() WHERE profile_id = ''a7000000-0000-4000-8000-000000000002'' AND revoked_at IS NULL',
   format($$SELECT public.mcp_project_video_finalize('d7000000-0000-4000-8000-000000000001', %L, 'pgtap-idem-s1', 2048, repeat('a', 64), true, 'e7000000-0000-4000-8000-000000000001', 'e7000000-0000-4000-8000-000000000002')$$, (SELECT upload_id FROM s1))),
   'mcp_video:autoria', 'autoria revogada nega');
 

@@ -11,20 +11,50 @@ const supabaseOrigin = 'http://127.0.0.1:54321';
 if (Deno.env.get('SUPABASE_URL') !== supabaseOrigin) throw new Error('CI_CORTE_EDGE_NONLOCAL_SUPABASE');
 
 const nativeFetch = globalThis.fetch.bind(globalThis);
-function allowed(input) {
+const authRoutes = new Map([
+  ['/rest/v1/rpc/validate_api_key_for_audience', 'key'],
+  ['/rest/v1/api_keys', 'key_state'],
+  ['/rest/v1/mcp_project_grants', 'grant'],
+  ['/rest/v1/internal_operators', 'operator'],
+  ['/rest/v1/projects', 'project'],
+  ['/rest/v1/profiles', 'profile'],
+]);
+function localTarget(input) {
   try {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    return url.origin === supabaseOrigin && !url.username && !url.password;
+    return url.origin === supabaseOrigin && !url.username && !url.password ? url : null;
   } catch {
-    return false;
+    return null;
   }
 }
-globalThis.fetch = (input, init) => {
-  if (!allowed(input)) {
-    console.error('CI_CORTE_EDGE_EGRESS_BLOCKED');
-    return Promise.reject(new TypeError('CI egress blocked'));
+function restResult(response, body) {
+  if (response.ok) {
+    if (!Array.isArray(body)) return 'other';
+    return body.length === 0 ? 'empty' : 'rows';
   }
-  return nativeFetch(input, { ...init, redirect: 'error' });
+  const code = body?.code;
+  return typeof code === 'string' && /^(?:PGRST\d{3}|[0-9][0-9A-Z]{4}|P0[0-9A-Z]{3}|XX[0-9A-Z]{3})$/.test(code)
+    ? code : 'unknown';
+}
+globalThis.fetch = async (input, init) => {
+  const url = localTarget(input);
+  if (!url) {
+    console.error('CI_CORTE_EDGE_EGRESS_BLOCKED');
+    throw new TypeError('CI egress blocked');
+  }
+  const route = authRoutes.get(url.pathname);
+  let response;
+  try {
+    response = await nativeFetch(input, { ...init, redirect: 'error' });
+  } catch (error) {
+    if (route) console.error(`CI_CORTE_EDGE_REST ${route} fetch_failed`);
+    throw error;
+  }
+  if (route) {
+    const body = await response.clone().json().catch(() => null);
+    console.error(`CI_CORTE_EDGE_REST ${route} ${response.status} ${restResult(response, body)}`);
+  }
+  return response;
 };
 
 const nativeServe = Deno.serve.bind(Deno);

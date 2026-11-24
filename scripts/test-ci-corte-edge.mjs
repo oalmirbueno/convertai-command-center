@@ -24,9 +24,9 @@ const FIXTURE_VARS = ['admin_id', 'author_id', 'staff_id', 'client_id', 'project
 const GRANT_TOOLS = new Set(['aceleriq_escritorio_entrar', 'aceleriq_projeto_identidade', 'aceleriq_projeto_resumo',
   'aceleriq_projeto_tarefas', 'aceleriq_projeto_arquivos', 'aceleriq_projeto_arquivo_ler',
   'aceleriq_projeto_video_preparar', 'aceleriq_projeto_video_finalizar', 'aceleriq_projeto_video_pedir_aprovacao']);
-const WRITE_TOOLS = ['aceleriq_projeto_video_preparar', 'aceleriq_projeto_video_finalizar', 'aceleriq_projeto_video_pedir_aprovacao'];
 // Deno's own denial text if any code path tries a socket outside --allow-net.
 const DENIED_NET = /CI_CORTE_EDGE_EGRESS_BLOCKED|NotCapable|PermissionDenied|Requires net access/;
+const REST_DIAGNOSTIC = /^CI_CORTE_EDGE_REST (key|key_state|grant|operator|project|profile) (fetch_failed|[1-5]\d{2} (?:empty|rows|other|unknown|PGRST\d{3}|[0-9][0-9A-Z]{4}|P0[0-9A-Z]{3}|XX[0-9A-Z]{3}))\r?\n/gm;
 
 const fail = (label) => { throw new Error(`Corte Edge: ${label}`); };
 const code = (value) => (typeof value === 'string' && /^[a-z_]{1,40}$/.test(value) ? value : 'unknown');
@@ -135,16 +135,19 @@ async function freePort() {
 
 function startEdge(port, env) {
   const child = spawn('deno', denoArgs(port), { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  const state = { child, ready: false, denied: false, exited: null, tail: '' };
-  // Output stays in memory, never printed: Edge logs may contain local keys or URLs.
-  const scan = (chunk) => {
-    const text = state.tail + chunk.toString('utf8');
-    if (text.includes('CI_CORTE_EDGE_READY')) state.ready = true;
-    if (DENIED_NET.test(text)) state.denied = true;
-    state.tail = text.slice(-128);
-  };
-  child.stdout.on('data', scan);
-  child.stderr.on('data', scan);
+  const state = { child, ready: false, denied: false, exited: null, rest: new Map() };
+  // Keep separate tails per stream. Only fixed route labels and filtered
+  // statuses are reported on failure, never command output or response contents.
+  for (const stream of [child.stdout, child.stderr]) {
+    let tail = '';
+    stream.on('data', (chunk) => {
+      const text = tail + chunk.toString('utf8');
+      if (text.includes('CI_CORTE_EDGE_READY')) state.ready = true;
+      if (DENIED_NET.test(text)) state.denied = true;
+      for (const [, route, status] of text.matchAll(REST_DIAGNOSTIC)) state.rest.set(route, status);
+      tail = text.slice(-128);
+    });
+  }
   child.on('exit', (status) => { state.exited = status ?? -1; });
   child.on('error', () => { state.exited = -1; });
   return state;
@@ -211,17 +214,18 @@ async function waitReady(state, rpc) {
 async function exercise(edge, ids, token, video, service, sha) {
   const { localFetch, rpc, tool } = edge;
 
-  // Catalog: only the prepared project tools, the three writes included.
-  const listed = await rpc(token, 'tools/list', {});
-  assert(listed.status === 200 && Array.isArray(listed.body?.result?.tools), 'Corte Edge: tools/list failed.');
-  const names = new Set(listed.body.result.tools.map((t) => t.name));
-  assert([...names].every((n) => GRANT_TOOLS.has(n)) && WRITE_TOOLS.every((n) => names.has(n)),
-    'Corte Edge: unexpected tool catalog for the Corte grant.');
-
-  // Enter: the slug comes from the grant; a different operator is refused.
+  // Discovery is public, so verify the protected identity before listing tools.
   const voce = success(await tool(token, 'aceleriq_escritorio_entrar', {}), 'enter')?.voce;
   assert(voce?.slug === 'corte' && voce.projeto_id === ids.project_id && voce.cliente_id === ids.client_id,
     'Corte Edge: enter did not return the granted Corte identity.');
+
+  const listed = await rpc(token, 'tools/list', {});
+  const tools = listed.body?.result?.tools;
+  assert(listed.status === 200 && Array.isArray(tools), 'Corte Edge: tools/list failed.');
+  const names = new Set(tools.map((tool) => tool?.name));
+  assert(tools.length === GRANT_TOOLS.size && names.size === tools.length && [...GRANT_TOOLS].every((name) => names.has(name)),
+    `Corte Edge: expected nine distinct granted tools, got ${tools.length} entries and ${names.size} distinct names.`);
+
   success(await tool(token, 'aceleriq_escritorio_entrar', { operator: 'corte' }), 'enter as corte');
   rpcDenied(await tool(token, 'aceleriq_escritorio_entrar', { operator: 'outro' }), 200, 'enter as another operator');
 
@@ -340,6 +344,11 @@ async function selfTest(video) {
     assert(entrySource.includes(needle), 'Edge entry lost a loopback guard.');
   }
   assert(DENIED_NET.test('CI_CORTE_EDGE_EGRESS_BLOCKED') && DENIED_NET.test('NotCapable: Requires net access') && !DENIED_NET.test('CI_CORTE_EDGE_READY'));
+  const trace = 'CI_CORTE_EDGE_REST key 404 PGRST202\nCI_CORTE_EDGE_REST grant 403 42501\n' +
+    'CI_CORTE_EDGE_REST profile 200 rows\nCI_CORTE_EDGE_REST operator fetch_failed\n' +
+    'CI_CORTE_EDGE_REST project 400 detail=unsafe\nCI_CORTE_EDGE_REST http://example.com 200 rows\n';
+  assert.deepEqual([...trace.matchAll(REST_DIAGNOSTIC)].map((m) => m.slice(1)),
+    [['key', '404 PGRST202'], ['grant', '403 42501'], ['profile', '200 rows'], ['operator', 'fetch_failed']]);
 
   const sql = await readFile(new URL(`../${fixturePath}`, import.meta.url), 'utf8');
   assert(!/[0-9a-f]{8}-[0-9a-f]{4}-/.test(sql), 'Edge fixture must not hardcode IDs.');
@@ -424,7 +433,11 @@ async function main() {
     }
     if (digest(await readFile(new URL('../deno.lock', import.meta.url))) !== lockBefore) failures.push('Corte Edge: deno.lock changed.');
   }
-  if (failures.length) throw new Error(failures.join('\n'));
+  if (failures.length) {
+    if (edge) console.error('Corte Edge REST diagnostics: ' +
+      ([...edge.rest].map(([route, status]) => `${route} ${status}`).join(', ') || 'no auth requests recorded'));
+    throw new Error(failures.join('\n'));
+  }
   checkCounters(before, sqlJson(COUNTERS, {}, 'final counters'));
   console.log('Corte Edge passed: real loopback Edge entered as corte, prepared, PUT privately once, finalized with dedicated ' +
     'authorship, byte readback and one attachment, requested internal review only, denied outside the project and after revocation.');
