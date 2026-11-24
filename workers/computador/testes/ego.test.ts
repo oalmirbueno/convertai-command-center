@@ -148,7 +148,7 @@ function egoFalsoDePagina(pag: PaginaFalsa, aoIr: (url: string) => void = (u) =>
       const src = String(fn);
       if (src.indexOf("password") >= 0 && src.indexOf("querySelector") >= 0) return pag.senha;
       if (src.indexOf("activeElement") >= 0) return pag.senha ? "password" : "text";
-      if (src.indexOf("querySelector") >= 0) return arg === "#publicar" ? "Publicar" : null;
+      if (src.indexOf("querySelectorAll") >= 0) return arg === "#publicar" ? { total: 1, rotulo: "Publicar" } : { total: 0, rotulo: null };
       return null;
     },
     snapshot: async () => pag.snapshot,

@@ -9,7 +9,9 @@
  * Travas (as mesmas regras do MCP, conferidas de novo aqui no alvo REAL):
  * - navegar só para URL permitida (o worker manda a lista e os padrões);
  * - clique: lê o rótulo do alvo na página; se publica/envia/paga/salva/apaga/ativa/pausa e o passo
- *   não veio autorizado pelo servidor, para sem clicar ("precisa_aprovacao");
+ *   não veio autorizado pelo servidor, para sem clicar ("precisa_aprovacao"); seletor CSS precisa casar
+ *   um único elemento ("alvo_ambiguo"/"alvo_nao_encontrado", mesmo autorizado); seletor opaco sem
+ *   autorização para ("seletor_nao_verificavel");
  * - digitar: nunca em campo de senha; fora de busca só autorizado;
  * - página de login no meio = "sessao_expirada": para, sem digitar nada;
  * - um print por passo que muda a tela; texto lido cortado.
@@ -34,20 +36,28 @@ export function rotulosDoTexto(snapshot, alvo) {
   return achados;
 }
 
-/** Rótulo do elemento de um seletor CSS (null quando o seletor não é CSS simples ou não acha nada). */
-export async function rotuloDoSeletor(page, seletor) {
+/** Conta os resultados do CSS nativo, inclusive ocultos, e lê o rótulo quando há um só. */
+async function inspecionarSeletor(page, seletor) {
   const s = String(seletor || "");
   if (!s || /^(text=|loc=|xpath=|@|ref=)/i.test(s)) return null;
   try {
-    return await page.evaluate((sel) => {
-      const el = document.querySelector(sel);
-      if (!el) return null;
+    const v = await page.evaluate((sel) => {
+      const lista = document.querySelectorAll(sel);
+      if (lista.length !== 1) return { total: lista.length, rotulo: null };
+      const el = lista[0];
       const partes = [el.innerText, el.getAttribute("aria-label"), el.getAttribute("title"), el.value, el.getAttribute("type") === "submit" ? "enviar" : ""];
-      return partes.filter(Boolean).join(" ").slice(0, 300);
+      return { total: 1, rotulo: partes.filter(Boolean).join(" ").slice(0, 300) };
     }, s);
+    return v && typeof v.total === "number" ? v : null;
   } catch {
     return null;
   }
+}
+
+/** Rótulo do único elemento de um seletor CSS (null quando é opaco, não acha nada ou casa vários). */
+export async function rotuloDoSeletor(page, seletor) {
+  const v = await inspecionarSeletor(page, seletor);
+  return v && v.total === 1 ? v.rotulo : null;
 }
 
 const re = (fonte) => new RegExp(fonte, "i");
@@ -125,10 +135,19 @@ export async function rodar(ctx, pedido) {
         await print(`Tela no passo ${i + 1}`);
       } else if (p.acao === "clicar") {
         const rotulos = p.texto ? rotulosDoTexto(await page.snapshot(), p.texto) : [];
-        const doSeletor = p.seletor ? await rotuloDoSeletor(page, p.seletor) : null;
-        if (p.seletor && doSeletor === null && !p.autorizado) {
-          throw new ParadaDoEgo("precisa_aprovacao", `Não consegui ler o que o seletor ${p.seletor.slice(0, 80)} clica. Clique sem rótulo claro só com aprovação. Nada foi clicado.`);
+        const inspecao = p.seletor ? await inspecionarSeletor(page, p.seletor) : null;
+        if (inspecao?.total > 1) {
+          throw new ParadaDoEgo("alvo_ambiguo", `O seletor encontrou ${inspecao.total} elementos na página. O clique exige um único alvo. Nada foi clicado.`);
         }
+        if (p.seletor && !p.autorizado) {
+          if (!inspecao) {
+            throw new ParadaDoEgo("seletor_nao_verificavel", "A inspeção não conseguiu confirmar o alvo do seletor. Nada foi clicado.");
+          }
+          if (inspecao.total === 0) {
+            throw new ParadaDoEgo("alvo_nao_encontrado", "O seletor não encontrou nenhum elemento na página. Nada foi clicado.");
+          }
+        }
+        const doSeletor = inspecao?.rotulo ?? null;
         const sensivel = rotulos.concat(doSeletor ? [doSeletor] : []).find((t) => re(regras.alvoSensivel).test(t));
         if (sensivel && !p.autorizado) {
           throw new ParadaDoEgo("precisa_aprovacao", `"${sensivel.slice(0, 80)}" muda a conta (publica, envia, paga, salva, apaga, ativa ou pausa): só com uma aprovação aprovada (aprovacao_id). Nada foi clicado.`);
