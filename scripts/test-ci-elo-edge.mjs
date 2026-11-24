@@ -190,7 +190,9 @@ async function selfTest() {
   const step = workflow.indexOf('- name: Verify Elo Edge end to end in the disposable stack');
   const end = workflow.indexOf('- name: Stop Supabase local stack');
   assert(step > workflow.indexOf('- name: Restore synthetic seed hooks before stopping Supabase') && end > step &&
-    !workflow.slice(step, end).includes('continue-on-error'));
+    !workflow.slice(step, end).includes('continue-on-error') &&
+    workflow.slice(step, end).includes('deno info --frozen scripts/ci-elo-edge-entry.mjs') &&
+    !workflow.slice(step, end).includes('deno cache'));
   console.log('Elo Edge self-test passed: strict loopback, frozen Deno, synthetic SQL and CI step order.');
 }
 

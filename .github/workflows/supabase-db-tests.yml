@@ -341,7 +341,9 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/test-ci-elo-edge.mjs --self-test
-          deno cache --frozen scripts/ci-elo-edge-entry.mjs
+          # In Deno 2 the cache subcommand is `deno install --entrypoint` and also resolves
+          # every package.json dependency. `deno info` fetches only this entry's graph, still frozen.
+          deno info --frozen scripts/ci-elo-edge-entry.mjs > /dev/null
           node scripts/guard-ci-e2e-network.mjs --guard
           superuser="$(psql -X -q -t -A -w -h 127.0.0.1 -p 54322 -U postgres -d postgres -c "SELECT rolsuper FROM pg_roles WHERE rolname='postgres'")"
           if [[ "$superuser" == 'f' ]]; then
