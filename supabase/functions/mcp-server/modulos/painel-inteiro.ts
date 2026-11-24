@@ -197,7 +197,7 @@ const estudioTool = leitura(
   {
     name: 'aceleriq_estudio_trabalhos',
     title: 'Estúdio: artes e entregas',
-    description: 'Trabalhos do Estúdio de arte do cliente (posts, carrosséis, peças de campanha): situação, entrega (enviado, aprovado, ajustes), lâminas com arte, agendamento. Filtra por situação, entrega e campanha. Paginado; completo traz direção, cards e ajustes do cliente.',
+    description: 'Trabalhos do Estúdio de arte do cliente (posts, carrosséis, peças de campanha): situação, entrega (enviado, aprovado, ajustes), lâminas com arte, agendamento e `arquivado_internamente` (entrega reprovada arquivada só na lista interna; inclui o arquivo legado da arte rápida). Filtra por situação, entrega e campanha. Paginado; completo traz direção, cards e ajustes do cliente.',
     scopes: LEITURA_EDITORIAL,
     cacheSeg: 15,
   },

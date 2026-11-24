@@ -18,6 +18,7 @@ import { exigirClienteExistente } from '../../_shared/mcp-client-id-guard.ts';
 import { comNovaTentativa, comPrazo, ErroDaFerramenta, explicarErro } from './robustez.ts';
 import { cortar, detalheDe, escolher, lerCursor, lerLinhas, pagina, tamanhoDaPagina, type Detalhe } from './leitura-enxuta.ts';
 import { lerErrosDoEstudio } from './estudio-erros-regras.ts';
+import { CHAVE_DO_ARQUIVO_DA_REPROVACAO, estadoDoArquivo } from '../../_shared/arquivo-da-reprovacao.ts';
 
 type Objeto = Record<string, unknown>;
 // deno-lint-ignore no-explicit-any
@@ -473,7 +474,9 @@ export async function trabalhosDoEstudio(input: EntradaDeLista & { client_id: st
   const detalhe = detalheDe(input.detalhe);
   const nome = `estudio:${clientId}:${input.status ?? ''}:${input.entrega_status ?? ''}:${input.campanha_id ?? ''}`;
   const { posicao, tamanho, ate } = faixa(input, nome);
-  const campos = ['id', 'tipo', 'status', 'entrega_status', 'entrega_aviso', 'legenda', 'cards', 'aprovado_em', 'agendado_para', 'publicar_em', 'origem', 'task_id', 'post_id', 'atualizado_em', ...(detalhe === 'completo' ? ['direcao', 'hashtags', 'ajustes_do_cliente', 'file_ids', 'custo_usd'] : [])];
+  // 24/11/2026: o arquivo interno da entrega reprovada (marcador novo e o legado da arte rápida) sem trazer a direção inteira.
+  const camposDoArquivo = ['entrega_rodada', `${CAMPO_ARQUIVO}:direcao->${CHAVE_DO_ARQUIVO_DA_REPROVACAO}`, `${CAMPO_ARQUIVO_LEGADO}:direcao->arte_rapida->>arquivada_em`];
+  const campos = ['id', 'tipo', 'status', 'entrega_status', 'entrega_aviso', 'legenda', 'cards', 'aprovado_em', 'agendado_para', 'publicar_em', 'origem', 'task_id', 'post_id', 'atualizado_em', ...camposDoArquivo, ...(detalhe === 'completo' ? ['direcao', 'hashtags', 'ajustes_do_cliente', 'file_ids', 'custo_usd'] : [])];
   const { linhas, aviso } = await lerLinhas(banco(), 'estudio_trabalhos', campos, (q) => {
     let x = q.eq('client_id', clientId);
     if (input.status) x = x.eq('status', input.status);
@@ -481,7 +484,8 @@ export async function trabalhosDoEstudio(input: EntradaDeLista & { client_id: st
     if (input.campanha_id) x = x.eq('direcao->arte_rapida->>campanha_id', input.campanha_id);
     return x.order('atualizado_em', { ascending: false }).range(posicao, ate);
   });
-  const itens = linhas.map((t) => {
+  const itens = linhas.map((linha) => {
+    const t = comArquivoInterno(linha);
     const cards = lista(t.cards);
     const comArte = cards.filter((c) => typeof obj(c).storage_path === 'string').length;
     if (detalhe === 'completo') return { ...t, laminas_com_arte: comArte };
@@ -489,6 +493,22 @@ export async function trabalhosDoEstudio(input: EntradaDeLista & { client_id: st
     return { ...resto, legenda: cortar(t.legenda, 200), laminas: cards.length, laminas_com_arte: comArte };
   });
   return { client_id: clientId, detalhe, ...pagina(itens, posicao, tamanho, nome), aviso };
+}
+
+const CAMPO_ARQUIVO = 'arquivo_da_reprovacao_lido';
+const CAMPO_ARQUIVO_LEGADO = 'arte_rapida_arquivada_em_lida';
+
+/**
+ * O estado "arquivado internamente" do trabalho (a mesma leitura da tela e do estudio-arte), sem as colunas
+ * auxiliares. Só informa: a lista continua trazendo os arquivados, com a marca.
+ */
+export function comArquivoInterno(t: Record<string, unknown>): Record<string, unknown> {
+  const { [CAMPO_ARQUIVO]: marcador, [CAMPO_ARQUIVO_LEGADO]: legado, ...resto } = t;
+  const direcao = t.direcao && typeof t.direcao === 'object'
+    ? t.direcao
+    : { [CHAVE_DO_ARQUIVO_DA_REPROVACAO]: marcador ?? null, ...(legado ? { arte_rapida: { arquivada_em: legado } } : {}) };
+  const e = estadoDoArquivo({ direcao, entrega_status: t.entrega_status as string | null, entrega_rodada: t.entrega_rodada as number | null });
+  return { ...resto, arquivado_internamente: e.arquivado, arquivado_em: e.arquivado_em, ...(e.origem ? { arquivo_origem: e.origem } : {}) };
 }
 
 /**

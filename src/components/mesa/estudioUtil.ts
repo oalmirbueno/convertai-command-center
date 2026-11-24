@@ -71,6 +71,16 @@ export function corpoDoReabrir(trabalhoId: string, motivo?: string): Record<stri
 }
 
 /**
+ * 24/11/2026: arquiva (ou desarquiva) só na lista interna a entrega reprovada (estudio-arte "reprovado_arquivar").
+ * Manda o atualizado_em que a tela viu: se o trabalho mudou no meio (aprovação, reentrega), o servidor recusa.
+ */
+export function corpoDoArquivarReprovado(trabalho: { id: string; atualizado_em?: unknown }, desfazer = false): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "reprovado_arquivar", trabalho_id: trabalho.id, desfazer };
+  if (typeof trabalho.atualizado_em === "string" && trabalho.atualizado_em) corpo.esperado_atualizado_em = trabalho.atualizado_em;
+  return corpo;
+}
+
+/**
  * Corpo do "Tirar fundo" pelo método antigo (mesa-foto preparar, modo
  * fundo_transparente), usado só quando o removedor profissional está sem
  * chave: a derivada sem fundo vai para o acervo e a tela põe na lâmina como

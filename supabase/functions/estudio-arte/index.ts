@@ -264,6 +264,7 @@ import {
   registrarPedido,
 } from "./segundo-plano.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+import { arquivarTrabalhoReprovado, ErroDoArquivo, type TrabalhoParaArquivo } from "../_shared/arquivo-da-reprovacao.ts";
 import type { LinhaVigiada } from "./fila-de-geracao.ts";
 import {
   type AcaoDoAgente,
@@ -5010,6 +5011,79 @@ async function rapidaArquivar(ch: Chamador, corpo: Record<string, unknown>) {
     direcao: { ...x.direcao, arte_rapida: { ...(x.direcao.arte_rapida as ArteRapida), arquivada_em: desfazer ? null : new Date().toISOString() } },
   }));
   return json({ trabalho: atualizado, arquivada: !desfazer, custo_usd: 0 });
+}
+
+/**
+ * reprovado_arquivar { trabalho_id, desfazer?, motivo?, esperado_atualizado_em? } (24/11/2026): tira da lista
+ * interna do Estúdio a entrega reprovada (social padrão, com ou sem item, e arte rápida). Só equipe com acesso ao
+ * cliente; grava só o marcador em `direcao` (_shared/arquivo-da-reprovacao.ts) com trava otimista. Não mexe em
+ * tarefa, post, publicação, arquivos, storage, aprovação nem fila. Sem custo; idempotente e reversível.
+ * Diferente do "Arquivar" da faixa das pautas (agente-calendario), que mexe na tarefa/post e segue igual.
+ */
+type TrabalhoCruParaArquivo = TrabalhoParaArquivo & Record<string, unknown>;
+
+async function trabalhoCruParaArquivo(id: string): Promise<TrabalhoCruParaArquivo> {
+  // Leitura crua: o lerTrabalho troca a direção sem `cards` pela padrão, e o patch não pode gravar isso.
+  if (!UUID.test(id)) throw new ErroEstudio(400, "trabalho_invalido", "Trabalho inválido.");
+  const { data, error } = await servico().from("estudio_trabalhos").select("*").eq("id", id).maybeSingle();
+  if (error) throw new ErroEstudio(503, "trabalho_indisponivel", "Não foi possível ler o trabalho do estúdio.");
+  if (!data) throw new ErroEstudio(404, "trabalho_inexistente", "Trabalho do estúdio não encontrado.");
+  return data as TrabalhoCruParaArquivo;
+}
+
+async function reprovadoArquivar(ch: Chamador, corpo: Record<string, unknown>) {
+  const desfazer = corpo.desfazer === true;
+  try {
+    const r = await arquivarTrabalhoReprovado<TrabalhoCruParaArquivo>({
+      lerComAcesso: async (id) => {
+        const t = await trabalhoCruParaArquivo(id);
+        await garantirAcesso(ch, t.client_id);
+        return t;
+      },
+      reler: trabalhoCruParaArquivo,
+      gravarSeIgual: async (t, patch) => {
+        const { data, error } = await servico()
+          .from("estudio_trabalhos")
+          .update(patch)
+          .eq("id", t.id)
+          .eq("client_id", t.client_id)
+          .eq("atualizado_em", t.atualizado_em)
+          .eq("entrega_status", "reprovado")
+          .select("*")
+          .maybeSingle();
+        if (error) throw new ErroEstudio(503, "gravacao_falhou", "Não foi possível gravar o trabalho do estúdio.");
+        return (data as TrabalhoCruParaArquivo | null) ?? null;
+      },
+      agora: () => new Date().toISOString(),
+      auditar: async ({ trabalho, desfazer: d, mudou, ok, codigo }) => {
+        await auditLog({
+          correlationId: crypto.randomUUID(), toolName: d ? "estudio_desarquivar_reprovado" : "estudio_arquivar_reprovado",
+          origin: "mesa:estudio-arte", keyId: `mesa:estudio-arte:${ch.userId}`, scopes: ["studio:archive"],
+          input: { client_id: trabalho.client_id, trabalho_id: trabalho.id, task_id: trabalho.task_id ?? null, mudou },
+          success: ok, statusCode: ok ? 200 : 409, durationMs: 0, errorCode: codigo ?? null, resultRef: trabalho.id,
+        }).catch(() => null);
+      },
+    }, {
+      trabalho_id: texto(corpo.trabalho_id, 64),
+      desfazer,
+      motivo: texto(corpo.motivo, 500) || null,
+      esperado_atualizado_em: texto(corpo.esperado_atualizado_em, 64) || null,
+      por: ch.userId,
+    });
+    const t = r.trabalho;
+    return json({
+      trabalho: { ...t, cards: Array.isArray(t.cards) ? t.cards : [] },
+      trabalho_id: t.id,
+      client_id: t.client_id,
+      arquivado: r.arquivado,
+      ja_estava: r.ja_estava,
+      estado: r.estado,
+      custo_usd: 0,
+    });
+  } catch (e) {
+    if (e instanceof ErroDoArquivo) throw new ErroEstudio(e.status, e.codigo, e.message);
+    throw e;
+  }
 }
 
 /** Lê um texto (HTML) do Instagram com o robô de prévia de links, sem seguir para o login, com tempo e teto. */
@@ -12502,6 +12576,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   rapida_preparar: (ch, corpo) => rapidaPreparar(ch, corpo, null),
   rapida_para_agenda: rapidaParaAgenda,
   rapida_arquivar: rapidaArquivar,
+  // 24/11/2026: arquivar (só na lista interna) a entrega reprovada; não toca tarefa, post nem aprovação.
+  reprovado_arquivar: reprovadoArquivar,
   // 22/10/2026: a referência da campanha vira o padrão visual dela (uma leitura por visão, custo antes na tela).
   ...acoesDoPadraoDaCampanha({
     servico: () => servico() as never,
