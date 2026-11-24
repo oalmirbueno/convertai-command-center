@@ -692,8 +692,10 @@ export const FERRAMENTAS_DO_ESCRITORIO: readonly ToolDefinition[] = [
     name: 'aceleriq_escritorio_entrar',
     title: 'Escritório: entrar',
     description:
-      'Só leitura. A porta de entrada de qualquer agente, de qualquer plataforma: chame ao começar a sessão. Devolve quem você é (slug, plataforma, função, grau, escopo, a quem responde, equipe), o organograma por área, as regras da casa, a ordem de leitura da memória, onde estão as skills, as suas salas e as mensagens não lidas. A credencial só entra como os agentes ligados a ela.',
-    scopes: ['aceleriq:read'],
+      'Só leitura. Chame ao começar a sessão. A chave API restrita recebe apenas a identidade do seu único operador ativo vinculado. Credenciais com acesso amplo também recebem equipe, organograma, regras da casa, memória, salas e mensagens não lidas.',
+    // Qualquer um (OR): aceleriq:read legado ou escritorio:identity, que canInvoke só aceita
+    // em chave API restrita (isRestrictedApiKeyIdentityScope), nunca OAuth.
+    scopes: ['aceleriq:read', 'escritorio:identity'],
     annotations: LEITURA,
     inputSchema: { type: 'object', additionalProperties: false, properties: { operator: OPERATOR } },
     handler: (input, ctx) => escritorioEntrar(input, ctx),

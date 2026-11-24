@@ -474,7 +474,10 @@ Deno.test('catálogo do Escritório: oito ferramentas, todas com manual, escrita
     assert(!/[—–]/.test(t.description), `${t.name}: sem travessão`);
     assertEquals((t.inputSchema as { additionalProperties: boolean }).additionalProperties, false);
     const escreve = t.annotations?.readOnlyHint === false;
-    assertEquals([...t.scopes], [escreve ? 'aceleriq:write' : 'aceleriq:read']);
+    const esperado = t.name === 'aceleriq_escritorio_entrar'
+      ? ['aceleriq:read', 'escritorio:identity']
+      : [escreve ? 'aceleriq:write' : 'aceleriq:read'];
+    assertEquals([...t.scopes], esperado);
   }
 });
 
@@ -513,10 +516,11 @@ function portaSoIdentidade(vinculos: Record<string, VinculoDaChave[] | null>, ch
 
 Deno.test('entrar restrito: chave não-admin com vínculo único e ativo vê só a própria identidade', async () => {
   const elo = chaveRestrita('elo', ['clio']);
+  const ctx = { ...elo.ctx, scopes: ['escritorio:identity'] };
   for (const pedido of [{}, { operator: 'clio' }, { operator: ' CLIO ' }]) {
     const chamadas: string[] = [];
     const porta = portaSoIdentidade(elo.vinculos, chamadas);
-    const r = await escritorioEntrar(pedido, elo.ctx, porta) as Record<string, any>;
+    const r = await escritorioEntrar(pedido, ctx, porta) as Record<string, any>;
     // Vínculo lido sem cache; operador buscado só pelo próprio slug, sem listar o elenco.
     assertEquals(chamadas, ['vinculos:key:elo:sem-cache', 'operador:clio']);
     assertEquals(Object.keys(r).sort(), ['aviso', 'modo', 'voce']);

@@ -1983,6 +1983,57 @@ Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nen
   assertEquals(TOOLS.length, 229);
 });
 
+// ─── Menor privilégio: escritorio:identity só abre a identidade da chave API restrita ───
+
+Deno.test('escritorio:identity: só aceleriq_escritorio_entrar, só chave API restrita, nunca OAuth; legado intacto', async () => {
+  const ENTRAR = TOOL_MAP.get('aceleriq_escritorio_entrar')!;
+  assertEquals([...ENTRAR.scopes], ['aceleriq:read', 'escritorio:identity']);
+  assert(ALL_SCOPES.includes('escritorio:identity') && SCOPE_DESCRIPTIONS['escritorio:identity']);
+  const restrita: AuthContext = {
+    ...readCtx,
+    keyId: '00000000-0000-0000-0000-0000000000e1',
+    scopes: ['escritorio:identity'],
+    dataScope: { unrestricted: false, clientIds: ['00000000-0000-0000-0000-0000000000aa'], principalUserId: 'funcionario-1', source: 'api_key' },
+  };
+  assert(canInvoke(restrita, ENTRAR), 'chave API restrita completa entra com escritorio:identity');
+  assert(canUseToolWithDataScope(restrita, ENTRAR));
+  const capacidades = await TOOL_MAP.get('aceleriq_capabilities')!.handler({}, restrita) as {
+    catalogo: { nomes_visiveis: string[] };
+    tools: Array<{ name: string }>;
+  };
+  const visiveis = [...TOOLS.filter(t => t.scopes.length === 0).map(t => t.name), ENTRAR.name].sort();
+  assertEquals([...capacidades.catalogo.nomes_visiveis].sort(), visiveis);
+  assertEquals(capacidades.tools.map(t => t.name).sort(), visiveis);
+  // Legado preservado: aceleriq:read e admin seguem abrindo entrar.
+  assert(canInvoke(readCtx, ENTRAR));
+  assert(canInvoke(adminCtx, ENTRAR));
+  // Negativos: OAuth (keyId ou source), contexto incompleto ou irrestrito não usam o escopo.
+  const negados: AuthContext[] = [
+    { ...restrita, keyId: 'oauth:00000000-0000-0000-0000-000000000001' },
+    { ...restrita, dataScope: { ...restrita.dataScope!, source: 'oauth' } },
+    { ...restrita, dataScope: { ...restrita.dataScope!, unrestricted: true } },
+    { ...restrita, dataScope: { ...restrita.dataScope!, clientIds: [] } },
+    { ...restrita, dataScope: { ...restrita.dataScope!, principalUserId: null } },
+    { ...restrita, dataScope: undefined } as unknown as AuthContext,
+    { ...restrita, scopes: [] },
+  ];
+  for (const ctx of negados) assert(!canInvoke(ctx, ENTRAR), JSON.stringify({ k: ctx.keyId, s: ctx.scopes, d: ctx.dataScope }));
+  // Nenhuma outra ferramenta abre com escritorio:identity, nem mesmo se declarasse o escopo.
+  for (const t of TOOLS) {
+    if (t.name === ENTRAR.name || t.scopes.length === 0) continue;
+    assert(!canInvoke(restrita, t), `${t.name} não abre com escritorio:identity`);
+  }
+  assert(!canInvoke(restrita, { ...TOOL_MAP.get('aceleriq_escritorio_caixa')!, scopes: ['escritorio:identity'] }));
+  // Fora dos agregados e do OAuth da equipe.
+  for (const escopos of [['aceleriq:read'], ['aceleriq:write'], ['aceleriq:read', 'aceleriq:write', 'aceleriq:finance', 'escritorio:write']]) {
+    assert(!expandScopes(escopos).has('escritorio:identity'));
+  }
+  assert(!expandScopes(['escritorio:identity']).has('aceleriq:read'));
+  const { OAUTH_STAFF_SCOPES, oauthScopesForStaff } = await import('../_shared/mcp-security.ts');
+  assert(!(OAUTH_STAFF_SCOPES as readonly string[]).includes('escritorio:identity'));
+  assert(!(oauthScopesForStaff(true, 'aceleriq:read escritorio:identity') ?? []).includes('escritorio:identity'));
+});
+
 // ─── MCP 2.36.0 (19/11/2026): Central de Automações ───
 
 Deno.test('2.36: automações lê com aceleriq:read; ligar e desligar só com automacoes:write, que nenhum outro escopo concede', async () => {
