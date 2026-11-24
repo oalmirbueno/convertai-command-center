@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CalendarCheck, Check, FileCheck2, FolderCheck, FolderOpen, Loader2, RotateCcw, Send, TriangleAlert } from "lucide-react";
+import { Archive, CalendarCheck, Check, FileCheck2, FolderCheck, FolderOpen, Loader2, RotateCcw, Send, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, juntar } from "@/components/sistema/estilos";
@@ -9,6 +9,7 @@ import { opcoesDaEntrega, rotuloDaOpcao, type ModoDeEntrega } from "@/lib/mesa/e
 import { faltaEnviar, textoDaEntrega } from "./EstudioSituacao";
 import { useEstadoGuardado } from "./estudioUtil";
 import type { Trabalho } from "./useItensDoMes";
+import { trabalhoArquivado } from "../../../supabase/functions/_shared/arquivo-da-reprovacao";
 
 /**
  * Último posto da esteira, no próprio Estúdio (pedido do dono em 23/09:
@@ -63,6 +64,8 @@ export default function EstudioEntrega({
   aprovando = false,
   onReabrir,
   reabrindo = false,
+  onArquivarReprovado,
+  arquivandoReprovado = false,
 }: {
   trabalho: Trabalho;
   laminasFeitas: number;
@@ -86,8 +89,15 @@ export default function EstudioEntrega({
   /** "Reabrir para corrigir": mesmas lâminas e versões, nova rodada de entrega (arquivo novo). */
   onReabrir?: () => void;
   reabrindo?: boolean;
+  /**
+   * 24/11/2026: arquivar (true = desfazer) a entrega reprovada só na lista interna. Não mexe na pauta,
+   * no post nem na aprovação; diferente do "Arquivar" da faixa das pautas.
+   */
+  onArquivarReprovado?: (desfazer: boolean) => void;
+  arquivandoReprovado?: boolean;
 }) {
   const entregue = trabalho.status === "entregue" || trabalho.entrega_status === "agendado";
+  const arquivada = trabalhoArquivado(trabalho);
   const todas = laminasTotal > 0 && laminasFeitas >= laminasTotal;
   const falta = faltaEnviar(trabalho);
   const rotuloEnviar = ehDesign ? "Pedir revisão da agência" : "Enviar para aprovação";
@@ -108,6 +118,26 @@ export default function EstudioEntrega({
           <p className="font-semibold text-warning">Pediram ajuste nesta arte</p>
           {trabalho.entrega_aviso && <p className="mt-1 [overflow-wrap:anywhere]">“{trabalho.entrega_aviso}”</p>}
           <p className="mt-1 leading-snug text-muted-foreground">Ajuste as lâminas e entregue de novo: vira um arquivo novo e volta para a aprovação.</p>
+        </div>
+      )}
+
+      {trabalho.entrega_status === "reprovado" && onArquivarReprovado && (
+        <div className="flex min-w-0 items-center gap-2 text-[12px]" data-arquivo-da-reprovacao={arquivada ? "arquivada" : "ativa"}>
+          <span className="min-w-0 flex-1 leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+            {arquivada
+              ? "Reprovada e arquivada só aqui dentro. A pauta, o post e a aprovação não mudaram."
+              : "Não vai refazer? Arquive só esta entrega reprovada; a pauta, o post e a aprovação não mudam."}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={arquivandoReprovado || ocupado}
+            onClick={() => onArquivarReprovado(arquivada)}
+          >
+            {arquivandoReprovado ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Archive className="mr-1 h-3.5 w-3.5" />}
+            {arquivada ? "Desarquivar" : "Arquivar reprovada"}
+          </Button>
         </div>
       )}
 

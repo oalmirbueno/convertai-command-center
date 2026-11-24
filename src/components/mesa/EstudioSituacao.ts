@@ -1,5 +1,6 @@
 import { dataEHora } from "@/lib/mesa/api";
 import { ultimasVersoes, type ArteNaAgenda, type ItemDoMes, type Trabalho } from "./useItensDoMes";
+import { trabalhoArquivado } from "../../../supabase/functions/_shared/arquivo-da-reprovacao";
 
 /**
  * Em que ponto da esteira cada item está. Regras puras (sem tela), usadas
@@ -86,6 +87,8 @@ export function situacaoDoItem(
   }
   const tr = t as Trabalho;
   if (tr.entrega_status === "agendado") return { rotulo: "na agenda", tom: "ok" };
+  // 24/11/2026: reprovada e arquivada internamente; a pauta continua aqui (o Arquivar da faixa é outro).
+  if (tr.entrega_status === "reprovado" && trabalhoArquivado(tr)) return { rotulo: "reprovada, arquivada", tom: "neutro" };
   if (tr.status === "entregue") {
     switch (tr.entrega_status) {
       case "aguardando_agencia":

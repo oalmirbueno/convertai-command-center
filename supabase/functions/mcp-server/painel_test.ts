@@ -556,6 +556,28 @@ Deno.test('listas: enxuto por padrão, completo sob pedido, cursor para a próxi
   }
 });
 
+Deno.test('estúdio: arquivado_internamente do marcador novo e do legado da arte rápida, sem colunas auxiliares', async () => {
+  semConferirClienteNoTeste(true);
+  const linhas = [
+    { id: 'a', entrega_status: 'reprovado', entrega_rodada: 2, cards: [], atualizado_em: '2026-11-24', arquivo_da_reprovacao_lido: { arquivado_em: '2026-11-24T12:00:00Z', rodada: 2 }, arte_rapida_arquivada_em_lida: null },
+    { id: 'b', entrega_status: 'reprovado', entrega_rodada: 3, cards: [], atualizado_em: '2026-11-24', arquivo_da_reprovacao_lido: { arquivado_em: '2026-11-24T12:00:00Z', rodada: 2 }, arte_rapida_arquivada_em_lida: null },
+    { id: 'c', entrega_status: 'aprovado', entrega_rodada: 1, cards: [], atualizado_em: '2026-11-24', arquivo_da_reprovacao_lido: null, arte_rapida_arquivada_em_lida: '2026-10-01T00:00:00Z' },
+    { id: 'd', entrega_status: null, cards: [], atualizado_em: '2026-11-24' },
+  ];
+  const banco = bancoFalso(() => ({ data: linhas }));
+  usarBancoDeTeste(() => banco);
+  try {
+    const r = await trabalhosDoEstudio({ client_id: CLIENTE, limite: 10 }, adminCtx) as { itens: Array<Record<string, unknown>> };
+    assertEquals(r.itens.map((i) => i.arquivado_internamente), [true, false, true, false]);
+    assertEquals(r.itens[2].arquivo_origem, 'arte_rapida');
+    assert(!('arquivo_da_reprovacao_lido' in r.itens[0]) && !('arte_rapida_arquivada_em_lida' in r.itens[0]));
+    assertStringIncludes(String(banco.chamadas.at(-1)?.select), 'direcao->arquivo_da_reprovacao');
+  } finally {
+    usarBancoDeTeste(null);
+    semConferirClienteNoTeste(false);
+  }
+});
+
 Deno.test('campanha inteira: junta conteúdos, artes, stories, criativos e sons pelo id da campanha', async () => {
   semConferirClienteNoTeste(true);
   const CAMP = '00000000-0000-0000-0000-0000000000cc';

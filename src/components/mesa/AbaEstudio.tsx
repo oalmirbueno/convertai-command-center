@@ -138,6 +138,7 @@ import {
   copiarTexto,
   corpoDoPreparar,
   corpoDoReabrir,
+  corpoDoArquivarReprovado,
   formatoDoTrabalho,
   proporcaoDoFormato,
   versaoForaDoFormato,
@@ -476,6 +477,7 @@ export function DetalheDoItem({
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [refazendo, setRefazendo] = useState(false);
   const [reabrindo, setReabrindo] = useState(false);
+  const [arquivandoReprovado, setArquivandoReprovado] = useState(false);
   const [salvandoFormato, setSalvandoFormato] = useState(false);
   // Guardados na sessão: voltar de outra aba devolve a mesma lâmina, o mesmo painel e a mesma ferramenta.
   const [selecionado, setSelecionado] = useEstadoGuardado<number | null>(`${chave}:lamina`, null);
@@ -973,6 +975,38 @@ export function DetalheDoItem({
       avisarErro(e, "Não foi possível reabrir");
     } finally {
       setReabrindo(false);
+    }
+  };
+
+  /**
+   * 24/11/2026: arquiva (ou desarquiva) só na lista interna a entrega reprovada. Não mexe na pauta, no post nem na
+   * aprovação (o "Arquivar" da faixa das pautas segue no agente-calendario). Com Desfazer no aviso.
+   */
+  const arquivarReprovado = async (desfazer: boolean, alvo: { id: string; atualizado_em?: unknown } | null = trabalho) => {
+    if (!alvo) return;
+    if (!desfazer) {
+      const ok = await confirmar({
+        title: "Arquivar esta entrega reprovada?",
+        description: "Fica marcada como arquivada só aqui dentro. A pauta, o post, a aprovação e os arquivos não mudam; dá para desarquivar.",
+        confirmLabel: "Arquivar",
+      });
+      if (!ok) return;
+    }
+    setArquivandoReprovado(true);
+    try {
+      const r = await chamarFuncao<{ trabalho?: TrabalhoGravado; arquivado?: boolean; ja_estava?: boolean }>("estudio-arte", corpoDoArquivarReprovado(alvo, desfazer));
+      gravarTrabalhoNoCache(queryClient, clientId, r && r.trabalho);
+      const gravado = (r && r.trabalho) || null;
+      toast.success(desfazer ? "Entrega desarquivada" : "Entrega reprovada arquivada", {
+        description: r && r.ja_estava ? "Já estava assim; nada mudou." : undefined,
+        ...(!desfazer && gravado && !(r && r.ja_estava) ? { action: { label: "Desfazer", onClick: () => void arquivarReprovado(true, gravado) } } : {}),
+      });
+      atualizar();
+    } catch (e) {
+      avisarErro(e, desfazer ? "Não foi possível desarquivar" : "Não foi possível arquivar");
+      atualizar();
+    } finally {
+      setArquivandoReprovado(false);
     }
   };
 
@@ -2389,6 +2423,8 @@ export function DetalheDoItem({
       aprovando={aprovandoPeloCliente}
       onReabrir={entregue ? () => void reabrir() : undefined}
       reabrindo={reabrindo}
+      onArquivarReprovado={(desfazer) => void arquivarReprovado(desfazer)}
+      arquivandoReprovado={arquivandoReprovado}
     />
   ) : null;
 
