@@ -73,4 +73,9 @@ Preview com dados sintéticos: preparar → PUT de MP4 sintético → finalizar 
 conferir um `files`, um anexo, um evento `agency_review_requested` com o perfil dedicado, nenhum aviso.
 Negativos: chave sem opt-in, outra tarefa/projeto, tarefa movida, concessão revogada.
 
+CI (Supabase descartável): `scripts/test-ci-corte-edge.mjs` sobe o `mcp-server` real com Deno em loopback
+(`--cached-only --frozen`, `--allow-net` só para a API local e a própria porta) e percorre Entrar → preparar →
+PUT privado → finalizar → pedir revisão interna → negação fora do projeto → revogação, com fixture e chave
+sintéticas aleatórias (`tests/database-isolated/fixtures/corte_edge_e2e.sql`), revogadas no fim do passo.
+
 Rollback lógico: `MCP_PROJECT_VIDEO_WRITE` desligado, ou revogar o vínculo/concessão. Nada é apagado.
