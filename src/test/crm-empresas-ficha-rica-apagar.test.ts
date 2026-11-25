@@ -23,7 +23,7 @@ const empresas = ler("src/components/comercial/EmpresasCRM.tsx");
 const kanban = ler("src/components/comercial/FunilKanban.tsx");
 const quadro = ler("src/components/sistema/QuadroKanban.tsx");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
-const servico = ler("supabase/functions/_shared/aceleriq-commercial-services.ts");
+const servico = ler("supabase/functions/mcp-server/modulos/aceleriq-commercial-services.ts");
 
 describe("a empresa do lead vira ficha sozinha, no banco", () => {
   it("o gatilho roda antes de inserir e de editar, acha pelo nome e só cria se não existir", () => {

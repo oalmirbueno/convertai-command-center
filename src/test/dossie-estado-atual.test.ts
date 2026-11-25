@@ -6,8 +6,9 @@ const raiz = resolve(__dirname, "../..");
 const ler = (c: string) => readFileSync(resolve(raiz, c), "utf8");
 const migration = ler("supabase/migrations/20260824120000_dossie_estado_atual.sql");
 const writeServices = ler("supabase/functions/_shared/mcp-write-services.ts");
-const readServices = ler("supabase/functions/_shared/aceleriq-read-services.ts");
+const readServices = ler("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
+const escopos = ler("supabase/functions/_shared/mcp-scope-list.ts");
 const metadata = ler("supabase/functions/mcp-oauth-metadata/index.ts");
 const card = ler("src/components/admin/DossieDoCliente.tsx");
 
@@ -137,9 +138,10 @@ describe("as ferramentas do MCP rico", () => {
   it("o escopo novo é anunciado onde o OAuth o descobre", () => {
     expect(tools).toContain("'clients:write'");
     // O metadata OAuth nao guarda mais copia propria da lista: deriva de
-    // ALL_SCOPES (mcp-tools.ts), que precisa conter o escopo novo.
-    expect(tools).toMatch(/export const ALL_SCOPES[\s\S]*?'clients:write',[\s\S]*?\] as const;/);
-    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-tools.ts'");
+    // ALL_SCOPES (mcp-scope-list.ts, reexportada por mcp-tools.ts), que
+    // precisa conter o escopo novo.
+    expect(escopos).toMatch(/export const ALL_SCOPES[\s\S]*?'clients:write',[\s\S]*?\] as const;/);
+    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-scope-list.ts'");
     expect(metadata).toContain("mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES");
     // E entra na expansão do agregado, para as credenciais existentes.
     const expansao = tools.slice(tools.indexOf("'aceleriq:write': ["), tools.indexOf("];", tools.indexOf("'aceleriq:write': [")));

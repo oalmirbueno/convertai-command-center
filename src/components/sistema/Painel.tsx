@@ -96,12 +96,12 @@ function CorpoDoPainel({
                     >
                       <ChevronDown className={juntar("h-4 w-4 transition-transform duration-200", fechado ? "-rotate-90" : "")} aria-hidden="true" />
                     </button>
-                    <h3 className={juntar(texto.tituloSecao, "min-w-0 cursor-pointer select-none line-clamp-2 break-words [text-wrap:balance]")} onClick={onAlternar}>
+                    <h3 className={juntar(texto.tituloSecao, "min-w-0 cursor-pointer select-none line-clamp-2 [text-wrap:balance]")} onClick={onAlternar}>
                       {titulo}
                     </h3>
                   </>
                 ) : (
-                  <h3 className={juntar(texto.tituloSecao, "min-w-0 line-clamp-2 break-words [text-wrap:balance]")}>{titulo}</h3>
+                  <h3 className={juntar(texto.tituloSecao, "min-w-0 line-clamp-2 [text-wrap:balance]")}>{titulo}</h3>
                 )}
                 {ajuda && !fechado && <AjudaRecolhida className="no-print ml-1.5">{ajuda}</AjudaRecolhida>}
               </div>

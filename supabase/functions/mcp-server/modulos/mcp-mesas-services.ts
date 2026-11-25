@@ -13,8 +13,8 @@
  */
 
 import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
-import { assertClientAccess, type AuthContext } from './mcp-auth.ts';
-import { exigirClienteExistente } from './mcp-client-id-guard.ts';
+import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
+import { exigirClienteExistente } from '../../_shared/mcp-client-id-guard.ts';
 import {
   arteDoTrabalho,
   COMO_ESTUDAR_ADS,

@@ -103,9 +103,9 @@ function edgeHarness(scope: Scope) {
     "./mcp-security.ts": security,
     "./mcp-runtime.ts": {},
   });
-  const service = loadModule("supabase/functions/_shared/aceleriq-read-services.ts", {
+  const service = loadModule("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts", {
     "https://esm.sh/@supabase/supabase-js@2.45.4": sdk,
-    "./mcp-auth.ts": auth,
+    "../../_shared/mcp-auth.ts": auth,
     "./aceleriq-metrics-services.ts": {},
   });
   const listTasks = service.listTasks as (input: Options, ctx: { dataScope: Scope }) => Promise<Page>;

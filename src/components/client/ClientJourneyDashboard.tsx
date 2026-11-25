@@ -386,17 +386,17 @@ export default function ClientJourneyDashboard({
                   type="button"
                   onClick={() => navigate(atalho.to)}
                   aria-label={pede ? `${atalho.label}: ${pendingFiles.length} aguardando` : atalho.label}
-                  className="flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-2xl py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-lg py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${pede ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
                     <atalho.icon className="h-[18px] w-[18px]" aria-hidden="true" />
                     {pede && (
-                      <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background">
+                      <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[11px] font-semibold text-background">
                         {pendingFiles.length}
                       </span>
                     )}
                   </span>
-                  <span className="w-full truncate text-center text-[10.5px] font-medium leading-4 tracking-tight text-muted-foreground">{ROTULO_CURTO[atalho.label] ?? atalho.label}</span>
+                  <span className="w-full truncate text-center text-[11px] font-medium leading-4 tracking-tight text-muted-foreground">{ROTULO_CURTO[atalho.label] ?? atalho.label}</span>
                 </button>
               );
             })}
@@ -462,7 +462,7 @@ export default function ClientJourneyDashboard({
           <section aria-label="Aprovações pendentes" className="min-w-0">
             <CardSurface variant="accent" className="overflow-hidden">
               <div className="flex min-w-0 flex-wrap items-center p-5">
-                <span className="mr-4 shrink-0 text-[56px] font-medium leading-[56px] tracking-[-0.05em] tabular-nums text-foreground" aria-hidden="true">
+                <span className="mr-4 shrink-0 text-[48px] font-medium leading-[48px] tracking-[-0.05em] tabular-nums text-foreground" aria-hidden="true">
                   {pendingFiles.length}
                 </span>
                 <div className="flex min-w-0 flex-1 items-center">
@@ -532,7 +532,7 @@ export default function ClientJourneyDashboard({
                       <span className="truncate text-[13px] font-medium leading-5 text-foreground">Aprovações pendentes</span>
                       {temPendencia && <AjudaRecolhida>{ajudaDaPendencia}</AjudaRecolhida>}
                     </div>
-                    <span className="mt-4 block text-[72px] font-normal leading-[72px] tracking-[-0.05em] tabular-nums text-foreground" aria-hidden="true">
+                    <span className="mt-4 block text-[48px] font-normal leading-[48px] tracking-[-0.05em] tabular-nums text-foreground" aria-hidden="true">
                       {pendingFiles.length}
                     </span>
                     <h2 className="mt-2 min-w-0 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-foreground">

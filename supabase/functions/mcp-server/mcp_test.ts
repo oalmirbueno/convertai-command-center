@@ -1058,7 +1058,7 @@ Deno.test('every mapped granular scope is on the resolved tool', () => {
 });
 
 // ─── Mesas (v1.46.0): estudar antes de rodar tráfego ──────────
-import { arteDoTrabalho, faltaNoBanco, kitParaLer, planoParaLer, tomadaParaLer } from '../_shared/mcp-mesas-formato.ts';
+import { arteDoTrabalho, faltaNoBanco, kitParaLer, planoParaLer, tomadaParaLer } from './modulos/mcp-mesas-formato.ts';
 
 const MESAS = ['aceleriq_mesa_ads_contexto', 'aceleriq_mesa_foto_contexto'];
 
@@ -1162,7 +1162,7 @@ Deno.test('mesas: foto sem tabela vira aviso; kit não expõe dados da autoriza�
 
 // ─── MCP 2.3: agir nas mesas e o cérebro do cliente ──────────
 import { folegoResponse } from './modulos/mcp-response.ts';
-import { chamarMesa, esperarOuSeguir } from '../_shared/mcp-mesas-acoes.ts';
+import { chamarMesa, esperarOuSeguir } from './modulos/mcp-mesas-acoes.ts';
 
 const ACOES_2_3 = [
   'aceleriq_mesa_calendario_pedido',
@@ -1342,7 +1342,7 @@ Deno.test('AB2: GET sem Bearer desafia, GET pedindo stream e 405, o resto e a de
 Deno.test('editar legenda aprovada: ferramenta no catálogo, escopo editorial:write e schema fechado', async () => {
   const { editarLegendaSchema, LIMITE_DA_LEGENDA } = await import('./modulos/editar-legenda-publicacao.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const tool = TOOL_MAP.get('aceleriq_editar_legenda_publicacao');
   assert(tool, 'ferramenta no catálogo');
   assert(tool.scopes.includes('editorial:write'));
@@ -1376,7 +1376,7 @@ Deno.test('editar legenda aprovada: ferramenta no catálogo, escopo editorial:wr
 Deno.test('ajustar formato aprovado: ferramenta no catálogo, escopo editorial:write e schema fechado', async () => {
   const { ajustarFormatoSchema, FORMATOS_DE_PECA_UNICA } = await import('./modulos/editar-legenda-publicacao.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   const tool = TOOL_MAP.get('aceleriq_ajustar_formato_publicacao');
   assert(tool, 'ferramenta no catálogo');
@@ -1435,7 +1435,7 @@ Deno.test('2.28: as três ferramentas estão no catálogo e contadas na descober
 Deno.test('revisão interna: escrita com mesas:write, cliente no escopo, RPC na ponte e schema fechado', async () => {
   const { revisarTrabalhoSchema, NOTA_MINIMA_DO_AJUSTE } = await import('./modulos/precisa-de-voce-e-revisao.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   const tool = TOOL_MAP.get('aceleriq_revisar_trabalho_interno');
   assert(tool, 'ferramenta no catálogo');
@@ -1499,7 +1499,7 @@ Deno.test('caixa Precisa de você: só leitura, com cache curto e visível para 
 Deno.test('marcar para o dono: escrita sem vínculo obrigatório, sem ação escolhida pelo agente e com o limite na descrição', async () => {
   const { marcarPrecisaDeVoceSchema } = await import('./modulos/precisa-de-voce-e-revisao.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const tool = TOOL_MAP.get('aceleriq_marcar_precisa_de_voce');
   assert(tool, 'ferramenta no catálogo');
@@ -1842,7 +1842,7 @@ Deno.test('2.30: criar publicação de aprovado no catálogo, no guia e contada 
 Deno.test('criar publicação de aprovado: escrita editorial:write, schema fechado, ponte e mesma lista de cliente do reagendar', async () => {
   const { criarPublicacaoSchema } = await import('./modulos/criar-publicacao-de-aprovado.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const tool = TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado')!;
   assert(tool.scopes.includes('editorial:write'));
   assertEquals(GRANULAR_SCOPE_BY_TOOL.aceleriq_criar_publicacao_de_aprovado, 'editorial:write');
@@ -2085,7 +2085,7 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
   assertEquals(MCP_VERSION, '2.39.1');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
   const esperado: Record<string, string> = {
     aceleriq_arquivos_agrupar_carrossel: 'files:write',

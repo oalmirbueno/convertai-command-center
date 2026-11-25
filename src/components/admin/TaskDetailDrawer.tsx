@@ -1104,9 +1104,10 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
 
               {/* Comment input with @mention */}
               <div className="relative">
+                {/* No máximo 5 nomes (filteredMentions): a lista cabe inteira, sem rolagem dentro da rolagem do corpo. */}
                 {mentionQuery !== null && filteredMentions.length > 0 && (
                   <div ref={mentionDropdownRef}
-                    className="absolute bottom-full left-0 z-10 mb-1 max-h-[160px] w-full overflow-y-auto rounded-md border border-border bg-card py-1 shadow-pop">
+                    className="absolute bottom-full left-0 z-10 mb-1 w-full rounded-md border border-border bg-card py-1 shadow-pop">
                     {filteredMentions.map((m: any, i: number) => (
                       <button type="button" key={m.id}
                         onClick={() => insertMention(m)}

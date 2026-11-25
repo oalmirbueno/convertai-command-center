@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const tools = read("supabase/functions/_shared/mcp-tools.ts");
-const reads = read("supabase/functions/_shared/aceleriq-read-services.ts");
+const reads = read("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts");
 const writes = read("supabase/functions/_shared/mcp-write-services.ts");
 const auth = read("supabase/functions/_shared/mcp-auth.ts");
 const server = read("supabase/functions/mcp-server/index.ts");

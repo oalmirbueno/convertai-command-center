@@ -11,9 +11,9 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4
 import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { DataScopeError } from '../../_shared/mcp-auth.ts';
-import { db } from '../../_shared/aceleriq-read-services.ts';
+import { db } from './aceleriq-read-services.ts';
 import { dataScopeAllowsClient } from '../../_shared/mcp-security.ts';
-import { rpcComoPessoa, umaVez } from '../../_shared/mcp-mesas-acoes.ts';
+import { rpcComoPessoa, umaVez } from './mcp-mesas-acoes.ts';
 import { LIMITS } from './mcp-files-services.ts';
 import {
   conferenciaDoLink,

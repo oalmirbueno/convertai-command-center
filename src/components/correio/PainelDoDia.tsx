@@ -20,7 +20,7 @@ import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, botao, campo, foco, ju
 export const chaveDasTarefas = ["produto", "correio", "tarefas"] as const;
 export const chaveDaAgenda = (dia: string) => ["produto", "correio", "agenda", dia] as const;
 
-const cartao = "min-w-0 rounded-3xl bg-card p-5";
+const cartao = "min-w-0 rounded-lg bg-card p-5";
 
 /** As tarefas da pessoa: marcar, criar e apagar. Tarefa vinda de e-mail mostra de onde veio. */
 export function TarefasDoDia({ eu, compacto = false }: { eu: EuNoCorreio; compacto?: boolean }) {
@@ -113,7 +113,7 @@ export function AgendaDeHoje({ eu, compacto = false }: { eu: EuNoCorreio; compac
           {lista.map((c) => (
             <li key={c.id} className="flex min-w-0 items-start">
               <span className="w-16 shrink-0 text-[20px] font-medium leading-7 tabular-nums">{horaDoCompromisso(c.inicio)}</span>
-              <span className="min-w-0 flex-1 rounded-2xl bg-muted px-3.5 py-2.5">
+              <span className="min-w-0 flex-1 rounded-lg bg-muted px-3.5 py-2.5">
                 <span className={juntar(texto.corpo, "block font-semibold")}>{c.titulo}</span>
                 {c.detalhe && <span className={juntar(texto.auxiliar, "block")}>{c.detalhe}</span>}
               </span>

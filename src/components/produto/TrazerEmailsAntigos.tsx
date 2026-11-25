@@ -46,7 +46,7 @@ function LinhaDaCaixa({ caixa, aoComecar }: { caixa: CaixaDeEmail; aoComecar: ()
     }
   };
   return (
-    <li className="rounded-2xl border border-border p-4" data-trazer-caixa={caixa.endereco}>
+    <li className="rounded-lg border border-border p-4" data-trazer-caixa={caixa.endereco}>
       <div className="flex min-w-0 items-center">
         <span className="min-w-0 flex-1">
           <span className={juntar(texto.corpo, "block truncate font-semibold")}>{caixa.endereco}</span>
@@ -160,7 +160,7 @@ function Assistente({ caixa, onFechar }: { caixa: CaixaDeEmail; onFechar: () => 
       {passo === 1 && (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" data-provedores-da-migracao="">
           {(provedores.data || []).map((p) => (
-            <button key={p.id} type="button" onClick={() => setProv(p)} aria-pressed={prov?.id === p.id} className={juntar("flex min-w-0 items-center rounded-2xl border p-3.5 text-left text-[14px] font-medium", foco, prov?.id === p.id ? "border-primary bg-accent-soft" : "border-border hover:bg-muted")} data-provedor={p.id}>
+            <button key={p.id} type="button" onClick={() => setProv(p)} aria-pressed={prov?.id === p.id} className={juntar("flex min-w-0 items-center rounded-lg border p-3.5 text-left text-[14px] font-medium", foco, prov?.id === p.id ? "border-primary bg-accent-soft" : "border-border hover:bg-muted")} data-provedor={p.id}>
               <span className={juntar("mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[13px] font-bold", prov?.id === p.id ? "bg-primary text-primary-foreground" : "bg-muted")} aria-hidden="true">{p.nome.slice(0, 1)}</span>
               <span className="min-w-0 truncate">{p.nome}</span>
             </button>
@@ -172,7 +172,7 @@ function Assistente({ caixa, onFechar }: { caixa: CaixaDeEmail; onFechar: () => 
       {passo === 2 && prov && (
         <div className="space-y-4">
           {prov.senha_de_app && (
-            <div className="rounded-2xl bg-muted p-4" data-ajuda-senha-de-app="">
+            <div className="rounded-lg bg-muted p-4" data-ajuda-senha-de-app="">
               <p className={juntar(texto.corpo, "font-semibold")}>O {prov.nome} pede uma senha de app</p>
               <p className={juntar(texto.auxiliar, "mt-1")}>É uma senha só para isto, diferente da sua senha normal. Leva um minuto:</p>
               <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px] leading-5">

@@ -244,7 +244,13 @@ describe("paleta em grupos, com rolagem própria", () => {
   });
 
   it("no editor, a paleta fica numa coluna da altura toda", () => {
-    expect(ler("src/components/laboratorio/EditorDoProjeto.tsx")).toContain('<div className="mr-2 flex shrink-0 flex-col border-r border-border pr-1">');
+    // Hoje ela flutua dentro do quadro, presa em cima e embaixo (altura toda), e devolve o clique que a casca tira.
+    const editor = ler("src/components/laboratorio/EditorDoProjeto.tsx");
+    const casca = (editor.match(/<div className="([^"]*)" data-paleta-flutuante="">\s*<Paleta /) || [])[1] || "";
+    expect(casca).toMatch(/\btop-\S+/);
+    expect(casca).toMatch(/\bbottom-\S+/);
+    expect(casca).toMatch(/\bflex-col\b/);
+    if (/\bpointer-events-none\b/.test(casca)) expect(ler("src/components/laboratorio/Paleta.tsx")).toContain("pointer-events-auto");
   });
 });
 

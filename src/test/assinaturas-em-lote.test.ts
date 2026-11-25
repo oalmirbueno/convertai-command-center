@@ -69,8 +69,9 @@ describe("assinatura de arquivos em lote", () => {
     expect(ruim.error).toBe("Object not found");
     falhar = true;
     const cai = assinarCaminhos("files", ["x.png", "y.png"]);
+    const rejeicao = expect(cai).rejects.toThrow("fora do ar");
     await passo(); await soltarTudo();
-    await expect(cai).rejects.toThrow("fora do ar");
+    await rejeicao;
   });
 
   it("quem chega enquanto um lote está no ar espera e vai junto no próximo", async () => {

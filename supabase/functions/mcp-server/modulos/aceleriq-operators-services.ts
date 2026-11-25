@@ -22,15 +22,15 @@
  */
 
 import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
-import { progressDetail, type OperatorProgressDetail } from './operator-progress-detail.ts';
-import { operatorRunIsStale } from './operator-freshness.ts';
-import { mensagemVinculoInexistente, type VinculoCandidato } from './vinculo-guard.ts';
-import { jevPerguntar } from './jev.ts';
-import { decidirTrava, perguntaDaTrava, ROTULO_DO_MOTIVO, type MotivoDoDono, type RespostaDaTrava } from './trava-do-dono.ts';
+import { progressDetail, type OperatorProgressDetail } from '../../_shared/operator-progress-detail.ts';
+import { operatorRunIsStale } from '../../_shared/operator-freshness.ts';
+import { mensagemVinculoInexistente, type VinculoCandidato } from '../../_shared/vinculo-guard.ts';
+import { jevPerguntar } from '../../_shared/jev.ts';
+import { decidirTrava, perguntaDaTrava, ROTULO_DO_MOTIVO, type MotivoDoDono, type RespostaDaTrava } from '../../_shared/trava-do-dono.ts';
 import {
   mensagemTetoNaReativacao, mensagemTetoNoCadastro, podeCadastrar, podeReativar, reativacaoOcupaVaga,
-} from './teto-de-operadores.ts';
-import { avaliarRodada, classificarProva, ehSoLeitura, provaConfere, vinculoSemEntrega, type Prova } from '../mcp-server/modulos/rodada-e-prova.ts';
+} from '../../_shared/teto-de-operadores.ts';
+import { avaliarRodada, classificarProva, ehSoLeitura, provaConfere, vinculoSemEntrega, type Prova } from './rodada-e-prova.ts';
 
 const texto = (v: unknown): string | null => {
   if (typeof v !== 'string') return null;

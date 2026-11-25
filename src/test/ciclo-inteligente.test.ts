@@ -403,7 +403,7 @@ describe("tarefa se liga ao cliente pelo projeto, nunca direto", () => {
     expect(situacao).not.toMatch(/from\("tasks"\)[\s\S]{0,160}in\("client_id"/);
 
     const dossie = readFileSync(
-      resolve(raiz, "supabase/functions/_shared/aceleriq-read-services.ts"), "utf8",
+      resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-read-services.ts"), "utf8",
     );
     expect(dossie).not.toMatch(/from\('tasks'\)[\s\S]{0,200}\.eq\('client_id'/);
     expect(dossie).toContain("projects!inner(client_id)");

@@ -9,7 +9,7 @@ const ler = (p: string) => readFileSync(resolve(__dirname, "../..", p), "utf8");
 
 describe("diário lido só quando muda", () => {
   it("o quadro e o leitor usam o mesmo campo e o mesmo critério de entrada humana", () => {
-    const quadro = ler("supabase/functions/_shared/aceleriq-operators-services.ts");
+    const quadro = ler("supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts");
     const leitor = ler("integrations/hermes-operational/diary_consumer.py");
     expect(quadro).toContain("ultima_entrada_humana_em: ultimaHumana.get(String(l.id)) ?? null");
     expect(quadro).toContain(".or('author_kind.eq.humano,entry_type.in.(instrucao,decisao,correcao)')");

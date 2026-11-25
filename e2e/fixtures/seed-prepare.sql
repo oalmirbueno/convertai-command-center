@@ -45,6 +45,7 @@ BEGIN
       ('auth.users','public','handle_new_user'),
       ('profiles','public','notify_ops_sync'),('profiles','public','update_updated_at_column'),
       ('profiles','app_private','capture_legacy_first_access_token'),('profiles','app_private','guard_profile_editable_fields'),
+      ('profiles','public','plano_mudou_atualiza_cobranca_e_crm'),
       ('projects','public','notify_ops_sync'),('projects','public','update_updated_at_column'),
       ('tasks','public','notify_ops_sync'),('tasks','public','update_updated_at_column'),
       ('tasks','public','update_milestone_progress'),('tasks','public','editorial_lock_task_sync_trigger'),
@@ -53,6 +54,24 @@ BEGIN
       ('tasks','public','contexto_extra_enfileira'),('tasks','public','tasks_acao_feita_no_dossie')
     )
   ) THEN RAISE EXCEPTION 'E2E_UNREVIEWED_FIXTURE_TRIGGER'; END IF;
+  -- The plan trigger only reacts to UPDATE OF plan_value; the seed never
+  -- writes plan_value. Require exactly the reviewed binding, fail closed.
+  IF (SELECT count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+        JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE t.tgrelid='public.profiles'::regclass AND NOT t.tgisinternal
+        AND n.nspname='public' AND p.proname='plano_mudou_atualiza_cobranca_e_crm')<>1
+    OR NOT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+        JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE t.tgrelid='public.profiles'::regclass AND NOT t.tgisinternal
+        AND n.nspname='public' AND p.proname='plano_mudou_atualiza_cobranca_e_crm'
+        AND t.tgname='profiles_plano_mudou_trg' AND t.tgtype=17 AND t.tgenabled='O'
+        AND t.tgqual IS NULL AND t.tgnargs=0
+        AND t.tgoldtable IS NULL AND t.tgnewtable IS NULL
+        AND t.tgattr::text IS NOT DISTINCT FROM (
+          SELECT a.attnum::text FROM pg_attribute a WHERE a.attrelid=t.tgrelid
+            AND a.attname='plan_value' AND NOT a.attisdropped)) THEN
+    RAISE EXCEPTION 'E2E_PLAN_TRIGGER_BINDING_CHANGED';
+  END IF;
   -- These two reviewed triggers only react to an UPDATE of deletion/status.
   -- The seed inserts backlog tasks; retain both triggers and reject rebinding.
   IF EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid

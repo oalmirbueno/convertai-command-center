@@ -16,7 +16,7 @@ const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
 
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
 const escrita = ler("supabase/functions/_shared/mcp-write-services.ts");
-const leitura = ler("supabase/functions/_shared/aceleriq-read-services.ts");
+const leitura = ler("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts");
 const seguranca = ler("supabase/functions/_shared/mcp-security.ts");
 const metadata = ler("supabase/functions/mcp-oauth-metadata/index.ts");
 

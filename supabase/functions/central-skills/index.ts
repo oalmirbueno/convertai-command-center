@@ -49,10 +49,11 @@ import {
   registrarMaquina,
 } from './modulos/nucleo.ts';
 import { scriptDoInstalador } from './modulos/instalador.ts';
+import { PREFLIGHT_CACHE } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const cors = { ...corsHeaders, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+const cors = { ...corsHeaders, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', ...PREFLIGHT_CACHE };
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {

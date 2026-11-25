@@ -19,7 +19,7 @@ const raiz = resolve(__dirname, "../..");
 const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
 
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
-const servicos = ler("supabase/functions/_shared/aceleriq-operators-services.ts");
+const servicos = ler("supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts");
 const migracao = ler("supabase/migrations/20260916120000_revisao_do_ciclo_com_hermes.sql");
 const fila = ler("src/components/central/CentralReviewQueue.tsx");
 const release = ler("supabase/functions/_shared/mcp-release.ts");

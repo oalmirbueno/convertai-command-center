@@ -11,7 +11,7 @@ const dashboard = ler("src/pages/AdminDashboard.tsx");
 const layout = ler("src/components/AppLayout.tsx");
 const studio = ler("src/components/workspace/StudioPanel.tsx");
 const central = ler("src/pages/AdminExperience.tsx");
-const servicos = ler("supabase/functions/_shared/aceleriq-read-services.ts");
+const servicos = ler("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts");
 const mcp = ler("supabase/functions/_shared/mcp-tools.ts");
 
 /**

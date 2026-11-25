@@ -697,6 +697,7 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
   "motion.cena": "escreverCena da Mesa Motion: o escritor de cenas tem o método próprio (frente SPM, _shared/cena-hf.ts) e a prova é o lint e o check do worker.",
   mcp: "O MCP não tem prompt próprio: as ações de mesa passam pela ponte e chamam as funções acima, que já levam o método.",
   jev: "O Jev (julgamento) não é modelo de texto: pergunta tipada, sem sistema; o método não se aplica.",
+  "intermediador.mensagem": "Mensagens curtas do Intermediador ao grupo (MCP 2.39.1): a pergunta, o lembrete e o fechamento usam um prompt próprio e só os fatos do assunto, com conferência do Jev antes do envio. O método da casa puxaria conteúdo além do pedido.",
   revisoes: "Segunda passada curta sobre uma saída que já levou o método (reparo de formato e encaixe na cadência do agente do Mês, correção de tutorial, revisão do texto das lâminas no Estúdio, reescrita da copy na Mesa Ads): conserta e completa o que a primeira chamada fez.",
   "nucleo.fatos": "Redação presa aos fatos do núcleo comum (Gestor da Central e Mesa Vídeos): responde só com o que as leituras devolveram e o código confere; o método da casa puxaria conteúdo novo.",
   "cfo.explicacao": "Explicação do CFO (frente CFO): a IA só reescreve a conta do motor em código, presa aos números (valor fora da conta faz valer o motor); método de trabalho puxaria conteúdo além da conta.",
@@ -714,6 +715,8 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
  * chama e não entra aqui.
  */
 export const CHAMADAS_SEM_METODO: Record<string, string> = {
+  // 25/11: o Intermediador escreve cada mensagem ao grupo do cliente na hora (MCP 2.39.1, intermediador-escrita.ts).
+  "mcp-server/modulos/intermediador.ts#escrever": "intermediador.mensagem",
   // 19/10: Laboratório v1 (agente do projeto e nós especialistas), até o catálogo ter o agente dele.
   "laboratorio/acoes.ts#chamarPlanejar": "laboratorio.v1",
   "laboratorio/executar.ts#texto": "laboratorio.v1",

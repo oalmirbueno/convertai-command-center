@@ -173,7 +173,7 @@ export function PainelDeAjustes({ resumo, rotulo, children }: { resumo: ReactNod
         role="group"
         aria-label="Ajustes da geração"
         className={juntar(
-          "absolute right-0 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] space-y-3 rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18)]",
+          "absolute right-0 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] space-y-3 rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18)]",
           aberto ? "" : "hidden",
         )}
       >

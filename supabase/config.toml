@@ -248,3 +248,10 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.produto-meta]
     verify_jwt = false
+  # Central de Skills: GET instalador/cliente são públicos e as chaves mcp_live_ não são JWT;
+  # a sessão do painel e o escopo da chave são conferidos dentro da função.
+  [functions.central-skills]
+    verify_jwt = false
+  # Central de Automações: o coletor do VPS não tem sessão (x-coletor-chave); a sessão do painel é conferida aqui.
+  [functions.automacoes-n8n]
+    verify_jwt = false

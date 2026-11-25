@@ -62,9 +62,9 @@ export default function ProdutosNoPlano({ clientId, crm }: { clientId: string; c
       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Produtos da Aceleriq</p>
 
       {c.email_ativo && (
-        <div className="rounded-2xl border border-border p-3.5" data-email-no-plano="">
+        <div className="rounded-lg border border-border p-3.5" data-email-no-plano="">
           <div className="flex min-w-0 flex-wrap items-center">
-            <Mail className="mr-2 h-4 w-4 text-primary" aria-hidden="true" />
+            <Mail className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <span className="mr-2 text-[14px] font-semibold">E-mail profissional</span>
             <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate")}>{c.dominios.map((d) => d.dominio).join(", ") || "sem domínio"} · {c.caixas} {c.caixas === 1 ? "caixa" : "caixas"}</span>
             <Link to="/produto/email" className={juntar(botao.discreto, "h-8 px-2 text-[13px]")}>Abrir na Central</Link>
@@ -88,9 +88,9 @@ export default function ProdutosNoPlano({ clientId, crm }: { clientId: string; c
       )}
 
       {c.crm_ativo && (
-        <div className="rounded-2xl border border-border p-3.5" data-crm-no-plano="">
+        <div className="rounded-lg border border-border p-3.5" data-crm-no-plano="">
           <div className="flex min-w-0 items-center">
-            <KanbanSquare className="mr-2 h-4 w-4 text-primary" aria-hidden="true" />
+            <KanbanSquare className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <span className="mr-2 text-[14px] font-semibold">Quem usa o CRM</span>
             <span className={juntar(texto.auxiliar, "flex-1")}>{pessoas.length} {pessoas.length === 1 ? "pessoa" : "pessoas"}</span>
           </div>
