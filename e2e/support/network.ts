@@ -1,6 +1,6 @@
 import { test as base, expect, type BrowserContext } from "@playwright/test";
 import { CI_E2E_API_ORIGIN, CI_E2E_APP_ORIGIN } from "../../config/ci-e2e-environment";
-import { isClientHistoryRead } from "./read-contract";
+import { isClientHistoryRead, isProductStateRead } from "./read-contract";
 import { observedWorkTable, observeWorkReads, summarizeWorkRead, type WorkReadObservation } from "./work-reads";
 
 const HTTP_ORIGINS = new Set([CI_E2E_APP_ORIGIN, CI_E2E_API_ORIGIN]);
@@ -71,19 +71,21 @@ export async function installEgressGuard(context: BrowserContext): Promise<Egres
     }
     const url = new URL(raw);
     // The selected UI flows need no database/RPC/storage writes or worker
-    // calls. Permit real Auth, the normal local login notice and the one
-    // reviewed STABLE public-history read with its exact public-only payload;
+    // calls. Permit real Auth, the normal local login notice and reviewed read
+    // RPCs with their exact request contracts;
     // fail even if a new work endpoint is introduced under another table name.
     const isApi = url.origin === CI_E2E_API_ORIGIN;
     const normalLoginPost = request.method() === "POST"
       && ["/auth/v1/token", "/auth/v1/logout", "/functions/v1/notify-admin"].includes(url.pathname);
-    // Never inspect credential-bearing Auth bodies. Only the reviewed public
-    // history payload is parsed from a request; synthetic work GET responses
+    // Never inspect credential-bearing Auth bodies. Only these two read RPC
+    // payloads are inspected; synthetic work GET responses
     // are summarized separately before fulfillment, without headers/session.
     const clientHistoryRead = isApi && url.pathname === "/rest/v1/rpc/movimentos_do_cliente"
       && isClientHistoryRead(request.method(), raw, request.postData());
+    const productStateRead = isApi && url.pathname === "/rest/v1/rpc/produto_estado"
+      && isProductStateRead(request.method(), raw, request.postData());
     const outsideReadContract = isApi && request.method() !== "OPTIONS"
-      && !clientHistoryRead
+      && !clientHistoryRead && !productStateRead
       && (
         (!["GET", "HEAD"].includes(request.method()) && !normalLoginPost)
         || url.pathname.startsWith("/rest/v1/rpc/")
