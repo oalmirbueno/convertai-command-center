@@ -22,9 +22,17 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
 describe("project-specific read-only deployment ledger", () => {
   it("pins the current reviewed package independently from the historical fixture", () => {
-    const live = listProjectLedgerEntries({ projectRef: reviewedProjectRef });
-    expect(live).toHaveLength(391);
-    expect(live.at(-1)).toMatchObject({
+    const observed = loadReviewedProjectBaseline({
+      projectRef: reviewedProjectRef,
+    }).document.entries;
+    expect(observed).toHaveLength(484);
+    expect(new Set(observed.map((entry) => entry.version)).size).toBe(484);
+    expect(observed.at(-1)).toEqual({
+      version: "20261125180000",
+      name: "intermediador_varios_marcados",
+      statements_sha256: "b47507e2b228a3f143e56582add217d51eb329bb1e9f53ef3dea64f2c0b7bdd7",
+    });
+    expect(observed.find((entry) => entry.version === "20261021154113")).toEqual({
       version: "20261021154113",
       name: "membros_crm_renovacao_manual",
       statements_sha256: "adc0a5bba160d667bea1f4771c550f4b425dceab1c0dd8ac7c811de916f457ff",
