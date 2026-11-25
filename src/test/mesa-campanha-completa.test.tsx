@@ -115,6 +115,10 @@ const semente: SementeDaCampanha = {
 };
 
 beforeEach(() => {
+  // A tela calcula a janela pela data de hoje (hojeIso); o cenário é o de 21/10/2026, dia da semente,
+  // com a Black Friday (27/11) ainda à frente. Só o Date é falso (e anda no tempo real): os timers seguem reais.
+  vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+  vi.setSystemTime(new Date("2026-10-21T12:00:00"));
   window.localStorage.removeItem("mesa:campanha:aba");
   window.sessionStorage.clear();
   vi.clearAllMocks();
@@ -132,7 +136,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => limparExecucoes());
+afterEach(() => {
+  limparExecucoes();
+  vi.useRealTimers();
+});
 
 describe("semente do Mês vira campanha", () => {
   it("hype com data: aquecimento de 14 dias antes, fecha um dia depois; trending sozinho: agora + 7", () => {

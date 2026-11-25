@@ -74,6 +74,7 @@ const PROJETO = "44444444-4444-4444-8444-444444444444";
 function autoriaCom(banco: unknown) {
   return carregar("supabase/functions/mcp-server/modulos/autoria.ts", {
     "../../_shared/aceleriq-read-services.ts": { db: () => banco, isUuid: UUID_OK },
+    "./robustez.ts": robustez,
   });
 }
 
