@@ -347,6 +347,28 @@ jobs:
           PGPASSWORD: postgres
         run: node scripts/seed-ci-e2e.mjs --restore
 
+      # The fixture commits synthetic users, so run only after the profile matrix
+      # has restored its hooks. Neither the matrix nor the global test status masks this check.
+      - name: Verify Elo Edge end to end in the disposable stack
+        if: ${{ !cancelled() && steps.db_reset.outcome == 'success' && steps.network_guard.outcome == 'success' && steps.background_jobs.outcome == 'success' && steps.npm_dependencies.outcome == 'success' && steps.restore_synthetic_hooks.outcome == 'success' }}
+        shell: bash
+        timeout-minutes: 4
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          node scripts/test-ci-elo-edge.mjs --self-test
+          # In Deno 2 the cache subcommand is `deno install --entrypoint` and also resolves
+          # every package.json dependency. `deno info` fetches only this entry's graph, still frozen.
+          deno info --frozen scripts/ci-elo-edge-entry.mjs > /dev/null
+          node scripts/guard-ci-e2e-network.mjs --guard
+          superuser="$(psql -X -q -t -A -w -h 127.0.0.1 -p 54322 -U postgres -d postgres -c "SELECT rolsuper FROM pg_roles WHERE rolname='postgres'")"
+          if [[ "$superuser" == 'f' ]]; then
+            psql -X -q -w -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 54322 -U supabase_admin -d postgres -c 'ALTER ROLE postgres SUPERUSER'
+            trap "psql -X -q -w -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 54322 -U supabase_admin -d postgres -c 'ALTER ROLE postgres NOSUPERUSER'" EXIT
+          fi
+          node scripts/test-ci-elo-edge.mjs
+
       # Real mcp-server Edge served by Deno on loopback (cached modules only, frozen
       # lock, --allow-net limited to the local API and its own port). It COMMITs
       # random synthetic @test.local actors and a random mcp:project key, then revokes
