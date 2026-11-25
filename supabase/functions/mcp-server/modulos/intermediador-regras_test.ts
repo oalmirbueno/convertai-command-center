@@ -21,12 +21,12 @@ Deno.test('perguntaProibida: termo interno, cobrança e travessão não saem; pr
   assertEquals(perguntaProibida('Dá uma olhada em https://x.y'), 'link');
 });
 
-Deno.test('ouvida: só cliente marcado ou quem citou a nossa mensagem; agência e bot nunca', () => {
+Deno.test('ouvida: cliente marcado, quem citou ou outra pessoa do cliente; agência e bot nunca', () => {
   const a = { marcar_numero: '554799990000' };
   const nossos = new Set(['3EB0AAA']);
   assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554799990000', resposta_a: null }, a, nossos), 'marcada');
   assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554711112222', resposta_a: '3EB0AAA' }, a, nossos), 'citou');
-  assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554711112222', resposta_a: null }, a, nossos), null);
+  assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554711112222', resposta_a: null }, a, nossos), 'outra_pessoa');
   assertEquals(ouvida({ papel: 'agencia', remetente: '554799990000', resposta_a: '3EB0AAA' }, a, nossos), null);
   assertEquals(ouvida({ papel: 'bot', remetente: '554197483429', resposta_a: null }, a, nossos), null);
 });
@@ -111,10 +111,18 @@ Deno.test('escolherPessoas: nome = essa pessoa; todos = todo mundo; sem nada = q
 Deno.test('ouvida: com várias pessoas marcadas, qualquer uma delas é ouvida', () => {
   const a = { marcar_numero: '554711110000', marcar_numeros: ['554711110000', '554722220000'] };
   assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554722220000', resposta_a: null }, a, new Set()), 'marcada');
-  assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554733330000', resposta_a: null }, a, new Set()), null);
+  assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554733330000', resposta_a: null }, a, new Set()), 'outra_pessoa');
 });
 
 Deno.test('ponto que a resposta torna desnecessário conta como resolvido (caso real SKC, 25/11)', () => {
   const q = perguntasAoJev(['tem recesso ou não', 'data de início e de volta']);
   assert(JSON.stringify(q.item_1).includes('torna o ponto desnecessário'));
+});
+
+Deno.test('decidir: "é robô?" lido como pergunta ao assistente ainda responde quem é; joinha só fecha com nota alta', () => {
+  const b = { o_que_conta: ['mandou as fotos'], pode_perguntar_de_volta: true, perguntou_de_volta: false, envios_ao_cliente: 1 };
+  assertEquals(decidir(b, { relacao: 'pergunta_ao_assistente', itens: [0.04], humano: 0.12, quem_e: 0.95 }).acao, 'quem_e');
+  assertEquals(decidir(b, { relacao: 'reacao', itens: [0.6], humano: 0.03, quem_e: 0.02 }).acao, 'esperar');
+  assertEquals(decidir(b, { relacao: 'reacao', itens: [0.85], humano: 0.03, quem_e: 0.02 }).acao, 'fechar');
+  assertEquals(decidir(b, { relacao: 'responde', itens: [0.6], humano: 0.03, quem_e: 0.02 }).acao, 'fechar');
 });

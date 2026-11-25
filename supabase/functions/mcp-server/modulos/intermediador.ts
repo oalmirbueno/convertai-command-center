@@ -45,6 +45,7 @@ import { escolhaDoModelo, escreverComModeloDaCentral } from '../../_shared/model
 import { lerDossie } from '../../_shared/contexto-cliente.ts';
 
 export const SLUG_DO_INTERMEDIADOR = 'intermediador';
+export const ESPERA_O_CLIENTE_TERMINAR_MS = 90_000;
 const QUEM_RODA = new Set([SLUG_DO_INTERMEDIADOR, 'default']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LEITURA = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false };
@@ -53,7 +54,7 @@ const ENVIA = { readOnlyHint: false, idempotentHint: false, destructiveHint: fal
 
 // ─── Tipos ──────────────────────────────────────────────────────
 
-export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou'; tipo: string; texto: string; em: string }
+export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou' | 'outra_pessoa'; tipo: string; texto: string; em: string; /** número de quem falou (nunca sai para o agente) */ de?: string | null; /** id da mensagem citada */ cita?: string | null }
 export interface Assunto {
   id: string; client_id: string; group_id: string; grupo_nome: string; tema: string; pergunta: string; para_que: string | null;
   marcar_numero: string; marcar_nome: string | null; marcar_numeros: string[]; marcar_nomes: string[]; o_que_conta: string[]; pode_perguntar_de_volta: boolean;
@@ -441,12 +442,27 @@ async function exigirQuemRoda(ctx: AuthContext, operator: string | undefined, po
   return eu;
 }
 
+const NOME_DO_ENVIO: Record<string, string> = { pergunta: 'pergunta', de_volta: 'pergunta de volta', lembrete: 'lembrete', quem_e: 'resposta sobre quem é', humano: 'aviso de que o Almir responde', fechamento: 'agradecimento' };
+
+/** A conversa do assunto em ordem: o que o assistente mandou no grupo e o que o cliente respondeu. */
+export function conversaDoAssunto(envios: Envio[], ouvidas: Ouvida[], quantasNovas: number) {
+  const nossas = envios.filter((e) => e.destino === 'grupo' && e.estado === 'enviado' && e.feito_em)
+    .map((e) => ({ em: e.feito_em as string, quem: 'assistente da agência', o_que: NOME_DO_ENVIO[e.tipo] ?? e.tipo, texto: e.texto_previa, id: e.message_id }));
+  const doCliente = ouvidas.map((o, i) => ({
+    em: o.em, quem: o.como === 'outra_pessoa' ? 'outra pessoa do cliente' : 'cliente', nova: i >= ouvidas.length - quantasNovas, texto: o.texto,
+    ...(o.cita ? { respondendo_a: NOME_DO_ENVIO[envios.find((e) => e.message_id === o.cita)?.tipo ?? 'pergunta'] ?? 'pergunta' } : {}),
+  }));
+  return [...nossas.map(({ id: _id, ...x }) => x), ...doCliente].sort((x, y) => Date.parse(x.em) - Date.parse(y.em)).map(({ em: _em, ...x }) => x);
+}
+
 async function julgar(porta: PortaDoIntermediador, a: Assunto, ouvidas: Ouvida[], quantasNovas: number): Promise<Notas> {
+  const envios = await porta.envios({ assunto_id: a.id });
   const state = {
     tema: a.tema,
     pergunta_feita: a.pergunta,
     pontos_pedidos: a.o_que_conta,
-    mensagens_do_cliente: ouvidas.map((o, i) => ({ n: i + 1, nova: i >= ouvidas.length - quantasNovas, como: o.como === 'citou' ? 'citou a pergunta' : 'pessoa marcada', tipo: o.tipo, texto: o.texto })),
+    conversa_do_assunto: conversaDoAssunto(envios, ouvidas, quantasNovas),
+    mensagens_do_cliente: ouvidas.map((o, i) => ({ n: i + 1, nova: i >= ouvidas.length - quantasNovas, como: o.como === 'citou' ? 'citou a pergunta' : o.como === 'marcada' ? 'pessoa marcada' : 'outra pessoa do cliente', tipo: o.tipo, texto: o.texto })),
   };
   const q = perguntasAoJev(a.o_que_conta);
   const primeira = lerNotas(await porta.jev(state, q), a.o_que_conta.length);
@@ -494,7 +510,8 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
       return { motivo: 'o Jev não conferiu o texto agora' };
     }
     const problema = problemaDoTexto(notas);
-    await porta.evento(a.id, 'texto_conferido', { tipo, tentativa, notas, problema });
+    // O texto vai no rastro com o nome (nunca o número), para ver depois por que foi recusado.
+    await porta.evento(a.id, 'texto_conferido', { tipo, tentativa, notas, problema, texto: comPessoa(limpo.texto, marcados.map((p) => p.numero), marcados.map((p) => p.nome)).texto_previa });
     if (!problema) return { texto: limpo.texto };
     corrigir = problema;
   }
@@ -555,9 +572,12 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     if (nossos.has(m.id)) continue;
     const como = ouvida(m, a, nossos);
     if (!como) { ignoradas++; continue; }
-    novas.push({ id: m.id, quem: m.remetente_nome ?? a.marcar_nome ?? 'cliente', como, tipo: m.tipo ?? 'texto', texto: conteudoDe(m), em: m.occurred_at });
+    novas.push({ id: m.id, quem: m.remetente_nome ?? a.marcar_nome ?? 'cliente', como, tipo: m.tipo ?? 'texto', texto: conteudoDe(m), em: m.occurred_at, de: m.remetente, cita: m.resposta_a });
   }
   const lidoAte = msgs.length ? msgs[msgs.length - 1].received_at : a.lido_ate;
+  // Gente não responde em segundos: espera o cliente terminar de escrever (nada novo dele há 90 s) e junta os pedaços
+  // ("Boa tarde" + "10:30") numa resposta só. Não avança a leitura; a próxima rodada vê tudo de novo.
+  if (novas.length && agora - Date.parse(novas[novas.length - 1].em) < ESPERA_O_CLIENTE_TERMINAR_MS) return 'esperando_cliente_terminar';
   if (ignoradas) await porta.evento(a.id, 'ignoradas', { quantas: ignoradas });
 
   if (!novas.length) {
@@ -584,7 +604,22 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
   const d = decidir(a, n);
   // Fora do horário de responder: não grava nada; a mesma mensagem é julgada de novo dentro do horário.
   if (!emHorario('fechamento', agora) && d.acao !== 'esperar') return 'fora_do_horario';
-  a = (await porta.atualizarAssunto(a.id, { ouvidas, lido_ate: lidoAte, itens: Object.fromEntries(a.o_que_conta.map((it, i) => [it, Number(n.itens[i].toFixed(2))])) })) ?? { ...a, ouvidas };
+  // Conversa de outra pessoa do cliente sobre outro assunto não entra no que "o cliente disse".
+  const foraDoAssunto = d.acao === 'esperar' && (n.relacao === 'outro_assunto' || n.relacao === 'reacao');
+  const guardadas = foraDoAssunto ? [...a.ouvidas, ...novas.filter((o) => o.como !== 'outra_pessoa')] : ouvidas;
+  // Quem respondeu sem estar marcado passa a ser marcado: a de volta e o agradecimento vão para essa pessoa.
+  const extra: Partial<Assunto> = {};
+  if (!foraDoAssunto) {
+    const nums = [...marcadosDe(a).map((p) => p.numero)];
+    const nomes = [...marcadosDe(a).map((p) => p.nome ?? '')];
+    for (const o of novas) {
+      if (o.como !== 'outra_pessoa' || !o.de || !/^[0-9]{10,16}$/.test(o.de) || nums.includes(o.de) || nums.length >= 6) continue;
+      nums.push(o.de);
+      nomes.push(o.quem);
+    }
+    if (nums.length > marcadosDe(a).length) Object.assign(extra, { marcar_numeros: nums, marcar_nomes: nomes });
+  }
+  a = (await porta.atualizarAssunto(a.id, { ouvidas: guardadas, lido_ate: lidoAte, ...extra, itens: Object.fromEntries(a.o_que_conta.map((it, i) => [it, Number(n.itens[i].toFixed(2))])) })) ?? { ...a, ouvidas: guardadas, ...extra };
   await porta.evento(a.id, 'julgado', { notas: n, acao: d.acao, novas: novas.length });
   switch (d.acao) {
     case 'fechar':

@@ -5,7 +5,11 @@
 
 import { z } from 'https://esm.sh/zod@3.23.8';
 import type { AuthContext } from './mcp-auth.ts';
-import { dataScopeAllowsTool } from './mcp-security.ts';
+import {
+  dataScopeAllowsTool,
+  isRestrictedApiKeyIdentityScope,
+  RESTRICTED_API_KEY_IDENTITY_TOOLS,
+} from './mcp-security.ts';
 import { MCP_VERSION } from './mcp-release.ts';
 import {
   ALLOWED_ENTITY_TYPES,
@@ -221,6 +225,9 @@ export type ToolScope =
   | 'mesas:write'
   | 'escritorio:write'
   | 'automacoes:write'
+  // Só identidade da chave API restrita (aceleriq_escritorio_entrar). Fora de
+  // SCOPE_EXPANSIONS e do OAuth da equipe; canInvoke só o aceita com o predicado.
+  | 'escritorio:identity'
   | 'admin';
 
 export const ALL_SCOPES: readonly ToolScope[] = [
@@ -253,6 +260,7 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'mesas:write',
   'escritorio:write',
   'automacoes:write',
+  'escritorio:identity',
   'admin',
 ] as const;
 
@@ -287,6 +295,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'mesas:write': { title: 'Mesas: agir', description: 'Agir nas mesas com a sessão da pessoa conectada (OAuth): pedir conteúdo e gravar na agenda, criar e editar campanha, briefing e imagens, salvar oferta da Mesa Ads e mandar peça para aprovação. Cada mesa confere acesso e regra como na tela. Não publica, não agenda post e não gasta verba de anúncio.', sensitive: true },
   'escritorio:write': { title: 'Escritório: falar como dono', description: 'Ler e escrever no Escritório dos agentes como o dono, fora do painel (app do Hermes). Nenhum outro escopo concede este; não alcança cliente, gasto nem publicação.', sensitive: true },
   'automacoes:write': { title: 'Automações: ligar e desligar', description: 'Ligar ou desligar fluxos do n8n de produção, com confirmação e motivo registrados. Nenhum outro escopo concede este.', sensitive: true },
+  'escritorio:identity': { title: 'Escritório: só identidade', description: 'Chave API restrita confere apenas quem ela é no Escritório (aceleriq_escritorio_entrar). Não abre caixa, organograma, outros agentes nem outra ferramenta; OAuth não recebe este escopo.' },
   'admin': { title: 'Administrador', description: 'Bypass total de escopo. Concede acesso a todas as ferramentas.', sensitive: true },
 };
 
@@ -5182,7 +5191,18 @@ export function canInvoke(ctx: AuthContext, tool: ToolDefinition): boolean {
   if (tool.scopes.length === 0) return true;
   const expanded = expandScopes(ctx.scopes);
   if (expanded.has('admin')) return true;
-  return tool.scopes.some(s => expanded.has(s));
+  return tool.scopes.some(s => s === 'escritorio:identity'
+    ? expanded.has(s) && identityScopeApplies(ctx, tool)
+    : expanded.has(s));
+}
+
+const IDENTITY_SCOPE_TOOL_SET = new Set<string>(RESTRICTED_API_KEY_IDENTITY_TOOLS);
+
+/** escritorio:identity só vale para a própria ferramenta de identidade, em chave API restrita (nunca OAuth). */
+function identityScopeApplies(ctx: AuthContext, tool: ToolDefinition): boolean {
+  return IDENTITY_SCOPE_TOOL_SET.has(tool.name)
+    && isRestrictedApiKeyIdentityScope(ctx.dataScope)
+    && !String(ctx.keyId ?? '').startsWith('oauth:');
 }
 
 export function canUseToolWithDataScope(ctx: AuthContext, tool: ToolDefinition): boolean {
