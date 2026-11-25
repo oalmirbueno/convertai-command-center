@@ -46,7 +46,7 @@ export function destinoConfere(envio, grupos) {
 export function mencoesConferem(envio) {
   const m = envio.mencoes || [];
   if (envio.destino !== 'grupo') return m.length === 0;
-  return m.length <= 2 && m.every((j) => { const n = /^(\d{10,16})@s\.whatsapp\.net$/.exec(j); return !!n && String(envio.texto).includes('@' + n[1]); });
+  return m.length <= 6 && m.every((j) => { const n = /^(\d{10,16})@s\.whatsapp\.net$/.exec(j); return !!n && String(envio.texto).includes('@' + n[1]); });
 }
 export function textoDaPrevia(envio) {
   return envio.destino === 'dono' ? envio.texto : '[Prévia → "' + envio.grupo_nome + '" · ' + envio.tipo + ']\n\n' + envio.texto_previa;

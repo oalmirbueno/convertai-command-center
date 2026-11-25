@@ -26,9 +26,9 @@ export function loadAllowedGroups(file=ALLOWED_GROUPS_FILE){
  }catch(e){console.error(JSON.stringify({event:'allowed_groups_rejected',reason:String(e?.message||e).slice(0,200)}));return new Map();}
  return groups;
 }
-const GROUP_MENTION_MAX=2;
+const GROUP_MENTION_MAX=6;
 const MENTION_JID=/^(\d{10,16})@s\.whatsapp\.net$/;
-// Mencao em grupo: lista de 1 a 2 numeros, cada um escrito como @numero no texto.
+// Mencao em grupo: lista de 1 a 6 numeros (a pessoa do assunto ou todos do cliente), cada um escrito como @numero no texto.
 export function assertGroupMentions(mentions,text){
  if(!Array.isArray(mentions)||!mentions.length||mentions.length>GROUP_MENTION_MAX||new Set(mentions).size!==mentions.length)throw Error('guard: group mention not allowed');
  for(const m of mentions){const n=MENTION_JID.exec(String(m||''));if(!n||!String(text||'').includes('@'+n[1]))throw Error('guard: group mention not allowed');}
@@ -67,7 +67,7 @@ export class PilotGuard {
  assertDestination(id){if(!OWNER.has(id))throw Error('owner-only destination denied');}
  isAllowedGroup(id){return typeof id==='string'&&this.groups.has(id);}
  // Grupo liberado so recebe texto simples: sem midia, edicao, enquete ou citacao.
- // 25/11/2026 (intermediador, pedido do dono): mencao de ate 2 pessoas, so com o @numero escrito no texto
+ // 25/11/2026 (intermediador, pedido do dono): mencao de ate 6 pessoas, so com o @numero escrito no texto
  // (nada de mencao escondida) e so de quem participa daquele grupo na hora do envio (conferido em send()).
  assertGroupText(id,payload,options={}){
   if(!this.isAllowedGroup(id))throw Error('guard: destination denied');

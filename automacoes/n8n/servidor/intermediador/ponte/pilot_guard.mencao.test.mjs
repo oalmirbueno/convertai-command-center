@@ -63,11 +63,11 @@ test('menção de quem não está no grupo é recusada', async () => {
   assert.equal(s.enviados.length, 0);
 });
 
-test('mais de 2 menções, menção de grupo ou lid é recusada', async () => {
+test('mais de 6 menções, menção de grupo ou lid é recusada', async () => {
   const g = guarda();
   const s = sock();
-  const tres = ['554799990000', '554799990001', '554799990002'];
-  await assert.rejects(() => g.send(s, GRUPO, { text: tres.map((n) => '@' + n).join(' '), mentions: tres.map((n) => n + '@s.whatsapp.net') }), /mention not allowed/);
+  const sete = Array.from({ length: 7 }, (_, i) => '55479999000' + i);
+  await assert.rejects(() => g.send(s, GRUPO, { text: sete.map((n) => '@' + n).join(' '), mentions: sete.map((n) => n + '@s.whatsapp.net') }), /mention not allowed/);
   await assert.rejects(() => g.send(s, GRUPO, { text: '@123456789012345', mentions: ['123456789012345@lid'] }), /mention not allowed/);
   await assert.rejects(() => g.send(s, GRUPO, { text: '@x', mentions: [GRUPO] }), /mention not allowed/);
   assert.equal(s.enviados.length, 0);
@@ -100,4 +100,11 @@ test('middleware: grupo liberado aceita mentions válidas e recusa replyTo e men
   assert.equal(chamar({ chatId: GRUPO, message: 'Oi!', mentions: [CLIENTE] }), 403);
   assert.equal(chamar({ chatId: GRUPO, message: 'Oi', replyTo: 'ABC' }), 403);
   assert.equal(chamar({ chatId: GRUPO, message: 'Oi' }), 200);
+});
+
+test('todos do cliente: duas pessoas do grupo marcadas juntas, cada uma pelo seu id', async () => {
+  const OUTRO = '554788880000@s.whatsapp.net';
+  const s = sock({ participants: [{ id: '123456789012345@lid', phoneNumber: CLIENTE }, { id: '987654321098765@lid', phoneNumber: OUTRO }] });
+  await guarda().send(s, GRUPO, { text: '@554799990000 @554788880000, vocês vão ter recesso?', mentions: [CLIENTE, OUTRO] });
+  assert.deepEqual(s.enviados[0].payload, { text: '@123456789012345 @987654321098765, vocês vão ter recesso?', mentions: ['123456789012345@lid', '987654321098765@lid'] });
 });
