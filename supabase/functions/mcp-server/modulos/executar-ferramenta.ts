@@ -69,6 +69,8 @@ interface Contexto {
   scopes: string[];
   correlationId?: string;
   resultRefHolder?: { value?: string };
+  /** Principal do cache de leitura; com concessão de projeto inclui projeto e operador. */
+  cachePrincipal?: string;
 }
 
 /** EdgeRuntime.waitUntil quando roda na Supabase; senão, só deixa a promessa seguir com catch. */
@@ -125,14 +127,14 @@ export async function executarFerramenta<C extends Contexto>(
     let deCache = false;
     let idadeMs = 0;
     if (leitura && tool.cacheSeg && tool.cacheSeg > 0) {
-      const r = await cache.lerOuBuscar(chaveDoCache(ctx.keyId, tool.name, args), tool.cacheSeg * 1000, comLimite);
+      const r = await cache.lerOuBuscar(chaveDoCache(ctx.cachePrincipal ?? ctx.keyId, tool.name, args), tool.cacheSeg * 1000, comLimite);
       valor = r.valor;
       deCache = r.deCache;
       idadeMs = r.idadeMs;
     } else {
       valor = await comLimite();
     }
-    if (!leitura) cache.esquecerDoPrincipal(ctx.keyId);
+    if (!leitura) cache.esquecerDoPrincipal(ctx.cachePrincipal ?? ctx.keyId);
     const ms = agora() - inicio;
     registro.anotar(tool.name, true, ms, { deCache, repeticoes, correlationId });
     await auditar({ ...base, success: true, statusCode: 200, durationMs: ms, resultRef: resultRefHolder.value ?? null });

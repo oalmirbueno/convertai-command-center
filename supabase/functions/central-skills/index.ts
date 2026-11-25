@@ -74,6 +74,8 @@ async function identificar(req: Request, banco: any): Promise<Quem | null> {
   if (token.startsWith('mcp_')) {
     const r = await authenticate(req);
     if (!r.ok) return null;
+    // Chave presa a um projeto e a um operador não usa a Central de Skills (negado por padrão).
+    if (r.ctx.projectGrant) return null;
     const s = expandScopesLocal(r.ctx.scopes);
     const admin = s.has('admin');
     return {

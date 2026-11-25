@@ -7,6 +7,7 @@ import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { validateLocalStatus } from './run-ci-e2e.mjs';
+import { columnAclProbe, columnSelectRegrants, parseColumnAcl, sameColumnAcl, selfTestColumnAcl } from './ci-service-role-column-acl.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fixture = new URL('../tests/database-isolated/fixtures/elo_edge_e2e.sql', import.meta.url);
@@ -97,6 +98,15 @@ function serviceReadPrivileges(label) {
   return parsePrivileges(psql(privilegeProbe, {}, label));
 }
 
+// has_table_privilege ignores column grants, and the REVOKE below drops every column SELECT of the
+// table too. Without this snapshot the Elo step erased the tracked GRANT SELECT (slug, status) ON
+// public.internal_operators and the next Corte step failed its operator read with 42501.
+function serviceColumnPrivileges(label) {
+  const parsed = parseColumnAcl(psql(columnAclProbe(serviceReads), {}, label), serviceReads);
+  if (!parsed) fail('unexpected column privilege probe.');
+  return parsed;
+}
+
 // Sanitized marker: fixed table names and booleans only.
 function privilegeMarker(privileges) {
   return serviceReads.map((t) => t.slice('public.'.length) + '=' + (privileges.get(t)?.select ? 'select' : 'none')).join(',');
@@ -104,6 +114,7 @@ function privilegeMarker(privileges) {
 
 // Fills `state` before any GRANT so the finally block can revoke even after a partial failure.
 function restoreLegacyServiceReads(state) {
+  state.columns = serviceColumnPrivileges('service_role column privilege probe');
   state.before = serviceReadPrivileges('service_role read probe');
   console.log('Elo Edge marker: service_role reads before restore [' + privilegeMarker(state.before) + '].');
   if (trackedServiceReads.some((t) => !state.before.get(t).select)) fail('tracked service_role read grant missing.');
@@ -129,6 +140,23 @@ function revokeRestoredServiceReads(state) {
     } catch {
       errors.push('service_role read revoke failed for a restored table.');
     }
+  }
+  // Put back exactly the column SELECT entries the table-level REVOKE removed, then compare the
+  // whole service_role column ACL of these tables with the snapshot taken before any GRANT.
+  try {
+    const regrants = state.restore.length
+      ? columnSelectRegrants(state.columns, serviceColumnPrivileges('service_role column privilege recheck'), state.restore) : [];
+    for (const statement of regrants) psql(statement, {}, 'restore service_role column read');
+    console.log('Elo Edge marker: service_role column SELECT grants re-applied [' + regrants.length + '].');
+  } catch {
+    errors.push('service_role column read restore failed.');
+  }
+  try {
+    if (!sameColumnAcl(serviceColumnPrivileges('service_role column privilege final probe'), state.columns)) {
+      errors.push('service_role column privileges were not restored.');
+    }
+  } catch {
+    errors.push('service_role column privilege final probe failed.');
   }
   try {
     const after = serviceReadPrivileges('service_role read final probe');
@@ -307,6 +335,18 @@ async function selfTest() {
     probe.split(',').slice(1).join(','), [probe.split(',')[0], ...probe.split(',').slice(0, -1)].join(','),
     'ERROR']) assert.throws(() => parsePrivileges(bad));
   assert.equal(privilegeMarker(parsePrivileges(probe)).includes('='), true);
+  // A table-level REVOKE also drops column grants: snapshot first, re-grant what it removed, compare all.
+  selfTestColumnAcl();
+  const restoreAt = source.indexOf('function restoreLegacyServiceReads(state)');
+  const revokeAt = source.indexOf('function revokeRestoredServiceReads(state)');
+  assert(restoreAt > 0 && revokeAt > restoreAt);
+  const restoreBody = source.slice(restoreAt, revokeAt);
+  // Prefixes only, so the GRANT/REVOKE inventory above keeps counting the real statements.
+  const snapshotAt = restoreBody.indexOf('state.columns = serviceColumnPrivileges(');
+  assert(snapshotAt > 0 && snapshotAt < restoreBody.indexOf("psql('GRANT"), 'column snapshot must precede the temporary table GRANT.');
+  const revokeBody = source.slice(revokeAt, source.indexOf('// The Edge logs only fixed labels'));
+  assert(revokeBody.indexOf("psql('REVOKE") > 0 && revokeBody.indexOf("psql('REVOKE") < revokeBody.indexOf('columnSelectRegrants(') &&
+    revokeBody.indexOf('columnSelectRegrants(') < revokeBody.indexOf('sameColumnAcl('), 'column restore must follow the REVOKE and be compared.');
 
   // Markers keep only fixed labels and codes; messages, arguments and tokens never pass.
   assert.deepEqual(edgeDbMarkers('[mcp escritorio] operador { code: "42501" }\n' +
@@ -339,7 +379,7 @@ async function main() {
   const values = { ...Object.fromEntries(ids.map((id) => [id, randomUUID()])),
     key_hash: sha(token), suffix: randomBytes(6).toString('hex') };
   const failures = [];
-  const reads = { before: null, restore: [] };
+  const reads = { before: null, columns: null, restore: [] };
   let edge;
   try {
     const seeded = psql(await readFile(fixture, 'utf8'), values, 'commit synthetic SQL fixture');

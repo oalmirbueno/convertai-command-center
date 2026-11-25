@@ -43,7 +43,12 @@ export function vencimentoDoJwt(token: string): number | null {
 
 export class CredencialEmCache<R extends { ok: boolean }> {
   private readonly mapa = new Map<string, { resultado: R; ate: number }>();
-  constructor(private readonly ttlMs = TTL_DA_CREDENCIAL_MS, private readonly agora: () => number = Date.now) {}
+  constructor(
+    private readonly ttlMs = TTL_DA_CREDENCIAL_MS,
+    private readonly agora: () => number = Date.now,
+    // Resultados que nunca ficam guardados (chave presa a projeto: concessão e operador são conferidos a cada chamada).
+    private readonly naoGuardar: (r: R) => boolean = () => false,
+  ) {}
 
   async autenticar(req: Request, conferir: (req: Request) => Promise<R>): Promise<R> {
     const token = bearerDe(req);
@@ -53,7 +58,7 @@ export class CredencialEmCache<R extends { ok: boolean }> {
     if (guardada && guardada.ate > this.agora()) return guardada.resultado;
     if (guardada) this.mapa.delete(chave);
     const resultado = await conferir(req);
-    if (resultado.ok) {
+    if (resultado.ok && !this.naoGuardar(resultado)) {
       const vence = vencimentoDoJwt(token);
       const ate = Math.min(this.agora() + this.ttlMs, vence ?? Number.POSITIVE_INFINITY);
       if (ate > this.agora()) {
