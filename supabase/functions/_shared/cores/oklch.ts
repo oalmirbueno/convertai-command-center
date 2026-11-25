@@ -217,7 +217,7 @@ export function ajustarAteContraste(cor: string, outra: string, alvo: number): s
     const extremo = oklchParaHex({ ...base, l: para });
     if (contraste(extremo, outra) < alvo) return null;
     let lo = base.l;
-    let hi = para;
+    let hi: number = para;
     for (let i = 0; i < 30; i++) {
       const meio = (lo + hi) / 2;
       if (contraste(oklchParaHex({ ...base, l: meio }), outra) >= alvo) hi = meio;
