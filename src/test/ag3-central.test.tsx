@@ -21,6 +21,10 @@ vi.mock("@/components/central/agenteCentralApi", () => ({
   salvarEPublicarRitual: mock.publicar,
   reescreverRitual: mock.reescrever,
   criarTarefaDoRitual: vi.fn(),
+  // Sincronização da rodada entre aparelhos: sem cópia no servidor, a tela segue com a local (mesmo contrato da API).
+  tarefasAbertasDoCliente: vi.fn(async () => []),
+  lerRodadaDoServidor: vi.fn(async () => null),
+  gravarRodadaNoServidor: vi.fn(async () => true),
 }));
 
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";
