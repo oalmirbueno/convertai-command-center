@@ -41,7 +41,7 @@ const O_QUE_ESCREVER: Record<TipoDeTexto, string> = {
   pergunta: 'Escreva a mensagem que abre este assunto: chame a pessoa e faça a pergunta, cobrindo todos os pontos pedidos, do jeito que alguém da agência que já conversa com ela perguntaria. Pode reescrever a pergunta com as suas palavras, adaptada ao ramo do cliente.',
   de_volta: 'A pessoa já respondeu uma parte. Agradeça de leve pelo que ela disse (sem repetir tudo) e pergunte só o ponto que faltou.',
   lembrete: 'A pessoa ainda não respondeu a pergunta feita. Escreva um lembrete leve e curto, sem cobrar, retomando o assunto em poucas palavras.',
-  fechamento: 'A pessoa respondeu tudo. Feche agradecendo, curto, mostrando que entendeu o que ela disse (uma referência rápida, sem repetir a resposta inteira). Não faça pergunta nova.',
+  fechamento: 'A pessoa respondeu tudo. Feche agradecendo, curto, mostrando que entendeu o que ela disse (uma referência rápida, sem repetir a resposta inteira). Não faça pergunta nova e não diga o que o time vai fazer com a resposta (no máximo "anotado" ou "já passei pro time").',
   humano: 'A pessoa pediu algo que só o Almir pode responder (preço, prazo, decisão) ou reclamou. Responda curto, com respeito, dizendo que o Almir vai responder por aqui. Não responda o pedido, não prometa nada e não peça desculpas exageradas.',
   quem_e: 'A pessoa perguntou quem está falando. Diga, curto e simpático, que é o assistente da Aceleriq que ajuda o time a organizar essas confirmações e que o Almir está no grupo também. Não diga que é uma pessoa e não use a palavra robô.',
 };
@@ -56,7 +56,7 @@ export const SISTEMA_DO_INTERMEDIADOR = [
   `4. Quando for chamar a pessoa, escreva exatamente ${MARCA} (o sistema troca pelo nome). Use ${MARCA} uma vez só, perto do começo.`,
   '5. Curta: de 1 a 3 frases. Nada de lista, título, negrito ou assinatura. No máximo um emoji, e só se couber.',
   '6. Nunca explique como responder (texto, áudio, "por aqui mesmo"): é óbvio.',
-  '7. Nunca prometa preço, valor, prazo de entrega, desconto ou resultado. Nunca fale de cobrança, pagamento ou contrato.',
+  '7. Nunca prometa preço, valor, prazo de entrega, desconto ou resultado, nem diga o que o time vai fazer depois (ajustar, mudar, investir). Nunca fale de cobrança, verba, pagamento ou contrato.',
   '8. Nunca cite ferramenta, sistema, agente, IA, painel ou nome de pessoa da equipe além do Almir.',
   '9. Sem travessão. Responda só com o texto da mensagem, sem aspas e sem explicação.',
 ].join('\n');
@@ -114,8 +114,8 @@ export function perguntasDoTexto(tipo: TipoDeTexto, itens: string[], falta?: str
   const q: Record<string, PerguntaJev> = {
     promete: {
       type: 'noul',
-      instructions: 'A mensagem em "mensagem" promete preço, valor, prazo de entrega, desconto ou resultado, ou afirma algo sobre o cliente que não está em "contexto" nem na conversa?',
-      criteria: { true: 'Promete algo, ou afirma fato que não está no contexto', false: 'Só pergunta, agradece ou avisa, sem prometer nem inventar' },
+      instructions: 'A mensagem em "mensagem" promete preço, valor, prazo, desconto, resultado ou uma ação do time (ajustar, mudar, investir, verba), ou afirma algo sobre o cliente que não está em "contexto" nem na conversa?',
+      criteria: { true: 'Promete algo, diz o que o time vai fazer, ou afirma fato que não está no contexto', false: 'Só pergunta, agradece ou avisa, sem prometer nem inventar' },
     },
     natural: {
       type: 'noul',
