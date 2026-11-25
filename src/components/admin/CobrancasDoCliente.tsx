@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Carregando, EstadoDeErro, EstadoVazio, Secao, botao, campo, etiqueta, juntar, texto } from "@/components/sistema";
+import { Carregando, EstadoDeErro, EstadoVazio, Secao, SeletorCompacto, botao, campo, etiqueta, juntar, texto } from "@/components/sistema";
+import { registrarPagamento, valorRecebido } from "@/lib/financeiro/pagamentoParcial";
 
 /**
  * As cobranças do cliente, editáveis onde o dono já está.
@@ -36,6 +37,8 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
   const queryClient = useQueryClient();
   const [salvando, setSalvando] = useState<string | null>(null);
   const [edicao, setEdicao] = useState<Record<string, { amount: string; due: string }>>({});
+  // 23/11 (dono): "Recebi" pergunta se entrou tudo ou só uma parte.
+  const [recebendo, setRecebendo] = useState<{ id: string; tipo: "total" | "parte"; valor: string } | null>(null);
 
   const chave = ["cobrancas-cliente", clientId];
   const { data: linhas = [], isLoading, isError, refetch } = useQuery({
@@ -78,6 +81,30 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
     }
   };
 
+  const confirmarRecebimento = async (linha: Cobranca) => {
+    if (!recebendo) return;
+    const valor = recebendo.tipo === "total" ? linha.amount : valorRecebido(recebendo.valor);
+    if (!valor) {
+      toast.error("Diga quanto entrou.");
+      return;
+    }
+    if (recebendo.tipo === "parte" && valor >= linha.amount) {
+      toast.error("O valor é o total da cobrança: use Pago total.");
+      return;
+    }
+    setSalvando(linha.id);
+    try {
+      const r = await registrarPagamento(linha.id, valor, new Date().toISOString().slice(0, 10));
+      await invalidar();
+      setRecebendo(null);
+      toast.success(r.tipo === "total" ? "Pagamento registrado." : `Recebido ${dinheiro(r.recebido)}. O saldo de ${dinheiro(r.restante)} ficou pendente.`);
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Não foi possível registrar o pagamento.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
   const salvarEdicao = (linha: Cobranca) => {
     const rascunho = edicao[linha.id];
     if (!rascunho) return;
@@ -99,7 +126,7 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
     );
   };
 
-  const pendentes = linhas.filter((l) => l.status !== "paid").length;
+  const pendentes = linhas.filter((l) => l.status === "pending").length;
   const pagas = linhas.length - pendentes;
   const estado =
     linhas.length === 0
@@ -116,7 +143,7 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
       titulo="Cobranças"
       divisoria
       descricao={estado}
-      ajuda="Valor e vencimento se corrigem na própria linha. Recebi marca como paga hoje; a seta volta a cobrança para pendente se ela foi marcada por engano. Mostra as 10 mais recentes."
+      ajuda="Valor e vencimento se corrigem na própria linha. Recebi pergunta se entrou o total ou só uma parte: parte registra o que entrou e cria o saldo restante como pendente. A seta volta para pendente uma cobrança marcada paga por engano. Mostra as 10 mais recentes."
     >
       {isLoading ? (
         <Carregando linhas={2} rotulo="Carregando cobranças" />
@@ -140,6 +167,7 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
               (parseFloat(rascunho.amount) !== linha.amount ||
                 (rascunho.due || linha.due_date) !== linha.due_date);
             const paga = linha.status === "paid";
+            const parcial = linha.status === "partial";
             const ocupada = salvando === linha.id;
             return (
               // Celular: descrição e ação na mesma linha, campos embaixo.
@@ -150,13 +178,13 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
                     <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>
                       {linha.description || (linha.type === "renewal" ? "Mensalidade" : "Cobrança")}
                     </p>
-                    <span className={juntar(etiqueta, "ml-2", paga ? "bg-muted text-success" : "bg-warning/10 text-warning")}>
-                      {paga ? `Paga${linha.paid_date ? ` ${linha.paid_date.slice(8, 10)}/${linha.paid_date.slice(5, 7)}` : ""}` : "Pendente"}
+                    <span className={juntar(etiqueta, "ml-2", paga ? "bg-muted text-success" : parcial ? "bg-info/10 text-info" : "bg-warning/10 text-warning")}>
+                      {paga ? `Paga${linha.paid_date ? ` ${linha.paid_date.slice(8, 10)}/${linha.paid_date.slice(5, 7)}` : ""}` : parcial ? "Paga em parte" : "Pendente"}
                     </span>
                   </div>
                   <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
                     {dinheiro(linha.amount)}
-                    {paga && linha.paid_amount != null && linha.paid_amount !== linha.amount
+                    {(paga || parcial) && linha.paid_amount != null && linha.paid_amount !== linha.amount
                       ? ` · recebido ${dinheiro(linha.paid_amount)}`
                       : ""}
                   </p>
@@ -227,27 +255,48 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
                         <RotateCcw className="h-4 w-4" aria-hidden="true" />
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        disabled={ocupada}
-                        onClick={() =>
-                          void aplicar(
-                            linha,
-                            {
-                              status: "paid",
-                              paid_date: new Date().toISOString().slice(0, 10),
-                              paid_amount: linha.amount,
-                            },
-                            "Pagamento registrado.",
-                          )
-                        }
-                        title="Marcar como paga hoje"
-                        className={juntar(botao.secundario, "h-8 px-2.5 text-success")}
-                      >
-                        Recebi
-                      </button>
+                      parcial ? null : (
+                        <button
+                          type="button"
+                          disabled={ocupada}
+                          onClick={() => setRecebendo({ id: linha.id, tipo: "total", valor: "" })}
+                          title="Registrar o pagamento de hoje"
+                          className={juntar(botao.secundario, "h-8 px-2.5 text-success")}
+                        >
+                          Recebi
+                        </button>
+                      )
                     )}
                 </div>
+                {recebendo && recebendo.id === linha.id && (
+                  <div className="order-4 mt-3 flex w-full min-w-0 flex-wrap items-center [&>*]:mb-2" data-recebendo={linha.id}>
+                    <SeletorCompacto
+                      opcoes={[{ valor: "total", rotulo: `Pago total (${dinheiro(linha.amount)})` }, { valor: "parte", rotulo: "Pagou parte" }]}
+                      valor={recebendo.tipo}
+                      onEscolher={(v) => setRecebendo({ ...recebendo, tipo: v === "parte" ? "parte" : "total" })}
+                      rotulo="Quanto entrou"
+                      className="mr-3"
+                    />
+                    {recebendo.tipo === "parte" && (
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        autoFocus
+                        placeholder="Valor recebido"
+                        value={recebendo.valor}
+                        onChange={(e) => setRecebendo({ ...recebendo, valor: e.target.value })}
+                        className={juntar(campo, "mr-3 h-8 w-36 tabular-nums")}
+                        aria-label="Valor recebido"
+                      />
+                    )}
+                    <button type="button" disabled={ocupada} onClick={() => void confirmarRecebimento(linha)} className={juntar(botao.primario, "mr-2 h-8")}>
+                      {ocupada ? "Salvando..." : "Confirmar"}
+                    </button>
+                    <button type="button" onClick={() => setRecebendo(null)} className={juntar(botao.discreto, "h-8")}>
+                      Cancelar
+                    </button>
+                  </div>
+                )}
               </li>
             );
           })}

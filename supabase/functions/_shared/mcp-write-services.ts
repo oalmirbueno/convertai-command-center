@@ -74,11 +74,15 @@ async function getWritableProject(projectId: string, ctx: WriteCtx) {
  * Filtro do replay em sanitized_input. `escopo` (ex.: { client_id }) prende a
  * chave a um recurso: a mesma idempotency_key em outro cliente não casa.
  * O input auditado guarda os campos crus, então o escopo usa os mesmos nomes.
+ * Tool com simulação passa { confirmar: true }: a simulação também é auditada
+ * com a chave, e sem isso a chamada confirmada voltaria replay dela.
  */
+export type EscopoDeIdempotencia = Record<string, string | boolean>;
+
 export function filtroDeIdempotencia(
   principal: string | null | undefined,
   idempotencyKey: string,
-  escopo?: Record<string, string>,
+  escopo?: EscopoDeIdempotencia,
 ): Record<string, unknown> {
   return {
     ...(escopo || {}),
@@ -91,7 +95,7 @@ export async function findIdempotentResult(
   toolName: string,
   keyId: string,
   idempotencyKey: string,
-  escopo?: Record<string, string>,
+  escopo?: EscopoDeIdempotencia,
 ): Promise<{
   correlationId: string;
   resultRef: string | null;
