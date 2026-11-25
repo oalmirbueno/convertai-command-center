@@ -268,9 +268,11 @@ function respostaEstruturada(a: Assunto, n: Notas | null, estado: string) {
 function textoDaDevolucao(a: Assunto, r: ReturnType<typeof respostaEstruturada>) {
   const titulo: Record<string, string> = {
     respondido: 'respondeu', respondido_em_parte: 'respondeu em parte', vencido: 'não respondeu no prazo',
-    precisa_do_almir: 'pediu algo que é do Almir', previa: 'em prévia: a pergunta foi só ao Almir, nada saiu no grupo',
+    precisa_do_almir: 'pediu algo que é do Almir',
   };
-  const linhas = [`${a.grupo_nome}: o cliente ${titulo[r.estado] ?? r.estado} sobre "${a.tema}".`];
+  const linhas = [r.estado === 'previa'
+    ? `${a.grupo_nome}: em prévia, a pergunta sobre "${a.tema}" foi só ao WhatsApp do Almir; nada saiu no grupo.`
+    : `${a.grupo_nome}: o cliente ${titulo[r.estado] ?? r.estado} sobre "${a.tema}".`];
   if (r.o_que_o_cliente_disse.length) linhas.push('', 'O que disse:', ...r.o_que_o_cliente_disse.map((o) => `- ${o.texto}`));
   if (r.o_que_o_cliente_disse.length) linhas.push('', 'Itens:', ...r.itens.map((i) => `- ${i.item}: ${i.coberto ? 'respondido' : 'faltou'}${i.nota === null ? '' : ` (${virgula(i.nota)})`}`));
   if (a.motivo) linhas.push('', `Motivo: ${a.motivo}`);

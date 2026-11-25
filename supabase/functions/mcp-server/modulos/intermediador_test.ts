@@ -258,7 +258,7 @@ Deno.test('prévia: a pergunta vai só ao Almir e o assunto fecha como previa', 
   const r = await intermediadorRodada({ modo: 'previa' }, ctx(), m.porta);
   await intermediadorEnvioFeito({ envio_id: r.envios[0].envio_id, resultado: 'previa' }, ctx(), m.porta);
   assertEquals(m.assuntos[0].estado, 'previa');
-  assert(m.devolvidas[0].texto.includes('prévia'));
+  assert(m.devolvidas[0].texto.startsWith('Verzelo - MKT - Aceleriq: em prévia, a pergunta sobre "horário de fim de ano" foi só ao WhatsApp do Almir'));
   const marcado = await intermediadorEnvioFeito({ envio_id: r.envios[0].envio_id, resultado: 'previa' }, ctx(), m.porta);
   assertEquals(marcado.repetido, true);
 });
