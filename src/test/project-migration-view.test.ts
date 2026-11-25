@@ -61,31 +61,53 @@ const plan = (entries = baseline().document.entries) =>
   planProjectMigrationView({ ...options, ledgerCsv: csv(entries) });
 
 describe("reviewed project forward-only migration view", () => {
-  it("includes the exact current CRM renewal source without changing the historical fixture", () => {
+  it("emits exactly the 484 observed rows as aborting sentinels and only the new Meta migration as pending SQL", () => {
     const current = loadReviewedProjectBaseline({ projectRef: reviewedProjectRef });
+    const observed = current.document.entries;
+    expect(observed).toHaveLength(484);
     const view = planProjectMigrationView({
       projectRef: reviewedProjectRef,
-      ledgerCsv: csv(current.document.entries),
+      ledgerCsv: csv(observed),
     });
     expect(view).toMatchObject({
       status: "pending",
-      actual_count: 389,
-      expected_count: 391,
-      reviewed_count: 389,
-      sentinel_count: 389,
-      pending_versions: ["20261021130623", "20261021154113"],
+      actual_count: 484,
+      expected_count: 485,
+      reviewed_count: 484,
+      sentinel_count: 484,
+      pending_versions: ["20261125211700"],
     });
-    expect(view.files).toHaveLength(391);
+    expect(view.files).toHaveLength(485);
+    const sentinels = view.files.filter((file) => file.kind === "sentinel");
+    expect(sentinels.map((file) => file.version)).toEqual(
+      observed.map((entry) => entry.version),
+    );
+    for (const file of sentinels) {
+      expect(file.bytes.toString("utf8")).toContain(
+        `RAISE EXCEPTION 'Refusing to execute audited migration sentinel ${file.version}'`,
+      );
+    }
+    const pending = view.files.filter((file) => file.kind === "pending");
+    expect(pending.map((file) => file.filename)).toEqual(["20261125211700_meta_conexao_token_da_conta.sql"]);
+    const [source] = current.document.pending_migrations;
+    expect(pending[0].bytes).toEqual(readFileSync(resolve(repoRoot, source.path)));
     const renewal = view.files.find((file) => file.version === "20261021154113")!;
-    expect(renewal.kind).toBe("pending");
-    expect(renewal.filename).toBe("20261021154113_membros_crm_renovacao_manual.sql");
-    expect(renewal.bytes).toEqual(readFileSync(resolve(repoRoot, "supabase/migrations", renewal.filename)));
-    expect(current.document.pending_migrations.at(-1)).toMatchObject({
-      version: "20261021154113",
-      local_sha256: "9b40e677ddc3d07c20b7b47ff039b46c56e71dee60ae16f65d4725ef33ca6c45",
-      statements_sha256: "adc0a5bba160d667bea1f4771c550f4b425dceab1c0dd8ac7c811de916f457ff",
-      hash_mode: "supabase_cli_split",
-    });
+    expect(renewal.kind).toBe("sentinel");
+    expect(renewal.filename).toBe("20261021154113_production_ledger_sentinel.sql");
+    expect(renewal.bytes.toString("utf8")).not.toContain("membros_crm");
+    const financeiroEntry = observed.find((entry) => entry.version === "20261119224325")!;
+    expect(financeiroEntry.name).toBe("licencas_dk_financeiro");
+    const financeiro = view.files.find((file) => file.version === "20261119224325")!;
+    expect(financeiro.kind).toBe("sentinel");
+    expect(financeiro.filename).toBe("20261119224325_production_ledger_sentinel.sql");
+    expect(financeiro.bytes.toString("utf8")).toContain(
+      "RAISE EXCEPTION 'Refusing to execute audited migration sentinel 20261119224325'",
+    );
+    expect(observed.some((entry) => entry.version === "20261120090000")).toBe(false);
+    expect(view.files.some((file) => file.version === "20261120090000")).toBe(false);
+    expect(
+      view.files.some((file) => file.filename.startsWith("20261120090000")),
+    ).toBe(false);
   });
 
   it("preserves all 206 historical versions as aborting sentinels and includes only the three reviewed SQL files", () => {

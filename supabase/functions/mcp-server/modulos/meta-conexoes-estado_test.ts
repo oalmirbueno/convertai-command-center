@@ -1,4 +1,4 @@
-// MCP 2.39.0 (25/11/2026): aceleriq_meta_conexoes_estado, sem banco nem rede (porta e fetch de memória).
+// MCP 2.40.0 (25/11/2026): aceleriq_meta_conexoes_estado, sem banco nem rede (porta e fetch de memória).
 import { assert, assertEquals, assertRejects } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { ErroDaFerramenta } from './robustez.ts';
@@ -143,7 +143,7 @@ Deno.test('catálogo: escopo admin, só leitura, no guia, prazo do despachante e
   const { TOOL_MAP, canInvoke, canUseToolWithDataScope } = await import('../../_shared/mcp-tools.ts');
   const { FERRAMENTAS_POR_AREA } = await import('./guia-do-painel.ts');
   const { MCP_VERSION } = await import('../../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.39.0');
+  assertEquals(MCP_VERSION, '2.40.0');
   const t = TOOL_MAP.get('aceleriq_meta_conexoes_estado')!;
   assert(t, 'existe');
   assertEquals([...t.scopes], ['admin']);
@@ -293,7 +293,7 @@ Deno.test('status manual: verificar_ao_vivo=false, Meta sem configuração e RPC
   const semRpc = fakes([{ id: CLI(1), nome: 'A' }], contas, { [CONTA(1)]: { tipo: 'rpc_ausente' } });
   const r2 = await metaConexoesEstado({}, admin, deps(semRpc, g.buscar));
   assertEquals((r2.clientes as any[])[0].contas[0].motivo, 'leitura_do_token_nao_instalada');
-  assert((r2.avisos as string[]).some((a) => a.includes('20261125120000')));
+  assert((r2.avisos as string[]).some((a) => a.includes('20261125211700')));
   assertEquals(g.pedidos.length, 0);
   const semContas = fakes([{ id: CLI(1), nome: 'A' }], null);
   const e = await assertRejects(() => metaConexoesEstado({}, admin, deps(semContas, g.buscar)), ErroDaFerramenta);

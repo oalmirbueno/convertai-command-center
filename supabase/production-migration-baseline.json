@@ -3281,6 +3281,46 @@
       "remote_name": "auditoria_de_assinaturas_do_mcp",
       "remote_statements_sha256": "90db9969220d2c703cdce0ec6bd9e22259593dcabc0ce456181b3dd8cae0dc0d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261120090000",
+      "path": "supabase/migrations/20261120090000_licencas_dk_financeiro.sql",
+      "local_sha256": "e08451a94692c1d8c608507e620ec1ef615173d776f64be88e2dd9d8224ffcfe",
+      "remote_name": "licencas_dk_financeiro",
+      "remote_statements_sha256": "00aa9c15ceb0d422901f21db9dbbeed580c1760f73b65797c4f5df0e58a37d99",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125120000",
+      "path": "supabase/migrations/20261125120000_intermediador_dos_grupos.sql",
+      "local_sha256": "e5feda98cc6552d766122fd5620e0a3b811c3aaaa32a5b0f3aa0336c6c08a97d",
+      "remote_name": "intermediador_dos_grupos",
+      "remote_statements_sha256": "557e92250b0ab36f6e9e3caa9175f1bf2915d8b296807ea390b3853e9f3925d6",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125150000",
+      "path": "supabase/migrations/20261125150000_intermediador_para_que.sql",
+      "local_sha256": "6140529f6498c2dd33e3d5c57cc3bb78989acc02ed2c2c8e08f5834ff4187c8f",
+      "remote_name": "intermediador_para_que",
+      "remote_statements_sha256": "9392b88cf4175c11877f54924c005210c1c38388957d89114892dc334598710b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125180000",
+      "path": "supabase/migrations/20261125180000_intermediador_varios_marcados.sql",
+      "local_sha256": "b47507e2b228a3f143e56582add217d51eb329bb1e9f53ef3dea64f2c0b7bdd7",
+      "remote_name": "intermediador_varios_marcados",
+      "remote_statements_sha256": "ed4d724a262a260b745c187a4ae3875cbcf19dc88e1580095a7a32dc11959733",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125211700",
+      "path": "supabase/migrations/20261125211700_meta_conexao_token_da_conta.sql",
+      "local_sha256": "e1c4f5934cd96f0e79de9df0ced57b01aa902db29d41acb32a05910864297931",
+      "remote_name": "meta_conexao_token_da_conta",
+      "remote_statements_sha256": "2db795200c1688df50937b238d97ceb57ffe92432e452705f518135fc3c7af1e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

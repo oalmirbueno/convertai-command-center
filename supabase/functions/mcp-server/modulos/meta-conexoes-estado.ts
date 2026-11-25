@@ -538,7 +538,7 @@ export async function metaConexoesEstado(input: unknown, ctx: AuthContext, deps:
         graph: Object.keys(graph).length ? graph : null,
       });
     }), CONCORRENCIA, sinal);
-    if (rpcAusente) avisos.push('A leitura do token por conta (migration 20261125120000) ainda não está no banco: teste ao vivo como nao_verificado.');
+    if (rpcAusente) avisos.push('A leitura do token por conta (migration 20261125211700) ainda não está no banco: teste ao vivo como nao_verificado.');
 
     const resumo: Record<EstadoDaConexao, number> = { ok: 0, venceu: 0, caiu: 0, sem_conexao: 0, nao_verificado: 0 };
     let semTempo = 0;

@@ -67,6 +67,7 @@ import { FERRAMENTAS_DO_ESCRITORIO } from '../mcp-server/modulos/escritorio.ts';
 import { FERRAMENTAS_DAS_REGRAS } from '../mcp-server/modulos/regras-permanentes.ts';
 import { FERRAMENTAS_DAS_AUTOMACOES } from '../mcp-server/modulos/automacoes.ts';
 import { FERRAMENTA_DO_DONO_NO_ESCRITORIO } from '../mcp-server/modulos/escritorio-dono.ts';
+import { FERRAMENTAS_DO_INTERMEDIADOR } from '../mcp-server/modulos/intermediador.ts';
 import { FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS } from '../mcp-server/modulos/auditoria-assinaturas.ts';
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
@@ -5159,7 +5160,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTA_DE_AGRUPAR_CARROSSEL,
   ...FERRAMENTA_DE_POST_DE_ARQUIVO,
   ...FERRAMENTA_DE_ENVIAR_ARQUIVO,
-  // MCP 2.39: inventário orgânico da Meta (só leitura, só admin irrestrito, debug_token pela credencial exata).
+  // MCP 2.39: Intermediador dos grupos de cliente (pergunta ao cliente no grupo e devolve a resposta).
+  ...FERRAMENTAS_DO_INTERMEDIADOR,
+  // MCP 2.40: inventário orgânico da Meta (só leitura, só admin irrestrito, debug_token pela credencial exata).
   ...FERRAMENTA_META_CONEXOES_ESTADO,
 ];
 
