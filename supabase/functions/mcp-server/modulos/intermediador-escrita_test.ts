@@ -27,11 +27,12 @@ Deno.test('pedido ao escritor leva o ramo do cliente, a conversa recente e a reg
 Deno.test('limparTexto: tira aspas e travessão, garante uma menção e recusa "texto ou áudio"', () => {
   assertEquals(limparTexto('"@{pessoa}, vocês atendem dia 24 — e dia 31?"', 'pergunta'), { texto: '@{pessoa}, vocês atendem dia 24, e dia 31?', problema: null });
   assertEquals(limparTexto('Vocês atendem dia 24?', 'pergunta').texto, '@{pessoa}, vocês atendem dia 24?');
-  assertEquals(limparTexto('@pessoa oi! @{pessoa} tudo bem?', 'pergunta').texto, '@{pessoa} oi! tudo bem?');
+  assertEquals(limparTexto('@pessoa oi! @{pessoa} tudo bem?', 'pergunta').texto, '@{pessoa} oi! Tudo bem?');
   assert(limparTexto('@{pessoa} atendem dia 24? Pode responder por aqui mesmo, em texto ou áudio.', 'pergunta').problema?.includes('como responder'));
 });
 
 Deno.test('limparTexto: fechamento sem menção e sem pergunta; termo interno e cobrança barrados', () => {
+  assertEquals(limparTexto('Valeu, meu querido , entendi: chegou pelo post novo. anotado!', 'fechamento').texto, 'Valeu, meu querido, entendi: chegou pelo post novo. Anotado!');
   assertEquals(limparTexto('@{pessoa} perfeito, anotado!', 'fechamento'), { texto: 'perfeito, anotado!', problema: null });
   assert(limparTexto('Perfeito! Mais alguma coisa?', 'fechamento').problema?.includes('pergunta'));
   assert(limparTexto('@{pessoa} o Hermes precisa saber se vocês atendem dia 24', 'pergunta').problema?.includes('termo interno'));

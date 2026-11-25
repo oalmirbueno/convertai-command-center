@@ -98,6 +98,8 @@ export function limparTexto(bruto: string, tipo: TipoDeTexto): { texto: string; 
   } else {
     t = t.split(MARCA).join('').replace(/^[,\s]+/, '').replace(/\s{2,}/g, ' ').trim();
   }
+  // Pontuação: sem espaço antes de vírgula ou ponto, maiúscula depois de ponto final, exclamação ou interrogação.
+  t = t.replace(/\s+([,.!?;:])/g, '$1').replace(/([.!?]\s+)(\p{Ll})/gu, (_m, sep: string, letra: string) => sep + letra.toUpperCase());
   if (t.length < 12) return { texto: t, problema: 'curto demais' };
   if (t.length > 600) return { texto: t, problema: 'longo demais (máximo 3 frases curtas)' };
   if (EXPLICA_COMO_RESPONDER.test(t)) return { texto: t, problema: 'explicou como responder (texto, áudio, por aqui); tire isso' };
