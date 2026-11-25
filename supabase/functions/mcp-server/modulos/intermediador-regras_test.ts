@@ -8,31 +8,9 @@ import {
   ouvida,
   perguntaProibida,
   perguntasAoJev,
-  textoDeVolta,
-  textoLembrete,
-  textoPergunta,
 } from './intermediador-regras.ts';
 
 const SP = (iso: string) => Date.parse(iso); // horários escritos já em UTC (SP = UTC-3)
-
-Deno.test('textoPergunta: menciona pelo número no grupo e pelo nome na prévia', () => {
-  const t = textoPergunta({ numero: '554799990000', nome: 'Carla Souza', tema: 'horário de fim de ano', pergunta: 'Vocês abrem dia 24 e 31?' });
-  assert(t.texto.startsWith('Oi, @554799990000! Tudo bem?'));
-  assert(t.texto.includes('*horário de fim de ano*'));
-  assert(t.texto.includes('\n\nVocês abrem dia 24 e 31?\n\n'));
-  assert(t.texto.endsWith('Pode responder por aqui mesmo, em texto ou áudio. 🙂'));
-  assert(t.texto_previa.startsWith('Oi, @Carla! Tudo bem?'));
-  assertEquals(t.mencoes, ['554799990000@s.whatsapp.net']);
-  assert(!t.texto.includes('—'));
-});
-
-Deno.test('textoDeVolta e lembrete também marcam a pessoa', () => {
-  const v = textoDeVolta({ numero: '554799990000', nome: null, item: 'o horário do dia 24' });
-  assertEquals(v.texto, 'Obrigado, @554799990000! Só faltou uma coisa: o horário do dia 24?');
-  assertEquals(v.texto_previa, 'Obrigado, @pessoa marcada! Só faltou uma coisa: o horário do dia 24?');
-  const l = textoLembrete({ numero: '554799990000', nome: 'Rui', tema: 'fotos da loja' });
-  assert(l.texto.includes('@554799990000') && l.texto.includes('*fotos da loja*'));
-});
 
 Deno.test('perguntaProibida: termo interno, cobrança e travessão não saem; preço de produto pode', () => {
   assertEquals(perguntaProibida('Qual o preço do kit para a arte?'), null);
