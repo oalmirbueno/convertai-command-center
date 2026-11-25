@@ -40,6 +40,7 @@ SERVICOS = [
     ('leitor_grupos', 'Leitor dos grupos de clientes', 'aceleriq-leitor-grupos.service', 'servico'),
     ('grupo_cliente', 'Envio aos grupos (lembrete e mensagem da semana)', 'aceleriq-grupo-cliente', 'timer'),
     ('post_no_ar', 'Aviso de post no ar', 'aceleriq-post-no-ar', 'timer'),
+    ('intermediador', 'Intermediador dos grupos (pergunta ao cliente e devolve ao agente)', 'aceleriq-intermediador', 'timer'),
     ('vigia', 'Vigia de saúde e vencimentos', 'aceleriq-vigia', 'timer'),
     ('backup_n8n', 'Cópia diária do n8n', 'n8n-backup', 'timer'),
 ]

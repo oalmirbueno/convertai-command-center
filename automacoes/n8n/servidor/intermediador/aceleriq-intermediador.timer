@@ -1,0 +1,10 @@
+[Unit]
+Description=Aceleriq: intermediador dos grupos a cada minuto
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=60s
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
