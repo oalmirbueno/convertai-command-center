@@ -8,7 +8,9 @@ const base = {
 };
 
 Deno.test('pedido ao escritor leva o ramo do cliente, a conversa recente e a regra de não explicar como responder', () => {
-  const { sistema, usuario } = pedidoAoEscritor({ ...base, tipo: 'pergunta' });
+  const { sistema, usuario } = pedidoAoEscritor({ ...base, tipo: 'pergunta', para_que: 'para o post de fim de ano' });
+  assert(usuario.includes('Para quê: para o post de fim de ano'));
+  assert(sistema.includes('do jeito que o Almir fala'));
   assert(sistema.includes('prestador de serviço não é loja'));
   assert(sistema.includes('Nunca explique como responder'));
   assert(sistema.includes(MARCA));

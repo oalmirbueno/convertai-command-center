@@ -332,6 +332,7 @@ Deno.test('estado e cancelar: só quem pediu vê e cancela', async () => {
   assertEquals(((await intermediadorEstado({ assunto_id: r.assunto_id }, ctx(), m.porta)) as { estado: string }).estado, 'na_fila');
   const c = await intermediadorCancelar({ assunto_id: r.assunto_id, motivo: 'a peça mudou' }, ctx(), m.porta);
   assertEquals(c.estado, 'cancelado');
+  assertEquals((c as { aviso?: string }).aviso, 'Nada tinha saído no grupo.');
 });
 
 Deno.test('texto que o Jev recusa duas vezes não sai: a pergunta volta para a fila e espera 15 min', async () => {

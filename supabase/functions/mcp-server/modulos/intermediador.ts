@@ -55,7 +55,7 @@ const ENVIA = { readOnlyHint: false, idempotentHint: false, destructiveHint: fal
 
 export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou'; tipo: string; texto: string; em: string }
 export interface Assunto {
-  id: string; client_id: string; group_id: string; grupo_nome: string; tema: string; pergunta: string;
+  id: string; client_id: string; group_id: string; grupo_nome: string; tema: string; pergunta: string; para_que: string | null;
   marcar_numero: string; marcar_nome: string | null; o_que_conta: string[]; pode_perguntar_de_volta: boolean;
   prazo_horas: number; pedido_por: string; responder_para: string; idempotency_key: string; estado: string;
   pergunta_msg_id: string | null; perguntado_em: string | null; vence_em: string | null; lido_ate: string | null;
@@ -73,7 +73,7 @@ export interface MsgGrupo {
   texto: string | null; transcricao: string | null; transcricao_status: string | null; descricao_midia: string | null;
   resposta_a: string | null; occurred_at: string; received_at: string;
 }
-type NovoAssunto = Pick<Assunto, 'client_id' | 'group_id' | 'grupo_nome' | 'tema' | 'pergunta' | 'marcar_numero' | 'marcar_nome' | 'o_que_conta' | 'pode_perguntar_de_volta' | 'prazo_horas' | 'pedido_por' | 'responder_para' | 'idempotency_key'>;
+type NovoAssunto = Pick<Assunto, 'client_id' | 'group_id' | 'grupo_nome' | 'tema' | 'pergunta' | 'para_que' | 'marcar_numero' | 'marcar_nome' | 'o_que_conta' | 'pode_perguntar_de_volta' | 'prazo_horas' | 'pedido_por' | 'responder_para' | 'idempotency_key'>;
 
 export interface PortaDoIntermediador {
   agora(): number;
@@ -105,7 +105,7 @@ export interface PortaDoIntermediador {
 
 // ─── A porta para o banco ───────────────────────────────────────
 
-const COL_ASSUNTO = 'id, client_id, group_id, grupo_nome, tema, pergunta, marcar_numero, marcar_nome, o_que_conta, pode_perguntar_de_volta, prazo_horas, pedido_por, responder_para, idempotency_key, estado, pergunta_msg_id, perguntado_em, vence_em, lido_ate, envios_ao_cliente, perguntou_de_volta, itens, ouvidas, resposta, motivo, devolvido_em, fechado_em, criado_em';
+const COL_ASSUNTO = 'id, client_id, group_id, grupo_nome, tema, pergunta, para_que, marcar_numero, marcar_nome, o_que_conta, pode_perguntar_de_volta, prazo_horas, pedido_por, responder_para, idempotency_key, estado, pergunta_msg_id, perguntado_em, vence_em, lido_ate, envios_ao_cliente, perguntou_de_volta, itens, ouvidas, resposta, motivo, devolvido_em, fechado_em, criado_em';
 const COL_ENVIO = 'id, assunto_id, tipo, destino, texto, texto_previa, mencoes, estado, message_id, criado_em, feito_em';
 
 function falhou(onde: string, error: { code?: string; message?: string } | null): never {
@@ -311,6 +311,7 @@ const pedirSchema = z.object({
   client_id: z.string().regex(UUID),
   tema: z.string().trim().min(3).max(120),
   pergunta: z.string().trim().min(8).max(400),
+  para_que: z.string().trim().min(3).max(160).optional(),
   marcar: z.string().max(80).optional(),
   o_que_conta: z.array(z.string().trim().min(2).max(120)).min(1).max(4),
   pode_perguntar_de_volta: z.boolean().optional(),
@@ -329,7 +330,7 @@ export async function intermediadorPedir(input: unknown, ctx: AuthContext, porta
   const ja = await porta.assuntoPorChave(d.idempotency_key);
   if (ja) return { ok: true, repetido: true, ...mostrarAssunto(ja), aviso: 'Este pedido já existia com a mesma idempotency_key. Nada novo foi aberto.' };
 
-  for (const t of [d.tema, d.pergunta, ...d.o_que_conta]) {
+  for (const t of [d.tema, d.pergunta, d.para_que ?? '', ...d.o_que_conta].filter(Boolean)) {
     if (pareceTerSegredo(t)) throw new ErroDaFerramenta('tem_segredo', 'O pedido parece ter senha, token ou chave. Nada foi aberto.', null, false);
     const motivo = perguntaProibida(t);
     if (motivo) {
@@ -357,7 +358,7 @@ export async function intermediadorPedir(input: unknown, ctx: AuthContext, porta
   }
 
   const a = await porta.criarAssunto({
-    client_id: d.client_id, group_id: grupo.group_id, grupo_nome: grupo.rotulo, tema: d.tema, pergunta: d.pergunta,
+    client_id: d.client_id, group_id: grupo.group_id, grupo_nome: grupo.rotulo, tema: d.tema, pergunta: d.pergunta, para_que: d.para_que ?? null,
     marcar_numero: pessoa.numero, marcar_nome: pessoa.nome, o_que_conta: d.o_que_conta,
     pode_perguntar_de_volta: d.pode_perguntar_de_volta ?? true, prazo_horas: d.prazo_horas ?? 24,
     pedido_por: eu.slug, responder_para: responder, idempotency_key: d.idempotency_key,
@@ -415,11 +416,12 @@ export async function intermediadorCancelar(input: unknown, ctx: AuthContext, po
   if (!a) throw new ErroDaFerramenta('nao_encontrado', 'Assunto não encontrado.', null, false);
   if (a.pedido_por !== eu.slug && !ehAdmin(ctx) && eu.grau !== 'orquestrador') throw new ErroDaFerramenta('nao_e_seu', 'Só quem pediu (ou um orquestrador) cancela.', null, false);
   const abertos = ['na_fila', ...ESTADOS_ABERTOS];
+  const jaSaiu = (await porta.envios({ assunto_id: a.id })).some((e) => e.destino === 'grupo' && e.estado === 'enviado');
   const feito = await porta.atualizarAssunto(a.id, { estado: 'cancelado', motivo: p.data.motivo, fechado_em: iso(porta.agora()) }, abertos);
   if (!feito) return { ok: true, ja_fechado: true, estado: a.estado };
   for (const e of await porta.envios({ assunto_id: a.id, estado: 'pendente' })) await porta.atualizarEnvio(e.id, { estado: 'cancelado' }, 'pendente');
   await porta.evento(a.id, 'cancelado', { por: eu.slug });
-  return { ok: true, estado: 'cancelado', aviso: a.estado === 'na_fila' ? 'Nada tinha saído no grupo.' : 'A pergunta já tinha saído no grupo; o que o cliente responder agora não será ouvido.' };
+  return { ok: true, estado: 'cancelado', aviso: jaSaiu ? 'A pergunta já tinha saído no grupo; o que o cliente responder agora não será ouvido.' : 'Nada tinha saído no grupo.' };
 }
 
 // ─── 4) Rodada (só o processo do VPS) ───────────────────────────
@@ -463,7 +465,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
   let corrigir: string | null = null;
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     const pedido = pedidoAoEscritor({
-      tipo, cliente: ctx.nome, primeiro_nome: nome, tema: a.tema, pergunta: a.pergunta, o_que_conta: a.o_que_conta,
+      tipo, cliente: ctx.nome, primeiro_nome: nome, tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, o_que_conta: a.o_que_conta,
       falta: falta ?? null, ja_disse: a.ouvidas.map((o) => o.texto), conversa_recente: conversa, contexto: ctx.dossie, corrigir,
     });
     const bruto = await porta.escrever({ clientId: a.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: a.id });
@@ -725,7 +727,8 @@ export const FERRAMENTAS_DO_INTERMEDIADOR: readonly ToolDefinition[] = [
         operator: OPERATOR,
         client_id: { type: 'string', format: 'uuid', description: 'O cliente (precisa ter grupo lido pela Aceleriq).' },
         tema: { type: 'string', minLength: 3, maxLength: 120, description: 'Curto, como o cliente entende: "horário de fim de ano da loja".' },
-        pergunta: { type: 'string', minLength: 8, maxLength: 400, description: 'O que perguntar, do jeito que vai ao cliente.' },
+        pergunta: { type: 'string', minLength: 8, maxLength: 400, description: 'O que o time precisa saber (o assistente reescreve no tom da conversa).' },
+        para_que: { type: 'string', minLength: 3, maxLength: 160, description: 'Opcional: para que o time precisa disso, ex.: "para o post de fim de ano". Entra em poucas palavras na mensagem.' },
         marcar: { type: 'string', maxLength: 80, description: 'Quem marcar: o primeiro nome de quem fala no grupo, ou "dono" (padrão: quem do cliente mais fala).' },
         o_que_conta: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', minLength: 2, maxLength: 120 }, description: 'Os pontos que precisam vir na resposta, ex.: ["abre ou não dia 24", "horário"].' },
         pode_perguntar_de_volta: { type: 'boolean', description: 'Padrão true: se faltar um ponto, pergunta só ele, uma vez.' },

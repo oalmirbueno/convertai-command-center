@@ -22,6 +22,8 @@ export interface PedidoDoTexto {
   primeiro_nome: string | null;
   tema: string;
   pergunta: string;
+  /** Para que o time precisa do dado (opcional). */
+  para_que?: string | null;
   o_que_conta: string[];
   /** Ponto que faltou (só na de volta). */
   falta?: string | null;
@@ -48,7 +50,8 @@ export const SISTEMA_DO_INTERMEDIADOR = [
   'Você escreve UMA mensagem de WhatsApp que o assistente da Aceleriq (agência de marketing) manda no grupo de um cliente.',
   'Regras:',
   '1. Soa como gente da agência que já conversa com o cliente todo dia: natural, direto, educado, leve. Português do Brasil falado, sem formalidade de e-mail.',
-  '2. Continue a conversa: olhe as mensagens recentes do grupo e não repita cumprimento se já cumprimentaram hoje; se a conversa já está no meio, entre no assunto sem cerimônia.',
+  '2. Continue a conversa: olhe as mensagens recentes do grupo e fale do jeito que o Almir fala ali (tom, intimidade, expressões). Não repita cumprimento se já cumprimentaram hoje; se a conversa já está no meio, entre no assunto sem cerimônia.',
+  '2b. Quando abrir um assunto, diga em poucas palavras para que é (o "para quê" do pedido; sem ele, pelo assunto, sem inventar). Ninguém pergunta do nada.',
   '3. Respeite o ramo do cliente pelo contexto (prestador de serviço não é loja; não invente produto, endereço, horário ou fato que não esteja no contexto).',
   `4. Quando for chamar a pessoa, escreva exatamente ${MARCA} (o sistema troca pelo nome). Use ${MARCA} uma vez só, perto do começo.`,
   '5. Curta: de 1 a 3 frases. Nada de lista, título, negrito ou assinatura. No máximo um emoji, e só se couber.',
@@ -66,6 +69,7 @@ export function pedidoAoEscritor(p: PedidoDoTexto): { sistema: string; usuario: 
     `Pessoa marcada: ${p.primeiro_nome ?? 'sem nome conhecido'}`,
     `Assunto: ${p.tema}`,
     `O que o time precisa saber: ${p.pergunta}`,
+    p.para_que ? `Para quê: ${p.para_que}` : '',
     `Pontos que a resposta precisa trazer: ${p.o_que_conta.join('; ')}`,
     p.ja_disse.length ? `O que a pessoa já disse sobre isso:\n${p.ja_disse.map((t) => `- ${t}`).join('\n')}` : '',
     p.falta ? `Ponto que faltou: ${p.falta}` : '',
@@ -125,7 +129,7 @@ export function perguntasDoTexto(tipo: TipoDeTexto, itens: string[], falta?: str
   return q;
 }
 
-export const CORTE_DO_TEXTO = { promete: 0.4, natural: 0.5, cobre: 0.6 } as const;
+export const CORTE_DO_TEXTO = { promete: 0.4, natural: 0.6, cobre: 0.6 } as const;
 
 /** Lê as notas do Jev sobre o texto. Devolve o problema (para a segunda tentativa) ou null. */
 export function problemaDoTexto(notas: Record<string, number>): string | null {
