@@ -2,6 +2,7 @@
 // As regras são funções puras; as ferramentas rodam sobre uma porta de memória.
 import { assert, assertEquals, assertRejects } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
+import { dataScopeAllowsTool, isRestrictedApiKeyIdentityScope } from '../../_shared/mcp-security.ts';
 import { ErroDaFerramenta } from './robustez.ts';
 import type { VinculoDaChave } from './autoria.ts';
 import {
@@ -75,6 +76,7 @@ function mundo(vinculos: Record<string, VinculoDaChave[] | null> = {}) {
   const porta: PortaDoEscritorio = {
     vinculos: (p) => Promise.resolve(p in vinculos ? vinculos[p] : []),
     operadores: () => Promise.resolve(ELENCO),
+    operador: (slug) => Promise.resolve(ELENCO.find((o) => o.slug === slug) ?? null),
     grupos: () => Promise.resolve(grupos),
     conversa: (id) => Promise.resolve(conversas.find((c) => c.id === id) ?? null),
     criarConversa: (c) => { const nova = { ...c, id: uuid(++n) }; conversas.push(nova); return Promise.resolve(nova); },
@@ -472,6 +474,161 @@ Deno.test('catálogo do Escritório: oito ferramentas, todas com manual, escrita
     assert(!/[—–]/.test(t.description), `${t.name}: sem travessão`);
     assertEquals((t.inputSchema as { additionalProperties: boolean }).additionalProperties, false);
     const escreve = t.annotations?.readOnlyHint === false;
-    assertEquals([...t.scopes], [escreve ? 'aceleriq:write' : 'aceleriq:read']);
+    const esperado = t.name === 'aceleriq_escritorio_entrar'
+      ? ['aceleriq:read', 'escritorio:identity']
+      : [escreve ? 'aceleriq:write' : 'aceleriq:read'];
+    assertEquals([...t.scopes], esperado);
   }
+});
+
+// ─── Identidade restrita: chave API de funcionário não-admin ───
+
+/** Chave API restrita (dono não-admin, escopo de clientes definido), ligada aos slugs dados. */
+function chaveRestrita(id: string, slugs: string[] | null, extra: Partial<AuthContext> = {}, scope: Partial<AuthContext['dataScope']> = {}) {
+  const ctx: AuthContext = {
+    keyId: id, keyName: `restrita-${id}`, scopes: ['aceleriq:read'], origin: null,
+    dataScope: { unrestricted: false, clientIds: ['cccccccc-cccc-4ccc-8ccc-cccccccccccc'], principalUserId: 'funcionario-1', source: 'api_key', ...scope },
+    resultRefHolder: {}, ...extra,
+  };
+  return { ctx, vinculos: { [`key:${id}`]: slugs === null ? null : slugs.map((s, i) => ({ operator_slug: s, padrao: i === 0 })) } };
+}
+
+/**
+ * Porta que explode se a variante restrita listar operadores ou tocar caixa, salas, leituras, presença ou
+ * escrita. Registra cada leitura de vínculo (com semCache) e cada lookup de operador pelo slug.
+ */
+function portaSoIdentidade(vinculos: Record<string, VinculoDaChave[] | null>, chamadas: string[] = []) {
+  const base = mundo(vinculos).porta;
+  const proibido = (nome: string) => () => { throw new Error(`identidade restrita não pode chamar ${nome}`); };
+  return {
+    ...base,
+    vinculos: (p: string, o?: { semCache?: boolean }) => { chamadas.push(`vinculos:${p}:${o?.semCache === true ? 'sem-cache' : 'cache'}`); return base.vinculos(p, o); },
+    operador: (slug: string) => { chamadas.push(`operador:${slug}`); return base.operador(slug); },
+    operadores: proibido('operadores'),
+    grupos: proibido('grupos'), conversa: proibido('conversa'), criarConversa: proibido('criarConversa'),
+    mensagemPorChave: proibido('mensagemPorChave'), mensagensDaUnidade: proibido('mensagensDaUnidade'),
+    mensagensDaConversa: proibido('mensagensDaConversa'), mensagensPara: proibido('mensagensPara'),
+    gravarMensagem: proibido('gravarMensagem'), lidas: proibido('lidas'), marcarLidas: proibido('marcarLidas'),
+    presencas: proibido('presencas'), baterPresenca: proibido('baterPresenca'), automacoes: proibido('automacoes'),
+    gravarAutomacao: proibido('gravarAutomacao'), taxa: proibido('taxa'),
+  } as PortaDoEscritorio;
+}
+
+Deno.test('entrar restrito: chave não-admin com vínculo único e ativo vê só a própria identidade', async () => {
+  const elo = chaveRestrita('elo', ['clio']);
+  const ctx = { ...elo.ctx, scopes: ['escritorio:identity'] };
+  for (const pedido of [{}, { operator: 'clio' }, { operator: ' CLIO ' }]) {
+    const chamadas: string[] = [];
+    const porta = portaSoIdentidade(elo.vinculos, chamadas);
+    const r = await escritorioEntrar(pedido, ctx, porta) as Record<string, any>;
+    // Vínculo lido sem cache; operador buscado só pelo próprio slug, sem listar o elenco.
+    assertEquals(chamadas, ['vinculos:key:elo:sem-cache', 'operador:clio']);
+    assertEquals(Object.keys(r).sort(), ['aviso', 'modo', 'voce']);
+    assertEquals(r.modo, 'identidade_restrita');
+    assertEquals(r.voce, { slug: 'clio', nome: 'Clio', plataforma: r.voce.plataforma, funcao: 'Conversas dos grupos', area: 'Conteúdo', grau: 'executor', status: 'active' });
+    const texto = JSON.stringify(r);
+    for (const outro of ELENCO.map((o) => o.slug).filter((s) => s !== 'clio')) assert(!texto.includes(`"${outro}"`), `vazou ${outro}`);
+    for (const campo of ['organograma', 'salas', 'nao_lidas', 'equipe', 'responde_a', 'escopo', 'regras_da_casa', 'memoria']) {
+      assert(!(campo in r) && !(campo in r.voce), `vazou ${campo}`);
+    }
+  }
+});
+
+Deno.test('entrar restrito: outro slug, dono e qualquer campo a mais são recusados', async () => {
+  const elo = chaveRestrita('elo', ['clio']);
+  const chamadas: string[] = [];
+  const porta = portaSoIdentidade(elo.vinculos, chamadas);
+  // Slug existente, inexistente, inativo e o dono: mesma resposta, sem citar o próprio slug nem o pedido,
+  // e sem lookup do slug pedido (não vira oráculo de quem existe).
+  const respostas = new Set<string>();
+  for (const outro of ['orion', 'fantasma', 'vela', 'fred', 'dono']) {
+    const e = await erro(escritorioEntrar({ operator: outro }, elo.ctx, porta), 'nao_e_voce');
+    const texto = `${e.message} ${e.dica ?? ''}`;
+    assert(!texto.includes('clio') && !texto.includes(outro), `vazou em ${outro}`);
+    respostas.add(texto);
+  }
+  assertEquals(respostas.size, 1);
+  assert(chamadas.every((c) => !c.startsWith('operador:')), chamadas.join(','));
+  await erro(escritorioEntrar({ operator: 'clio', organograma: true }, elo.ctx, porta), 'entrada_invalida');
+  await erro(escritorioEntrar({ client_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }, elo.ctx, porta), 'entrada_invalida');
+});
+
+Deno.test('entrar restrito: sem vínculo, vínculo múltiplo, tabela ausente ou agente inativo continuam negados', async () => {
+  const casos: Array<[string[] | null, string]> = [
+    [[], 'identidade_restrita_sem_vinculo'],
+    [['clio', 'orion'], 'identidade_restrita_sem_vinculo'],
+    [null, 'identidade_restrita_sem_vinculo'],
+    [['vela'], 'identidade_restrita_inativa'],
+    [['radar'], 'identidade_restrita_inativa'],
+    [['fantasma'], 'identidade_restrita_inativa'],
+  ];
+  for (const [slugs, codigo] of casos) {
+    const k = chaveRestrita('k', slugs);
+    await erro(escritorioEntrar({}, k.ctx, portaSoIdentidade(k.vinculos)), codigo);
+  }
+  // Credencial restrita sem nenhuma linha de vínculo cadastrada.
+  const solta = chaveRestrita('solta', ['clio']);
+  await erro(escritorioEntrar({}, solta.ctx, portaSoIdentidade({})), 'identidade_restrita_sem_vinculo');
+});
+
+Deno.test('entrar restrito: dono ausente, zero clientes, OAuth, admin ou contexto ausente negam antes de ler vínculo', async () => {
+  const semEscopo = chaveRestrita('d', ['clio']);
+  (semEscopo.ctx as { dataScope?: unknown }).dataScope = undefined;
+  const negados = [
+    chaveRestrita('a', ['clio'], { scopes: ['aceleriq:read', 'admin'] }),
+    chaveRestrita('b', ['clio'], {}, { source: 'oauth' }),
+    chaveRestrita('oauth:x', ['clio']),
+    chaveRestrita('c', ['clio'], {}, { principalUserId: null }),
+    chaveRestrita('c2', ['clio'], {}, { principalUserId: '   ' }),
+    chaveRestrita('z', ['clio'], {}, { clientIds: [] }),
+    chaveRestrita('u', ['clio'], {}, { unrestricted: undefined as unknown as boolean }),
+    semEscopo,
+  ];
+  for (const k of negados) {
+    const chamadas: string[] = [];
+    await erro(escritorioEntrar({}, k.ctx, portaSoIdentidade(k.vinculos, chamadas)), 'identidade_restrita_negada');
+    assertEquals(chamadas, [], `${k.ctx.keyId} leu o banco antes de negar`);
+  }
+});
+
+Deno.test('entrar irrestrito (legado) segue igual: organograma, salas e caixa', async () => {
+  const fred = chave('fred', 'fred');
+  const r = await escritorioEntrar({}, fred.ctx, mundo(fred.vinculos).porta) as any;
+  assert(Array.isArray(r.organograma) && Array.isArray(r.salas) && r.nao_lidas);
+  assertEquals(r.voce.slug, 'fred');
+});
+
+Deno.test('despachante: mesmo predicado do handler; só a chave API restrita completa alcança entrar', () => {
+  const ENTRAR = 'aceleriq_escritorio_entrar';
+  const api = { unrestricted: false, source: 'api_key', principalUserId: 'funcionario-1', clientIds: ['c1'] };
+  assert(isRestrictedApiKeyIdentityScope(api));
+  assert(dataScopeAllowsTool(api, ENTRAR));
+  const negados: unknown[] = [
+    undefined, null, {},
+    { ...api, source: 'oauth' },
+    { ...api, source: undefined },
+    { ...api, principalUserId: null },
+    { ...api, principalUserId: '' },
+    { ...api, clientIds: [] },
+    { ...api, clientIds: undefined },
+    { ...api, unrestricted: undefined },
+    { ...api, unrestricted: 'false' },
+    { unrestricted: false },
+  ];
+  for (const s of negados) {
+    const scope = s as Parameters<typeof dataScopeAllowsTool>[0];
+    assert(!isRestrictedApiKeyIdentityScope(scope), JSON.stringify(s));
+    assert(!dataScopeAllowsTool(scope, ENTRAR), JSON.stringify(s));
+  }
+  for (const t of FERRAMENTAS_DO_ESCRITORIO.filter((x) => x.name !== ENTRAR)) {
+    assert(!dataScopeAllowsTool(api, t.name), t.name);
+  }
+  assert(!dataScopeAllowsTool(api, 'aceleriq_operator_board'));
+  assert(!dataScopeAllowsTool(api, 'future_private_tool'));
+  // Legado: só unrestricted === true abre tudo; truthy que não é true não abre.
+  assert(dataScopeAllowsTool({ unrestricted: true, source: 'oauth' }, ENTRAR));
+  assert(dataScopeAllowsTool({ unrestricted: true }, 'future_private_tool'));
+  assert(!dataScopeAllowsTool({ unrestricted: 1 } as unknown as Parameters<typeof dataScopeAllowsTool>[0], 'future_private_tool'));
+  // Público continua público, mesmo sem contexto.
+  assert(dataScopeAllowsTool(undefined, 'qualquer', true));
 });
