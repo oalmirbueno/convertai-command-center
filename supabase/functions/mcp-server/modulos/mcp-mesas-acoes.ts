@@ -20,11 +20,11 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { db, isUuid } from './aceleriq-read-services.ts';
-import { auditLog } from './mcp-audit.ts';
-import { assertClientAccess, type AuthContext } from './mcp-auth.ts';
-import { exigirClienteExistente } from './mcp-client-id-guard.ts';
-import { getMcpRuntimeConfig } from './mcp-runtime.ts';
-import { type EscopoDeIdempotencia, findIdempotentResult } from './mcp-write-services.ts';
+import { auditLog } from '../../_shared/mcp-audit.ts';
+import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
+import { exigirClienteExistente } from '../../_shared/mcp-client-id-guard.ts';
+import { getMcpRuntimeConfig } from '../../_shared/mcp-runtime.ts';
+import { type EscopoDeIdempotencia, findIdempotentResult } from '../../_shared/mcp-write-services.ts';
 import {
   acaoPermitida,
   AVISO_ACAO_SO_COM_PESSOA,

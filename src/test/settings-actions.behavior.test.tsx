@@ -34,8 +34,12 @@ describe("Configuracoes: acoes disponiveis", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("mostra a seção Dados da agência", () => {
+  // v4 (SettingsPage): o formulário da agência abre numa janela pela linha "Dados da agência".
+  it("mostra a seção Dados da agência ao abrir a linha", () => {
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
+    expect(screen.queryByRole("region", { name: "Dados da agência" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Dados da agência/ }));
+    expect(screen.getByRole("dialog", { name: "Dados da agência" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Dados da agência" })).toBeInTheDocument();
   });
 });

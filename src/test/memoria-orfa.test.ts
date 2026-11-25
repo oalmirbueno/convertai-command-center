@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const raiz = resolve(__dirname, "../..");
 const ler = (c: string) => readFileSync(resolve(raiz, c), "utf8");
 const memoria = ler("supabase/functions/_shared/project-memory-services.ts");
-const leitura = ler("supabase/functions/_shared/aceleriq-read-services.ts");
+const leitura = ler("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts");
 const migration = ler("supabase/migrations/20260824160000_auditoria_referencias_orfas.sql");
 const criacao = ler("supabase/migrations/20260714135001_ddee07bf-a344-4fb0-8998-c642a8c4d36e.sql");
 

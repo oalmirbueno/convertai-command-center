@@ -112,7 +112,7 @@ describe('portable MCP runtime configuration', () => {
       'supabase/functions/mcp-server/index.ts',
       'supabase/functions/mcp-oauth-metadata/index.ts',
       'supabase/functions/_shared/mcp-auth.ts',
-      'supabase/functions/_shared/mcp-contracts-services.ts',
+      'supabase/functions/mcp-server/modulos/mcp-contracts-services.ts',
     ].map(path => readFileSync(resolve(root, path), 'utf8'));
     const config = readFileSync(resolve(root, 'supabase/config.toml'), 'utf8');
 

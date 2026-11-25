@@ -200,7 +200,7 @@ export async function enviarUm(envio: EnvioDaFila, integracao: Integracao | null
       /* resposta sem JSON: o status decide */
     }
     const r = lerRespostaDoWhatsapp(resposta.status, lido, token);
-    if (r.ok) return { situacao: "enviado", id: r.id };
+    if (r.ok === true) return { situacao: "enviado", id: r.id };
     return { situacao: r.definitivo ? "erro" : "de_novo", erro: r.erro };
   } catch (e) {
     const abortou = e instanceof Error && e.name === "AbortError";

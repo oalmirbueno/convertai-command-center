@@ -18,7 +18,7 @@
  */
 
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
-import { db, isUuid, READ_LIMITS } from '../../_shared/aceleriq-read-services.ts';
+import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
 import { lerDadosDaAgencia } from '../../_shared/dados-da-agencia.ts';
 import { blocosDaAgencia } from '../../mesa-proposta/agencia.ts';
 import { resolvePublicAppUrl } from '../../_shared/public-url.ts';

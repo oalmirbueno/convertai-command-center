@@ -25,8 +25,8 @@ import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { DataScopeError } from '../../_shared/mcp-auth.ts';
 import { dataScopeAllowsClient } from '../../_shared/mcp-security.ts';
-import { db } from '../../_shared/aceleriq-read-services.ts';
-import { umaVez } from '../../_shared/mcp-mesas-acoes.ts';
+import { db } from './aceleriq-read-services.ts';
+import { umaVez } from './mcp-mesas-acoes.ts';
 import { auditLog } from '../../_shared/mcp-audit.ts';
 import {
   type ArquivoDoCarrossel,

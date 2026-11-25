@@ -10,7 +10,7 @@ Evolução da Execução, sem painel novo. Primeira aba: **Central**.
 | Kanban/tarefas | `tasks` (backlog, todo, doing, review, done; sem coluna "bloqueado") | estado da ENTREGA |
 | Execuções | `operator_task_links` (vínculo), `operator_runs` (execução), `operator_audit_log` (trilha), `operator_participations` (diário), `operator_deliveries` | estado do TRABALHO do agente e prova |
 | Aprovações | `operator_approvals` + `operator_approval_decidir` / `central_review_decide` (`src/lib/execucaoApresentacao.ts`) | Decisões do CEO reaproveitam `AprovacoesExplicadas` |
-| MCP | `supabase/functions/mcp-server` → `_shared/aceleriq-operators-services.ts` (`operatorReport` → RPC `operator_report_event`; `completeTask` em `_shared/mcp-write-services.ts`) | origem dos relatos |
+| MCP | `supabase/functions/mcp-server` → `modulos/aceleriq-operators-services.ts` (`operatorReport` → RPC `operator_report_event`; `completeTask` em `_shared/mcp-write-services.ts`) | origem dos relatos |
 | Hermes | `integrations/hermes-operational/diary_consumer.py` (lê o diário pelo MCP a cada minuto) | canal seguro Gestor → Hermes |
 | IA | `_shared/ia-motor.ts` (`modeloPadrao`, `chamarTexto` com cota, saldo, registro de uso), carteira da agência (padrão do `agente-cfo`) | redação do Gestor |
 | Julgamento | `_shared/jev.ts` (TypeSafe) | conferência das frases e cliente com erro de grafia |

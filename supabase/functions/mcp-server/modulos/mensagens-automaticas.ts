@@ -9,7 +9,7 @@
  * Banco: supabase/migrations/20261027100000_lembrete_de_aprovacao_e_regua_de_cobranca.sql.
  */
 
-import { db, isUuid } from '../../_shared/aceleriq-read-services.ts';
+import { db, isUuid } from './aceleriq-read-services.ts';
 import { assertClientAccess, canAccessClient, type AuthContext } from '../../_shared/mcp-auth.ts';
 
 const slug = (s: string) => String(s || '').trim().toLowerCase();

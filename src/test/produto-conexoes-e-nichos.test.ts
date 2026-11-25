@@ -273,7 +273,7 @@ describe("cobrança depois da revisão", () => {
   });
 
   it("o MCP da casa e a tela da casa não veem as buscas das empresas", () => {
-    const mcp = ler("supabase/functions/_shared/aceleriq-commercial-services.ts");
+    const mcp = ler("supabase/functions/mcp-server/modulos/aceleriq-commercial-services.ts");
     expect((mcp.match(/from\('leads_buscas'\)\.select\([^)]*\)\.is\('conta_id', null\)/g) || []).length).toBe(2);
     expect(mcp).toContain(".eq('id', input.busca_id).is('conta_id', null)");
     expect(ler("supabase/migrations/20261113120000_produto_crm_e_email.sql")).toContain("using (conta_id is null and (public.has_role(auth.uid(), 'admin'::public.app_role)");

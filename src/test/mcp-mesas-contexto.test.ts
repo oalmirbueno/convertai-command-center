@@ -11,12 +11,12 @@ import {
   ofertaParaLer,
   planoParaLer,
   tomadaParaLer,
-} from "../../supabase/functions/_shared/mcp-mesas-formato";
+} from "../../supabase/functions/mcp-server/modulos/mcp-mesas-formato";
 import { CLIENT_SCOPED_LEGACY_TOOLS } from "../../supabase/functions/_shared/mcp-security";
 
 const ler = (caminho: string) => readFileSync(resolve(__dirname, "../..", caminho), "utf8");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
-const servico = ler("supabase/functions/_shared/mcp-mesas-services.ts");
+const servico = ler("supabase/functions/mcp-server/modulos/mcp-mesas-services.ts");
 
 /**
  * Quem vai rodar o tráfego precisa estudar o que a Mesa Ads gerou (oferta,

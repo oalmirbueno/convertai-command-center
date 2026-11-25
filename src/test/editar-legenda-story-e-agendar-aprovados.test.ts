@@ -14,7 +14,7 @@ import {
 import { buildApprovedMediaAssets, inferEditorialMediaContentType } from "@/lib/editorialMedia";
 import { buildEditorialSchedulePayload } from "@/lib/editorialScheduler";
 import { FERRAMENTAS_POR_AREA } from "../../supabase/functions/mcp-server/modulos/guia-do-painel";
-import { RPCS_DA_PONTE } from "../../supabase/functions/_shared/mcp-mesas-ponte";
+import { RPCS_DA_PONTE } from "../../supabase/functions/mcp-server/modulos/mcp-mesas-ponte";
 
 const ler = (caminho: string) => readFileSync(resolve(process.cwd(), caminho), "utf8");
 const sql = ler("supabase/migrations/20261114180000_editar_legenda_e_formato_aprovados.sql");

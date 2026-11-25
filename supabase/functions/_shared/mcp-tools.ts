@@ -38,7 +38,7 @@ import {
   getCycleStatus,
   getAgendaStatus,
   db,
-} from './aceleriq-read-services.ts';
+} from '../mcp-server/modulos/aceleriq-read-services.ts';
 import {
   OPERATOR_EVENTS,
   operatorBoard,
@@ -58,7 +58,7 @@ import {
   studioDraft,
   studioRead,
   vaultOverview,
-} from './aceleriq-operators-services.ts';
+} from '../mcp-server/modulos/aceleriq-operators-services.ts';
 import { operatorDiary } from '../mcp-server/modulos/diario.ts';
 import { agentConversationsTool, agentHandoffTool } from './mcp-agentes-das-mesas.ts';
 import { browserActTool, browserSessionTool } from '../mcp-server/modulos/mcp-navegador.ts';
@@ -107,7 +107,7 @@ import {
   comercialMaquinaCandidatos,
   comercialRegistrarFato,
   comercialRegistrarMensagem,
-} from './aceleriq-commercial-services.ts';
+} from '../mcp-server/modulos/aceleriq-commercial-services.ts';
 import { comercialBolsoLiberar, comercialBolsoPedir, comercialPedirProposta } from '../mcp-server/modulos/comercial-conduzir.ts';
 import { comercialCobrar, comercialEntradaNova, comercialFalar, comercialHorarios, comercialMarcarReuniao, comercialRepasseMarcar, comercialRepasses } from '../mcp-server/modulos/comercial-fechar.ts';
 import { TIPOS_DE_EVIDENCIA, type TipoDeEvidencia } from './comercial-evidencia.ts';
@@ -130,7 +130,7 @@ import {
   listFinanceEntries,
   listFinancePlans,
   listFinanceRecurringRules,
-} from './aceleriq-finance-services.ts';
+} from '../mcp-server/modulos/aceleriq-finance-services.ts';
 import {
   bridgeStatus,
   bridgeStatusPublic,
@@ -191,78 +191,13 @@ import {
   listContractsSchema,
   updateContract,
   updateContractSchema,
-} from './mcp-contracts-services.ts';
+} from '../mcp-server/modulos/mcp-contracts-services.ts';
 
-export type ToolScope =
-  // Aggregate scopes (kept for backward compat — expand into granular below).
-  | 'aceleriq:read'
-  | 'aceleriq:write'
-  | 'aceleriq:finance'
-  // Granular per-resource scopes (Bloco D).
-  | 'clients:read'
-  | 'clients:write'
-  | 'projects:read'
-  | 'projects:write'
-  | 'tasks:read'
-  | 'tasks:write'
-  | 'editorial:read'
-  | 'editorial:write'
-  | 'reports:read'
-  | 'reports:write'
-  | 'briefings:read'
-  | 'files:read'
-  | 'files:write'
-  | 'files:sensitive:read'
-  | 'files:archive'
-  | 'workspace:read'
-  | 'commercial:read'
-  | 'commercial:write'
-  | 'contracts:read'
-  | 'contracts:write'
-  | 'memory:read'
-  | 'memory:propose'
-  | 'memory:write'
-  | 'mesas:write'
-  | 'escritorio:write'
-  | 'automacoes:write'
-  // Só identidade da chave API restrita (aceleriq_escritorio_entrar). Fora de
-  // SCOPE_EXPANSIONS e do OAuth da equipe; canInvoke só o aceita com o predicado.
-  | 'escritorio:identity'
-  | 'admin';
-
-export const ALL_SCOPES: readonly ToolScope[] = [
-  'aceleriq:read',
-  'aceleriq:write',
-  'aceleriq:finance',
-  'clients:read',
-  'clients:write',
-  'projects:read',
-  'projects:write',
-  'tasks:read',
-  'tasks:write',
-  'editorial:read',
-  'editorial:write',
-  'reports:read',
-  'reports:write',
-  'briefings:read',
-  'files:read',
-  'files:write',
-  'files:sensitive:read',
-  'files:archive',
-  'workspace:read',
-  'commercial:read',
-  'commercial:write',
-  'contracts:read',
-  'contracts:write',
-  'memory:read',
-  'memory:propose',
-  'memory:write',
-  'mesas:write',
-  'escritorio:write',
-  'automacoes:write',
-  'escritorio:identity',
-  'admin',
-] as const;
+// Lista de escopos: fonte única em mcp-scope-list.ts (o metadata OAuth lê de lá
+// sem puxar o catálogo). Reexportada aqui para os importadores de sempre.
+import { ALL_SCOPES, type ToolScope } from './mcp-scope-list.ts';
+export { ALL_SCOPES };
+export type { ToolScope };
 
 // Human-readable descriptions for the OAuth consent screen and audit logs.
 export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description: string; sensitive?: boolean }> = {
@@ -2062,7 +1997,7 @@ import {
   listAdsPerformance as _listAdsPerformance,
   listSocialMetrics as _listSocialMetrics,
   listSocialPosts as _listSocialPosts,
-} from './aceleriq-metrics-services.ts';
+} from '../mcp-server/modulos/aceleriq-metrics-services.ts';
 
 const getSocialMetricsTool: ToolDefinition = {
   name: 'aceleriq_get_social_metrics',
@@ -2192,7 +2127,7 @@ const getAdsPerformanceTool: ToolDefinition = {
 };
 
 // ─── Mesas: estudar o que foi gerado antes de rodar tráfego (v1.46.0) ──────
-import { mesaAdsContexto as _mesaAdsContexto, mesaFotoContexto as _mesaFotoContexto } from './mcp-mesas-services.ts';
+import { mesaAdsContexto as _mesaAdsContexto, mesaFotoContexto as _mesaFotoContexto } from '../mcp-server/modulos/mcp-mesas-services.ts';
 
 const mesaAdsContextoTool: ToolDefinition = {
   name: 'aceleriq_mesa_ads_contexto',
@@ -2519,7 +2454,7 @@ const mesaFotoContextoTool: ToolDefinition = {
 // Ler não basta: quando precisar, o agente AGE nas mesas. Cada ação chama a
 // função da mesa pelo servidor, com a sessão da pessoa conectada (OAuth), e a
 // mesa confere acesso e regra como na tela. A regra de negócio fica na mesa
-// (mcp-mesas-acoes.ts só leva o pedido e devolve o resultado com a prova).
+// (mcp-server/modulos/mcp-mesas-acoes.ts só leva o pedido e devolve o resultado com a prova).
 import {
   adsArteGerar as _adsArteGerar,
   adsBriefingSalvar as _adsBriefingSalvar,
@@ -2533,7 +2468,7 @@ import {
   campanhaCriar as _campanhaCriar,
   campanhaSalvar as _campanhaSalvar,
   enviarParaAprovacao as _enviarParaAprovacao,
-} from './mcp-mesas-acoes.ts';
+} from '../mcp-server/modulos/mcp-mesas-acoes.ts';
 import { cerebroLer as _cerebroLer, cerebroRegistrar as _cerebroRegistrar } from './mcp-cerebro-services.ts';
 import { AREAS_DO_CEREBRO, CATEGORIAS_DO_CEREBRO } from './cerebro-do-cliente.ts';
 
@@ -4891,8 +4826,8 @@ const comercialCobrarTool = ferramentaDoCrm(
 const comercialHorariosTool = ferramentaDoCrm(
   'aceleriq_comercial_horarios', 'Horarios livres para reuniao com o Almir',
   'Devolve os proximos horarios livres: uma reuniao por dia, terca e quinta as 11h ou 16h, quarta as 11h. Mande em ocupados o que estiver no Google Agenda.',
-  false, z.object({ ocupados: z.array(z.object({ inicio: z.string(), fim: z.string() }).strict()).max(200).optional(), maximo: z.number().int().min(1).max(6).optional() }).strict(),
-  { type: 'object', properties: { ocupados: { type: 'array', items: { type: 'object', properties: { inicio: { type: 'string' }, fim: { type: 'string' } }, required: ['inicio', 'fim'], additionalProperties: false } }, maximo: { type: 'number' } }, additionalProperties: false },
+  false, z.object({ ocupados: z.array(z.object({ inicio: z.string(), fim: z.string() }).strict()).max(200).optional(), maximo: limite(6) }).strict(),
+  { type: 'object', properties: { ocupados: { type: 'array', items: { type: 'object', properties: { inicio: { type: 'string' }, fim: { type: 'string' } }, required: ['inicio', 'fim'], additionalProperties: false } }, maximo: { type: 'integer', minimum: 1, maximum: 6 } }, additionalProperties: false },
   comercialHorarios,
 );
 
@@ -4915,8 +4850,8 @@ const comercialFalarTool = ferramentaDoCrm(
 const comercialRepassesTool = ferramentaDoCrm(
   'aceleriq_comercial_repasses', 'Repasses da Caixa ainda nao avisados no WhatsApp',
   'Lista os itens novos da Caixa que ainda nao foram avisados no WhatsApp da Aceleriq, com o lead e o contexto.',
-  false, z.object({ limit: z.number().int().min(1).max(30).optional() }).strict(),
-  { type: 'object', properties: { limit: { type: 'number' } }, additionalProperties: false },
+  false, z.object({ limit: limite(30) }).strict(),
+  { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 30 } }, additionalProperties: false },
   comercialRepasses,
 );
 

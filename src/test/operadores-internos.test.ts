@@ -17,7 +17,7 @@ const migracao = readFileSync(
   resolve(raiz, "supabase/migrations/20260827200000_operadores_internos.sql"), "utf8",
 );
 const servicos = readFileSync(
-  resolve(raiz, "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8",
+  resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts"), "utf8",
 );
 const ferramentas = readFileSync(
   resolve(raiz, "supabase/functions/_shared/mcp-tools.ts"), "utf8",

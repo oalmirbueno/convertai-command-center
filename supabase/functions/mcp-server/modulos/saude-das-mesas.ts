@@ -10,7 +10,7 @@
  * Fica fora de _shared (perto do teto do Lovable): o mcp-tools.ts só declara as ferramentas.
  */
 
-import { db, isUuid } from '../../_shared/aceleriq-read-services.ts';
+import { db, isUuid } from './aceleriq-read-services.ts';
 import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
 import { exigirClienteExistente } from '../../_shared/mcp-client-id-guard.ts';
 import { type Controle, notaDaAuditoria } from '../../mesa-ads/modulos/auditoria-da-conta.ts';

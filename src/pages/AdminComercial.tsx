@@ -606,7 +606,7 @@ export default function AdminComercial() {
       {/* 19/11/2026: no painel o Comercial é o acompanhamento; o trabalho do dia é no CRM novo (/vendas),
           com os mesmos dados. Aqui só aparece o atalho para lá. */}
       {!conta && baseDaCasa() === "/comercial" && (
-        <div className="flex min-w-0 flex-wrap items-center rounded-2xl border border-primary/25 bg-accent-soft px-4 py-3" data-crm-novo-atalho="">
+        <div className="flex min-w-0 flex-wrap items-center rounded-lg border border-primary/25 bg-accent-soft px-4 py-3" data-crm-novo-atalho="">
           <span className="mr-3 min-w-0 flex-1 text-[14px] leading-5">
             <b>O CRM de vendas agora abre na casa nova.</b> Mesmos negócios e o mesmo Rafael, com visual novo, tema escuro e celular.
           </span>

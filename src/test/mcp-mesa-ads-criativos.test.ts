@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
-import { acaoPermitida, laminasDoTrabalho, prazoDaAcao } from "../../supabase/functions/_shared/mcp-mesas-ponte";
-import { arteDoTrabalho, criativoParaLer } from "../../supabase/functions/_shared/mcp-mesas-formato";
+import { acaoPermitida, laminasDoTrabalho, prazoDaAcao } from "../../supabase/functions/mcp-server/modulos/mcp-mesas-ponte";
+import { arteDoTrabalho, criativoParaLer } from "../../supabase/functions/mcp-server/modulos/mcp-mesas-formato";
 
 /**
  * MCP 2.12 (pedido do dono em 16/10/2026): os agentes do Paperclip gravavam
@@ -17,7 +17,7 @@ import { arteDoTrabalho, criativoParaLer } from "../../supabase/functions/_share
 const raiz = resolve(__dirname, "../..");
 const ler = (c: string) => readFileSync(resolve(raiz, c), "utf8");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
-const acoes = ler("supabase/functions/_shared/mcp-mesas-acoes.ts");
+const acoes = ler("supabase/functions/mcp-server/modulos/mcp-mesas-acoes.ts");
 
 const NOVAS = [
   "aceleriq_mesa_ads_plano_gerar",
@@ -109,7 +109,7 @@ describe("Mesa Ads pelo MCP: plano, criativos, arte e gestor", () => {
       expect(definicao(nome)).not.toContain("longa: true");
     }
     // O fim aparece na leitura da Mesa Ads.
-    const servicos = ler("supabase/functions/_shared/mcp-mesas-services.ts");
+    const servicos = ler("supabase/functions/mcp-server/modulos/mcp-mesas-services.ts");
     expect(servicos).toContain("andamento");
     expect(servicos).toContain(":concluida");
   });

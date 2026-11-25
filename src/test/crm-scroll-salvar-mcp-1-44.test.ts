@@ -22,7 +22,8 @@ const quadro = ler("src/components/sistema/QuadroKanban.tsx");
 const pagina = ler("src/pages/AdminComercial.tsx");
 const lib = ler("src/lib/comercial.ts");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
-const servico = ler("supabase/functions/_shared/aceleriq-commercial-services.ts");
+const escopos = ler("supabase/functions/_shared/mcp-scope-list.ts");
+const servico = ler("supabase/functions/mcp-server/modulos/aceleriq-commercial-services.ts");
 const auth = ler("supabase/functions/_shared/mcp-auth.ts");
 const seguranca = ler("supabase/functions/_shared/mcp-security.ts");
 const metadata = ler("supabase/functions/mcp-oauth-metadata/index.ts");
@@ -93,16 +94,16 @@ describe("o MCP tem o CRM inteiro na 1.44.0", () => {
   });
 
   it("o escopo commercial:write está em todas as pontas, como o de leitura", () => {
-    expect(tools).toContain("| 'commercial:write'");
+    expect(escopos).toContain("| 'commercial:write'");
     expect(tools).toContain("'commercial:write': { title: 'Comercial — escrita'");
     expect(tools).toContain("'editorial:write', 'clients:write', 'commercial:write',");
     expect(auth).toContain("'editorial:write','commercial:write']");
     expect(seguranca).toContain("'commercial:write',");
-    // O metadata OAuth deriva de ALL_SCOPES (mcp-tools.ts) em vez de manter
-    // copia propria; a garantia agora e que ALL_SCOPES tem o par e que o
-    // metadata importa dela.
-    expect(tools).toMatch(/export const ALL_SCOPES[\s\S]*?'commercial:read',\s*'commercial:write',[\s\S]*?\] as const;/);
-    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-tools.ts'");
+    // O metadata OAuth deriva de ALL_SCOPES (mcp-scope-list.ts, reexportada
+    // por mcp-tools.ts) em vez de manter copia propria; a garantia agora e
+    // que ALL_SCOPES tem o par e que o metadata importa dela.
+    expect(escopos).toMatch(/export const ALL_SCOPES[\s\S]*?'commercial:read',\s*'commercial:write',[\s\S]*?\] as const;/);
+    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-scope-list.ts'");
     expect(metadata).toContain("mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES");
   });
 

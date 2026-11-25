@@ -6,7 +6,7 @@
 import { getMcpRuntimeConfig } from '../_shared/mcp-runtime.ts';
 import { MCP_VERSION } from '../_shared/mcp-release.ts';
 import { MCP_RELEASE_SOURCE } from '../_shared/mcp-release-source.ts';
-import { ALL_SCOPES } from '../_shared/mcp-tools.ts';
+import { ALL_SCOPES } from '../_shared/mcp-scope-list.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -26,8 +26,10 @@ const {
 const MCP_PROTOCOL = '2025-06-18';
 
 const OAUTH_SCOPES = ['openid', 'email', 'profile'];
-// Uma unica fonte: a lista de escopos vive em mcp-tools.ts (ALL_SCOPES).
-// A copia local divergia da do mcp-server e da do catalogo.
+// Uma unica fonte: a lista de escopos vive em mcp-scope-list.ts (ALL_SCOPES),
+// reexportada pelo catalogo mcp-tools.ts. Importar direto daqui evita puxar o
+// catalogo e seus servicos para esta funcao. A copia local divergia da do
+// mcp-server e da do catalogo.
 const INTERNAL_MCP_SCOPES: readonly string[] = ALL_SCOPES;
 
 async function proxyAuthorizationServerMetadata() {

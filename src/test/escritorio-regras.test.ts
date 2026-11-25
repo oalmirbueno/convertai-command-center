@@ -13,7 +13,7 @@ const MODELOS = {
   pedido_material: { nome: "Pedido de material", texto: "Oi, [nome do cliente]. Pode mandar o material?" },
 };
 const MENSAGENS = { hora_inicio: 9, hora_fim: 18, max_por_assunto: 2, intervalo_dias: 6, modelos: MODELOS };
-const erros = (r: ReturnType<typeof validarLimites>) => (r.ok ? {} : r.erros);
+const erros = (r: ReturnType<typeof validarLimites>) => (r.ok === false ? r.erros : {});
 
 describe("limites de cada regra", () => {
   it("conteúdo: rejeições inteiras de 0 a 5; o texto digitado vira número", () => {

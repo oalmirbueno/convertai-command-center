@@ -12,7 +12,7 @@
  * resposta inteira.
  */
 
-import { db, isUuid } from '../../_shared/aceleriq-read-services.ts';
+import { db, isUuid } from './aceleriq-read-services.ts';
 import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
 import { exigirClienteExistente } from '../../_shared/mcp-client-id-guard.ts';
 import { comNovaTentativa, comPrazo, ErroDaFerramenta, explicarErro } from './robustez.ts';

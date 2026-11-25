@@ -17,7 +17,7 @@ const sql = readFileSync(
 );
 const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
 const servico = readFileSync(
-  resolve(raiz, "supabase/functions/_shared/aceleriq-metrics-services.ts"), "utf8",
+  resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-metrics-services.ts"), "utf8",
 );
 const ferramentas = readFileSync(
   resolve(raiz, "supabase/functions/_shared/mcp-tools.ts"), "utf8",

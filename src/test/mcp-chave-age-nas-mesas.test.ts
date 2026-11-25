@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
  */
 
 const raiz = resolve(__dirname, "../..");
-const acoes = readFileSync(resolve(raiz, "supabase/functions/_shared/mcp-mesas-acoes.ts"), "utf8");
-const ponte = readFileSync(resolve(raiz, "supabase/functions/_shared/mcp-mesas-ponte.ts"), "utf8");
+const acoes = readFileSync(resolve(raiz, "supabase/functions/mcp-server/modulos/mcp-mesas-acoes.ts"), "utf8");
+const ponte = readFileSync(resolve(raiz, "supabase/functions/mcp-server/modulos/mcp-mesas-ponte.ts"), "utf8");
 
 describe("a chave do agente age nas mesas em nome do dono", () => {
   it("só dono admin ou gestor empresta a sessão; chave sem dono continua só lendo", () => {

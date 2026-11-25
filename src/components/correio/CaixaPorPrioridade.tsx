@@ -12,7 +12,7 @@ import LogoDoRemetente, { corDaPessoa } from "./LogoDoRemetente";
 
 export { corDaPessoa };
 
-const cartao = "min-w-0 rounded-3xl bg-card";
+const cartao = "min-w-0 rounded-lg bg-card";
 const acao = juntar("inline-flex h-9 items-center rounded-full border border-border bg-card px-3.5 text-[13px] font-medium hover:bg-muted", foco);
 const POR_PAGINA = 30;
 
@@ -150,15 +150,15 @@ export default function CaixaPorPrioridade({ caixa, eu }: { caixa: CaixaDoCorrei
   return (
     <div className={juntar("grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[208px_minmax(320px,420px)_minmax(0,1fr)]", altura)} data-caixa-por-prioridade="">
       {/* Pastas */}
-      <nav className={juntar("correio-pastas correio-rolagem min-w-0 rounded-3xl p-2 lg:overflow-y-auto", aberta && "max-lg:hidden")} aria-label="Pastas">
-        <p className="hidden px-3 pb-2 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] opacity-60 lg:block">Pastas</p>
+      <nav className={juntar("correio-pastas correio-rolagem min-w-0 rounded-lg p-2 lg:overflow-y-auto", aberta && "max-lg:hidden")} aria-label="Pastas">
+        <p className="hidden px-3 pb-2 pt-2 text-[11px] font-semibold opacity-60 lg:block">Pastas</p>
         <ul className="flex min-w-0 [&>*]:mr-1 [&>*:last-child]:mr-0 overflow-x-auto lg:flex-col lg:overflow-visible" data-pastas-do-correio="">
           {listaDePastas.map((p) => {
             const Icone = p.icone;
             const ativa = p.id === pasta;
             return (
               <li key={p.id} className="shrink-0">
-                <button type="button" onClick={() => setPasta(p.id)} aria-current={ativa ? "page" : undefined} className={juntar("flex h-10 w-full min-w-0 items-center rounded-2xl px-3 text-left text-[14px]", foco)} data-pasta={p.id}>
+                <button type="button" onClick={() => setPasta(p.id)} aria-current={ativa ? "page" : undefined} className={juntar("flex h-10 w-full min-w-0 items-center rounded-lg px-3 text-left text-[14px]", foco)} data-pasta={p.id}>
                   <Icone className="mr-2.5 h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate">{p.nome}</span>
                   {p.nao_lidas > 0 && <span className="correio-contador ml-2 rounded-full px-1.5 text-[11px] font-semibold tabular-nums">{p.nao_lidas}</span>}
@@ -309,7 +309,7 @@ export function LeituraDaMensagem({ caixa, pasta, m, eu, aoVoltar, rotuloVoltar 
             {lida.data.anexos.length > 0 && (
               <ul className="mt-5 flex min-w-0 flex-wrap [&>*]:mb-2 [&>*]:mr-2">
                 {lida.data.anexos.map((a, i) => (
-                  <li key={`${a.nome}-${i}`} className="flex items-center rounded-2xl bg-muted px-3.5 py-2.5 text-[13px] font-medium">
+                  <li key={`${a.nome}-${i}`} className="flex items-center rounded-lg bg-muted px-3.5 py-2.5 text-[13px] font-medium">
                     <Paperclip className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     {a.nome}
                   </li>
@@ -319,7 +319,7 @@ export function LeituraDaMensagem({ caixa, pasta, m, eu, aoVoltar, rotuloVoltar 
           </>
         )}
       </div>
-      <div id="resposta-do-correio" className="mt-6 rounded-2xl border border-border p-4">
+      <div id="resposta-do-correio" className="mt-6 rounded-lg border border-border p-4">
         <p className={juntar(texto.corpo, "mb-2 font-semibold")}>Responder para {enderecoDe(m.de) || "o remetente"}</p>
         <textarea value={resposta} onChange={(e) => setResposta(e.target.value)} rows={5} aria-label="Sua resposta" placeholder="Escreva a resposta" className="w-full resize-y rounded-xl bg-muted p-3.5 text-[14px] leading-6 outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring" data-campo-resposta="" />
         <div className="mt-3 flex justify-end">
@@ -338,7 +338,7 @@ export function Linha({ m, aberta, aoAbrir, aoPreparar, enviados }: { m: Mensage
   const quem = enviados ? `Para ${nomeDe(m.para)}` : nomeDe(m.de);
   const endereco = enderecoDe(enviados ? m.para : m.de);
   return (
-    <button type="button" onClick={() => aoAbrir(m.id)} onMouseEnter={aoPreparar ? () => aoPreparar(m.id) : undefined} onFocus={aoPreparar ? () => aoPreparar(m.id) : undefined} aria-pressed={aberta} className={juntar("mb-1 flex w-full min-w-0 items-start rounded-2xl p-3 text-left", foco, !aberta && "hover:bg-muted/70")} data-mensagem={m.id}>
+    <button type="button" onClick={() => aoAbrir(m.id)} onMouseEnter={aoPreparar ? () => aoPreparar(m.id) : undefined} onFocus={aoPreparar ? () => aoPreparar(m.id) : undefined} aria-pressed={aberta} className={juntar("mb-1 flex w-full min-w-0 items-start rounded-lg p-3 text-left", foco, !aberta && "hover:bg-muted/70")} data-mensagem={m.id}>
       <LogoDoRemetente endereco={endereco} nome={enviados ? m.para : nomeDe(m.de)} tamanho={38} className="mr-3" />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline">

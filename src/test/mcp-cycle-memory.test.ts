@@ -19,7 +19,7 @@ const servicosMemoria = readFileSync(
   "utf8",
 );
 const servicosLeitura = readFileSync(
-  resolve(raiz, "supabase/functions/_shared/aceleriq-read-services.ts"),
+  resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-read-services.ts"),
   "utf8",
 );
 
