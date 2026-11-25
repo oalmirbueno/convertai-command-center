@@ -32,21 +32,33 @@ export function parseMigrationManifest(text, source = manifestPath) {
   return entries
 }
 
-export function verifyAppendOnlyManifest(currentEntries, baseEntries) {
+const migrationPathPattern = /^supabase\/migrations\/[0-9]{14}_[A-Za-z0-9._-]+\.sql$/
+
+// baseUnlisted: SQL migrations tracked in the base commit but absent from its
+// manifest, mapped to the SHA-256 of the base blob (null when not a regular file).
+export function verifyAppendOnlyManifest(currentEntries, baseEntries, baseUnlisted = new Map()) {
   for (const [path, baseHash] of baseEntries) {
     const currentHash = currentEntries.get(path)
     if (!currentHash) fail(`published entry was removed: ${path}`)
     if (currentHash !== baseHash) fail(`published entry changed: ${path}`)
   }
 
-  const baseMigrations = [...baseEntries.keys()]
+  for (const [path, baseHash] of baseUnlisted) {
+    const currentHash = currentEntries.get(path)
+    if (!currentHash) fail(`existing unlisted migration was removed: ${path}`)
+    if (typeof baseHash !== 'string' || !/^[0-9a-f]{64}$/.test(baseHash) || baseHash !== currentHash) {
+      fail(`existing unlisted migration changed since base: ${path}`)
+    }
+  }
+
+  const baseMigrations = [...baseEntries.keys(), ...baseUnlisted.keys()]
     .filter(path => path.startsWith('supabase/migrations/'))
     .map(path => path.slice('supabase/migrations/'.length))
     .sort()
   const latestBaseVersion = baseMigrations.at(-1)?.slice(0, 14) ?? ''
 
   for (const path of currentEntries.keys()) {
-    if (baseEntries.has(path)) continue
+    if (baseEntries.has(path) || baseUnlisted.has(path)) continue
     if (!path.startsWith('supabase/migrations/')) {
       fail(`new non-migration ledger entry is not allowed: ${path}`)
     }
@@ -162,11 +174,7 @@ function verifyCurrentFiles(entries) {
 
 function readBaseManifest(baseRef) {
   try {
-    return execFileSync(
-      'git',
-      ['show', `${baseRef}:${manifestPath}`],
-      { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-    )
+    return git(['show', `${baseRef}:${manifestPath}`])
   } catch (error) {
     const stderr = error && typeof error === 'object' && 'stderr' in error
       ? String(error.stderr)
@@ -179,29 +187,69 @@ function readBaseManifest(baseRef) {
 }
 
 function readBaseSourceEntries(baseRef) {
-  const output = execFileSync(
-    'git',
-    [
-      'ls-tree', '-r', '--name-only', baseRef, '--',
-      'supabase/migrations', bootstrapPath,
-    ],
-    { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-  )
+  const output = git([
+    'ls-tree', '-r', '--name-only', baseRef, '--',
+    'supabase/migrations', bootstrapPath,
+  ])
   const entries = new Map()
   for (const path of output.split(/\r?\n/).filter(Boolean).sort()) {
     if (
       path !== bootstrapPath
       && !/^supabase\/migrations\/[0-9]{14}_[A-Za-z0-9._-]+\.sql$/.test(path)
     ) continue
-    const bytes = execFileSync(
-      'git',
-      ['show', `${baseRef}:${path}`],
-      { cwd: repoRoot, encoding: null, stdio: ['ignore', 'pipe', 'pipe'] },
-    )
+    const bytes = git(['show', `${baseRef}:${path}`], null)
     entries.set(path, createHash('sha256').update(bytes).digest('hex'))
   }
   if (entries.size === 0) fail(`${baseRef} contains no migration source`)
   return entries
+}
+
+function git(args, encoding = 'utf8') {
+  return execFileSync(
+    'git',
+    ['--no-replace-objects', ...args],
+    {
+      cwd: repoRoot,
+      encoding,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+      maxBuffer: 256 * 1024 * 1024,
+    },
+  )
+}
+
+function resolveBaseCommit(baseRef) {
+  if (typeof baseRef !== 'string' || !baseRef || baseRef.startsWith('-')) {
+    fail('--base-ref must be a Git ref')
+  }
+  let commit
+  try {
+    commit = git(['rev-parse', '--verify', '--quiet', '--end-of-options', `${baseRef}^{commit}`]).trim()
+  } catch {
+    fail(`cannot resolve base ref ${baseRef}`)
+  }
+  if (!/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(commit)) fail(`cannot resolve base ref ${baseRef}`)
+  return commit
+}
+
+function readBaseUnlistedMigrations(baseCommit, baseEntries) {
+  const output = git(['ls-tree', '-r', '-z', '--full-tree', baseCommit, '--', 'supabase/migrations'])
+  const unlisted = new Map()
+  for (const record of output.split('\0')) {
+    if (!record) continue
+    const match = record.match(/^([0-7]{6}) (blob|tree|commit) ([0-9a-f]{40}(?:[0-9a-f]{24})?)\t(.+)$/s)
+    if (!match) fail(`unexpected git ls-tree output for ${baseCommit}`)
+    const [, mode, type, objectId, path] = match
+    if (!migrationPathPattern.test(path) || baseEntries.has(path)) continue
+    const regular = type === 'blob' && (mode === '100644' || mode === '100755')
+    unlisted.set(
+      path,
+      regular
+        ? createHash('sha256').update(git(['cat-file', 'blob', objectId], null)).digest('hex')
+        : null,
+    )
+  }
+  return unlisted
 }
 
 export function verifyMigrationIntegrity({ baseRef } = {}) {
@@ -209,12 +257,13 @@ export function verifyMigrationIntegrity({ baseRef } = {}) {
   const currentEntries = parseMigrationManifest(currentText)
   verifyCurrentFiles(currentEntries)
 
-  if (baseRef) {
-    const baseText = readBaseManifest(baseRef)
+  if (baseRef !== undefined) {
+    const baseCommit = resolveBaseCommit(baseRef)
+    const baseText = readBaseManifest(baseCommit)
     if (baseText === null) {
       const initial = verifyInitialBaseline(
         currentEntries,
-        readBaseSourceEntries(baseRef),
+        readBaseSourceEntries(baseCommit),
         parseBaselineExceptions(),
       )
       return {
@@ -224,7 +273,11 @@ export function verifyMigrationIntegrity({ baseRef } = {}) {
       }
     }
     const baseEntries = parseMigrationManifest(baseText, `${baseRef}:${manifestPath}`)
-    verifyAppendOnlyManifest(currentEntries, baseEntries)
+    verifyAppendOnlyManifest(
+      currentEntries,
+      baseEntries,
+      readBaseUnlistedMigrations(baseCommit, baseEntries),
+    )
   }
   return {
     files: currentEntries.size,

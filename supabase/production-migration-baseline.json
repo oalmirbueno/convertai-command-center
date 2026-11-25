@@ -3283,6 +3283,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261120090000",
+      "path": "supabase/migrations/20261120090000_licencas_dk_financeiro.sql",
+      "local_sha256": "e08451a94692c1d8c608507e620ec1ef615173d776f64be88e2dd9d8224ffcfe",
+      "remote_name": "licencas_dk_financeiro",
+      "remote_statements_sha256": "00aa9c15ceb0d422901f21db9dbbeed580c1760f73b65797c4f5df0e58a37d99",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261125120000",
       "path": "supabase/migrations/20261125120000_intermediador_dos_grupos.sql",
       "local_sha256": "e5feda98cc6552d766122fd5620e0a3b811c3aaaa32a5b0f3aa0336c6c08a97d",
