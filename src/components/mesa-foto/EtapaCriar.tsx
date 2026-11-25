@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { Cartao, MiniaturaDaFoto, useMesaFoto, type EtapaDaMesaFoto } from "./Comuns";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { foco, juntar } from "@/components/sistema/estilos";
+import { foco, juntar, superficie } from "@/components/sistema/estilos";
 import { fotosParaRevisar, periodoDaCampanha, rotuloDoTipo, useCampanhasDaMesa, useEnsaios, useFotos, useKits } from "./fotoApi";
 import { ICONES_DOS_OBJETIVOS, useSeguirNaLinha } from "./GuiaDaLinha";
 import { OBJETIVOS } from "./linhaDeProducao";
@@ -81,7 +81,8 @@ export default function EtapaCriar() {
                   title={`${o.texto} Precisa: ${o.precisa}.`}
                   className={juntar(
                     // v4 (azulejos das referências): ícone num círculo grande no centro; o escolhido fica com o círculo de tinta.
-                    "group flex h-full w-full min-w-0 flex-col items-center justify-center rounded-lg border bg-card px-2 pb-4 pt-5 text-center transition-colors hover:border-foreground/30",
+                    superficie.painel,
+                    "group flex h-full w-full min-w-0 flex-col items-center justify-center px-2 pb-4 pt-5 text-center transition-colors hover:border-foreground/30",
                     escolhido ? "border-foreground/40" : "border-border",
                     foco,
                   )}

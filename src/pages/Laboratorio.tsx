@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Brush, FolderOpen, Home, Maximize2, Minimize2, Palette, Workflow } from "lucide-react";
-import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import Etapas, { type ItemDeEtapa } from "@/components/sistema/Etapas";
 import { Carregando } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -141,12 +141,10 @@ export default function Laboratorio() {
       <header className={juntar("min-w-0 flex-wrap items-center", noCanvas ? "hidden" : "flex")} data-cabecalho-do-lab="">
         <div className="order-1 mr-3 min-w-0 flex-1 lg:flex-none">
           <p className={juntar(texto.etiqueta, "truncate uppercase tracking-[0.08em] text-muted-foreground")}>Criação livre</p>
-          <div className="flex min-w-0 items-center">
-            <h1 className={juntar(texto.tituloPagina, "min-w-0 truncate font-medium")}>Laboratório</h1>
-            <AjudaRecolhida className="ml-2">
-              Trabalhos avulsos com ou sem cliente, com a inteligência das mesas. Nada gera sem o custo à vista e o seu confirmar; o que sai fica em Arquivos e não entra na Mesa do cliente. {AJUDAS[aba]}
-            </AjudaRecolhida>
-          </div>
+          <CabecalhoDePagina
+            titulo="Laboratório"
+            ajuda={<>Trabalhos avulsos com ou sem cliente, com a inteligência das mesas. Nada gera sem o custo à vista e o seu confirmar; o que sai fica em Arquivos e não entra na Mesa do cliente. {AJUDAS[aba]}</>}
+          />
         </div>
         <div className="order-2 ml-auto flex shrink-0 items-center lg:order-3" data-acoes-do-cabecalho="">
           {/* Créditos do Laboratório (20/10): carteira + saldo; abre a janela com carregar e extrato. */}

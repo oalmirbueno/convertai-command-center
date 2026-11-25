@@ -89,7 +89,7 @@ function Porta({ email, aoAbrir }: { email: string; aoAbrir: () => void }) {
   return (
     <main className="flex min-w-0 flex-1 items-center justify-center px-4 py-10" data-porta-do-correio="">
       <form
-        className="w-full max-w-[400px] rounded-3xl bg-card p-7"
+        className="w-full max-w-[400px] rounded-lg bg-card p-7"
         onSubmit={(e) => {
           e.preventDefault();
           void entrar();
@@ -138,8 +138,8 @@ function ConectarCaixa({ caixa, aoConectar }: { caixa: CaixaDoCorreio; aoConecta
     }
   };
   return (
-    <div className="mx-auto max-w-[520px] rounded-3xl bg-card p-6" data-conectar-caixa="">
-      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+    <div className="mx-auto max-w-[520px] rounded-lg bg-card p-6" data-conectar-caixa="">
+      <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-muted-foreground">
         <KeyRound className="h-5 w-5" aria-hidden="true" />
       </span>
       <h2 className={juntar(texto.tituloSecao, "mt-4")}>Conectar {caixa.endereco}</h2>
@@ -169,8 +169,8 @@ function SeletorDeCaixa({ caixas, atual, master, aoEscolher }: { caixas: CaixaDo
   return (
     <Popover open={aberto} onOpenChange={setAberto}>
       <PopoverTrigger asChild>
-        <button type="button" className={juntar("flex h-11 min-w-0 max-w-full items-center rounded-2xl bg-muted pl-2 pr-3 hover:bg-muted/70 sm:w-[300px]", foco)} aria-label={`Caixa aberta: ${atual.endereco}. Trocar de caixa`} data-caixas-do-correio="">
-          <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-foreground text-[12px] font-semibold uppercase text-background" aria-hidden="true">{atual.endereco.slice(0, 1)}</span>
+        <button type="button" className={juntar("flex h-11 min-w-0 max-w-full items-center rounded-lg bg-muted pl-2 pr-3 hover:bg-muted/70 sm:w-[300px]", foco)} aria-label={`Caixa aberta: ${atual.endereco}. Trocar de caixa`} data-caixas-do-correio="">
+          <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-foreground text-[12px] font-semibold text-background" aria-hidden="true">{atual.endereco.slice(0, 1).toUpperCase()}</span>
           <span className="min-w-0 flex-1 text-left">
             <span className="block truncate text-[14px] font-semibold leading-5">{atual.endereco}</span>
             <span className="block truncate text-[12px] leading-4 text-muted-foreground">{atual.ligado ? (atual.minha ? "Sua caixa" : atual.dono ? `De ${atual.dono}` : "Caixa da empresa") : "Falta conectar"}</span>
@@ -178,9 +178,9 @@ function SeletorDeCaixa({ caixas, atual, master, aoEscolher }: { caixas: CaixaDo
           {caixas.length > 1 && <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[340px] rounded-3xl p-2">
+      <PopoverContent align="end" className="w-[340px] rounded-lg p-2">
         <div className="flex items-center px-3 pb-2 pt-1.5">
-          <span className={juntar(texto.auxiliar, "flex-1 font-semibold uppercase tracking-wide")}>Caixas</span>
+          <span className={juntar(texto.auxiliar, "flex-1 font-semibold")}>Caixas</span>
           {master && (
             <span className={juntar(etiqueta, "bg-muted text-foreground")} title="Você administra a empresa e vê todas as caixas">
               <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />
@@ -201,10 +201,10 @@ function SeletorDeCaixa({ caixas, atual, master, aoEscolher }: { caixas: CaixaDo
                     aoEscolher(c.id);
                     setAberto(false);
                   }}
-                  className={juntar("flex w-full min-w-0 items-center rounded-2xl p-2.5 text-left", foco, ativa ? "bg-muted" : "hover:bg-muted/60")}
+                  className={juntar("flex w-full min-w-0 items-center rounded-lg p-2.5 text-left", foco, ativa ? "bg-muted" : "hover:bg-muted/60")}
                   data-caixa-opcao={c.endereco}
                 >
-                  <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[13px] font-semibold uppercase", ativa ? "bg-foreground text-background" : "bg-muted text-foreground")} aria-hidden="true">{c.endereco.slice(0, 1)}</span>
+                  <span className={juntar("mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[13px] font-semibold", ativa ? "bg-foreground text-background" : "bg-muted text-foreground")} aria-hidden="true">{c.endereco.slice(0, 1).toUpperCase()}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-medium">{c.endereco}</span>
                     <span className="flex items-center text-[12px] text-muted-foreground">
@@ -244,7 +244,7 @@ function CorreioAberto({ tema, aoAlternarTema }: { tema: TemaDoCorreio; aoAltern
   const euNoCorreio = d && d.liberado ? eu.data || null : null;
 
   let corpo;
-  if (minhas.isLoading || eu.isLoading) corpo = <div className="rounded-3xl bg-card p-5"><Carregando linhas={5} rotulo="Abrindo o correio" /></div>;
+  if (minhas.isLoading || eu.isLoading) corpo = <div className="rounded-lg bg-card p-5"><Carregando linhas={5} rotulo="Abrindo o correio" /></div>;
   else if (minhas.isError || !d) corpo = <EstadoDeErro acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void minhas.refetch()}>Tentar de novo</button>} />;
   else if (!d.conta && produto.data && produto.data.crm_da_empresa) corpo = <EstadoVazio icone={<KeyRound className="h-5 w-5" aria-hidden="true" />} titulo={`${produto.data.crm_da_empresa.nome} tem e-mail profissional`} descricao="O Correio abre com o usuário de cada pessoa, e não com o login geral do painel." acao={<button type="button" className={juntar(botao.primario, "correio-botao-forte")} onClick={() => troca.abrir("correio")} data-entrar-com-meu-usuario="">Entrar com o meu usuário</button>} />;
   else if (!d.conta) corpo = <EstadoVazio icone={<Inbox className="h-5 w-5" aria-hidden="true" />} titulo="Você ainda não tem uma caixa" descricao="O correio é das empresas com e-mail profissional na Aceleriq." acao={<Link to="/email" className={botao.primario}>Conhecer o e-mail profissional</Link>} />;
@@ -260,12 +260,12 @@ function CorreioAberto({ tema, aoAlternarTema }: { tema: TemaDoCorreio; aoAltern
   return (
     <div className="correio-tema min-h-[100dvh] min-w-0 text-foreground" data-correio={area}>
       <div className="mx-auto min-w-0 max-w-[1680px] space-y-4 p-3 sm:p-4">
-        <header className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2 rounded-3xl bg-card p-2" data-topo-do-correio="">
+        <header className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2 rounded-lg bg-card p-2" data-topo-do-correio="">
           <SaidaDoCorreio />
           <span className="flex h-11 shrink-0 items-center pl-1 pr-2" aria-label="Correio da Aceleriq"><LogoDoCorreio tamanho={34} className="max-sm:[&>.logo-do-topo]:hidden max-sm:[&>i]:hidden" /></span>
           <nav className="flex min-w-0 flex-1 [&>*]:mr-1 [&>*:last-child]:mr-0 overflow-x-auto max-md:order-last max-md:basis-full" aria-label="Áreas do correio">
             {AREAS.map((a) => (
-              <button key={a.id} type="button" onClick={() => irPara(a.id)} aria-current={a.id === area ? "page" : undefined} className={juntar("h-10 shrink-0 rounded-2xl px-4 text-[14px] font-medium", foco, a.id === area ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")} data-area-do-correio={a.id}>
+              <button key={a.id} type="button" onClick={() => irPara(a.id)} aria-current={a.id === area ? "page" : undefined} className={juntar("h-10 shrink-0 rounded-lg px-4 text-[14px] font-medium", foco, a.id === area ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")} data-area-do-correio={a.id}>
                 {a.nome}
               </button>
             ))}

@@ -130,7 +130,7 @@ export default function NovoClienteDeEmail({ onFechar }: { onFechar: () => void 
         <div className="space-y-4" data-cliente-cadastrado="">
           <p className={texto.corpo}><b>{empresa}</b> foi cadastrada. {emailResponsavel} recebeu o convite do painel, onde a pessoa acompanha tudo e traz os e-mails antigos sozinha.</p>
           {fim.link && (
-            <div className="rounded-2xl bg-muted p-4">
+            <div className="rounded-lg bg-muted p-4">
               <p className={juntar(texto.corpo, "font-semibold")}>Link de pagamento{fim.valor ? ` (${reais(fim.valor)})` : ""}</p>
               <p className={juntar(texto.auxiliar, "mt-1 break-all")}>{fim.link}</p>
               <button type="button" className={juntar(botao.secundario, "mt-3")} onClick={() => void navigator.clipboard.writeText(fim.link!).then(() => toast.success("Link copiado."))}><Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />Copiar o link</button>
@@ -138,7 +138,7 @@ export default function NovoClienteDeEmail({ onFechar }: { onFechar: () => void 
             </div>
           )}
           {fim.registros && (
-            <div className="rounded-2xl border border-border p-4">
+            <div className="rounded-lg border border-border p-4">
               <p className={juntar(texto.corpo, "font-semibold")}>{fim.criadas ? `${fim.criadas} caixa(s) criada(s) e convites enviados.` : "Domínio criado no Migadu."} Agora publique no DNS:</p>
               <pre className="mt-2 max-h-48 overflow-auto rounded-xl bg-muted p-3 text-[12px] leading-5">{fim.registros}</pre>
               <button type="button" className={juntar(botao.secundario, "mt-3")} onClick={() => void navigator.clipboard.writeText(fim.registros!).then(() => toast.success("Registros copiados."))}><Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />Copiar os registros</button>
@@ -164,7 +164,7 @@ export default function NovoClienteDeEmail({ onFechar }: { onFechar: () => void 
       ) : passo === 3 ? (
         <div className="space-y-3" data-caixas-do-cadastro="">
           {caixas.map((c, i) => (
-            <div key={i} className="grid grid-cols-1 gap-2 rounded-2xl border border-border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <div key={i} className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <label className="block">
                 <span className={juntar(texto.auxiliar, "mb-1 block")}>Endereço</span>
                 <span className="flex items-center"><input value={c.usuario} onChange={(e) => mudarCaixa(i, { usuario: e.target.value })} className={juntar(campo, "min-w-0 flex-1")} autoCapitalize="none" /><span className={juntar(texto.auxiliar, "ml-1.5 shrink-0")}>@{dom || "dominio"}</span></span>
@@ -204,7 +204,7 @@ function Campo({ rotulo, apoio, valor, aoMudar, tipo, placeholder, dado }: { rot
 
 function Escolha({ ativa, titulo, descricao, aoEscolher }: { ativa: boolean; titulo: string; descricao: string; aoEscolher: () => void }) {
   return (
-    <button type="button" onClick={aoEscolher} aria-pressed={ativa} className={juntar("flex w-full min-w-0 items-start rounded-2xl border p-3.5 text-left", foco, ativa ? "border-primary bg-accent-soft" : "border-border hover:bg-muted")}>
+    <button type="button" onClick={aoEscolher} aria-pressed={ativa} className={juntar("flex w-full min-w-0 items-start rounded-lg border p-3.5 text-left", foco, ativa ? "border-primary bg-accent-soft" : "border-border hover:bg-muted")}>
       <span className={juntar("mr-3 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", ativa ? "border-primary bg-primary text-primary-foreground" : "border-border")} aria-hidden="true">{ativa && <Check className="h-3 w-3" />}</span>
       <span className="min-w-0">
         <span className={juntar(texto.corpo, "block font-semibold")}>{titulo}</span>

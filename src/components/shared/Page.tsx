@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { superficie } from "@/components/sistema/estilos";
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 
 /**
  * Peças de layout compartilhadas por TODAS as telas (cliente, equipe, admin).
@@ -45,9 +46,8 @@ export function PageHeader({
             {eyebrow}
           </p>
         )}
-        <h1 className="truncate text-[20px] font-semibold leading-tight text-foreground">
-          {title}
-        </h1>
+        {/* O título é o do sistema (CabecalhoDePagina), como no PageHeader de components/ds. */}
+        <CabecalhoDePagina titulo={title} />
         {description && (
           <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
             {description}

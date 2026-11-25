@@ -54,7 +54,7 @@ export function useTemaDoCorreio(chave: string = CHAVE) {
 export function BotaoDoTema({ tema, aoAlternar }: { tema: TemaDoCorreio; aoAlternar: () => void }) {
   const escuro = tema === "escuro";
   return (
-    <button type="button" onClick={aoAlternar} className={juntar("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl hover:bg-muted", foco)} aria-label={escuro ? "Usar o tema claro" : "Usar o tema escuro"} title={escuro ? "Tema claro" : "Tema escuro"} data-tema-do-correio={tema}>
+    <button type="button" onClick={aoAlternar} className={juntar("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-muted", foco)} aria-label={escuro ? "Usar o tema claro" : "Usar o tema escuro"} title={escuro ? "Tema claro" : "Tema escuro"} data-tema-do-correio={tema}>
       {escuro ? <Sun className="h-[18px] w-[18px]" aria-hidden="true" /> : <Moon className="h-[18px] w-[18px]" aria-hidden="true" />}
     </button>
   );
