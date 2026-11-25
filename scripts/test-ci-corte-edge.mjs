@@ -28,6 +28,20 @@ const GRANT_TOOLS = new Set(['aceleriq_escritorio_entrar', 'aceleriq_projeto_ide
 const DENIED_NET = /CI_CORTE_EDGE_EGRESS_BLOCKED|NotCapable|PermissionDenied|Requires net access/;
 const REST_DIAGNOSTIC = /^CI_CORTE_EDGE_REST (key|key_state|grant|operator|project|profile) (fetch_failed|[1-5]\d{2} (?:empty|rows|other|unknown|PGRST\d{3}|[0-9][0-9A-Z]{4}|P0[0-9A-Z]{3}|XX[0-9A-Z]{3}))\r?\n/gm;
 
+// The Edge reads public.tasks with service_role (projeto-restrito.ts). No tracked SQL grants that read:
+// production relies on the legacy Supabase default grant, which the empty CI replay does not recreate
+// (same drift as the Elo proof in #171). Only a missing SELECT on this one fixed table is restored, only
+// in the disposable stack, and only what this run added is revoked in finally. Never input-derived.
+const legacyServiceRead = 'public.tasks';
+const privilegeProbe = `SELECT has_table_privilege('service_role', '${legacyServiceRead}', 'SELECT')::text || '/' ||
+  has_table_privilege('service_role', '${legacyServiceRead}', 'SELECT WITH GRANT OPTION')::text;`;
+
+export function parsePrivilege(out) {
+  const m = /^(true|false)\/(true|false)$/.exec(String(out).trim());
+  if (!m) throw new Error('Corte Edge: unexpected service_role privilege probe output.');
+  return { select: m[1] === 'true', grantOption: m[2] === 'true' };
+}
+
 const fail = (label) => { throw new Error(`Corte Edge: ${label}`); };
 const code = (value) => (typeof value === 'string' && /^[a-z_]{1,40}$/.test(value) ? value : 'unknown');
 const digest = (data) => createHash('sha256').update(data).digest('hex');
@@ -211,6 +225,50 @@ async function waitReady(state, rpc) {
   fail('Edge did not become ready.');
 }
 
+function restoreLegacyTaskRead(state) {
+  state.before = parsePrivilege(psql(privilegeProbe, {}, 'service_role tasks read probe'));
+  console.log(`Corte Edge marker: service_role tasks read before restore [${state.before.select ? 'select' : 'none'}].`);
+  if (!state.before.select) {
+    state.restored = true; // registered before the GRANT so finally revokes even after a partial failure
+    psql('GRANT SELECT ON TABLE ' + legacyServiceRead + ' TO service_role;', {}, 'restore legacy service_role tasks read');
+  }
+  const after = parsePrivilege(psql(privilegeProbe, {}, 'service_role tasks read recheck'));
+  if (!after.select || after.grantOption !== state.before.grantOption) fail('service_role tasks read restore did not apply exactly.');
+  console.log(`Corte Edge marker: legacy service_role SELECT restored for [${state.restored ? 'tasks' : 'none'}].`);
+}
+
+function revokeRestoredTaskRead(state, failures) {
+  if (!state.before) return;
+  if (state.restored) {
+    try { psql('REVOKE SELECT ON TABLE ' + legacyServiceRead + ' FROM service_role;', {}, 'revoke restored service_role tasks read'); }
+    catch { failures.push('Corte Edge: service_role tasks read revoke failed.'); }
+  }
+  try {
+    const final = parsePrivilege(psql(privilegeProbe, {}, 'service_role tasks read final probe'));
+    if (final.select !== state.before.select || final.grantOption !== state.before.grantOption) {
+      failures.push('Corte Edge: service_role tasks read was not returned to its original state.');
+    }
+  } catch { failures.push('Corte Edge: service_role tasks read final probe failed.'); }
+}
+
+// Fixed labels only: tells a read outage apart from a leak without printing any task data.
+export function foreignTaskVerdict(result) {
+  if (result?.ok === false && result.codigo === 'not_found') return null;
+  if (result?.ok === false && result.codigo === 'unavailable') return 'Corte Edge: foreign task read was unavailable (service_role cannot read tasks), not an isolation verdict.';
+  if (result?.ok === false) return `Corte Edge: foreign task read returned ${code(result.codigo)} instead of not_found.`;
+  return 'Corte Edge: a task outside the project was readable.';
+}
+
+export function ownTaskVerdict(result, taskId, projectId) {
+  if (result?.ok === false) return `Corte Edge: own task read failed with ${code(result.codigo)}.`;
+  // Real shape (readProjectTasks): { projeto_id, tarefas: [...] } with project_id stripped per task.
+  const tasks = Array.isArray(result?.tarefas) ? result.tarefas : null;
+  if (result?.projeto_id !== projectId || !tasks || tasks.length !== 1 || tasks[0]?.id !== taskId || 'project_id' in tasks[0]) {
+    return 'Corte Edge: own task read did not return exactly the granted task.';
+  }
+  return null;
+}
+
 async function exercise(edge, ids, token, video, service, sha) {
   const { localFetch, rpc, tool } = edge;
 
@@ -234,8 +292,13 @@ async function exercise(edge, ids, token, video, service, sha) {
   const prepareArgs = (taskId, key) => ({ task_id: taskId, tamanho_bytes: video.length, sha256: sha, idempotency_key: key, confirmar: true });
   toolError(await tool(token, 'aceleriq_projeto_video_preparar', prepareArgs(ids.other_task_id, `${idem}-fora`)), 'tarefa', 'prepare outside the project');
   rpcDenied(await tool(token, 'aceleriq_projeto_tarefas', { project_id: ids.other_project_id }), 200, 'forged project_id');
+  // Positive control first: an outage must not be mistaken for (or mask) the isolation verdict.
+  const own = success(await tool(token, 'aceleriq_projeto_tarefas', { task_id: ids.task_id }), 'own task read');
+  const ownError = ownTaskVerdict(own, ids.task_id, ids.project_id);
+  if (ownError) fail(ownError.slice('Corte Edge: '.length));
   const foreign = success(await tool(token, 'aceleriq_projeto_tarefas', { task_id: ids.other_task_id }), 'foreign task read');
-  assert(foreign?.ok === false && foreign.codigo === 'not_found', 'Corte Edge: a task outside the project was readable.');
+  const foreignError = foreignTaskVerdict(foreign);
+  if (foreignError) fail(foreignError.slice('Corte Edge: '.length));
 
   // Prepare (idempotent) and the signed, server-chosen destination.
   const prepared = success(await tool(token, 'aceleriq_projeto_video_preparar', prepareArgs(ids.task_id, idem)), 'prepare');
@@ -368,6 +431,31 @@ async function selfTest(video) {
     'Corte Edge step must follow the Deno cache and seed restore, and precede the Corte race.');
   assert(!/continue-on-error/.test(workflow.slice(edgeStep, at('- name: Verify Corte review concurrency'))), 'Corte Edge step must not be masked.');
 
+  // Restore stays SELECT-only on public.tasks, never with grant option, and is undone in finally.
+  const source = await readFile(new URL(import.meta.url), 'utf8');
+  assert.deepEqual([...source.matchAll(/'(GRANT|REVOKE) ([A-Z ]+) ON TABLE '/g)].map((m) => m[1] + ' ' + m[2]),
+    ['GRANT SELECT', 'REVOKE SELECT']);
+  assert.equal(legacyServiceRead, 'public.tasks');
+  assert.deepEqual(parsePrivilege('false/false\n'), { select: false, grantOption: false });
+  for (const bad of ['true', 'true/false;x', 'ERROR', '', 't/f']) assert.throws(() => parsePrivilege(bad));
+  // Strict negative: only not_found passes; unavailable is reported apart from a leak; no data echoed.
+  assert.equal(foreignTaskVerdict({ ok: false, codigo: 'not_found' }), null);
+  assert.match(foreignTaskVerdict({ ok: false, codigo: 'unavailable' }), /unavailable/);
+  assert.match(foreignTaskVerdict({ ok: false, codigo: 'denied' }), /denied instead of not_found/);
+  assert.equal(foreignTaskVerdict({ ok: false, codigo: 'Secret Title!' }), 'Corte Edge: foreign task read returned unknown instead of not_found.');
+  for (const leak of [{ ok: true, tarefa: { id: 'x', title: 'segredo' } }, { tarefas: [] }, null, undefined]) {
+    const msg = foreignTaskVerdict(leak);
+    assert.equal(msg, 'Corte Edge: a task outside the project was readable.');
+  }
+  const t = randomUUID(); const pr = randomUUID();
+  assert.equal(ownTaskVerdict({ projeto_id: pr, tarefas: [{ id: t, title: 'x' }] }, t, pr), null);
+  assert.match(ownTaskVerdict({ ok: false, codigo: 'unavailable' }, t, pr), /own task read failed with unavailable/);
+  for (const bad of [{ projeto_id: pr, tarefas: [] }, { projeto_id: randomUUID(), tarefas: [{ id: t }] }, { tarefas: [{ id: t }] },
+    { projeto_id: pr, tarefas: [{ id: t }, { id: t }] }, { projeto_id: pr, tarefas: [{ id: randomUUID() }] },
+    { projeto_id: pr, tarefas: [{ id: t, project_id: pr }] }, null]) {
+    assert.equal(ownTaskVerdict(bad, t, pr), 'Corte Edge: own task read did not return exactly the granted task.');
+  }
+
   assert(video.length >= 1024 && video.toString('ascii', 4, 12) === 'ftypisom', 'Invalid synthetic MP4 fixture.');
   console.log('Corte Edge self-test passed: loopback URLs, strict Deno flags, synthetic fixture and step order.');
 }
@@ -399,7 +487,9 @@ async function main() {
   let committed = false;
   let edge = null;
   const failures = [];
+  const taskRead = { before: null, restored: false };
   try {
+    restoreLegacyTaskRead(taskRead);
     const seeded = psql(fixture, ids, 'synthetic fixture');
     committed = true; // psql exited 0: revoke in finally even if the marker is unexpected.
     if (seeded !== 'corte edge fixture committed') fail('synthetic fixture did not report its commit.');
@@ -433,6 +523,7 @@ async function main() {
       try { psql(CLEANUP, pick(ids, ['key_id', 'author_id']), 'revoke synthetic key, grant and author binding'); }
       catch (error) { failures.push(safeMessage(error)); }
     }
+    revokeRestoredTaskRead(taskRead, failures);
     if (digest(await readFile(new URL('../deno.lock', import.meta.url))) !== lockBefore) failures.push('Corte Edge: deno.lock changed.');
   }
   if (failures.length) {
