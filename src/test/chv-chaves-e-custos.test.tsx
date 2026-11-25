@@ -514,7 +514,9 @@ describe("tela: Chaves e custos", () => {
   });
 
   it("Configurações: largura total, linha de chaves só para o admin, ?secao=chaves abre", async () => {
-    expect(ler("src/pages/SettingsPage.tsx")).not.toContain("max-w-3xl");
+    // A página não tem teto de largura; janela (DialogContent) pode ter o seu, como a de Dados da agência.
+    const foraDeJanela = ler("src/pages/SettingsPage.tsx").split("\n").filter((linha) => !linha.includes("<DialogContent"));
+    expect(foraDeJanela.join("\n")).not.toContain("max-w-3xl");
     expect(ler("src/components/config/EstadoDosMotores.tsx")).not.toContain("max-w-3xl");
     expect(ler("src/components/config/SuperpoderesDasMesas.tsx")).not.toContain("max-w-3xl");
     expect(ler("src/pages/SettingsPage.tsx")).toContain('lazy(() => import("@/components/config/ChavesECustos"))');
