@@ -29,7 +29,7 @@ import {
   CORTE,
   decidir,
   emHorario,
-  escolherPessoa,
+  escolherPessoas,
   ESTADOS_ABERTOS,
   INTERVALO_ENTRE_ASSUNTOS_MIN,
   lerNotas,
@@ -56,7 +56,7 @@ const ENVIA = { readOnlyHint: false, idempotentHint: false, destructiveHint: fal
 export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou'; tipo: string; texto: string; em: string }
 export interface Assunto {
   id: string; client_id: string; group_id: string; grupo_nome: string; tema: string; pergunta: string; para_que: string | null;
-  marcar_numero: string; marcar_nome: string | null; o_que_conta: string[]; pode_perguntar_de_volta: boolean;
+  marcar_numero: string; marcar_nome: string | null; marcar_numeros: string[]; marcar_nomes: string[]; o_que_conta: string[]; pode_perguntar_de_volta: boolean;
   prazo_horas: number; pedido_por: string; responder_para: string; idempotency_key: string; estado: string;
   pergunta_msg_id: string | null; perguntado_em: string | null; vence_em: string | null; lido_ate: string | null;
   envios_ao_cliente: number; perguntou_de_volta: boolean; itens: Record<string, unknown>; ouvidas: Ouvida[];
@@ -73,7 +73,7 @@ export interface MsgGrupo {
   texto: string | null; transcricao: string | null; transcricao_status: string | null; descricao_midia: string | null;
   resposta_a: string | null; occurred_at: string; received_at: string;
 }
-type NovoAssunto = Pick<Assunto, 'client_id' | 'group_id' | 'grupo_nome' | 'tema' | 'pergunta' | 'para_que' | 'marcar_numero' | 'marcar_nome' | 'o_que_conta' | 'pode_perguntar_de_volta' | 'prazo_horas' | 'pedido_por' | 'responder_para' | 'idempotency_key'>;
+type NovoAssunto = Pick<Assunto, 'client_id' | 'group_id' | 'grupo_nome' | 'tema' | 'pergunta' | 'para_que' | 'marcar_numero' | 'marcar_nome' | 'marcar_numeros' | 'marcar_nomes' | 'o_que_conta' | 'pode_perguntar_de_volta' | 'prazo_horas' | 'pedido_por' | 'responder_para' | 'idempotency_key'>;
 
 export interface PortaDoIntermediador {
   agora(): number;
@@ -105,7 +105,7 @@ export interface PortaDoIntermediador {
 
 // ─── A porta para o banco ───────────────────────────────────────
 
-const COL_ASSUNTO = 'id, client_id, group_id, grupo_nome, tema, pergunta, para_que, marcar_numero, marcar_nome, o_que_conta, pode_perguntar_de_volta, prazo_horas, pedido_por, responder_para, idempotency_key, estado, pergunta_msg_id, perguntado_em, vence_em, lido_ate, envios_ao_cliente, perguntou_de_volta, itens, ouvidas, resposta, motivo, devolvido_em, fechado_em, criado_em';
+const COL_ASSUNTO = 'id, client_id, group_id, grupo_nome, tema, pergunta, para_que, marcar_numero, marcar_nome, marcar_numeros, marcar_nomes, o_que_conta, pode_perguntar_de_volta, prazo_horas, pedido_por, responder_para, idempotency_key, estado, pergunta_msg_id, perguntado_em, vence_em, lido_ate, envios_ao_cliente, perguntou_de_volta, itens, ouvidas, resposta, motivo, devolvido_em, fechado_em, criado_em';
 const COL_ENVIO = 'id, assunto_id, tipo, destino, texto, texto_previa, mencoes, estado, message_id, criado_em, feito_em';
 
 function falhou(onde: string, error: { code?: string; message?: string } | null): never {
@@ -266,11 +266,17 @@ const ehAdmin = (ctx: AuthContext) => ctx.scopes.includes('admin');
 const primeiroNome = (n: string | null) => (n ?? '').trim().split(/\s+/)[0] || 'a pessoa marcada';
 const virgula = (x: number) => x.toFixed(2).replace('.', ',');
 
+/** As pessoas marcadas no assunto (as antigas só tinham uma). */
+export function marcadosDe(a: Pick<Assunto, 'marcar_numero' | 'marcar_nome' | 'marcar_numeros' | 'marcar_nomes'>) {
+  const numeros = a.marcar_numeros?.length ? a.marcar_numeros : [a.marcar_numero];
+  return numeros.map((numero, i) => ({ numero, nome: (a.marcar_numeros?.length ? a.marcar_nomes?.[i] : a.marcar_nome) || null }));
+}
+
 /** O que o agente vê do assunto: nunca o número de quem foi marcado. */
 export function mostrarAssunto(a: Assunto) {
   return {
     assunto_id: a.id, estado: a.estado, client_id: a.client_id, grupo: a.grupo_nome, tema: a.tema, pergunta: a.pergunta,
-    marcado: primeiroNome(a.marcar_nome), o_que_conta: a.o_que_conta, pedido_por: a.pedido_por, responder_para: a.responder_para,
+    marcado: marcadosDe(a).map((p) => primeiroNome(p.nome)).join(', '), o_que_conta: a.o_que_conta, pedido_por: a.pedido_por, responder_para: a.responder_para,
     perguntado_em: a.perguntado_em, vence_em: a.vence_em, mensagens_ao_cliente: a.envios_ao_cliente,
     ouvidas: a.ouvidas.map((o) => ({ como: o.como, tipo: o.tipo, texto: o.texto, em: o.em })),
     ...(a.resposta ? { resposta: a.resposta } : {}), ...(a.motivo ? { motivo: a.motivo } : {}), fechado_em: a.fechado_em,
@@ -350,7 +356,8 @@ export async function intermediadorPedir(input: unknown, ctx: AuthContext, porta
   const grupo = await porta.grupoDoCliente(d.client_id);
   if (!grupo) throw new ErroDaFerramenta('sem_grupo', 'Este cliente não tem grupo de WhatsApp lido pela Aceleriq.', 'O intermediador só pergunta em grupo que o leitor dos grupos já lê. Peça ao Almir para liberar o grupo.', false);
   const pessoas = await porta.pessoasDoGrupo(d.client_id);
-  const pessoa = escolherPessoa(pessoas, d.marcar);
+  const escolhidas = escolherPessoas(pessoas, d.marcar);
+  const pessoa = escolhidas[0];
   if (!pessoa) {
     const nomes = pessoas.map((x) => primeiroNome(x.nome)).filter((n, i, l) => l.indexOf(n) === i).slice(0, 8);
     throw new ErroDaFerramenta('sem_pessoa', d.marcar ? `Ninguém do cliente chamado "${d.marcar}" falou no grupo nos últimos 60 dias.` : 'Ninguém do cliente falou no grupo nos últimos 60 dias.',
@@ -359,7 +366,7 @@ export async function intermediadorPedir(input: unknown, ctx: AuthContext, porta
 
   const a = await porta.criarAssunto({
     client_id: d.client_id, group_id: grupo.group_id, grupo_nome: grupo.rotulo, tema: d.tema, pergunta: d.pergunta, para_que: d.para_que ?? null,
-    marcar_numero: pessoa.numero, marcar_nome: pessoa.nome, o_que_conta: d.o_que_conta,
+    marcar_numero: pessoa.numero, marcar_nome: pessoa.nome, marcar_numeros: escolhidas.map((p) => p.numero), marcar_nomes: escolhidas.map((p) => p.nome ?? ''), o_que_conta: d.o_que_conta,
     pode_perguntar_de_volta: d.pode_perguntar_de_volta ?? true, prazo_horas: d.prazo_horas ?? 24,
     pedido_por: eu.slug, responder_para: responder, idempotency_key: d.idempotency_key,
   });
@@ -451,7 +458,7 @@ async function julgar(porta: PortaDoIntermediador, a: Assunto, ouvidas: Ouvida[]
 const quemFalou = (m: MsgGrupo, a: Assunto) =>
   m.papel === 'bot' ? 'Aceleriq (aviso automático)'
     : String(m.papel ?? '').startsWith('agencia') ? 'Almir (agência)'
-    : `${primeiroNome(m.remetente_nome)}${m.remetente === a.marcar_numero ? ' (pessoa marcada)' : ''} (cliente)`;
+    : `${primeiroNome(m.remetente_nome)}${marcadosDe(a).some((p) => p.numero === m.remetente) ? ' (marcada)' : ''} (cliente)`;
 
 /** Escreve o texto no contexto (escritor do painel), limpa e confere com o Jev; até 2 tentativas. */
 export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tipo: TipoDeTexto, falta?: string | null): Promise<{ texto: string } | { motivo: string }> {
@@ -461,16 +468,17 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
     porta.mensagens(a.group_id, iso(agora - 3 * 86_400_000)),
   ]);
   const conversa = recentes.slice(-14).map((m) => `${quemFalou(m, a)}: ${conteudoDe(m).slice(0, 280)}`);
-  const nome = a.marcar_nome ? primeiroNome(a.marcar_nome) : null;
+  const marcados = marcadosDe(a);
+  const nome = marcados.length > 1 ? marcados.map((p) => primeiroNome(p.nome)).join(', ') : a.marcar_nome ? primeiroNome(a.marcar_nome) : null;
   let corrigir: string | null = null;
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     const pedido = pedidoAoEscritor({
-      tipo, cliente: ctx.nome, primeiro_nome: nome, tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, o_que_conta: a.o_que_conta,
+      tipo, cliente: ctx.nome, primeiro_nome: nome, marcados: marcados.length, tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, o_que_conta: a.o_que_conta,
       falta: falta ?? null, ja_disse: a.ouvidas.map((o) => o.texto), conversa_recente: conversa, contexto: ctx.dossie, corrigir,
     });
     const bruto = await porta.escrever({ clientId: a.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: a.id });
     if (!bruto) return { motivo: 'o escritor do painel não respondeu' };
-    const limpo = limparTexto(bruto, tipo);
+    const limpo = limparTexto(bruto, tipo, marcados.map((p) => p.nome));
     if (limpo.problema) {
       corrigir = limpo.problema;
       await porta.evento(a.id, 'texto_conferido', { tipo, tentativa, problema: limpo.problema });
@@ -480,7 +488,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
     try {
       const q = perguntasDoTexto(tipo, a.o_que_conta, falta);
       const mensagem = limpo.texto.split(MARCA).join(`@${nome ?? 'pessoa'}`);
-      const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, pontos: a.o_que_conta } }, q);
+      const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, pontos: a.o_que_conta } }, q);
       notas = Object.fromEntries(Object.keys(q).map((k) => [k, probabilidadeNoul(r.answers[k]) ?? (k === 'promete' ? 1 : 0)]));
     } catch {
       return { motivo: 'o Jev não conferiu o texto agora' };
@@ -503,7 +511,7 @@ async function enviarAoGrupo(porta: PortaDoIntermediador, a: Assunto, tipo: Tipo
     await porta.evento(a.id, 'texto_segurado', { tipo, motivo: escrito.motivo });
     return { a, ok: false };
   }
-  const t = comPessoa(escrito.texto, a.marcar_numero, a.marcar_nome);
+  const t = comPessoa(escrito.texto, marcadosDe(a).map((p) => p.numero), marcadosDe(a).map((p) => p.nome));
   const e = await porta.criarEnvio({ assunto_id: a.id, tipo, destino: 'grupo', texto: t.texto, texto_previa: t.texto_previa, mencoes: t.mencoes });
   if (!e) return { a, ok: false };
   return { a: (await porta.atualizarAssunto(a.id, { envios_ao_cliente: a.envios_ao_cliente + 1 })) ?? a, ok: true };
@@ -729,7 +737,7 @@ export const FERRAMENTAS_DO_INTERMEDIADOR: readonly ToolDefinition[] = [
         tema: { type: 'string', minLength: 3, maxLength: 120, description: 'Curto, como o cliente entende: "horário de fim de ano da loja".' },
         pergunta: { type: 'string', minLength: 8, maxLength: 400, description: 'O que o time precisa saber (o assistente reescreve no tom da conversa).' },
         para_que: { type: 'string', minLength: 3, maxLength: 160, description: 'Opcional: para que o time precisa disso, ex.: "para o post de fim de ano". Entra em poucas palavras na mensagem.' },
-        marcar: { type: 'string', maxLength: 80, description: 'Quem marcar: o primeiro nome de quem fala no grupo, ou "dono" (padrão: quem do cliente mais fala).' },
+        marcar: { type: 'string', maxLength: 80, description: 'Quem marcar: o primeiro nome da pessoa do cliente a quem o assunto se refere, "dono" (quem mais fala) ou "todos". Sem nada: a pessoa que responde quase sempre ou, se não houver uma, todos do cliente.' },
         o_que_conta: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', minLength: 2, maxLength: 120 }, description: 'Os pontos que precisam vir na resposta, ex.: ["abre ou não dia 24", "horário"].' },
         pode_perguntar_de_volta: { type: 'boolean', description: 'Padrão true: se faltar um ponto, pergunta só ele, uma vez.' },
         prazo_horas: { type: 'integer', minimum: 2, maximum: 72, description: 'Padrão 24. Lembrete na metade; vencido avisa o Almir.' },

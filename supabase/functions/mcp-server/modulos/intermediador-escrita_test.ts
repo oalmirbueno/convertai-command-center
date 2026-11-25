@@ -27,11 +27,12 @@ Deno.test('pedido ao escritor leva o ramo do cliente, a conversa recente e a reg
 Deno.test('limparTexto: tira aspas e travessão, garante uma menção e recusa "texto ou áudio"', () => {
   assertEquals(limparTexto('"@{pessoa}, vocês atendem dia 24 — e dia 31?"', 'pergunta'), { texto: '@{pessoa}, vocês atendem dia 24, e dia 31?', problema: null });
   assertEquals(limparTexto('Vocês atendem dia 24?', 'pergunta').texto, '@{pessoa}, vocês atendem dia 24?');
-  assertEquals(limparTexto('@pessoa oi! @{pessoa} tudo bem?', 'pergunta').texto, '@{pessoa} oi! tudo bem?');
+  assertEquals(limparTexto('@pessoa oi! @{pessoa} tudo bem?', 'pergunta').texto, '@{pessoa} oi! Tudo bem?');
   assert(limparTexto('@{pessoa} atendem dia 24? Pode responder por aqui mesmo, em texto ou áudio.', 'pergunta').problema?.includes('como responder'));
 });
 
 Deno.test('limparTexto: fechamento sem menção e sem pergunta; termo interno e cobrança barrados', () => {
+  assertEquals(limparTexto('Valeu, meu querido , entendi: chegou pelo post novo. anotado!', 'fechamento').texto, 'Valeu, meu querido, entendi: chegou pelo post novo. Anotado!');
   assertEquals(limparTexto('@{pessoa} perfeito, anotado!', 'fechamento'), { texto: 'perfeito, anotado!', problema: null });
   assert(limparTexto('Perfeito! Mais alguma coisa?', 'fechamento').problema?.includes('pergunta'));
   assert(limparTexto('@{pessoa} o Hermes precisa saber se vocês atendem dia 24', 'pergunta').problema?.includes('termo interno'));
@@ -53,4 +54,28 @@ Deno.test('comPessoa: número no grupo, primeiro nome na prévia', () => {
   const t = comPessoa('Oi @{pessoa}, tudo certo?', '554799990000', 'Thiélo Ramos');
   assertEquals(t, { texto: 'Oi @554799990000, tudo certo?', texto_previa: 'Oi @Thiélo, tudo certo?', mencoes: ['554799990000@s.whatsapp.net'] });
   assertEquals(comPessoa('Perfeito, anotado!', '554799990000', null).mencoes, []);
+});
+
+Deno.test('limparTexto: nome escrito à mão e marcador com o nome dentro viram uma menção só (caso real de 25/11)', () => {
+  assertEquals(limparTexto('@Marialex, @{Marialex}, pra colocar o horário certinho, vocês abrem sábado às 9h?', 'pergunta', 'Marialex Souza').texto,
+    '@{pessoa}, pra colocar o horário certinho, vocês abrem sábado às 9h?');
+  assertEquals(limparTexto('@Preserva, @{Preserva}, como vai funcionar a lavanderia dia 24?', 'pergunta', 'Preserva').texto,
+    '@{pessoa}, como vai funcionar a lavanderia dia 24?');
+  assertEquals(limparTexto('@{Thiélo} pode dar uma olhada no vídeo?', 'pergunta', 'Thiélo').texto, '@{pessoa} pode dar uma olhada no vídeo?');
+  // Outro nome com @ que não é a pessoa marcada fica como está.
+  assertEquals(limparTexto('@{pessoa}, o @Rui já viu?', 'pergunta', 'Thiélo').texto, '@{pessoa}, o @Rui já viu?');
+});
+
+Deno.test('conferência de promessa sabe que o pedido do time é fonte', () => {
+  const q = perguntasDoTexto('pergunta', ['a']);
+  assert(JSON.stringify(q.promete).includes('para_que do time'));
+});
+
+Deno.test('comPessoa com várias pessoas: todas marcadas no grupo, nomes na prévia', () => {
+  const t = comPessoa('@{pessoa}, vocês vão ter recesso?', ['554711110000', '554722220000'], ['Andreus Lima', 'Marcos']);
+  assertEquals(t.texto, '@554711110000 @554722220000, vocês vão ter recesso?');
+  assertEquals(t.texto_previa, '@Andreus @Marcos, vocês vão ter recesso?');
+  assertEquals(t.mencoes, ['554711110000@s.whatsapp.net', '554722220000@s.whatsapp.net']);
+  // O escritor às vezes escreve os dois nomes à mão: vira um marcador só (que depois marca os dois).
+  assertEquals(limparTexto('@Andreus e @Marcos, vocês vão ter recesso?', 'pergunta', ['Andreus Lima', 'Marcos']).texto, '@{pessoa}, vocês vão ter recesso?');
 });

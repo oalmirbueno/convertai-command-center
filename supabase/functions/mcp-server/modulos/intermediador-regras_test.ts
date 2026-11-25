@@ -4,6 +4,7 @@ import {
   decidir,
   emHorario,
   escolherPessoa,
+  escolherPessoas,
   type Notas,
   ouvida,
   perguntaProibida,
@@ -93,4 +94,27 @@ Deno.test('combinarNotas: mediana dos nouls e maioria da choice', () => {
   assertEquals(c.itens, [0.62, 0.9, 0.9]);
   assertEquals(c.humano, 0.1);
   assertEquals(c.relacao, 'responde');
+});
+
+Deno.test('escolherPessoas: nome = essa pessoa; todos = todo mundo; sem nada = quem responde quase sempre ou todos', () => {
+  const dois = [{ numero: '554711110000', nome: 'Andreus', mensagens: 20 }, { numero: '554722220000', nome: 'Marcos', mensagens: 11 }];
+  assertEquals(escolherPessoas(dois, 'Marcos').map((p) => p.nome), ['Marcos']);
+  assertEquals(escolherPessoas(dois, 'todos').map((p) => p.nome), ['Andreus', 'Marcos']);
+  assertEquals(escolherPessoas(dois, '').map((p) => p.nome), ['Andreus', 'Marcos']); // 20 de 31 não chega a 80%
+  assertEquals(escolherPessoas(dois, 'dono').map((p) => p.nome), ['Andreus']);
+  const quaseSo = [{ numero: '554711110000', nome: 'Thainá', mensagens: 95 }, { numero: '554722220000', nome: 'Ju', mensagens: 4 }];
+  assertEquals(escolherPessoas(quaseSo, undefined).map((p) => p.nome), ['Thainá']);
+  assertEquals(escolherPessoas(dois, 'Fulano'), []);
+  assertEquals(escolherPessoas([], 'todos'), []);
+});
+
+Deno.test('ouvida: com várias pessoas marcadas, qualquer uma delas é ouvida', () => {
+  const a = { marcar_numero: '554711110000', marcar_numeros: ['554711110000', '554722220000'] };
+  assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554722220000', resposta_a: null }, a, new Set()), 'marcada');
+  assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554733330000', resposta_a: null }, a, new Set()), null);
+});
+
+Deno.test('ponto que a resposta torna desnecessário conta como resolvido (caso real SKC, 25/11)', () => {
+  const q = perguntasAoJev(['tem recesso ou não', 'data de início e de volta']);
+  assert(JSON.stringify(q.item_1).includes('torna o ponto desnecessário'));
 });
