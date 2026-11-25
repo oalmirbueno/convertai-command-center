@@ -73,7 +73,7 @@ BEGIN
         ))) THEN
     RAISE EXCEPTION 'E2E_PROFILE_PLAN_TRIGGER_BINDING_CHANGED';
   END IF;
-  -- Reviewed MCP Corte triggers (20261123120000/20261123130000). Without HTTP:
+  -- Reviewed MCP Corte triggers (20261125202100/20261125202200). Without HTTP:
   -- mcp_agent_author_serializa only locks matching mcp_agent_author_attestations
   -- rows (none in this empty stack); the grant revocation reacts only to an
   -- UPDATE of deleted_at/status/client_id or a DELETE, while the seed only

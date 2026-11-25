@@ -22,7 +22,7 @@ bucket, caminho, URL ou autor; o banco deriva tudo da chave autenticada.
 1. `mcp_project_grants.allow_video_upload = true` na criação da concessão (padrão `false`, imutável).
 2. Vínculo ativo em `mcp_operator_author_profiles` (operador → perfil dedicado), criado por admin.
 3. Atestado ativo e conta de Auth dedicada, bloqueada para login, sem histórico de login e com `aceleriq_mcp_author_operator=corte` no metadado administrado pelo servidor.
-4. `MCP_PROJECT_VIDEO_WRITE=true` e `MCP_PROJECT_VIDEO_PROJECT_ID` igual ao projeto autorizado no servidor.
+4. `MCP_PROJECT_VIDEO_WRITE=true` (kill switch) e o projeto na allowlist explícita do servidor: `MCP_PROJECT_VIDEO_PROJECT_IDS` (UUIDs separados por vírgula) e/ou `MCP_PROJECT_VIDEO_PROJECT_ID` (legado, um UUID). As duas se somam; qualquer item que não seja UUID invalida a lista inteira (falha fechada) e lista vazia não libera ninguém. A allowlist só restringe: cada projeto continua exigindo sua própria chave `mcp:project`, concessão, autoria e revisão interna.
 
 Sem qualquer uma delas as tools não aparecem (`tools/list`) ou o banco recusa (`mcp_video:negado`/`autoria`).
 
@@ -61,11 +61,11 @@ mesmo `status` e o mesmo `assigned_to`. Qualquer mudança nega finalizar e pedir
 
 ## Ativação (manual, fora deste lote, depois de aprovada)
 
-1. Aplicar `20261123120000` e `20261123130000` pelo workflow do banco (backup confirmado).
+1. Aplicar `20261125202100` e `20261125202200` pelo workflow do banco (backup confirmado).
 2. Admin cria e bloqueia a conta dedicada ao Corte, define o marcador técnico e registra o atestado. O perfil recebe papel `design` e só a carteira autorizada.
 3. Admin insere o vínculo em `mcp_operator_author_profiles` (`configured_by` = o próprio admin).
 4. Emitir chave nova `mcp:project` e a concessão com `allow_video_upload = true`.
-5. Configurar `MCP_PROJECT_VIDEO_PROJECT_ID` para Skyfleet, então ligar `MCP_PROJECT_VIDEO_WRITE=true` e publicar pelo workflow autorizado.
+5. Configurar a allowlist (`MCP_PROJECT_VIDEO_PROJECT_IDS`, ou o legado `MCP_PROJECT_VIDEO_PROJECT_ID`) somente com os projetos autorizados (clientes próprios e a prova Casa dos Assados, conforme autorização), então ligar `MCP_PROJECT_VIDEO_WRITE=true` e publicar pelo workflow autorizado.
 
 ## Preview e rollback
 

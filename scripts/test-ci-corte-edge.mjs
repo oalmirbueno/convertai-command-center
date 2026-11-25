@@ -411,7 +411,9 @@ async function main() {
       ...(process.env.XDG_CACHE_HOME ? { XDG_CACHE_HOME: process.env.XDG_CACHE_HOME } : {}),
       CI_CORTE_EDGE_PORT: String(port), SUPABASE_URL: supabaseOrigin,
       SUPABASE_SERVICE_ROLE_KEY: local.ACELERIQ_E2E_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY: local.ACELERIQ_E2E_ANON_KEY,
-      APP_PUBLIC_URL: 'https://app.example.com', MCP_PROJECT_VIDEO_WRITE: 'true', MCP_PROJECT_VIDEO_PROJECT_ID: ids.project_id,
+      APP_PUBLIC_URL: 'https://app.example.com', MCP_PROJECT_VIDEO_WRITE: 'true',
+      // Both projects may accept writes, but this key is granted only one of them.
+      MCP_PROJECT_VIDEO_PROJECT_IDS: [ids.project_id, ids.other_project_id].join(','),
     });
     const client = edgeClient(`http://127.0.0.1:${port}`);
     await waitReady(edge, client.rpc);

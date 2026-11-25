@@ -10,7 +10,7 @@ import {
   validateOAuthJwtClaims,
 } from './mcp-security.ts';
 import { getMcpRuntimeConfig } from './mcp-runtime.ts';
-import { cachePrincipalFor, effectiveVideoWrite, grantScopes, hasOnlyProjectMarker, isProjectLive, isProjectScopedKey, resolveGrantRows, type ProjectGrant } from './mcp-project-access.ts';
+import { cachePrincipalFor, effectiveVideoWrite, grantScopes, hasOnlyProjectMarker, isProjectLive, isProjectScopedKey, projectAllowedForVideo, resolveGrantRows, type ProjectGrant } from './mcp-project-access.ts';
 
 export interface AuthContext {
   keyId: string;
@@ -440,11 +440,13 @@ async function loadProjectGrant(keyId: string): Promise<ProjectGrant | null> {
     if (error) return null;
     const record = resolveGrantRows(data, keyId);
     if (!record) return null;
-    // Envio de MP4: opt-in imutável da concessão E MCP_PROJECT_VIDEO_WRITE=true. O banco reconfere tudo na RPC.
+    // Envio de MP4: opt-in imutável da concessão E projeto na allowlist explícita do servidor
+    // (MCP_PROJECT_VIDEO_PROJECT_IDS ∪ MCP_PROJECT_VIDEO_PROJECT_ID legado) E MCP_PROJECT_VIDEO_WRITE=true (kill switch).
+    // O banco reconfere chave, concessão, operador, projeto, autoria e tarefa na RPC.
     const grant: ProjectGrant = {
       projectId: record.projectId, clientId: record.clientId, operatorSlug: record.operatorSlug,
       videoWrite: record.operatorSlug === 'corte'
-        && record.projectId === Deno.env.get('MCP_PROJECT_VIDEO_PROJECT_ID')
+        && projectAllowedForVideo(record.projectId, Deno.env.get('MCP_PROJECT_VIDEO_PROJECT_IDS'), Deno.env.get('MCP_PROJECT_VIDEO_PROJECT_ID'))
         && effectiveVideoWrite(record.allowVideoUpload, Deno.env.get('MCP_PROJECT_VIDEO_WRITE')),
     };
     const [op, proj, cli] = await Promise.all([

@@ -21,6 +21,8 @@ import {
   PROJECT_GRANT_ALLOWED_TOOLS,
   PROJECT_GRANT_WRITE_TOOLS,
   projectGrantAllowsTool,
+  projectAllowedForVideo,
+  videoProjectAllowlist,
   ProjectAccessError,
   readApprovedFile,
   readProjectTasks,
@@ -344,7 +346,7 @@ describe("ligação no servidor (texto-fonte)", () => {
     // capabilities (lista visível) usa o catálogo da credencial; as contagens continuam sobre TOOLS (legado).
     expect(tools).toContain("const visible = catalogoDe(ctx)");
     expect(tools).toContain("total: TOOLS.length,");
-    // Initialize e discovery seguem o legado (229): nada de PROJECT_TOOLS nas contagens.
+    // Initialize e discovery seguem o legado (TOOLS): nada de PROJECT_TOOLS nas contagens.
     const index = ler("supabase/functions/mcp-server/index.ts");
     expect(index).toContain("este servidor expoe ${TOOLS.length} tools nesta versao");
     expect(index).toContain("toolCount: TOOLS.length");
@@ -352,8 +354,8 @@ describe("ligação no servidor (texto-fonte)", () => {
     expect(index).toContain("const tool = toolFor(ctx, name);");
     expect(index).toContain("catalogoDe(auth.ctx).filter((t) => authorizeTool(auth.ctx, t))");
     expect(index).toMatch(/: TOOLS;/);
-    // Contrato legado: 229 tools; nenhuma delas é restrita.
-    expect(ler("supabase/functions/mcp-server/mcp_test.ts")).toContain("assertEquals(TOOLS.length, 229);");
+    // Contrato legado: a contagem fixa é do mcp_test.ts (dona da main); aqui só garante que ela existe e nenhuma restrita entra.
+    expect(ler("supabase/functions/mcp-server/mcp_test.ts")).toMatch(/assertEquals\(TOOLS\.length, \d+\);/);
     // As cinco tools do módulo são exatamente a lista preparada.
     const nomes = [...ler("supabase/functions/mcp-server/modulos/projeto-restrito.ts").matchAll(/^\s+name: '([a-z_]+)',$/gm)].map((m) => m[1]);
     expect(nomes.sort()).toEqual([...PROJECT_GRANT_ALLOWED_TOOLS, ...PROJECT_GRANT_WRITE_TOOLS].sort());
@@ -382,7 +384,7 @@ describe("ligação no servidor (texto-fonte)", () => {
   });
 
   it("migration: marcador mcp:project imutável em api_keys.scopes, só a criação nova entra", () => {
-    const sql = ler("supabase/migrations/20261123120000_mcp_project_grants.sql");
+    const sql = ler("supabase/migrations/20261125202100_mcp_project_grants.sql");
     expect(sql).toContain("CREATE TRIGGER api_keys_project_marker_guard");
     expect(sql).toContain("BEFORE INSERT OR UPDATE OF scopes, audience, is_active, revoked_at ON public.api_keys");
     // Recusa mudança de escopos que entre, saia ou altere chave marcada (independe de concessão/revogação).
@@ -400,7 +402,7 @@ describe("ligação no servidor (texto-fonte)", () => {
   });
 
   it("a migration é aditiva, fecha o RLS e não toca nas tabelas existentes", () => {
-    const sql = ler("supabase/migrations/20261123120000_mcp_project_grants.sql");
+    const sql = ler("supabase/migrations/20261125202100_mcp_project_grants.sql");
     expect(sql).toContain("ENABLE ROW LEVEL SECURITY");
     expect(sql).toMatch(/REVOKE ALL ON public\.mcp_project_grants FROM PUBLIC, anon, authenticated/);
     expect(sql).toContain("AND revoked_at IS NULL");
@@ -486,7 +488,62 @@ describe("aceleriq_escritorio_entrar: variante restrita x legado", () => {
     const defLegada = legado.slice(legado.indexOf("name: 'aceleriq_escritorio_entrar'"), legado.indexOf("name: 'aceleriq_escritorio_diretorio'"));
     expect(defLegada).toContain("scopes: ['aceleriq:read']");
     expect(defLegada).toContain("handler: (input, ctx) => escritorioEntrar(input, ctx)");
-    expect(ler("supabase/functions/mcp-server/mcp_test.ts")).toContain("assertEquals(TOOLS.length, 229);");
+    // Nenhuma tool restrita (leitura ou escrita) é definida nos módulos do registro legado.
+    for (const nome of [...PROJECT_GRANT_ALLOWED_TOOLS, ...PROJECT_GRANT_WRITE_TOOLS].filter((n) => n !== "aceleriq_escritorio_entrar")) {
+      expect(registro, nome).not.toContain(`'${nome}'`);
+      expect(legado, nome).not.toContain(`name: '${nome}'`);
+    }
+    expect(ler("supabase/functions/mcp-server/mcp_test.ts")).toMatch(/assertEquals\(TOOLS\.length, \d+\);/);
+  });
+
+  it("allowlist de projetos do envio de MP4: plural explícito, singular legado, falha fechada", () => {
+    const A = "11111111-1111-4111-8111-111111111111";
+    const B = "22222222-2222-4222-8222-222222222222";
+    const C = "33333333-3333-4333-8333-333333333333";
+    // Ausente/vazio: ninguém.
+    expect(videoProjectAllowlist(undefined, undefined).size).toBe(0);
+    expect(projectAllowedForVideo(A, "", "")).toBe(false);
+    expect(projectAllowedForVideo(A, " , ,", null)).toBe(false);
+    // Singular legado continua valendo sozinho.
+    expect(projectAllowedForVideo(A, undefined, A)).toBe(true);
+    expect(projectAllowedForVideo(B, undefined, A)).toBe(false);
+    // Plural: só os listados; espaços e maiúsculas normalizados; união com o singular.
+    expect(projectAllowedForVideo(B, ` ${A} ,${B.toUpperCase()} `, undefined)).toBe(true);
+    expect(projectAllowedForVideo(C, `${A},${B}`, undefined)).toBe(false);
+    expect([...videoProjectAllowlist(A, C)].sort()).toEqual([A, C]);
+    // Qualquer item inválido (inclusive curinga) derruba a lista inteira.
+    for (const ruim of [`${A},*`, `${A},projeto`, "*", `${A};${B}`]) {
+      expect(projectAllowedForVideo(A, ruim, undefined), ruim).toBe(false);
+    }
+    expect(projectAllowedForVideo(A, `${B}`, "nao-uuid")).toBe(false);
+    // projectId inválido nunca casa.
+    expect(projectAllowedForVideo("", A, A)).toBe(false);
+  });
+
+  it("autenticação usa a allowlist junto com operador corte, opt-in da concessão e kill switch", () => {
+    const auth = ler("supabase/functions/_shared/mcp-auth.ts");
+    expect(auth).toContain("record.operatorSlug === 'corte'");
+    expect(auth).toContain("projectAllowedForVideo(record.projectId, Deno.env.get('MCP_PROJECT_VIDEO_PROJECT_IDS'), Deno.env.get('MCP_PROJECT_VIDEO_PROJECT_ID'))");
+    expect(auth).toContain("effectiveVideoWrite(record.allowVideoUpload, Deno.env.get('MCP_PROJECT_VIDEO_WRITE'))");
+    expect(auth).not.toContain("record.projectId === Deno.env.get(");
+  });
+
+  it("internal_operators: service_role lê só slug/status; nenhuma permissão nova para anon/authenticated", () => {
+    const sql = ler("supabase/migrations/20261125202100_mcp_project_grants.sql");
+    expect(sql).toContain("GRANT SELECT (slug, status) ON public.internal_operators TO service_role;");
+    const sobreOperadores = sql.replace(/--[^\n]*/g, "").split(";")
+      .filter((s) => /internal_operators/.test(s) && /\b(GRANT|REVOKE|POLICY|ROW LEVEL SECURITY)\b/i.test(s));
+    expect(sobreOperadores.map((s) => s.trim())).toEqual([
+      "GRANT SELECT (slug, status) ON public.internal_operators TO service_role",
+    ]);
+    // A leitura do caminho Corte cabe nessas colunas.
+    const auth = ler("supabase/functions/_shared/mcp-auth.ts");
+    const leituras = [...auth.matchAll(/from\('internal_operators'\)\.select\('([^']*)'\)((?:\.[a-zA-Z]+\([^)]*\))*)/g)];
+    expect(leituras.length).toBeGreaterThan(0);
+    for (const [, colunas, filtros] of leituras) {
+      for (const c of colunas.split(",").map((x) => x.trim())) expect(["slug", "status"]).toContain(c);
+      for (const [, f] of filtros.matchAll(/\.(?:eq|is|in)\('([a-z_]+)'/g)) expect(["slug", "status"]).toContain(f);
+    }
   });
 
   it("sem escopos legados: a concessão segue só com tasks:read/files:read; as demais tools do escritório continuam negadas", () => {

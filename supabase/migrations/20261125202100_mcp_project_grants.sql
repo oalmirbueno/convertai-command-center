@@ -221,5 +221,10 @@ ALTER TABLE public.mcp_project_grants ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.mcp_project_grants FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.mcp_project_grants TO service_role;
 
+-- A autenticação da chave presa (mcp-auth loadProjectGrant) confere operador ativo por slug e status.
+-- Privilégio mínimo e idempotente: só essas duas colunas, só para service_role (no banco atual já
+-- coberto pelo SELECT existente; em banco descartável evita o 42501). anon/authenticated e RLS intactos.
+GRANT SELECT (slug, status) ON public.internal_operators TO service_role;
+
 COMMENT ON TABLE public.mcp_project_grants IS
   'Prende uma chave MCP com escopo mcp:project a um projeto e a um operador interno. Imutável; revogação definitiva. Sem concessão ativa e projeto vivo a chave é negada.';

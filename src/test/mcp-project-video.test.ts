@@ -331,7 +331,7 @@ describe("erros e trilha sem URL", () => {
 });
 
 describe("migration (texto): contrato do banco", () => {
-  const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20261123130000_mcp_project_video_upload.sql"), "utf8");
+  const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20261125202200_mcp_project_video_upload.sql"), "utf8");
   const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
   const corpo = (nome: string) => {
     const i = codigo.indexOf(`FUNCTION public.${nome}(`);

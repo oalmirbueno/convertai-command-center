@@ -1,5 +1,5 @@
 -- MCP: envio de MP4 à pauta e pedido de revisão HUMANA da agência pela chave presa a projeto/operador.
--- Migration incremental, somente arquivo: NÃO aplicada. Depende de 20261123120000_mcp_project_grants.sql.
+-- Migration incremental, somente arquivo: NÃO aplicada. Depende de 20261125202100_mcp_project_grants.sql.
 -- Exige plano, backup restaurável e autorização explícita (AGENTS.md).
 --
 -- Fechado por padrão, quatro travas independentes (todas precisam abrir):

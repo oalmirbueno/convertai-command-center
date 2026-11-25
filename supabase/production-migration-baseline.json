@@ -3291,19 +3291,43 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261123120000",
-      "path": "supabase/migrations/20261123120000_mcp_project_grants.sql",
-      "local_sha256": "c4de2f7bb0dee9d535ae51580bca5a824016aee547621eabd78be8828978e563",
-      "remote_name": "mcp_project_grants",
-      "remote_statements_sha256": "a5abe2099931c823ed59a1010e5d37dac45c2ab40ee5f9e13a401f4574b20f2d",
+      "version": "20261125120000",
+      "path": "supabase/migrations/20261125120000_intermediador_dos_grupos.sql",
+      "local_sha256": "e5feda98cc6552d766122fd5620e0a3b811c3aaaa32a5b0f3aa0336c6c08a97d",
+      "remote_name": "intermediador_dos_grupos",
+      "remote_statements_sha256": "557e92250b0ab36f6e9e3caa9175f1bf2915d8b296807ea390b3853e9f3925d6",
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261123130000",
-      "path": "supabase/migrations/20261123130000_mcp_project_video_upload.sql",
-      "local_sha256": "5b030c17b770e3c880c58d09354bdbac02b749f110e6711dac560524fab53bce",
+      "version": "20261125150000",
+      "path": "supabase/migrations/20261125150000_intermediador_para_que.sql",
+      "local_sha256": "6140529f6498c2dd33e3d5c57cc3bb78989acc02ed2c2c8e08f5834ff4187c8f",
+      "remote_name": "intermediador_para_que",
+      "remote_statements_sha256": "9392b88cf4175c11877f54924c005210c1c38388957d89114892dc334598710b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125180000",
+      "path": "supabase/migrations/20261125180000_intermediador_varios_marcados.sql",
+      "local_sha256": "b47507e2b228a3f143e56582add217d51eb329bb1e9f53ef3dea64f2c0b7bdd7",
+      "remote_name": "intermediador_varios_marcados",
+      "remote_statements_sha256": "ed4d724a262a260b745c187a4ae3875cbcf19dc88e1580095a7a32dc11959733",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125202100",
+      "path": "supabase/migrations/20261125202100_mcp_project_grants.sql",
+      "local_sha256": "d041d9edae6583af4470faf5d4bb78aeed631a3a519340c558f9301bec0b2778",
+      "remote_name": "mcp_project_grants",
+      "remote_statements_sha256": "14327c0a558497b61992bd4676485026cf0d7d0419a5b0c296fab1351bace210",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125202200",
+      "path": "supabase/migrations/20261125202200_mcp_project_video_upload.sql",
+      "local_sha256": "05289667d228b8dd32a2a82494e0792341af7338c70a640b10f8af11d8229f63",
       "remote_name": "mcp_project_video_upload",
-      "remote_statements_sha256": "d1c2e9a4cc947c4ca3415de394927f21f2e826da2c9c3d1d6332221d21d3f614",
+      "remote_statements_sha256": "e282d3c9bb7a14763affa7cda74159e1170f9495d7cdaa0aecb6b6fa141915df",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],

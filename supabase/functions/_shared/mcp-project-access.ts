@@ -99,6 +99,23 @@ export function effectiveVideoWrite(allowVideoUpload: boolean, serverFlag: strin
   return allowVideoUpload === true && serverFlag === 'true';
 }
 
+/**
+ * Projetos com envio de MP4 liberado (opt-in explícito do servidor): MCP_PROJECT_VIDEO_PROJECT_IDS (lista separada
+ * por vírgula) ∪ MCP_PROJECT_VIDEO_PROJECT_ID (legado, um ID). Qualquer item que não seja UUID invalida a lista
+ * inteira (falha fechada); vazio/ausente = nenhum projeto. Não substitui concessão, kill switch, autoria nem revisão.
+ */
+export function videoProjectAllowlist(plural: string | null | undefined, singular: string | null | undefined): ReadonlySet<string> {
+  const itens = [...String(plural ?? '').split(','), String(singular ?? '')].map((s) => s.trim()).filter(Boolean);
+  if (itens.some((s) => !UUID_RE.test(s))) return new Set();
+  return new Set(itens.map((s) => s.toLowerCase()));
+}
+
+export function projectAllowedForVideo(
+  projectId: string, plural: string | null | undefined, singular: string | null | undefined,
+): boolean {
+  return UUID_RE.test(String(projectId ?? '')) && videoProjectAllowlist(plural, singular).has(String(projectId).toLowerCase());
+}
+
 /** Converte a linha do banco; qualquer campo inválido vira null (o chamador falha fechado). */
 export function parseProjectGrantRow(row: unknown): ProjectGrant | null {
   if (!row || typeof row !== 'object') return null;
