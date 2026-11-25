@@ -34,12 +34,13 @@ export function perguntaProibida(t: string): string | null {
 /** Quem é ouvido: só gente do cliente, e só a pessoa marcada ou quem citou uma mensagem nossa. */
 export function ouvida(
   m: { papel: string | null; remetente: string | null; resposta_a: string | null },
-  a: { marcar_numero: string },
+  a: { marcar_numero: string; marcar_numeros?: string[] },
   nossos: Set<string>,
 ): 'marcada' | 'citou' | null {
   if (!String(m.papel ?? '').startsWith('cliente')) return null;
   if (m.resposta_a && nossos.has(m.resposta_a)) return 'citou';
-  if (m.remetente === a.marcar_numero) return 'marcada';
+  const marcados = a.marcar_numeros?.length ? a.marcar_numeros : [a.marcar_numero];
+  if (m.remetente && marcados.includes(m.remetente)) return 'marcada';
   return null;
 }
 
@@ -58,6 +59,29 @@ export function emHorario(tipo: string, ms: number): boolean {
 }
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+
+export const MAXIMO_MARCADOS = 6;
+/** Fatia das mensagens do cliente acima da qual uma pessoa só é "quem responde" (sem nome no pedido). */
+export const QUEM_RESPONDE_SOZINHO = 0.8;
+
+/**
+ * Quem marcar (pedido do Almir: "sempre marcar o membro do grupo referente ou todos").
+ * Nome: essa pessoa. "dono": quem mais fala. "todos": todo mundo do cliente. Sem nada: a pessoa que responde
+ * quase sempre (80% ou mais das mensagens do cliente) ou, se não houver, todos. Nome desconhecido: [].
+ */
+export function escolherPessoas<P extends { numero: string; nome: string | null; mensagens: number }>(pessoas: P[], marcar: string | null | undefined): P[] {
+  const ordem = [...pessoas].sort((a, b) => b.mensagens - a.mensagens);
+  if (!ordem.length) return [];
+  const alvo = semAcento(String(marcar ?? ''));
+  const todos = ordem.slice(0, MAXIMO_MARCADOS);
+  if (['todos', 'todas', 'todo mundo', 'pessoal', 'equipe', 'grupo'].includes(alvo)) return todos;
+  if (!alvo) {
+    const total = ordem.reduce((s, p) => s + p.mensagens, 0);
+    return ordem.length === 1 || ordem[0].mensagens / Math.max(total, 1) >= QUEM_RESPONDE_SOZINHO ? [ordem[0]] : todos;
+  }
+  const um = escolherPessoa(ordem, marcar);
+  return um ? [um] : [];
+}
 
 /** "dono" ou vazio: quem do cliente mais fala no grupo. Nome: casa pelo nome (sem acento). */
 export function escolherPessoa<P extends { numero: string; nome: string | null; mensagens: number }>(pessoas: P[], marcar: string | null | undefined): P | null {
@@ -97,8 +121,8 @@ export function perguntasAoJev(itens: string[]): Record<string, PerguntaJev> {
   itens.forEach((item, i) => {
     q[`item_${i}`] = {
       type: 'noul',
-      instructions: { pergunta: 'Somando todas as mensagens do cliente neste assunto, elas deixam claro este ponto da pergunta?', ponto: item },
-      criteria: { true: 'O cliente disse isso de forma clara (sim, não, um valor, uma data ou uma escolha)', false: 'O cliente não falou desse ponto ou ficou vago' },
+      instructions: { pergunta: 'Somando todas as mensagens do cliente neste assunto, este ponto da pergunta está resolvido? Conta como resolvido quando o cliente respondeu o ponto ou quando a resposta dele torna o ponto desnecessário (ex.: disse que não vai ter recesso, então as datas do recesso não se aplicam).', ponto: item },
+      criteria: { true: 'O cliente respondeu o ponto (sim, não, valor, data, escolha) ou a resposta dele já torna o ponto desnecessário', false: 'O ponto ainda faz sentido e o cliente não falou dele, ou ficou vago' },
     };
   });
   return q;

@@ -70,3 +70,12 @@ Deno.test('conferência de promessa sabe que o pedido do time é fonte', () => {
   const q = perguntasDoTexto('pergunta', ['a']);
   assert(JSON.stringify(q.promete).includes('para_que do time'));
 });
+
+Deno.test('comPessoa com várias pessoas: todas marcadas no grupo, nomes na prévia', () => {
+  const t = comPessoa('@{pessoa}, vocês vão ter recesso?', ['554711110000', '554722220000'], ['Andreus Lima', 'Marcos']);
+  assertEquals(t.texto, '@554711110000 @554722220000, vocês vão ter recesso?');
+  assertEquals(t.texto_previa, '@Andreus @Marcos, vocês vão ter recesso?');
+  assertEquals(t.mencoes, ['554711110000@s.whatsapp.net', '554722220000@s.whatsapp.net']);
+  // O escritor às vezes escreve os dois nomes à mão: vira um marcador só (que depois marca os dois).
+  assertEquals(limparTexto('@Andreus e @Marcos, vocês vão ter recesso?', 'pergunta', ['Andreus Lima', 'Marcos']).texto, '@{pessoa}, vocês vão ter recesso?');
+});

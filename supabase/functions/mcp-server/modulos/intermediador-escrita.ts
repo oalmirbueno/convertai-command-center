@@ -20,6 +20,8 @@ export interface PedidoDoTexto {
   tipo: TipoDeTexto;
   cliente: string;
   primeiro_nome: string | null;
+  /** Quantas pessoas vão marcadas (com mais de uma, fala com o pessoal do cliente). */
+  marcados?: number;
   tema: string;
   pergunta: string;
   /** Para que o time precisa do dado (opcional). */
@@ -39,7 +41,7 @@ export interface PedidoDoTexto {
 
 const O_QUE_ESCREVER: Record<TipoDeTexto, string> = {
   pergunta: 'Escreva a mensagem que abre este assunto: chame a pessoa e faça a pergunta, cobrindo todos os pontos pedidos, do jeito que alguém da agência que já conversa com ela perguntaria. Pode reescrever a pergunta com as suas palavras, adaptada ao ramo do cliente.',
-  de_volta: 'A pessoa já respondeu uma parte. Agradeça de leve pelo que ela disse (sem repetir tudo) e pergunte só o ponto que faltou.',
+  de_volta: 'A pessoa já respondeu uma parte. Agradeça de leve pelo que ela disse (sem repetir tudo) e pergunte só o ponto que faltou, de um jeito que faça sentido com o que ela acabou de dizer.',
   lembrete: 'A pessoa ainda não respondeu a pergunta feita. Escreva um lembrete leve e curto, sem cobrar, retomando o assunto em poucas palavras.',
   fechamento: 'A pessoa respondeu tudo. Feche agradecendo, curto, mostrando que entendeu o que ela disse (uma referência rápida, sem repetir a resposta inteira). Não faça pergunta nova e não diga o que o time vai fazer com a resposta (no máximo "anotado" ou "já passei pro time").',
   humano: 'A pessoa pediu algo que só o Almir pode responder (preço, prazo, decisão) ou reclamou. Responda curto, com respeito, dizendo que o Almir vai responder por aqui. Não responda o pedido, não prometa nada e não peça desculpas exageradas.',
@@ -53,7 +55,7 @@ export const SISTEMA_DO_INTERMEDIADOR = [
   '2. Continue a conversa: olhe as mensagens recentes do grupo e fale do jeito que o Almir fala ali (tom, intimidade, expressões). Não repita cumprimento se já cumprimentaram hoje; se a conversa já está no meio, entre no assunto sem cerimônia.',
   '2b. Quando abrir um assunto, diga em poucas palavras para que é (o "para quê" do pedido; sem ele, pelo assunto, sem inventar). Ninguém pergunta do nada.',
   '3. Respeite o ramo do cliente pelo contexto (prestador de serviço não é loja; não invente produto, endereço, horário ou fato que não esteja no contexto).',
-  `4. Quando for chamar a pessoa, escreva exatamente ${MARCA} (o sistema troca pelo nome). Use ${MARCA} uma vez só, perto do começo.`,
+  `4. Quando for chamar a pessoa, escreva exatamente ${MARCA} (o sistema troca pelo nome). Use ${MARCA} uma vez só, perto do começo, e não escreva o nome da pessoa de novo na mensagem.`,
   '5. Curta: de 1 a 3 frases. Nada de lista, título, negrito ou assinatura. No máximo um emoji, e só se couber.',
   '6. Nunca explique como responder (texto, áudio, "por aqui mesmo"): é óbvio.',
   '7. Nunca prometa preço, valor, prazo de entrega, desconto ou resultado, nem diga o que o time vai fazer depois (ajustar, mudar, investir). Nunca fale de cobrança, verba, pagamento ou contrato.',
@@ -66,7 +68,7 @@ export function pedidoAoEscritor(p: PedidoDoTexto): { sistema: string; usuario: 
     `Cliente: ${p.cliente}`,
     p.contexto ? `Contexto do cliente (dossiê, só para entender o ramo e o momento; não cite):\n${p.contexto}` : 'Contexto do cliente: sem dossiê.',
     p.conversa_recente.length ? `Últimas mensagens do grupo (mais antigas primeiro):\n${p.conversa_recente.join('\n')}` : 'Últimas mensagens do grupo: nenhuma recente.',
-    `Pessoa marcada: ${p.primeiro_nome ?? 'sem nome conhecido'}`,
+    (p.marcados ?? 1) > 1 ? `Pessoas marcadas: ${p.primeiro_nome} (fale com elas juntas; ${MARCA} marca todas de uma vez)` : `Pessoa marcada: ${p.primeiro_nome ?? 'sem nome conhecido'}`,
     `Assunto: ${p.tema}`,
     `O que o time precisa saber: ${p.pergunta}`,
     p.para_que ? `Para quê: ${p.para_que}` : '',
@@ -82,16 +84,19 @@ export function pedidoAoEscritor(p: PedidoDoTexto): { sistema: string; usuario: 
 const EXPLICA_COMO_RESPONDER = /(texto ou (em )?[áa]udio|[áa]udio ou (em )?texto|por aqui mesmo|pode responder (aqui|por aqui))/i;
 
 /** Limpa o que o escritor devolveu e diz o que impede de sair (null = pode seguir para o Jev). */
-export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | null): { texto: string; problema: string | null } {
+export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | null | (string | null)[]): { texto: string; problema: string | null } {
   let t = String(bruto ?? '').trim().replace(/^["“”']+|["“”']+$/g, '').trim();
   t = t.replace(/\s*[—–]\s*/g, ', ').replace(/\*\*/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
   // Variações do marcador: "@{Thiélo}", "@{ pessoa }", "{pessoa}", "@pessoa" e o próprio "@Thiélo" escrito à mão.
   t = t.replace(/@\s*\{[^}\n]{1,40}\}|@pessoa\b|\{pessoa\}/gi, MARCA);
-  const primeiro = String(nome ?? '').trim().split(/\s+/)[0];
-  if (primeiro && !/^\+?\d+$/.test(primeiro)) {
+  for (const n of Array.isArray(nome) ? nome : [nome]) {
+    const primeiro = String(n ?? '').trim().split(/\s+/)[0];
+    if (!primeiro || /^\+?\d+$/.test(primeiro)) continue;
     const esc = primeiro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     t = t.replace(new RegExp(`@${esc}(?![\\p{L}\\d])`, 'gu'), MARCA);
   }
+  // "@{pessoa} e @{pessoa}" (duas pessoas escritas à mão) também vira uma menção só.
+  t = t.replace(new RegExp(`${MARCA.replace(/[{}]/g, '\\$&')}(\\s*(,|e)\\s*${MARCA.replace(/[{}]/g, '\\$&')})+`, 'g'), MARCA);
   // "@{pessoa}, @{pessoa}," vira uma menção só.
   t = t.replace(new RegExp(`(${MARCA.replace(/[{}]/g, '\\$&')})([\\s,]*${MARCA.replace(/[{}]/g, '\\$&')})+`, 'g'), MARCA);
   if (COM_MENCAO.has(tipo)) {
@@ -149,12 +154,20 @@ export function problemaDoTexto(notas: Record<string, number>): string | null {
   return null;
 }
 
-/** Troca o marcador pela menção. */
-export function comPessoa(texto: string, numero: string, nome: string | null) {
-  const primeiro = String(nome ?? '').trim().split(/\s+/)[0];
+const primeiroDe = (nome: string | null | undefined) => {
+  const p = String(nome ?? '').trim().split(/\s+/)[0];
+  return p && !/^\+?\d+$/.test(p) ? p : 'pessoa marcada';
+};
+
+/** Troca o marcador pela menção de cada pessoa marcada (uma ou várias, na mesma ordem). */
+export function comPessoa(texto: string, numero: string | string[], nome: string | null | (string | null)[]) {
+  const numeros = Array.isArray(numero) ? numero : [numero];
+  const nomes = Array.isArray(nome) ? nome : [nome];
+  const noGrupo = numeros.map((n) => `@${n}`).join(' ');
+  const naPrevia = numeros.map((_, i) => `@${primeiroDe(nomes[i])}`).join(' ');
   return {
-    texto: texto.split(MARCA).join(`@${numero}`),
-    texto_previa: texto.split(MARCA).join(`@${primeiro && !/^\+?\d+$/.test(primeiro) ? primeiro : 'pessoa marcada'}`),
-    mencoes: texto.includes(MARCA) ? [`${numero}@s.whatsapp.net`] : [],
+    texto: texto.split(MARCA).join(noGrupo),
+    texto_previa: texto.split(MARCA).join(naPrevia),
+    mencoes: texto.includes(MARCA) ? numeros.map((n) => `${n}@s.whatsapp.net`) : [],
   };
 }

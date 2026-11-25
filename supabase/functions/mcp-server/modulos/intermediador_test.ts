@@ -363,3 +363,20 @@ Deno.test('escritor fora do ar: nada sai e o pedido segue na fila', async () => 
   assertEquals(m.assuntos[0].estado, 'na_fila');
   assert(m.eventos.some((e) => e.tipo === 'texto_segurado' && String(e.dados.motivo).includes('escritor')));
 });
+
+Deno.test('sem nome no pedido e duas pessoas falando parecido: marca as duas e ouve qualquer uma', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.porta.pessoasDoGrupo = async () => [{ numero: MARCADA, nome: 'Carla Souza', mensagens: 12 }, { numero: OUTRA, nome: 'Rui', mensagens: 10 }];
+  await intermediadorPedir({ ...PEDIDO }, ctx(), m.porta);
+  assertEquals(m.assuntos[0].marcar_numeros, [MARCADA, OUTRA]);
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios[0].mencoes, [`${MARCADA}@s.whatsapp.net`, `${OUTRA}@s.whatsapp.net`]);
+  assert(r.envios[0].texto.startsWith(`Oi @${MARCADA} @${OUTRA}, tudo certo?`));
+  assert(r.envios[0].texto_previa.startsWith('Oi @Carla @Rui, tudo certo?'));
+  await intermediadorEnvioFeito({ envio_id: r.envios[0].envio_id, resultado: 'enviado', message_id: '3EB0P' }, ctx(), m.porta);
+  m.avancar(5);
+  m.cliente(OUTRA, 'Atendemos dia 24 até 12h');
+  await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.assuntos[0].estado, 'respondido');
+  assertEquals(m.assuntos[0].ouvidas[0].como, 'marcada');
+});
