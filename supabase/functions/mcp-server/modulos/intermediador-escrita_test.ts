@@ -55,3 +55,18 @@ Deno.test('comPessoa: número no grupo, primeiro nome na prévia', () => {
   assertEquals(t, { texto: 'Oi @554799990000, tudo certo?', texto_previa: 'Oi @Thiélo, tudo certo?', mencoes: ['554799990000@s.whatsapp.net'] });
   assertEquals(comPessoa('Perfeito, anotado!', '554799990000', null).mencoes, []);
 });
+
+Deno.test('limparTexto: nome escrito à mão e marcador com o nome dentro viram uma menção só (caso real de 25/11)', () => {
+  assertEquals(limparTexto('@Marialex, @{Marialex}, pra colocar o horário certinho, vocês abrem sábado às 9h?', 'pergunta', 'Marialex Souza').texto,
+    '@{pessoa}, pra colocar o horário certinho, vocês abrem sábado às 9h?');
+  assertEquals(limparTexto('@Preserva, @{Preserva}, como vai funcionar a lavanderia dia 24?', 'pergunta', 'Preserva').texto,
+    '@{pessoa}, como vai funcionar a lavanderia dia 24?');
+  assertEquals(limparTexto('@{Thiélo} pode dar uma olhada no vídeo?', 'pergunta', 'Thiélo').texto, '@{pessoa} pode dar uma olhada no vídeo?');
+  // Outro nome com @ que não é a pessoa marcada fica como está.
+  assertEquals(limparTexto('@{pessoa}, o @Rui já viu?', 'pergunta', 'Thiélo').texto, '@{pessoa}, o @Rui já viu?');
+});
+
+Deno.test('conferência de promessa sabe que o pedido do time é fonte', () => {
+  const q = perguntasDoTexto('pergunta', ['a']);
+  assert(JSON.stringify(q.promete).includes('para_que do time'));
+});

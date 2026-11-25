@@ -470,7 +470,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
     });
     const bruto = await porta.escrever({ clientId: a.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: a.id });
     if (!bruto) return { motivo: 'o escritor do painel não respondeu' };
-    const limpo = limparTexto(bruto, tipo);
+    const limpo = limparTexto(bruto, tipo, a.marcar_nome);
     if (limpo.problema) {
       corrigir = limpo.problema;
       await porta.evento(a.id, 'texto_conferido', { tipo, tentativa, problema: limpo.problema });
@@ -480,7 +480,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
     try {
       const q = perguntasDoTexto(tipo, a.o_que_conta, falta);
       const mensagem = limpo.texto.split(MARCA).join(`@${nome ?? 'pessoa'}`);
-      const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, pontos: a.o_que_conta } }, q);
+      const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, pontos: a.o_que_conta } }, q);
       notas = Object.fromEntries(Object.keys(q).map((k) => [k, probabilidadeNoul(r.answers[k]) ?? (k === 'promete' ? 1 : 0)]));
     } catch {
       return { motivo: 'o Jev não conferiu o texto agora' };

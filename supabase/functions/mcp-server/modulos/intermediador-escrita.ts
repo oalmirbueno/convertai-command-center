@@ -82,11 +82,18 @@ export function pedidoAoEscritor(p: PedidoDoTexto): { sistema: string; usuario: 
 const EXPLICA_COMO_RESPONDER = /(texto ou (em )?[áa]udio|[áa]udio ou (em )?texto|por aqui mesmo|pode responder (aqui|por aqui))/i;
 
 /** Limpa o que o escritor devolveu e diz o que impede de sair (null = pode seguir para o Jev). */
-export function limparTexto(bruto: string, tipo: TipoDeTexto): { texto: string; problema: string | null } {
+export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | null): { texto: string; problema: string | null } {
   let t = String(bruto ?? '').trim().replace(/^["“”']+|["“”']+$/g, '').trim();
   t = t.replace(/\s*[—–]\s*/g, ', ').replace(/\*\*/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
-  // Variações do marcador que o modelo às vezes escreve.
-  t = t.replace(/@\s*\{\s*pessoa\s*\}|@pessoa\b|\{pessoa\}/gi, MARCA);
+  // Variações do marcador: "@{Thiélo}", "@{ pessoa }", "{pessoa}", "@pessoa" e o próprio "@Thiélo" escrito à mão.
+  t = t.replace(/@\s*\{[^}\n]{1,40}\}|@pessoa\b|\{pessoa\}/gi, MARCA);
+  const primeiro = String(nome ?? '').trim().split(/\s+/)[0];
+  if (primeiro && !/^\+?\d+$/.test(primeiro)) {
+    const esc = primeiro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    t = t.replace(new RegExp(`@${esc}(?![\\p{L}\\d])`, 'gu'), MARCA);
+  }
+  // "@{pessoa}, @{pessoa}," vira uma menção só.
+  t = t.replace(new RegExp(`(${MARCA.replace(/[{}]/g, '\\$&')})([\\s,]*${MARCA.replace(/[{}]/g, '\\$&')})+`, 'g'), MARCA);
   if (COM_MENCAO.has(tipo)) {
     const vezes = t.split(MARCA).length - 1;
     if (vezes === 0) t = `${MARCA}, ${t.charAt(0).toLowerCase()}${t.slice(1)}`;
@@ -116,7 +123,7 @@ export function perguntasDoTexto(tipo: TipoDeTexto, itens: string[], falta?: str
   const q: Record<string, PerguntaJev> = {
     promete: {
       type: 'noul',
-      instructions: 'A mensagem em "mensagem" promete preço, valor, prazo, desconto, resultado ou uma ação do time (ajustar, mudar, investir, verba), ou afirma algo sobre o cliente que não está em "contexto" nem na conversa?',
+      instructions: 'A mensagem em "mensagem" promete preço, valor, prazo, desconto, resultado ou uma ação do time (ajustar, mudar, investir, verba), ou afirma algo sobre o cliente que não está em "contexto", na conversa nem em "pedido"? O que está em "pedido" (a pergunta e o para_que do time) é verdade e dizer para que o time precisa do dado não é promessa.',
       criteria: { true: 'Promete algo, diz o que o time vai fazer, ou afirma fato que não está no contexto', false: 'Só pergunta, agradece ou avisa, sem prometer nem inventar' },
     },
     natural: {
