@@ -233,7 +233,7 @@ function resolveBaseCommit(baseRef) {
 }
 
 function readBaseUnlistedMigrations(baseCommit, baseEntries) {
-  const output = git(['ls-tree', '-r', '-z', '--full-tree', baseCommit, '--', 'supabase/migrations'])
+  const output = git(['ls-tree', '-r', '-t', '-z', '--full-tree', baseCommit, '--', 'supabase/migrations'])
   const unlisted = new Map()
   for (const record of output.split('\0')) {
     if (!record) continue
