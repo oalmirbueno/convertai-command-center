@@ -64,7 +64,7 @@ function portas(tasks: TaskRow[], files: FileRow[], urls: string[] = [], donos?:
 
 describe("concessão de projeto: autorização central", () => {
   it("só a lista preparada passa; escrita de MP4 e tools legadas ficam negadas por padrão", () => {
-    expect(PROJECT_GRANT_ALLOWED_TOOLS.every(projectGrantAllowsTool)).toBe(true);
+    expect(PROJECT_GRANT_ALLOWED_TOOLS.every((nome) => projectGrantAllowsTool(nome))).toBe(true);
     for (const nome of [
       ...PROJECT_GRANT_WRITE_TOOLS, "aceleriq_create_task", "aceleriq_delete_task", "aceleriq_list_clients",
       "aceleriq_capabilities", "aceleriq_guia", "memory_fetch", "aceleriq_arquivos_enviar_para_aprovacao", "ferramenta_nova_qualquer",
@@ -452,7 +452,7 @@ describe("aceleriq_escritorio_entrar: variante restrita x legado", () => {
     ]) {
       const d = authorizeGrantCall(grant, ENTRAR, args);
       expect(d.ok, JSON.stringify(args)).toBe(false);
-      if (!d.ok) expect(d.code).toBe("grant_identity_forged");
+      if (d.ok === false) expect(d.code).toBe("grant_identity_forged");
       expect(() => projectEntrar(grant, args), JSON.stringify(args)).toThrow(ProjectAccessError);
     }
   });
