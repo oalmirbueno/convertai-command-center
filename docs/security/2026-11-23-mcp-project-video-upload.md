@@ -64,7 +64,7 @@ mesmo `status` e o mesmo `assigned_to`. Qualquer mudança nega finalizar e pedir
 1. Aplicar `20261125202100` e `20261125202200` pelo workflow do banco (backup confirmado).
 2. Admin cria e bloqueia a conta dedicada ao Corte, define o marcador técnico e registra o atestado. O perfil recebe papel `design` e só a carteira autorizada.
 3. Admin insere o vínculo em `mcp_operator_author_profiles` (`configured_by` = o próprio admin).
-4. Emitir chave nova `mcp:project` e a concessão com `allow_video_upload = true`.
+4. Emitir chave nova `mcp:project`; o administrador do banco (papel PostgreSQL administrativo, não `service_role`) cria a concessão em `mcp_project_grants` com `allow_video_upload = true`. O `service_role` do MCP não tem INSERT nessa tabela: só lê e revoga.
 5. Configurar a allowlist (`MCP_PROJECT_VIDEO_PROJECT_IDS`, ou o legado `MCP_PROJECT_VIDEO_PROJECT_ID`) somente com os projetos autorizados (clientes próprios e a prova Casa dos Assados, conforme autorização), então ligar `MCP_PROJECT_VIDEO_WRITE=true` e publicar pelo workflow autorizado.
 
 ## Preview e rollback

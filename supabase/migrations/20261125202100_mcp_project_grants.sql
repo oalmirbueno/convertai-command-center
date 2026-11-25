@@ -216,10 +216,13 @@ CREATE TRIGGER mcp_project_grants_no_delete
   BEFORE DELETE ON public.mcp_project_grants
   FOR EACH ROW EXECUTE FUNCTION public.mcp_project_grants_no_delete();
 
--- Somente service_role (o MCP) lê e escreve. Sem política para anon/authenticated: RLS nega tudo.
+-- service_role (o MCP) só lê e revoga (UPDATE de revoked_at). Concessão é criada pelo administrador do
+-- banco; o INSERT é revogado explicitamente para cobrir default ACL existente. Sem política para
+-- anon/authenticated: RLS nega tudo.
 ALTER TABLE public.mcp_project_grants ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.mcp_project_grants FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.mcp_project_grants TO service_role;
+REVOKE INSERT ON public.mcp_project_grants FROM service_role;
+GRANT SELECT, UPDATE ON public.mcp_project_grants TO service_role;
 
 -- A autenticação da chave presa (mcp-auth loadProjectGrant) confere operador ativo por slug e status.
 -- Privilégio mínimo e idempotente: só essas duas colunas, só para service_role (no banco atual já
