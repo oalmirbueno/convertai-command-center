@@ -86,3 +86,7 @@ Deno.test('promessa: na pergunta o para quê do pedido (com prazo) passa; no fec
   const noFechamento = JSON.stringify(perguntasDoTexto('fechamento', ['a']).promete);
   assert(noFechamento.includes('ação do time') && noFechamento.includes('prazo'));
 });
+
+Deno.test('o escritor não presume gênero (caso Preserva Eco, 25/11)', () => {
+  assert(pedidoAoEscritor({ ...base, tipo: 'fechamento' }).sistema.includes('Não presuma gênero'));
+});
