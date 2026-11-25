@@ -10,6 +10,7 @@ import type { PerguntaJev, ResultadoJev } from '../../_shared/jev.ts';
 import { probabilidadeNoul } from '../../_shared/jev.ts';
 
 export const CORTE = 0.6;
+export const CORTE_DA_REACAO = 0.8;
 export const FAIXA_DE_DUVIDA: [number, number] = [0.5, 0.7];
 export const MAXIMO_AO_CLIENTE = 3; // pergunta, uma de volta ou lembrete, fechamento
 export const ASSUNTOS_POR_CLIENTE_POR_DIA = 2;
@@ -109,7 +110,7 @@ export function perguntasAoJev(itens: string[]): Record<string, PerguntaJev> {
   const q: Record<string, PerguntaJev> = {
     relacao: {
       type: 'choice',
-      instructions: 'O assistente da agência fez a pergunta em "pergunta_feita" ao cliente no grupo. Olhe as mensagens marcadas como novas em "mensagens_do_cliente" (as anteriores são contexto). Qual destas descreve melhor as mensagens novas?',
+      instructions: 'O assistente da agência fez a pergunta em "pergunta_feita" ao cliente no grupo; "conversa_do_assunto" traz em ordem tudo o que o assistente mandou e o que o cliente respondeu (uma resposta curta como "sim" responde à última pergunta do assistente antes dela). Olhe as mensagens do cliente marcadas como novas. Qual destas descreve melhor as mensagens novas?',
       criteria: RELACOES,
     },
     humano: {
@@ -125,7 +126,7 @@ export function perguntasAoJev(itens: string[]): Record<string, PerguntaJev> {
   itens.forEach((item, i) => {
     q[`item_${i}`] = {
       type: 'noul',
-      instructions: { pergunta: 'Somando todas as mensagens do cliente neste assunto, este ponto da pergunta está resolvido? Conta como resolvido quando o cliente respondeu o ponto ou quando a resposta dele torna o ponto desnecessário (ex.: disse que não vai ter recesso, então as datas do recesso não se aplicam).', ponto: item },
+      instructions: { pergunta: 'Lendo "conversa_do_assunto" em ordem (uma resposta curta como "sim" ou "isso" confirma o que o assistente acabou de perguntar), este ponto da pergunta está resolvido? Conta como resolvido quando o cliente respondeu o ponto ou quando a resposta dele torna o ponto desnecessário (ex.: disse que não vai ter recesso, então as datas do recesso não se aplicam).', ponto: item },
       criteria: { true: 'O cliente respondeu o ponto (sim, não, valor, data, escolha) ou a resposta dele já torna o ponto desnecessário', false: 'O ponto ainda faz sentido e o cliente não falou dele, ou ficou vago' },
     };
   });
@@ -166,11 +167,14 @@ export function decidir(
   a: { o_que_conta: string[]; pode_perguntar_de_volta: boolean; perguntou_de_volta: boolean; envios_ao_cliente: number },
   n: Notas,
 ): { acao: Acao; item?: string; faltam: string[] } {
-  const faltam = a.o_que_conta.filter((_, i) => (n.itens[i] ?? 0) < CORTE);
+  // Reação sozinha ("👍", "ok") só fecha com nota alta: um joinha para "manda as fotos?" não entrega as fotos.
+  const corte = n.relacao === 'reacao' ? CORTE_DA_REACAO : CORTE;
+  const faltam = a.o_que_conta.filter((_, i) => (n.itens[i] ?? 0) < corte);
   const cobriuAlgum = faltam.length < a.o_que_conta.length;
-  if (n.humano >= CORTE || n.relacao === 'pergunta_ao_assistente') return { acao: 'humano', faltam };
-  if (faltam.length === 0) return { acao: 'fechar', faltam };
+  if (n.humano >= CORTE) return { acao: 'humano', faltam };
   if (n.quem_e >= CORTE) return { acao: 'quem_e', faltam };
+  if (n.relacao === 'pergunta_ao_assistente') return { acao: 'humano', faltam };
+  if (faltam.length === 0) return { acao: 'fechar', faltam };
   const respondeu = (n.relacao === 'responde' || n.relacao === 'responde_parte') && cobriuAlgum;
   if (!respondeu) return { acao: 'esperar', faltam };
   // Precisa sobrar espaço para a de volta E para o fechamento depois dela.

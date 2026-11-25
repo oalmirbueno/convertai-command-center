@@ -53,7 +53,7 @@ const ENVIA = { readOnlyHint: false, idempotentHint: false, destructiveHint: fal
 
 // ─── Tipos ──────────────────────────────────────────────────────
 
-export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou' | 'outra_pessoa'; tipo: string; texto: string; em: string; /** número de quem falou (nunca sai para o agente) */ de?: string | null }
+export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou' | 'outra_pessoa'; tipo: string; texto: string; em: string; /** número de quem falou (nunca sai para o agente) */ de?: string | null; /** id da mensagem citada */ cita?: string | null }
 export interface Assunto {
   id: string; client_id: string; group_id: string; grupo_nome: string; tema: string; pergunta: string; para_que: string | null;
   marcar_numero: string; marcar_nome: string | null; marcar_numeros: string[]; marcar_nomes: string[]; o_que_conta: string[]; pode_perguntar_de_volta: boolean;
@@ -441,11 +441,26 @@ async function exigirQuemRoda(ctx: AuthContext, operator: string | undefined, po
   return eu;
 }
 
+const NOME_DO_ENVIO: Record<string, string> = { pergunta: 'pergunta', de_volta: 'pergunta de volta', lembrete: 'lembrete', quem_e: 'resposta sobre quem é', humano: 'aviso de que o Almir responde', fechamento: 'agradecimento' };
+
+/** A conversa do assunto em ordem: o que o assistente mandou no grupo e o que o cliente respondeu. */
+export function conversaDoAssunto(envios: Envio[], ouvidas: Ouvida[], quantasNovas: number) {
+  const nossas = envios.filter((e) => e.destino === 'grupo' && e.estado === 'enviado' && e.feito_em)
+    .map((e) => ({ em: e.feito_em as string, quem: 'assistente da agência', o_que: NOME_DO_ENVIO[e.tipo] ?? e.tipo, texto: e.texto_previa, id: e.message_id }));
+  const doCliente = ouvidas.map((o, i) => ({
+    em: o.em, quem: o.como === 'outra_pessoa' ? 'outra pessoa do cliente' : 'cliente', nova: i >= ouvidas.length - quantasNovas, texto: o.texto,
+    ...(o.cita ? { respondendo_a: NOME_DO_ENVIO[envios.find((e) => e.message_id === o.cita)?.tipo ?? 'pergunta'] ?? 'pergunta' } : {}),
+  }));
+  return [...nossas.map(({ id: _id, ...x }) => x), ...doCliente].sort((x, y) => Date.parse(x.em) - Date.parse(y.em)).map(({ em: _em, ...x }) => x);
+}
+
 async function julgar(porta: PortaDoIntermediador, a: Assunto, ouvidas: Ouvida[], quantasNovas: number): Promise<Notas> {
+  const envios = await porta.envios({ assunto_id: a.id });
   const state = {
     tema: a.tema,
     pergunta_feita: a.pergunta,
     pontos_pedidos: a.o_que_conta,
+    conversa_do_assunto: conversaDoAssunto(envios, ouvidas, quantasNovas),
     mensagens_do_cliente: ouvidas.map((o, i) => ({ n: i + 1, nova: i >= ouvidas.length - quantasNovas, como: o.como === 'citou' ? 'citou a pergunta' : o.como === 'marcada' ? 'pessoa marcada' : 'outra pessoa do cliente', tipo: o.tipo, texto: o.texto })),
   };
   const q = perguntasAoJev(a.o_que_conta);
@@ -556,7 +571,7 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     if (nossos.has(m.id)) continue;
     const como = ouvida(m, a, nossos);
     if (!como) { ignoradas++; continue; }
-    novas.push({ id: m.id, quem: m.remetente_nome ?? a.marcar_nome ?? 'cliente', como, tipo: m.tipo ?? 'texto', texto: conteudoDe(m), em: m.occurred_at, de: m.remetente });
+    novas.push({ id: m.id, quem: m.remetente_nome ?? a.marcar_nome ?? 'cliente', como, tipo: m.tipo ?? 'texto', texto: conteudoDe(m), em: m.occurred_at, de: m.remetente, cita: m.resposta_a });
   }
   const lidoAte = msgs.length ? msgs[msgs.length - 1].received_at : a.lido_ate;
   if (ignoradas) await porta.evento(a.id, 'ignoradas', { quantas: ignoradas });

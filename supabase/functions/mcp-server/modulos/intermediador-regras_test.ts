@@ -118,3 +118,11 @@ Deno.test('ponto que a resposta torna desnecessário conta como resolvido (caso 
   const q = perguntasAoJev(['tem recesso ou não', 'data de início e de volta']);
   assert(JSON.stringify(q.item_1).includes('torna o ponto desnecessário'));
 });
+
+Deno.test('decidir: "é robô?" lido como pergunta ao assistente ainda responde quem é; joinha só fecha com nota alta', () => {
+  const b = { o_que_conta: ['mandou as fotos'], pode_perguntar_de_volta: true, perguntou_de_volta: false, envios_ao_cliente: 1 };
+  assertEquals(decidir(b, { relacao: 'pergunta_ao_assistente', itens: [0.04], humano: 0.12, quem_e: 0.95 }).acao, 'quem_e');
+  assertEquals(decidir(b, { relacao: 'reacao', itens: [0.6], humano: 0.03, quem_e: 0.02 }).acao, 'esperar');
+  assertEquals(decidir(b, { relacao: 'reacao', itens: [0.85], humano: 0.03, quem_e: 0.02 }).acao, 'fechar');
+  assertEquals(decidir(b, { relacao: 'responde', itens: [0.6], humano: 0.03, quem_e: 0.02 }).acao, 'fechar');
+});

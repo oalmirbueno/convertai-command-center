@@ -4,11 +4,13 @@ import type { ResultadoJev } from '../../_shared/jev.ts';
 import {
   type Assunto,
   type Envio,
+  type Ouvida,
   intermediadorCancelar,
   intermediadorEnvioFeito,
   intermediadorEstado,
   intermediadorPedir,
   intermediadorRodada,
+  conversaDoAssunto,
   type MsgGrupo,
   type PortaDoIntermediador,
 } from './intermediador.ts';
@@ -395,4 +397,20 @@ Deno.test('nunca no vácuo: outra pessoa do cliente responde, é ouvida e passa 
   assertEquals(m.assuntos[0].marcar_numeros, [MARCADA, OUTRA]);
   assertEquals(volta.mencoes, [`${MARCADA}@s.whatsapp.net`, `${OUTRA}@s.whatsapp.net`]);
   assertEquals(m.assuntos[0].ouvidas.map((o) => o.como), ['outra_pessoa', 'outra_pessoa']);
+});
+
+Deno.test('um "sim" citando a pergunta de volta é lido junto com ela (caso Casa dos Assados, 25/11)', () => {
+  const envios = [
+    { id: 'e1', assunto_id: 'a', tipo: 'pergunta', destino: 'grupo', texto: 'x', texto_previa: '@Marialex vocês abrem às 9h ou às 10h30 e fecham às 14h?', mencoes: [], estado: 'enviado', message_id: 'M1', criado_em: '2026-11-25T17:35:00Z', feito_em: '2026-11-25T17:35:33Z' },
+    { id: 'e2', assunto_id: 'a', tipo: 'de_volta', destino: 'grupo', texto: 'x', texto_previa: '@Marialex @Sheilymar valeu! E às 14h vocês fecham também aos sábados, domingos e feriados?', mencoes: [], estado: 'enviado', message_id: 'M2', criado_em: '2026-11-25T17:53:00Z', feito_em: '2026-11-25T17:53:00Z' },
+  ] as Envio[];
+  const ouvidas = [
+    { id: 'C1', quem: 'Sheilymar', como: 'outra_pessoa', tipo: 'texto', texto: '10:30', em: '2026-11-25T17:38:15Z' },
+    { id: 'C2', quem: 'Sheilymar', como: 'citou', tipo: 'texto', texto: 'Sim', em: '2026-11-25T18:08:00Z', cita: 'M2' },
+  ] as Ouvida[];
+  const c = conversaDoAssunto(envios, ouvidas, 1);
+  assertEquals(c.map((x) => x.quem), ['assistente da agência', 'outra pessoa do cliente', 'assistente da agência', 'cliente']);
+  assertEquals((c[3] as { respondendo_a?: string }).respondendo_a, 'pergunta de volta');
+  assertEquals((c[3] as { nova?: boolean }).nova, true);
+  assert(!JSON.stringify(c).includes('M2'));
 });
