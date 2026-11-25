@@ -73,9 +73,9 @@ describe("central de automações: leitura", () => {
 describe("central de automações: desenho e caminho", () => {
   const desenho = {
     nos: [
-      { nome: "A cada 5 minutos", tipo: "scheduleTrigger", x: 0, y: 0, desligado: false },
-      { nome: "Ler pendentes", tipo: "postgres", x: 220, y: 0, desligado: false },
-      { nome: "Responder", tipo: "httpRequest", x: 440, y: 120, desligado: true },
+      { nome: "A cada 5 minutos", tipo: "scheduleTrigger", x: 0, y: 0, desligado: false, resumo: [], codigo: null },
+      { nome: "Ler pendentes", tipo: "postgres", x: 220, y: 0, desligado: false, resumo: [], codigo: null },
+      { nome: "Responder", tipo: "httpRequest", x: 440, y: 120, desligado: true, resumo: [], codigo: null },
     ],
     ligacoes: [
       { de: "A cada 5 minutos", para: "Ler pendentes", saida: 0, tipo: "main" },
