@@ -169,7 +169,11 @@ describe("MCP 2.28: registro das três ferramentas", () => {
     expect(MCP_VERSION).toBe("2.39.1");
     expect(ler("supabase/functions/_shared/mcp-release.ts")).toContain("// 2.28.0 (14/11/2026):");
     expect(tools).toContain("import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';");
-    expect(tools).toContain("  ...FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO,\n];");
+    // Dentro do catálogo RAW_TOOLS (releases posteriores entram depois dele, antes do "];").
+    const inicioDoCatalogo = tools.indexOf("const RAW_TOOLS: readonly ToolDefinition[] = [");
+    expect(inicioDoCatalogo).toBeGreaterThan(-1);
+    const catalogo = tools.slice(inicioDoCatalogo, tools.indexOf("\n];", inicioDoCatalogo));
+    expect(catalogo).toContain("\n  ...FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO,\n");
     expect(tools).toContain("aceleriq_revisar_trabalho_interno: 'mesas:write'");
     expect(tools).toContain("aceleriq_marcar_precisa_de_voce: 'mesas:write'");
     expect(tools).toContain("aceleriq_listar_precisa_de_voce: 'clients:read'");

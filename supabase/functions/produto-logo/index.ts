@@ -38,7 +38,7 @@ export function dominioDoSite(d: string): string {
 
 if (import.meta.main) {
   Deno.serve(async (req) => {
-    if (req.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": "*" } });
+    if (req.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Max-Age": "7200" } });
     const d = (new URL(req.url).searchParams.get("d") || "").trim().toLowerCase();
     if (!DOMINIO.test(d) || d.length > 120) return new Response("", { status: 400 });
     const site = dominioDoSite(d);
