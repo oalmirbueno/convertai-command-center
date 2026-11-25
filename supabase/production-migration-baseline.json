@@ -3281,6 +3281,14 @@
       "remote_name": "auditoria_de_assinaturas_do_mcp",
       "remote_statements_sha256": "90db9969220d2c703cdce0ec6bd9e22259593dcabc0ce456181b3dd8cae0dc0d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125120000",
+      "path": "supabase/migrations/20261125120000_intermediador_dos_grupos.sql",
+      "local_sha256": "e5feda98cc6552d766122fd5620e0a3b811c3aaaa32a5b0f3aa0336c6c08a97d",
+      "remote_name": "intermediador_dos_grupos",
+      "remote_statements_sha256": "557e92250b0ab36f6e9e3caa9175f1bf2915d8b296807ea390b3853e9f3925d6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
