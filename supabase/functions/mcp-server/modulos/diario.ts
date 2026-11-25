@@ -14,8 +14,8 @@
  * se notifica: pedido_insumo e pedido_revisao notificam; comentario não).
  */
 
-import { db, isUuid } from '../../_shared/aceleriq-read-services.ts';
-import { exigirVinculoExistente } from '../../_shared/aceleriq-operators-services.ts';
+import { db, isUuid } from './aceleriq-read-services.ts';
+import { exigirVinculoExistente } from './aceleriq-operators-services.ts';
 import { progressDetail } from '../../_shared/operator-progress-detail.ts';
 import { organizarArquivosDaExecucao } from '../../_shared/arquivos-da-execucao.ts';
 import { ErroDaFerramenta } from './robustez.ts';

@@ -2,7 +2,7 @@
 import { assert, assertEquals, assertRejects, assertStringIncludes } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { DataScopeError } from '../../_shared/mcp-auth.ts';
-import { RPCS_DA_PONTE } from '../../_shared/mcp-mesas-ponte.ts';
+import { RPCS_DA_PONTE } from './mcp-mesas-ponte.ts';
 import {
   caminhoPorPapel,
   type DependenciasDoEnvio,

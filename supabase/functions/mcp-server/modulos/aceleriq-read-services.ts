@@ -14,7 +14,7 @@
 // no carregamento do módulo, então o ciclo se resolve em tempo de chamada.
 import { listAdsPerformance, listSocialMetrics, listSocialPosts } from './aceleriq-metrics-services.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import { assertClientAccess, type AuthContext } from './mcp-auth.ts';
+import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
 
 // ─── Config ───────────────────────────────────────────────────
 export const READ_LIMITS = {

@@ -23,7 +23,7 @@ import {
   juntarBriefingDeAds,
   lerRespostaDaMesa,
   prazoDaAcao,
-} from "../../supabase/functions/_shared/mcp-mesas-ponte";
+} from "../../supabase/functions/mcp-server/modulos/mcp-mesas-ponte";
 import { CLIENT_SCOPED_LEGACY_TOOLS, OAUTH_STAFF_SCOPES, oauthScopesForStaff } from "../../supabase/functions/_shared/mcp-security";
 
 /**
@@ -36,7 +36,8 @@ import { CLIENT_SCOPED_LEGACY_TOOLS, OAUTH_STAFF_SCOPES, oauthScopesForStaff } f
 const raiz = resolve(__dirname, "../..");
 const ler = (c: string) => readFileSync(resolve(raiz, c), "utf8");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
-const acoes = ler("supabase/functions/_shared/mcp-mesas-acoes.ts");
+const escopos = ler("supabase/functions/_shared/mcp-scope-list.ts");
+const acoes = ler("supabase/functions/mcp-server/modulos/mcp-mesas-acoes.ts");
 const servidor = ler("supabase/functions/mcp-server/index.ts");
 const auth = ler("supabase/functions/_shared/mcp-auth.ts");
 
@@ -106,8 +107,8 @@ describe("o catálogo 2.3 está registrado", () => {
   });
 
   it("escopo mesas:write existe em todas as pontas e é concedível a staff", () => {
-    expect(tools).toContain("| 'mesas:write'");
-    expect(tools).toMatch(/export const ALL_SCOPES[\s\S]*?'mesas:write',[\s\S]*?\] as const;/);
+    expect(escopos).toContain("| 'mesas:write'");
+    expect(escopos).toMatch(/export const ALL_SCOPES[\s\S]*?'mesas:write',[\s\S]*?\] as const;/);
     expect(tools).toContain("'mesas:write': { title: 'Mesas: agir'");
     expect(tools.slice(tools.indexOf("export const SCOPE_EXPANSIONS"), tools.indexOf("export function expandScopes"))).toContain("'mesas:write',");
     expect(auth).toContain("'mesas:write'");

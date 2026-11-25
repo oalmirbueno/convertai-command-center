@@ -65,7 +65,7 @@ function consulta(tabela: string) {
   return b;
 }
 
-vi.mock("../../supabase/functions/_shared/aceleriq-read-services.ts", () => ({
+vi.mock("../../supabase/functions/mcp-server/modulos/aceleriq-read-services.ts", () => ({
   db: () => ({
     from: (t: string) => consulta(t),
     rpc: (nome: string, args: Record<string, unknown>) => {

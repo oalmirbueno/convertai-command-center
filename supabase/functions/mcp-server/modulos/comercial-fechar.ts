@@ -10,7 +10,7 @@
  */
 
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
-import { db, isUuid, READ_LIMITS } from '../../_shared/aceleriq-read-services.ts';
+import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
 import { chave } from '../../_shared/chaves.ts';
 import { ADICIONAL_GOOGLE, criarCobrancaPix, documentoValido, ErroDoAsaas, planoPorId, valorDoFechamento } from '../../_shared/comercial-asaas.ts';
 import { AJUSTES_DA_VOZ, textoFalado } from '../../_shared/comercial-voz.ts';

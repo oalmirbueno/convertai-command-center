@@ -5,9 +5,9 @@
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { z } from 'https://esm.sh/zod@3.23.8';
-import { WriteError, type WriteCtx } from './mcp-write-services.ts';
-import { auditPrincipalSelector } from './mcp-security.ts';
-import { getMcpRuntimeConfig } from './mcp-runtime.ts';
+import { WriteError, type WriteCtx } from '../../_shared/mcp-write-services.ts';
+import { auditPrincipalSelector } from '../../_shared/mcp-security.ts';
+import { getMcpRuntimeConfig } from '../../_shared/mcp-runtime.ts';
 
 let cached: SupabaseClient | null = null;
 function db(): SupabaseClient {

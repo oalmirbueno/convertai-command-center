@@ -29,7 +29,7 @@ const normalizarTipoDeDossie = (tipo: string): string => {
 
 const raiz = resolve(__dirname, "../..");
 const leitura = readFileSync(
-  resolve(raiz, "supabase/functions/_shared/aceleriq-read-services.ts"), "utf8",
+  resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-read-services.ts"), "utf8",
 );
 const escrita = readFileSync(
   resolve(raiz, "supabase/functions/_shared/mcp-write-services.ts"), "utf8",

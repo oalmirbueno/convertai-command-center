@@ -21,9 +21,9 @@ import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { DataScopeError } from '../../_shared/mcp-auth.ts';
 import { dataScopeAllowsClient } from '../../_shared/mcp-security.ts';
-import { db } from '../../_shared/aceleriq-read-services.ts';
-import { rpcComoPessoa, umaVez } from '../../_shared/mcp-mesas-acoes.ts';
-import { AVISO_ACAO_SO_COM_PESSOA } from '../../_shared/mcp-mesas-ponte.ts';
+import { db } from './aceleriq-read-services.ts';
+import { rpcComoPessoa, umaVez } from './mcp-mesas-acoes.ts';
+import { AVISO_ACAO_SO_COM_PESSOA } from './mcp-mesas-ponte.ts';
 import {
   type ArquivoDoCarrossel,
   ehImagemDoCarrossel,

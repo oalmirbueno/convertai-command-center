@@ -12,7 +12,7 @@
  *  2. Edicao grava SO o que foi mandado. Campo ausente nao vira null.
  */
 
-import type { AuthContext } from './mcp-auth.ts';
+import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
 import {
   avaliarEvidencias,
@@ -22,7 +22,7 @@ import {
   normalizarCampoDoFato,
   pedeParaParar,
   type Evidencia,
-} from './comercial-evidencia.ts';
+} from '../../_shared/comercial-evidencia.ts';
 
 export const ETAPAS_DO_FUNIL = ['novo', 'contato', 'diagnostico', 'proposta', 'negociacao', 'ganho', 'perdido'] as const;
 export const CLASSES_DO_LEAD = ['cliente_atual', 'upsell', 'novo_prospect'] as const;

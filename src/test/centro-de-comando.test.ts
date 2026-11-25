@@ -20,7 +20,7 @@ const raiz = resolve(__dirname, "../..");
 const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
 
 const migracao = ler("supabase/migrations/20260829010000_participacao_aprovacao_e_propostas.sql");
-const servicos = ler("supabase/functions/_shared/aceleriq-operators-services.ts");
+const servicos = ler("supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
 const pagina = ler("src/pages/AdminExecucao.tsx");
 

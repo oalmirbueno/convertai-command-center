@@ -163,7 +163,7 @@ describe("no banco", () => {
   });
 
   it("o MCP recusa antes e explica o caminho", () => {
-    const s = ler("supabase/functions/_shared/aceleriq-commercial-services.ts");
+    const s = ler("supabase/functions/mcp-server/modulos/aceleriq-commercial-services.ts");
     expect(s).toContain("if (para === 'ganho' && !input.won_client_id) {");
   });
 

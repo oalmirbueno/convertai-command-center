@@ -24,7 +24,7 @@ describe("o funil comercial entra no MCP somente como leitura", () => {
     // Filtros pelas tres classes + o estado visivel de nao confirmado.
     expect(tools).toContain("'cliente_atual', 'upsell', 'novo_prospect', 'sem_classe'");
 
-    const servico = ler("supabase/functions/_shared/aceleriq-read-services.ts");
+    const servico = ler("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts");
     expect(servico).toContain("export async function listOpportunities");
     expect(servico).toContain("'nao_confirmado'");
     // So leitura: o servico nunca insere, atualiza ou apaga no funil.
@@ -36,7 +36,7 @@ describe("o funil comercial entra no MCP somente como leitura", () => {
   });
 
   it("area interna: chave restrita a cliente recebe lista vazia, nunca o funil", () => {
-    const servico = ler("supabase/functions/_shared/aceleriq-read-services.ts");
+    const servico = ler("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts");
     const corpo = servico.slice(
       servico.indexOf("export async function listOpportunities"),
       servico.indexOf("export async function listClients"),
@@ -54,7 +54,8 @@ describe("o funil comercial entra no MCP somente como leitura", () => {
 
   it("o escopo commercial:read esta registrado em todas as pontas", () => {
     const tools = ler("supabase/functions/_shared/mcp-tools.ts");
-    expect(tools).toContain("| 'commercial:read'");
+    const escopos = ler("supabase/functions/_shared/mcp-scope-list.ts");
+    expect(escopos).toContain("| 'commercial:read'");
     expect(tools).toContain("'commercial:read': { title: 'Comercial — leitura'");
     expect(tools).toContain("aceleriq_list_opportunities: 'commercial:read'");
     // O guarda-chuva aceleriq:read expande para ele nas DUAS tabelas de
@@ -66,10 +67,11 @@ describe("o funil comercial entra no MCP somente como leitura", () => {
     const seguranca = ler("supabase/functions/_shared/mcp-security.ts");
     expect(seguranca).toContain("'commercial:read',");
     // O metadata OAuth e o mcp-server nao guardam mais copia propria da
-    // lista: os dois derivam de ALL_SCOPES, que ja contem commercial:read.
-    expect(tools).toMatch(/export const ALL_SCOPES[\s\S]*?'commercial:read',[\s\S]*?\] as const;/);
+    // lista: os dois derivam de ALL_SCOPES (mcp-scope-list.ts, reexportada
+    // por mcp-tools.ts), que ja contem commercial:read.
+    expect(escopos).toMatch(/export const ALL_SCOPES[\s\S]*?'commercial:read',[\s\S]*?\] as const;/);
     const metadata = ler("supabase/functions/mcp-oauth-metadata/index.ts");
-    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-tools.ts'");
+    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-scope-list.ts'");
     expect(metadata).toContain("const INTERNAL_MCP_SCOPES: readonly string[] = ALL_SCOPES;");
     expect(metadata).not.toContain("'commercial:read'");
     const servidor = ler("supabase/functions/mcp-server/index.ts");

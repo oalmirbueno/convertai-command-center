@@ -45,20 +45,20 @@ function harness() {
   });
   const dependencies: Record<string, unknown> = {
     "./aceleriq-read-services.ts": { db: () => ({ from, rpc }), isUuid: (value: string) => /^[a-f0-9-]{36}$/i.test(value), READ_LIMITS: { queryTimeoutMs: 8000, maxPageSize: 500 } },
-    "./operator-freshness.ts": freshness,
+    "../../_shared/operator-freshness.ts": freshness,
     // 07/10 (#69): o detalhe do progresso do agente (puro). Depois: os arquivos da execução organizados no
     // Workspace, que este teste de leitura não exercita (o relatório guarda o diário mesmo se organizar falhar).
-    "./operator-progress-detail.ts": progresso,
-    "./arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
+    "../../_shared/operator-progress-detail.ts": progresso,
+    "../../_shared/arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
     // 18/10: o guarda do link_id do diario (puro), que este teste de leitura nao exercita.
-    "./vinculo-guard.ts": guardaDoVinculo,
+    "../../_shared/vinculo-guard.ts": guardaDoVinculo,
     // 19/10: só trava para o dono o que só o dono resolve (puro). O Jev fora do ar mantém a trava.
-    "./trava-do-dono.ts": travaDoDono,
-    "./teto-de-operadores.ts": tetoDeOperadores,
-    "../mcp-server/modulos/rodada-e-prova.ts": rodadaEProva,
-    "./jev.ts": { jevPerguntar: async () => { throw new Error("jev fora do ar no teste"); } },
+    "../../_shared/trava-do-dono.ts": travaDoDono,
+    "../../_shared/teto-de-operadores.ts": tetoDeOperadores,
+    "./rodada-e-prova.ts": rodadaEProva,
+    "../../_shared/jev.ts": { jevPerguntar: async () => { throw new Error("jev fora do ar no teste"); } },
   };
-  const source = readFileSync(resolve(process.cwd(), "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8");
+  const source = readFileSync(resolve(process.cwd(), "supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts"), "utf8");
   const compiled = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const exports: Record<string, unknown> = {};
   const run = new Function("exports", "require", "Deno", "setTimeout", compiled);

@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 
 const raiz = resolve(__dirname, "../..");
 const servicos = readFileSync(
-  resolve(raiz, "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8",
+  resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts"), "utf8",
 );
 
 describe("o digest conta entregas, nao linhas da trilha", () => {

@@ -11,7 +11,7 @@
  * como escrita quando escrevem (body; add/check): ler com outro operator continua livre.
  */
 
-import { db } from '../../_shared/aceleriq-read-services.ts';
+import { db } from './aceleriq-read-services.ts';
 // robustez.ts não importa nada daqui: sem import circular.
 import { ErroDaFerramenta } from './robustez.ts';
 

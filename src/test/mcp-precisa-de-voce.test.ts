@@ -10,7 +10,7 @@ import {
 import { FERRAMENTAS_POR_AREA } from "../../supabase/functions/mcp-server/modulos/guia-do-painel";
 import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { CLIENT_SCOPED_LEGACY_TOOLS } from "../../supabase/functions/_shared/mcp-security";
-import { RPCS_DA_PONTE } from "../../supabase/functions/_shared/mcp-mesas-ponte";
+import { RPCS_DA_PONTE } from "../../supabase/functions/mcp-server/modulos/mcp-mesas-ponte";
 
 /**
  * MCP 2.28.0 (14/11/2026): a caixa "Precisa de você" pelos agentes, a revisão

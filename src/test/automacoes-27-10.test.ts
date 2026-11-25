@@ -386,7 +386,7 @@ describe("boletim mínimo: só exceções, sem duplicar", () => {
   it("o MCP aceita nivel medio/baixo/alto no boletim (o que derrubou o do Hermes em 26/10)", () => {
     const mod = carregar("supabase/functions/mcp-server/modulos/anuncios-registro.ts", {
       "https://esm.sh/zod@3.23.8": zod,
-      "../../_shared/aceleriq-read-services.ts": { db: () => null },
+      "./aceleriq-read-services.ts": { db: () => null },
       "../../_shared/mcp-security.ts": seguranca,
       "./autoria.ts": { principalDaChamada: () => "key:x" },
     });

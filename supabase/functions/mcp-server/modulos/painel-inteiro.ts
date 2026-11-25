@@ -4,7 +4,7 @@
  * Pedido do dono: "atualize o MCP geral, que englobe o painel inteiro de forma completa e robusta,
  * muito veloz na leitura e econômico". Este arquivo declara as ferramentas novas; o trabalho de
  * leitura mora em painel-leituras.ts e as ações chamam a própria mesa pela ponte de sempre
- * (_shared/mcp-mesas-acoes.ts), com a sessão da pessoa, a mesma confirmação de custo da tela e
+ * (modulos/mcp-mesas-acoes.ts), com a sessão da pessoa, a mesma confirmação de custo da tela e
  * idempotency_key.
  *
  * Não importa nada de _shared/mcp-tools.ts em tempo de execução (só o tipo): o mcp-tools importa
@@ -15,7 +15,7 @@
 import { z } from 'https://esm.sh/zod@3.23.8';
 import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
-import { chamarMesa, clienteDaLinha, conferirCliente, umaVez } from '../../_shared/mcp-mesas-acoes.ts';
+import { chamarMesa, clienteDaLinha, conferirCliente, umaVez } from './mcp-mesas-acoes.ts';
 import { MCP_VERSION } from '../../_shared/mcp-release.ts';
 import {
   baseDosAgentes,

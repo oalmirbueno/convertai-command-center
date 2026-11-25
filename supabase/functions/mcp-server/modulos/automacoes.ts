@@ -9,7 +9,7 @@
 
 import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
-import { db } from '../../_shared/aceleriq-read-services.ts';
+import { db } from './aceleriq-read-services.ts';
 import { ErroDaFerramenta } from './robustez.ts';
 import { ErroDeAutomacao, ligarDesligar, montarConfirmacao } from '../../_shared/automacoes.ts';
 import { GUIA_DO_N8N } from '../../_shared/automacoes-guia.ts';

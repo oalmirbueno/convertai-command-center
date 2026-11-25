@@ -4,9 +4,9 @@
 import { assert, assertEquals, assertRejects, assertStringIncludes } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { canInvoke, canUseToolWithDataScope, describeTool, TOOL_MAP, TOOLS } from '../_shared/mcp-tools.ts';
 import type { AuthContext } from '../_shared/mcp-auth.ts';
-import { acaoPermitida, ACOES_LONGAS_DA_PONTE } from '../_shared/mcp-mesas-ponte.ts';
+import { acaoPermitida, ACOES_LONGAS_DA_PONTE } from './modulos/mcp-mesas-ponte.ts';
 import { MCP_VERSION } from '../_shared/mcp-release.ts';
-import { recuoDaSessaoDoDono, sessaoDoDonoDaChave } from '../_shared/mcp-mesas-acoes.ts';
+import { recuoDaSessaoDoDono, sessaoDoDonoDaChave } from './modulos/mcp-mesas-acoes.ts';
 import {
   comNovaTentativa,
   comPrazo,

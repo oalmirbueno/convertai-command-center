@@ -73,7 +73,7 @@ const PROJETO = "44444444-4444-4444-8444-444444444444";
 
 function autoriaCom(banco: unknown) {
   return carregar("supabase/functions/mcp-server/modulos/autoria.ts", {
-    "../../_shared/aceleriq-read-services.ts": { db: () => banco, isUuid: UUID_OK },
+    "./aceleriq-read-services.ts": { db: () => banco, isUuid: UUID_OK },
     "./robustez.ts": robustez,
   });
 }
@@ -81,8 +81,8 @@ function autoriaCom(banco: unknown) {
 function diarioCom(banco: unknown) {
   const autoria = autoriaCom(banco);
   return carregar("supabase/functions/mcp-server/modulos/diario.ts", {
-    "../../_shared/aceleriq-read-services.ts": { db: () => banco, isUuid: UUID_OK },
-    "../../_shared/aceleriq-operators-services.ts": { exigirVinculoExistente: async () => {} },
+    "./aceleriq-read-services.ts": { db: () => banco, isUuid: UUID_OK },
+    "./aceleriq-operators-services.ts": { exigirVinculoExistente: async () => {} },
     "../../_shared/operator-progress-detail.ts": progresso,
     "../../_shared/arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
     "./robustez.ts": robustez,
@@ -287,15 +287,15 @@ describe("create_task não duplica entre credenciais", () => {
 
 function relato(responder: (q: Consulta) => Resposta, resposta: Record<string, unknown>) {
   const falso = bancoFalso(responder, (nome, args) => (nome === "operator_report_event" ? { data: { ok: true, ...resposta, _event: args._event }, error: null } : { data: 0, error: null }));
-  const mod = carregar("supabase/functions/_shared/aceleriq-operators-services.ts", {
+  const mod = carregar("supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts", {
     "./aceleriq-read-services.ts": { db: () => falso.banco, isUuid: () => true, READ_LIMITS: { queryTimeoutMs: 8000, maxPageSize: 500 } },
-    "./operator-freshness.ts": freshness,
-    "./operator-progress-detail.ts": progresso,
-    "./vinculo-guard.ts": guardaDoVinculo,
-    "./trava-do-dono.ts": travaDoDono,
-    "./teto-de-operadores.ts": tetoDeOperadores,
-    "./jev.ts": { jevPerguntar: async () => { throw new Error("sem Jev"); } },
-    "../mcp-server/modulos/rodada-e-prova.ts": rodadaEProva,
+    "../../_shared/operator-freshness.ts": freshness,
+    "../../_shared/operator-progress-detail.ts": progresso,
+    "../../_shared/vinculo-guard.ts": guardaDoVinculo,
+    "../../_shared/trava-do-dono.ts": travaDoDono,
+    "../../_shared/teto-de-operadores.ts": tetoDeOperadores,
+    "../../_shared/jev.ts": { jevPerguntar: async () => { throw new Error("sem Jev"); } },
+    "./rodada-e-prova.ts": rodadaEProva,
   });
   return { ...falso, report: mod.operatorReport as (i: Record<string, unknown>, a: string) => Promise<Record<string, unknown>> };
 }
@@ -385,7 +385,7 @@ function anuncios(responder: (q: Consulta) => Resposta, rpc?: (n: string, a: Rec
   const falso = bancoFalso(responder, rpc);
   const mod = carregar("supabase/functions/mcp-server/modulos/anuncios-registro.ts", {
     "https://esm.sh/zod@3.23.8": zod,
-    "../../_shared/aceleriq-read-services.ts": { db: () => falso.banco },
+    "./aceleriq-read-services.ts": { db: () => falso.banco },
     "../../_shared/mcp-security.ts": seguranca,
     "./autoria.ts": autoriaCom(falso.banco),
   });

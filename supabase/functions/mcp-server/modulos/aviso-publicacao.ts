@@ -8,7 +8,7 @@
  * Além do operador, vale o escopo da chave: cliente fora do escopo é recusado antes de qualquer escrita.
  */
 
-import { db, isUuid } from '../../_shared/aceleriq-read-services.ts';
+import { db, isUuid } from './aceleriq-read-services.ts';
 import { assertClientAccess, canAccessClient, type AuthContext } from '../../_shared/mcp-auth.ts';
 
 const slug = (s: string) => String(s || '').trim().toLowerCase();

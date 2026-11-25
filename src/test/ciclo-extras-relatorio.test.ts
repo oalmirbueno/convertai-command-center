@@ -12,7 +12,7 @@ const folha = ler("src/components/ciclo/ClientCycleSheet.tsx");
 const criarRelatorio = ler("src/pages/AdminReportCreate.tsx");
 const listaRelatorios = ler("src/pages/AdminReports.tsx");
 const anuncios = ler("src/pages/AdminAds.tsx");
-const servicos = ler("supabase/functions/_shared/aceleriq-read-services.ts");
+const servicos = ler("supabase/functions/mcp-server/modulos/aceleriq-read-services.ts");
 const mcp = ler("supabase/functions/_shared/mcp-tools.ts");
 
 /**
