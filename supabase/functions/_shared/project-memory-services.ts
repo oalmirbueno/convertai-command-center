@@ -1,6 +1,6 @@
 // Persistent large-memory services for project/client scope.
 // Used by MCP tools and by the Studio agent to survive across threads.
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { createClient } from 'npm:@supabase/supabase-js@2.97.0';
 import { exigirClienteExistente } from './mcp-client-id-guard.ts';
 
 const admin = () => createClient(
