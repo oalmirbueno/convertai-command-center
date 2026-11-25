@@ -31,17 +31,21 @@ export function perguntaProibida(t: string): string | null {
   return null;
 }
 
-/** Quem é ouvido: só gente do cliente, e só a pessoa marcada ou quem citou uma mensagem nossa. */
+/**
+ * Quem é ouvido depois da pergunta: só gente do cliente (agência e avisos automáticos nunca).
+ * 25/11: o Almir pediu "nunca deixe um cliente no vácuo" (na Casa dos Assados respondeu outra pessoa da equipe,
+ * não a marcada). Então qualquer pessoa do cliente é ouvida; o Jev separa resposta de outro assunto.
+ */
 export function ouvida(
   m: { papel: string | null; remetente: string | null; resposta_a: string | null },
   a: { marcar_numero: string; marcar_numeros?: string[] },
   nossos: Set<string>,
-): 'marcada' | 'citou' | null {
+): 'marcada' | 'citou' | 'outra_pessoa' | null {
   if (!String(m.papel ?? '').startsWith('cliente')) return null;
   if (m.resposta_a && nossos.has(m.resposta_a)) return 'citou';
   const marcados = a.marcar_numeros?.length ? a.marcar_numeros : [a.marcar_numero];
   if (m.remetente && marcados.includes(m.remetente)) return 'marcada';
-  return null;
+  return 'outra_pessoa';
 }
 
 function horaSP(ms: number) {

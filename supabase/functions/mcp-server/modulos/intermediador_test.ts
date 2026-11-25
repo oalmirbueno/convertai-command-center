@@ -180,22 +180,24 @@ Deno.test('rodada: fora do horário nada sai', async () => {
   assertEquals((await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta)).envios.length, 0);
 });
 
-Deno.test('caminho inteiro: ignora quem não foi marcado, fecha quando tudo foi respondido e devolve ao Fred', async () => {
-  const m = memoria({ slug: 'intermediador' });
+Deno.test('caminho inteiro: outra pessoa falando de outro assunto não entra; fecha quando tudo foi respondido e devolve ao Fred', async () => {
+  const m = memoria({ slug: 'intermediador', jev: (st) => JSON.stringify(st).includes('A arte de ontem') && !JSON.stringify(st).includes('meio dia')
+    ? { relacao: 'outro_assunto', itens: [0.1, 0.1] } : { relacao: 'responde', itens: [0.9, 0.9] } });
   await perguntar(m);
   assertEquals(m.assuntos[0].estado, 'esperando');
 
   m.avancar(5);
   m.cliente(OUTRA, 'Bom dia! A arte de ontem ficou ótima');
   let r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
-  assertEquals(m.jevChamadas.length, 0); // ninguém marcado falou: nem chama o Jev
+  assertEquals(m.jevChamadas.length, 1); // ouviu (é do cliente), mas o Jev viu que é outro assunto
   assertEquals(r.envios.length, 0);
+  assertEquals(m.assuntos[0].ouvidas.length, 0); // e não entrou no que "o cliente disse"
 
   m.avancar(30);
   m.cliente(MARCADA, '', { tipo: 'audio', texto: null, transcricao: 'dia 24 a gente abre até meio dia', transcricao_status: 'ok' });
   r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
-  assertEquals(m.jevChamadas.length, 1);
-  const estado = m.jevChamadas[0] as { mensagens_do_cliente: { texto: string }[] };
+  assertEquals(m.jevChamadas.length, 2);
+  const estado = m.jevChamadas[1] as { mensagens_do_cliente: { texto: string }[] };
   assertEquals(estado.mensagens_do_cliente.length, 1);
   assert(estado.mensagens_do_cliente[0].texto.includes('[áudio] dia 24'));
   assertEquals(r.envios.map((e) => e.tipo), ['fechamento']);
@@ -379,4 +381,18 @@ Deno.test('sem nome no pedido e duas pessoas falando parecido: marca as duas e o
   await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
   assertEquals(m.assuntos[0].estado, 'respondido');
   assertEquals(m.assuntos[0].ouvidas[0].como, 'marcada');
+});
+
+Deno.test('nunca no vácuo: outra pessoa do cliente responde, é ouvida e passa a ser marcada (caso Casa dos Assados, 25/11)', async () => {
+  const m = memoria({ slug: 'intermediador', jev: () => ({ relacao: 'responde_parte', itens: [0.9, 0.2] }) });
+  await perguntar(m);
+  m.avancar(3);
+  m.cliente(OUTRA, 'Boa tarde');
+  m.cliente(OUTRA, '10:30');
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  const volta = r.envios.find((e) => e.tipo === 'de_volta')!;
+  assert(volta, 'respondeu quem respondeu');
+  assertEquals(m.assuntos[0].marcar_numeros, [MARCADA, OUTRA]);
+  assertEquals(volta.mencoes, [`${MARCADA}@s.whatsapp.net`, `${OUTRA}@s.whatsapp.net`]);
+  assertEquals(m.assuntos[0].ouvidas.map((o) => o.como), ['outra_pessoa', 'outra_pessoa']);
 });

@@ -53,7 +53,7 @@ const ENVIA = { readOnlyHint: false, idempotentHint: false, destructiveHint: fal
 
 // ─── Tipos ──────────────────────────────────────────────────────
 
-export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou'; tipo: string; texto: string; em: string }
+export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou' | 'outra_pessoa'; tipo: string; texto: string; em: string; /** número de quem falou (nunca sai para o agente) */ de?: string | null }
 export interface Assunto {
   id: string; client_id: string; group_id: string; grupo_nome: string; tema: string; pergunta: string; para_que: string | null;
   marcar_numero: string; marcar_nome: string | null; marcar_numeros: string[]; marcar_nomes: string[]; o_que_conta: string[]; pode_perguntar_de_volta: boolean;
@@ -446,7 +446,7 @@ async function julgar(porta: PortaDoIntermediador, a: Assunto, ouvidas: Ouvida[]
     tema: a.tema,
     pergunta_feita: a.pergunta,
     pontos_pedidos: a.o_que_conta,
-    mensagens_do_cliente: ouvidas.map((o, i) => ({ n: i + 1, nova: i >= ouvidas.length - quantasNovas, como: o.como === 'citou' ? 'citou a pergunta' : 'pessoa marcada', tipo: o.tipo, texto: o.texto })),
+    mensagens_do_cliente: ouvidas.map((o, i) => ({ n: i + 1, nova: i >= ouvidas.length - quantasNovas, como: o.como === 'citou' ? 'citou a pergunta' : o.como === 'marcada' ? 'pessoa marcada' : 'outra pessoa do cliente', tipo: o.tipo, texto: o.texto })),
   };
   const q = perguntasAoJev(a.o_que_conta);
   const primeira = lerNotas(await porta.jev(state, q), a.o_que_conta.length);
@@ -556,7 +556,7 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     if (nossos.has(m.id)) continue;
     const como = ouvida(m, a, nossos);
     if (!como) { ignoradas++; continue; }
-    novas.push({ id: m.id, quem: m.remetente_nome ?? a.marcar_nome ?? 'cliente', como, tipo: m.tipo ?? 'texto', texto: conteudoDe(m), em: m.occurred_at });
+    novas.push({ id: m.id, quem: m.remetente_nome ?? a.marcar_nome ?? 'cliente', como, tipo: m.tipo ?? 'texto', texto: conteudoDe(m), em: m.occurred_at, de: m.remetente });
   }
   const lidoAte = msgs.length ? msgs[msgs.length - 1].received_at : a.lido_ate;
   if (ignoradas) await porta.evento(a.id, 'ignoradas', { quantas: ignoradas });
@@ -585,7 +585,22 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
   const d = decidir(a, n);
   // Fora do horário de responder: não grava nada; a mesma mensagem é julgada de novo dentro do horário.
   if (!emHorario('fechamento', agora) && d.acao !== 'esperar') return 'fora_do_horario';
-  a = (await porta.atualizarAssunto(a.id, { ouvidas, lido_ate: lidoAte, itens: Object.fromEntries(a.o_que_conta.map((it, i) => [it, Number(n.itens[i].toFixed(2))])) })) ?? { ...a, ouvidas };
+  // Conversa de outra pessoa do cliente sobre outro assunto não entra no que "o cliente disse".
+  const foraDoAssunto = d.acao === 'esperar' && (n.relacao === 'outro_assunto' || n.relacao === 'reacao');
+  const guardadas = foraDoAssunto ? [...a.ouvidas, ...novas.filter((o) => o.como !== 'outra_pessoa')] : ouvidas;
+  // Quem respondeu sem estar marcado passa a ser marcado: a de volta e o agradecimento vão para essa pessoa.
+  const extra: Partial<Assunto> = {};
+  if (!foraDoAssunto) {
+    const nums = [...marcadosDe(a).map((p) => p.numero)];
+    const nomes = [...marcadosDe(a).map((p) => p.nome ?? '')];
+    for (const o of novas) {
+      if (o.como !== 'outra_pessoa' || !o.de || !/^[0-9]{10,16}$/.test(o.de) || nums.includes(o.de) || nums.length >= 6) continue;
+      nums.push(o.de);
+      nomes.push(o.quem);
+    }
+    if (nums.length > marcadosDe(a).length) Object.assign(extra, { marcar_numeros: nums, marcar_nomes: nomes });
+  }
+  a = (await porta.atualizarAssunto(a.id, { ouvidas: guardadas, lido_ate: lidoAte, ...extra, itens: Object.fromEntries(a.o_que_conta.map((it, i) => [it, Number(n.itens[i].toFixed(2))])) })) ?? { ...a, ouvidas: guardadas, ...extra };
   await porta.evento(a.id, 'julgado', { notas: n, acao: d.acao, novas: novas.length });
   switch (d.acao) {
     case 'fechar':
