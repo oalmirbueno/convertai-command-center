@@ -11,6 +11,9 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const MODO = process.env.INTERMEDIADOR_MODO === 'grupos' ? 'grupos' : 'previa';
+// Piloto (25/11/2026, ok do Almir "Sim, pode ligar Verzelo"): clientes (client_id) que já saem de verdade no
+// grupo mesmo com o modo geral em prévia. Separados por vírgula. Os outros continuam indo só ao dono.
+const CLIENTES_REAIS = new Set(String(process.env.INTERMEDIADOR_CLIENTES_REAIS || '').split(',').map((s) => s.trim()).filter(Boolean));
 const OPERADOR = process.env.INTERMEDIADOR_OPERADOR || 'default';
 const MCP_URL = process.env.INTERMEDIADOR_MCP_URL || 'https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server';
 const PONTE = process.env.INTERMEDIADOR_PONTE || 'http://127.0.0.1:3049';
@@ -58,8 +61,13 @@ export function ultimoPorGrupo(linhas) {
   }
   return m;
 }
+/** O modo deste envio: real se o modo geral for real ou se o cliente estiver no piloto. */
+export function modoDoEnvio(envio, modoGeral, clientesReais) {
+  return modoGeral === 'grupos' || (clientesReais && clientesReais.has(String(envio.client_id || ''))) ? 'grupos' : 'previa';
+}
 /** O que fazer com um envio nesta rodada. */
-export function planoDoEnvio(envio, { modo, grupos, diario, outros, agora }) {
+export function planoDoEnvio(envio, { modo: modoGeral, clientesReais, grupos, diario, outros, agora }) {
+  const modo = modoDoEnvio(envio, modoGeral, clientesReais);
   if (!destinoConfere(envio, grupos)) return { acao: 'pular', motivo: 'destino_fora_da_lista' };
   if (!mencoesConferem(envio)) return { acao: 'pular', motivo: 'mencao_invalida' };
   const intencao = diario.get('intencao:' + envio.envio_id);
@@ -132,11 +140,11 @@ async function main() {
   const outros = ultimoPorGrupo(OUTROS_DIARIOS.flatMap(lerLinhas));
 
   const rodada = await mcp(chave, 'aceleriq_intermediador_rodada', { operator: OPERADOR, modo: MODO });
-  log({ evento: 'rodada', feito: rodada.feito || {}, envios: (rodada.envios || []).length });
+  log({ evento: 'rodada', feito: rodada.feito || {}, envios: (rodada.envios || []).length, clientes_reais: CLIENTES_REAIS.size });
   let feitos = 0;
   for (const envio of rodada.envios || []) {
     if (feitos >= MAX_POR_RODADA) break;
-    const plano = planoDoEnvio(envio, { modo: MODO, grupos, diario, outros, agora: Date.now() });
+    const plano = planoDoEnvio(envio, { modo: MODO, clientesReais: CLIENTES_REAIS, grupos, diario, outros, agora: Date.now() });
     const id = envio.envio_id;
     if (plano.acao === 'pular' || plano.acao === 'esperar') { log({ evento: plano.acao, id, tipo: envio.tipo, motivo: plano.motivo }); continue; }
     if (plano.acao === 'incerto') {

@@ -29,6 +29,9 @@ nem decide nada: só envia o que o painel devolveu e confirma.
 - `INTERMEDIADOR_MODO=previa` (padrão): a pergunta vai só ao Almir, marcada `[Prévia → "grupo" · tipo]`, com o
   nome no lugar do número. O assunto fecha como `previa` e o agente recebe o aviso de prévia.
 - `INTERMEDIADOR_MODO=grupos`: real. **Só com ok do Almir em palavras.** Trocar na unidade e `systemctl daemon-reload`.
+- `INTERMEDIADOR_CLIENTES_REAIS=<client_id,...>`: piloto. Esses clientes saem de verdade no grupo mesmo com o modo geral
+  em prévia. Desde 25/11/2026 só a Verzelo (`piloto-verzelo.conf` em `aceleriq-intermediador.service.d/piloto.conf`,
+  ok do Almir "Sim, pode ligar Verzelo"). Apagar o arquivo e `daemon-reload` volta tudo à prévia.
 
 ## Ponte (menção)
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { destinoConfere, diarioEmMapa, lerGrupos, mencoesConferem, planoDoEnvio, textoDaPrevia, ultimoPorGrupo, TENTATIVAS_RECUSADAS } from './intermediador.mjs';
+import { destinoConfere, diarioEmMapa, lerGrupos, mencoesConferem, modoDoEnvio, planoDoEnvio, textoDaPrevia, ultimoPorGrupo, TENTATIVAS_RECUSADAS } from './intermediador.mjs';
 
 const GRUPO = '120363000000000001@g.us';
 const grupos = lerGrupos({ schemaVersion: 1, groups: [{ chat_id: GRUPO, group_name: 'Verzelo - MKT - Aceleriq', client_id: 'c1' }] });
@@ -50,4 +50,15 @@ test('intenção sem resultado nunca é repetida; recusa da ponte 3 vezes vira i
 test('destino errado ou menção errada: pula sem enviar', () => {
   assert.equal(planoDoEnvio({ ...pergunta, grupo_nome: 'X' }, base).acao, 'pular');
   assert.equal(planoDoEnvio({ ...pergunta, texto: 'sem arroba' }, base).acao, 'pular');
+});
+
+test('piloto: com o modo geral em prévia, só o cliente liberado sai no grupo', () => {
+  const piloto = new Set(['c1']);
+  assert.equal(modoDoEnvio(pergunta, 'previa', piloto), 'grupos');
+  assert.equal(modoDoEnvio({ ...pergunta, client_id: 'c2' }, 'previa', piloto), 'previa');
+  assert.equal(modoDoEnvio(pergunta, 'previa', new Set()), 'previa');
+  assert.deepEqual(planoDoEnvio(pergunta, { ...base, modo: 'previa', clientesReais: piloto }), { acao: 'grupo' });
+  const outro = lerGrupos({ groups: [{ chat_id: GRUPO, group_name: 'Verzelo - MKT - Aceleriq', client_id: 'c1' }, { chat_id: '120363000000000002@g.us', group_name: 'Stop', client_id: 'c2' }] });
+  const daStop = { ...pergunta, client_id: 'c2', chat_id: '120363000000000002@g.us', grupo_nome: 'Stop' };
+  assert.deepEqual(planoDoEnvio(daStop, { ...base, grupos: outro, modo: 'previa', clientesReais: piloto }), { acao: 'previa' });
 });
