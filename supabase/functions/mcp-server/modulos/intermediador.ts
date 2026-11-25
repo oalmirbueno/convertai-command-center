@@ -209,7 +209,7 @@ export function portaDoBanco(): PortaDoIntermediador {
       const lista = (ids ?? []).map((x: { id: string }) => x.id);
       if (!lista.length) return null;
       const { data, error } = await b.from('intermediador_envios').select('criado_em').in('assunto_id', lista).eq('destino', 'grupo')
-        .neq('estado', 'cancelado').order('criado_em', { ascending: false }).limit(1);
+        .not('estado', 'in', '(cancelado,previa)').order('criado_em', { ascending: false }).limit(1);
       if (error) falhou('último envio', error);
       return (data?.[0] as { criado_em: string } | undefined)?.criado_em ?? null;
     },

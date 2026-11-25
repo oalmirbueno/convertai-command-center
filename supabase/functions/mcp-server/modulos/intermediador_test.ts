@@ -83,7 +83,7 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     },
     ultimoEnvioNoGrupo: async (g) => {
       const ids = new Set(assuntos.filter((a) => a.group_id === g).map((a) => a.id));
-      const l = envios.filter((e) => ids.has(e.assunto_id) && e.destino === 'grupo' && e.estado !== 'cancelado').map((e) => e.criado_em).sort();
+      const l = envios.filter((e) => ids.has(e.assunto_id) && e.destino === 'grupo' && e.estado !== 'cancelado' && e.estado !== 'previa').map((e) => e.criado_em).sort();
       return l.length ? l[l.length - 1] : null;
     },
     evento: async (a, tipo, dados = {}) => { eventos.push({ assunto_id: a, tipo, dados, em: new Date(agora).toISOString() }); },
