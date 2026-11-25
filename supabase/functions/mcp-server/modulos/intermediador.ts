@@ -45,6 +45,7 @@ import { escolhaDoModelo, escreverComModeloDaCentral } from '../../_shared/model
 import { lerDossie } from '../../_shared/contexto-cliente.ts';
 
 export const SLUG_DO_INTERMEDIADOR = 'intermediador';
+export const ESPERA_O_CLIENTE_TERMINAR_MS = 90_000;
 const QUEM_RODA = new Set([SLUG_DO_INTERMEDIADOR, 'default']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LEITURA = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false };
@@ -574,6 +575,9 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     novas.push({ id: m.id, quem: m.remetente_nome ?? a.marcar_nome ?? 'cliente', como, tipo: m.tipo ?? 'texto', texto: conteudoDe(m), em: m.occurred_at, de: m.remetente, cita: m.resposta_a });
   }
   const lidoAte = msgs.length ? msgs[msgs.length - 1].received_at : a.lido_ate;
+  // Gente não responde em segundos: espera o cliente terminar de escrever (nada novo dele há 90 s) e junta os pedaços
+  // ("Boa tarde" + "10:30") numa resposta só. Não avança a leitura; a próxima rodada vê tudo de novo.
+  if (novas.length && agora - Date.parse(novas[novas.length - 1].em) < ESPERA_O_CLIENTE_TERMINAR_MS) return 'esperando_cliente_terminar';
   if (ignoradas) await porta.evento(a.id, 'ignoradas', { quantas: ignoradas });
 
   if (!novas.length) {

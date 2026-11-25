@@ -115,8 +115,8 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     avancar: (min: number) => { agora += min * 60_000; },
     setJev: (f: Jev) => { jev = f; },
     cliente: (de: string, texto: string, extra: Partial<MsgGrupo> = {}) => {
-      const em = new Date(agora).toISOString();
-      mensagens.push({ id: `MSG${mensagens.length + 1}`, remetente: de, remetente_nome: de === MARCADA ? 'Carla Souza' : 'Rui', papel: 'cliente_equipe', tipo: 'texto', texto, transcricao: null, transcricao_status: 'nao_aplicavel', descricao_midia: null, resposta_a: null, occurred_at: em, received_at: em, ...extra });
+      const em = new Date(agora - 120_000).toISOString();
+      mensagens.push({ id: `MSG${mensagens.length + 1}`, remetente: de, remetente_nome: de === MARCADA ? 'Carla Souza' : 'Rui', papel: 'cliente_equipe', tipo: 'texto', texto, transcricao: null, transcricao_status: 'nao_aplicavel', descricao_midia: null, resposta_a: null, occurred_at: em, received_at: new Date(agora).toISOString(), ...extra });
     },
   };
 }
@@ -229,7 +229,8 @@ Deno.test('faltou um ponto: pergunta de volta só ele, uma vez; depois fecha', a
   m.cliente(MARCADA, 'Abre sim');
   let r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
   const volta = r.envios.find((e) => e.tipo === 'de_volta')!;
-  assert(volta.texto.startsWith(`@${MARCADA} show`));
+  assertEquals(volta.mencoes, []);
+  assert(!volta.texto.includes('@'));
   assert(m.escritas.some((u) => u.includes('Ponto que faltou: horário')));
   await intermediadorEnvioFeito({ envio_id: volta.envio_id, resultado: 'enviado', message_id: '3EB0VOLTA' }, ctx(), m.porta);
   m.setJev(() => ({ relacao: 'responde', itens: [0.9, 0.85] }));
@@ -395,7 +396,7 @@ Deno.test('nunca no vácuo: outra pessoa do cliente responde, é ouvida e passa 
   const volta = r.envios.find((e) => e.tipo === 'de_volta')!;
   assert(volta, 'respondeu quem respondeu');
   assertEquals(m.assuntos[0].marcar_numeros, [MARCADA, OUTRA]);
-  assertEquals(volta.mencoes, [`${MARCADA}@s.whatsapp.net`, `${OUTRA}@s.whatsapp.net`]);
+  assertEquals(volta.mencoes, []); // no meio da conversa ninguém é marcado de novo
   assertEquals(m.assuntos[0].ouvidas.map((o) => o.como), ['outra_pessoa', 'outra_pessoa']);
 });
 
@@ -413,4 +414,18 @@ Deno.test('um "sim" citando a pergunta de volta é lido junto com ela (caso Casa
   assertEquals((c[3] as { respondendo_a?: string }).respondendo_a, 'pergunta de volta');
   assertEquals((c[3] as { nova?: boolean }).nova, true);
   assert(!JSON.stringify(c).includes('M2'));
+});
+
+Deno.test('espera o cliente terminar de escrever antes de responder (90 s sem mensagem nova dele)', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  await perguntar(m);
+  m.avancar(5);
+  m.cliente(MARCADA, 'Atendemos dia 24', { occurred_at: new Date(Date.parse('2026-11-25T13:05:00Z') - 10_000).toISOString() });
+  let r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.feito.esperando_cliente_terminar, 1);
+  assertEquals(m.jevChamadas.length, 0);
+  m.avancar(2);
+  r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.jevChamadas.length, 1);
+  assertEquals(m.assuntos[0].estado, 'respondido');
 });

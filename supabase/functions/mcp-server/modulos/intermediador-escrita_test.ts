@@ -90,3 +90,9 @@ Deno.test('promessa: na pergunta o para quê do pedido (com prazo) passa; no fec
 Deno.test('o escritor não presume gênero (caso Preserva Eco, 25/11)', () => {
   assert(pedidoAoEscritor({ ...base, tipo: 'fechamento' }).sistema.includes('Não presuma gênero'));
 });
+
+Deno.test('só a pergunta e o lembrete marcam; a de volta tira a menção que o modelo puser', () => {
+  assertEquals(limparTexto('@{pessoa} show, e até que horas?', 'de_volta').texto, 'show, e até que horas?');
+  assertEquals(limparTexto('@Andreus, boa! E até que dia?', 'de_volta', 'Andreus').texto, 'boa! E até que dia?');
+  assert(pedidoAoEscritor({ ...base, tipo: 'de_volta', falta: 'horário' }).usuario.includes('não marque ninguém'));
+});
