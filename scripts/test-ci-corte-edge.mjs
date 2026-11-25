@@ -10,6 +10,7 @@ import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { validateLocalStatus } from './run-ci-e2e.mjs';
+import { columnAclProbe, columnSelectRegrants, parseColumnAcl, sameColumnAcl, selfTestColumnAcl } from './ci-service-role-column-acl.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const supabaseOrigin = 'http://127.0.0.1:54321';
@@ -35,6 +36,23 @@ const REST_DIAGNOSTIC = /^CI_CORTE_EDGE_REST (key|key_state|grant|operator|proje
 const legacyServiceRead = 'public.tasks';
 const privilegeProbe = `SELECT has_table_privilege('service_role', '${legacyServiceRead}', 'SELECT')::text || '/' ||
   has_table_privilege('service_role', '${legacyServiceRead}', 'SELECT WITH GRANT OPTION')::text;`;
+
+// Tracked column grant (20261125202100_mcp_project_grants.sql) used by loadProjectGrant. It is never
+// restored here: if an earlier step dropped it (a table-level REVOKE also drops column grants), the
+// run fails with this fixed label before the Edge turns the 42501 into an opaque 401.
+const trackedOperatorColumns = `SELECT has_column_privilege('service_role', 'public.internal_operators', 'slug', 'SELECT')::text || '/' ||
+  has_column_privilege('service_role', 'public.internal_operators', 'status', 'SELECT')::text;`;
+
+function requireTrackedOperatorColumns() {
+  const out = psql(trackedOperatorColumns, {}, 'service_role operator column read probe');
+  if (out !== 'true/true') fail('tracked service_role SELECT (slug, status) on internal_operators is missing; an earlier CI step altered it.');
+}
+
+function taskColumnPrivileges(label) {
+  const parsed = parseColumnAcl(psql(columnAclProbe([legacyServiceRead]), {}, label), [legacyServiceRead]);
+  if (!parsed) fail(`${label} returned unexpected output.`);
+  return parsed;
+}
 
 export function parsePrivilege(out) {
   const m = /^(true|false)\/(true|false)$/.exec(String(out).trim());
@@ -226,6 +244,8 @@ async function waitReady(state, rpc) {
 }
 
 function restoreLegacyTaskRead(state) {
+  // The REVOKE in finally also drops column SELECT grants: snapshot them before any GRANT.
+  state.columns = taskColumnPrivileges('service_role tasks column probe');
   state.before = parsePrivilege(psql(privilegeProbe, {}, 'service_role tasks read probe'));
   console.log(`Corte Edge marker: service_role tasks read before restore [${state.before.select ? 'select' : 'none'}].`);
   if (!state.before.select) {
@@ -242,7 +262,16 @@ function revokeRestoredTaskRead(state, failures) {
   if (state.restored) {
     try { psql('REVOKE SELECT ON TABLE ' + legacyServiceRead + ' FROM service_role;', {}, 'revoke restored service_role tasks read'); }
     catch { failures.push('Corte Edge: service_role tasks read revoke failed.'); }
+    try {
+      const regrants = columnSelectRegrants(state.columns, taskColumnPrivileges('service_role tasks column recheck'), [legacyServiceRead]);
+      for (const statement of regrants) psql(statement, {}, 'restore service_role tasks column read');
+    } catch { failures.push('Corte Edge: service_role tasks column read restore failed.'); }
   }
+  try {
+    if (!sameColumnAcl(taskColumnPrivileges('service_role tasks column final probe'), state.columns)) {
+      failures.push('Corte Edge: service_role tasks column privileges were not returned to their original state.');
+    }
+  } catch { failures.push('Corte Edge: service_role tasks column final probe failed.'); }
   try {
     const final = parsePrivilege(psql(privilegeProbe, {}, 'service_role tasks read final probe'));
     if (final.select !== state.before.select || final.grantOption !== state.before.grantOption) {
@@ -438,6 +467,21 @@ async function selfTest(video) {
   assert.equal(legacyServiceRead, 'public.tasks');
   assert.deepEqual(parsePrivilege('false/false\n'), { select: false, grantOption: false });
   for (const bad of ['true', 'true/false;x', 'ERROR', '', 't/f']) assert.throws(() => parsePrivilege(bad));
+  // The table-level REVOKE also drops column grants: snapshot before the GRANT, re-grant after the
+  // REVOKE and compare. The tracked operator column read is only checked, never granted here.
+  selfTestColumnAcl();
+  const restoreBody = source.slice(source.indexOf('function restoreLegacyTaskRead(state)'), source.indexOf('function revokeRestoredTaskRead(state'));
+  const snapshotAt = restoreBody.indexOf('state.columns = taskColumnPrivileges(');
+  assert(snapshotAt > 0 && snapshotAt < restoreBody.indexOf("psql('GRANT"), 'column snapshot must precede the temporary table GRANT.');
+  const revokeBody = source.slice(source.indexOf('function revokeRestoredTaskRead(state'), source.indexOf('// Fixed labels only: tells a read outage'));
+  assert(revokeBody.indexOf("psql('REVOKE") > 0 && revokeBody.indexOf("psql('REVOKE") < revokeBody.indexOf('columnSelectRegrants(') &&
+    revokeBody.indexOf('columnSelectRegrants(') < revokeBody.indexOf('sameColumnAcl('), 'column restore must follow the REVOKE and be compared.');
+  assert(trackedOperatorColumns.includes("'public.internal_operators', 'slug', 'SELECT'") &&
+    trackedOperatorColumns.includes("'public.internal_operators', 'status', 'SELECT'"));
+  const mainBody = source.slice(source.lastIndexOf('async function main()'));
+  assert(mainBody.indexOf('requireTrackedOperatorColumns();') > 0 &&
+    mainBody.indexOf('requireTrackedOperatorColumns();') < mainBody.indexOf('restoreLegacyTaskRead(taskRead);'),
+    'tracked operator column check must run before the fixture.');
   // Strict negative: only not_found passes; unavailable is reported apart from a leak; no data echoed.
   assert.equal(foreignTaskVerdict({ ok: false, codigo: 'not_found' }), null);
   assert.match(foreignTaskVerdict({ ok: false, codigo: 'unavailable' }), /unavailable/);
@@ -487,8 +531,9 @@ async function main() {
   let committed = false;
   let edge = null;
   const failures = [];
-  const taskRead = { before: null, restored: false };
+  const taskRead = { before: null, columns: null, restored: false };
   try {
+    requireTrackedOperatorColumns();
     restoreLegacyTaskRead(taskRead);
     const seeded = psql(fixture, ids, 'synthetic fixture');
     committed = true; // psql exited 0: revoke in finally even if the marker is unexpected.

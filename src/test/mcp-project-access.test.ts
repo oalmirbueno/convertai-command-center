@@ -31,6 +31,7 @@ import {
   type ProjectPorts,
   type TaskRow,
 } from "../../supabase/functions/_shared/mcp-project-access.ts";
+import { dataScopeAllowsTool, isRestrictedApiKeyIdentityScope } from "../../supabase/functions/_shared/mcp-security.ts";
 import { CredencialEmCache } from "../../supabase/functions/mcp-server/modulos/credencial-em-cache.ts";
 import { CacheCurto } from "../../supabase/functions/mcp-server/modulos/leitura-enxuta.ts";
 import { executarFerramenta } from "../../supabase/functions/mcp-server/modulos/executar-ferramenta.ts";
@@ -486,8 +487,28 @@ describe("aceleriq_escritorio_entrar: variante restrita x legado", () => {
     expect(registro).toContain("FERRAMENTAS_DO_ESCRITORIO");
     const legado = ler("supabase/functions/mcp-server/modulos/escritorio.ts");
     const defLegada = legado.slice(legado.indexOf("name: 'aceleriq_escritorio_entrar'"), legado.indexOf("name: 'aceleriq_escritorio_diretorio'"));
-    expect(defLegada).toContain("scopes: ['aceleriq:read']");
+    // #171 acrescentou escritorio:identity (OR) sem tirar aceleriq:read: a lista é exatamente essa, nada mais.
+    const escoposLegados = [...defLegada.matchAll(/^\s+scopes: \[([^\]]*)\],$/gm)];
+    expect(escoposLegados).toHaveLength(1);
+    expect(escoposLegados[0][1].split(",").map((s) => s.trim())).toEqual(["'aceleriq:read'", "'escritorio:identity'"]);
     expect(defLegada).toContain("handler: (input, ctx) => escritorioEntrar(input, ctx)");
+    // Efeito do escopo novo no escopo de dados: só a própria entrada, só chave API restrita com dono e cliente.
+    const restrita = { source: "api_key", unrestricted: false, principalUserId: U(900), clientIds: [CLIENTE_A] };
+    expect(isRestrictedApiKeyIdentityScope(restrita)).toBe(true);
+    expect(dataScopeAllowsTool(restrita, ENTRAR)).toBe(true);
+    for (const nome of ["aceleriq_escritorio_caixa", "aceleriq_escritorio_diretorio", "aceleriq_escritorio_enviar", "aceleriq_escritorio_presenca"]) {
+      expect(dataScopeAllowsTool(restrita, nome), nome).toBe(false);
+    }
+    for (const negado of [
+      null, undefined, {}, { ...restrita, source: "oauth" }, { ...restrita, unrestricted: undefined }, { ...restrita, unrestricted: "false" },
+      { ...restrita, principalUserId: "" }, { ...restrita, principalUserId: " " }, { ...restrita, principalUserId: null },
+      { ...restrita, clientIds: [] }, { ...restrita, clientIds: CLIENTE_A },
+    ]) {
+      expect(isRestrictedApiKeyIdentityScope(negado), JSON.stringify(negado)).toBe(false);
+      expect(dataScopeAllowsTool(negado, ENTRAR), JSON.stringify(negado)).toBe(false);
+    }
+    // Legado intacto: escopo irrestrito segue abrindo a entrada.
+    expect(dataScopeAllowsTool({ ...restrita, unrestricted: true }, ENTRAR)).toBe(true);
     // Nenhuma tool restrita (leitura ou escrita) é definida nos módulos do registro legado.
     for (const nome of [...PROJECT_GRANT_ALLOWED_TOOLS, ...PROJECT_GRANT_WRITE_TOOLS].filter((n) => n !== "aceleriq_escritorio_entrar")) {
       expect(registro, nome).not.toContain(`'${nome}'`);
