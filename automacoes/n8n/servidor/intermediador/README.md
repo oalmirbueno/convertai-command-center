@@ -21,8 +21,8 @@ Este processo no VPS  /opt/aceleriq-intermediador/intermediador.mjs
 Resposta estruturada ao agente pelo Escritório (de "intermediador" para quem pediu)
 ```
 
-O texto que vai ao cliente é sempre um modelo fixo (`intermediador-regras.ts` no painel). Este script não escreve
-nem decide nada: só envia o que o painel devolveu e confirma.
+O texto que vai ao cliente é escrito no painel, no contexto do cliente e da conversa, e conferido pelo Jev
+(`intermediador-escrita.ts`). Este script não escreve nem decide nada: só envia o que o painel devolveu e confirma.
 
 ## Modos
 
