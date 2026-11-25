@@ -68,7 +68,7 @@ Deno.test('limparTexto: nome escrito à mão e marcador com o nome dentro viram 
 
 Deno.test('conferência de promessa sabe que o pedido do time é fonte', () => {
   const q = perguntasDoTexto('pergunta', ['a']);
-  assert(JSON.stringify(q.promete).includes('para_que do time'));
+  assert(JSON.stringify(q.promete).includes('o para_que do time'));
 });
 
 Deno.test('comPessoa com várias pessoas: todas marcadas no grupo, nomes na prévia', () => {
@@ -78,4 +78,11 @@ Deno.test('comPessoa com várias pessoas: todas marcadas no grupo, nomes na pré
   assertEquals(t.mencoes, ['554711110000@s.whatsapp.net', '554722220000@s.whatsapp.net']);
   // O escritor às vezes escreve os dois nomes à mão: vira um marcador só (que depois marca os dois).
   assertEquals(limparTexto('@Andreus e @Marcos, vocês vão ter recesso?', 'pergunta', ['Andreus Lima', 'Marcos']).texto, '@{pessoa}, vocês vão ter recesso?');
+});
+
+Deno.test('promessa: na pergunta o para quê do pedido (com prazo) passa; no fechamento, prazo e ação do time não', () => {
+  const naPergunta = JSON.stringify(perguntasDoTexto('pergunta', ['a']).promete);
+  assert(naPergunta.includes('inclusive datas') && !naPergunta.includes('ação do time'));
+  const noFechamento = JSON.stringify(perguntasDoTexto('fechamento', ['a']).promete);
+  assert(noFechamento.includes('ação do time') && noFechamento.includes('prazo'));
 });

@@ -125,12 +125,21 @@ export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | nu
 
 /** O Jev confere o texto escrito: cobre os pontos, não promete, não inventa, soa natural. */
 export function perguntasDoTexto(tipo: TipoDeTexto, itens: string[], falta?: string | null): Record<string, PerguntaJev> {
+  // Pergunta, de volta e lembrete podem dizer para que o time precisa do dado (vem do pedido, até com prazo).
+  // Fechamento e resposta de "é com o Almir" não dizem o que o time vai fazer nem quando.
+  const abre = tipo === 'pergunta' || tipo === 'de_volta' || tipo === 'lembrete';
   const q: Record<string, PerguntaJev> = {
-    promete: {
-      type: 'noul',
-      instructions: 'A mensagem em "mensagem" promete preço, valor, prazo, desconto, resultado ou uma ação do time (ajustar, mudar, investir, verba), ou afirma algo sobre o cliente que não está em "contexto", na conversa nem em "pedido"? O que está em "pedido" (a pergunta e o para_que do time) é verdade e dizer para que o time precisa do dado não é promessa.',
-      criteria: { true: 'Promete algo, diz o que o time vai fazer, ou afirma fato que não está no contexto', false: 'Só pergunta, agradece ou avisa, sem prometer nem inventar' },
-    },
+    promete: abre
+      ? {
+        type: 'noul',
+        instructions: 'A mensagem em "mensagem" promete ao cliente preço, valor, desconto ou resultado, ou afirma algo sobre o cliente que não está em "contexto", na conversa nem em "pedido"? O que está em "pedido" (a pergunta e o para_que do time, inclusive datas) é verdade: dizer para que e para quando o time precisa do dado não é promessa.',
+        criteria: { true: 'Promete preço, desconto ou resultado, ou inventa um fato', false: 'Só pergunta e diz para que o time precisa, sem inventar' },
+      }
+      : {
+        type: 'noul',
+        instructions: 'A mensagem em "mensagem" promete preço, valor, prazo, desconto, resultado ou uma ação do time (ajustar, mudar, investir, verba), ou afirma algo sobre o cliente que não está em "contexto", na conversa nem em "pedido"?',
+        criteria: { true: 'Promete algo, diz o que o time vai fazer, ou afirma fato que não está no contexto', false: 'Só agradece ou avisa, sem prometer nem inventar' },
+      },
     natural: {
       type: 'noul',
       instructions: 'A mensagem soa como uma pessoa da agência falando naturalmente com o cliente no WhatsApp, em continuidade com a conversa recente (não parece texto pronto, formulário ou robô)?',

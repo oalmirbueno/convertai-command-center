@@ -494,7 +494,8 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
       return { motivo: 'o Jev não conferiu o texto agora' };
     }
     const problema = problemaDoTexto(notas);
-    await porta.evento(a.id, 'texto_conferido', { tipo, tentativa, notas, problema });
+    // O texto vai no rastro com o nome (nunca o número), para ver depois por que foi recusado.
+    await porta.evento(a.id, 'texto_conferido', { tipo, tentativa, notas, problema, texto: comPessoa(limpo.texto, marcados.map((p) => p.numero), marcados.map((p) => p.nome)).texto_previa });
     if (!problema) return { texto: limpo.texto };
     corrigir = problema;
   }
