@@ -367,6 +367,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_mesa_site',
     'aceleriq_mesa_stories',
     'aceleriq_mesa_templates',
+    'aceleriq_meta_conexoes_estado',
     'aceleriq_move_opportunity',
     'aceleriq_navegador_do_pc',
     'aceleriq_operator_assign',
@@ -436,7 +437,7 @@ Deno.test('foundation tools are open to any authenticated key; gated tools requi
     assert(!canInvoke(emptyCtx, t), `${t.name} should be gated`);
     assert(canInvoke(adminCtx, t), `${t.name} should allow admin`);
     if (t.name.startsWith('memory_')) continue; // memory scopes tested separately
-    if (t.scopes.some(scope => scope.endsWith(':write') || scope === 'files:archive')) {
+    if (t.scopes.some(scope => scope.endsWith(':write') || scope === 'files:archive' || scope === 'admin')) {
       assert(!canInvoke(readCtx, t), `${t.name} should reject aceleriq:read`);
       continue;
     }
@@ -1967,7 +1968,7 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
 
 Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nenhum outro escopo concede', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.38.1');
+  assertEquals(MCP_VERSION, '2.39.0');
   const t = TOOL_MAP.get('aceleriq_escritorio_dono')!;
   assertEquals([...t.scopes], ['escritorio:write']);
   assert(ALL_SCOPES.includes('escritorio:write') && SCOPE_DESCRIPTIONS['escritorio:write'].sensitive);
@@ -1979,8 +1980,8 @@ Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nen
   assert(!canUseToolWithDataScope(restrictedCtx, t), 'chave restrita a cliente não fala como dono');
   const { STAFF_OAUTH_SCOPES } = await import('../_shared/mcp-security.ts').then((m) => ({ STAFF_OAUTH_SCOPES: JSON.stringify(m) }));
   assert(!STAFF_OAUTH_SCOPES.includes('escritorio:write'), 'o OAuth da equipe não recebe este escopo');
-  // 2.37.0: +1 (aceleriq_auditoria_assinaturas_listar). 2.38.0: +3 (carrossel de Arquivos).
-  assertEquals(TOOLS.length, 229);
+  // 2.37.0: +1 (aceleriq_auditoria_assinaturas_listar). 2.38.0: +3 (carrossel de Arquivos). 2.39.0: +1 (aceleriq_meta_conexoes_estado).
+  assertEquals(TOOLS.length, 230);
 });
 
 // ─── MCP 2.36.0 (19/11/2026): Central de Automações ───
@@ -2009,7 +2010,7 @@ Deno.test('2.36: automações lê com aceleriq:read; ligar e desligar só com au
 
 Deno.test('2.37: aceleriq_auditoria_assinaturas_listar é só leitura, no guia (área mcp) e fechada para chave restrita a cliente', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.38.1');
+  assertEquals(MCP_VERSION, '2.39.0');
   const t = TOOL_MAP.get('aceleriq_auditoria_assinaturas_listar')!;
   assert(t, 'a ferramenta existe');
   assertEquals([...t.scopes], ['aceleriq:read']);
@@ -2019,14 +2020,14 @@ Deno.test('2.37: aceleriq_auditoria_assinaturas_listar é só leitura, no guia (
   assert(!canUseToolWithDataScope(restrictedCtx, t), 'chave restrita a cliente não lê a auditoria das credenciais');
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   assert(FERRAMENTAS_POR_AREA.mcp.includes('aceleriq_auditoria_assinaturas_listar'));
-  assertEquals(TOOLS.length, 229);
+  assertEquals(TOOLS.length, 230);
 });
 
 // ─── MCP 2.38.0 (20/11/2026): carrossel de Arquivos ───
 
 Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catálogo, nos escopos, no guia e na descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.38.1');
+  assertEquals(MCP_VERSION, '2.39.0');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
   const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
@@ -2062,7 +2063,7 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
   assert(TOOL_MAP.get('aceleriq_mesa_enviar_para_aprovacao')!.description.includes('aceleriq_arquivos_enviar_para_aprovacao'));
   assert(TOOL_MAP.get('aceleriq_arquivos_enviar_para_aprovacao')!.description.includes('aceleriq_mesa_enviar_para_aprovacao'));
   for (const r of ['admin_release_file_now', 'request_file_agency_review']) assert((RPCS_DA_PONTE as readonly string[]).includes(r));
-  assertEquals(TOOLS.length, 229);
+  assertEquals(TOOLS.length, 230);
   const d = descobertaDoMcp({
     servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
     protocolVersion: MCP_PROTOCOL_VERSION,
@@ -2070,5 +2071,5 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
     segundoCerebroConfigurado: false,
     agora: new Date('2026-11-20T12:00:00Z'),
   });
-  assertEquals(d.toolCount, 229);
+  assertEquals(d.toolCount, 230);
 });
