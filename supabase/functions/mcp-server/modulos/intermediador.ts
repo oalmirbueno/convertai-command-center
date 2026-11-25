@@ -9,7 +9,8 @@
  * aceleriq_intermediador_envio_feito. Ao fechar, a resposta estruturada volta ao agente pelo Escritório.
  *
  * Travas que não dependem do agente: um assunto aberto por grupo; no máximo 3 mensagens ao cliente por
- * assunto; pergunta e lembrete só em dia útil, 8h às 19h; texto ao cliente só de modelos fixos; pergunta com
+ * assunto; pergunta e lembrete só em dia útil, 8h às 19h; texto escrito na hora no contexto do cliente e conferido
+ * pelo Jev antes de sair (2.39.1, intermediador-escrita.ts); pergunta com
  * termo interno, cobrança, link ou segredo é recusada; o número de quem é marcado nunca sai do servidor.
  */
 
@@ -17,7 +18,7 @@ import { z } from 'https://esm.sh/zod@3.23.8';
 import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
 import { db } from '../../_shared/aceleriq-read-services.ts';
-import { jevPerguntar, type PerguntaJev, type ResultadoJev } from '../../_shared/jev.ts';
+import { jevPerguntar, type PerguntaJev, probabilidadeNoul, type ResultadoJev } from '../../_shared/jev.ts';
 import { ErroDaFerramenta } from './robustez.ts';
 import { portaDoBanco as portaDoEscritorio, quemChama as quemChamaNoEscritorio } from './escritorio.ts';
 import { DONO, pareceTerSegredo, grauDe } from './escritorio-regras.ts';
@@ -38,15 +39,10 @@ import {
   perguntaProibida,
   perguntasAoJev,
   precisaDeMediana,
-  semMencao,
-  TEXTO_FECHAMENTO,
-  TEXTO_HUMANO,
-  TEXTO_QUEM_E,
-  textoDeVolta,
-  textoLembrete,
-  textoPergunta,
-  type Texto,
 } from './intermediador-regras.ts';
+import { comPessoa, limparTexto, MARCA, pedidoAoEscritor, perguntasDoTexto, problemaDoTexto, type TipoDeTexto } from './intermediador-escrita.ts';
+import { escolhaDoModelo, escreverComModeloDaCentral } from '../../_shared/modelo-da-central.ts';
+import { lerDossie } from '../../_shared/contexto-cliente.ts';
 
 export const SLUG_DO_INTERMEDIADOR = 'intermediador';
 const QUEM_RODA = new Set([SLUG_DO_INTERMEDIADOR, 'default']);
@@ -100,6 +96,11 @@ export interface PortaDoIntermediador {
   evento(assuntoId: string | null, tipo: string, dados?: Record<string, unknown>): Promise<void>;
   devolver(a: Assunto, texto: string): Promise<string | null>;
   jev(state: unknown, questions: Record<string, PerguntaJev>): Promise<ResultadoJev>;
+  /** Nome e dossiê do cliente para o escritor. */
+  contextoDoCliente(clientId: string): Promise<{ nome: string; dossie: string | null }>;
+  /** O motor de escrita do painel. null = nenhum modelo respondeu. */
+  escrever(p: { clientId: string; sistema: string; usuario: string; assuntoId: string }): Promise<string | null>;
+  ultimoEvento(assuntoId: string, tipo: string): Promise<string | null>;
 }
 
 // ─── A porta para o banco ───────────────────────────────────────
@@ -230,6 +231,29 @@ export function portaDoBanco(): PortaDoIntermediador {
       return m.id;
     },
     jev: (state, questions) => jevPerguntar({ state, questions }),
+    async contextoDoCliente(clientId) {
+      const [{ data }, dossie] = await Promise.all([
+        b.from('profiles').select('company_name, full_name').eq('id', clientId).maybeSingle(),
+        lerDossie(b as unknown as Parameters<typeof lerDossie>[0], clientId, 2500).catch(() => null),
+      ]);
+      const p = data as { company_name: string | null; full_name: string | null } | null;
+      return { nome: p?.company_name || p?.full_name || 'cliente', dossie };
+    },
+    async escrever(p) {
+      const r = await escreverComModeloDaCentral({
+        clientId: p.clientId, sistema: p.sistema, usuario: p.usuario, escolha: escolhaDoModelo(undefined, undefined),
+        temperatura: 0.6, maxTokensSaida: 600, criadoPor: null, referencia: { tipo: 'intermediador_assunto', id: p.assuntoId },
+      }).catch((e) => {
+        console.error('[mcp intermediador] escrever', { erro: e instanceof Error ? e.message.slice(0, 80) : 'erro' });
+        return null;
+      });
+      return r?.texto?.trim() || null;
+    },
+    async ultimoEvento(assuntoId, tipo) {
+      const { data, error } = await b.from('intermediador_eventos').select('em').eq('assunto_id', assuntoId).eq('tipo', tipo).order('em', { ascending: false }).limit(1);
+      if (error) return null;
+      return (data?.[0] as { em: string } | undefined)?.em ?? null;
+    },
   };
 }
 
@@ -422,14 +446,65 @@ async function julgar(porta: PortaDoIntermediador, a: Assunto, ouvidas: Ouvida[]
   return combinarNotas([primeira, ...mais.map((r) => lerNotas(r, a.o_que_conta.length))]);
 }
 
-async function enviarAoGrupo(porta: PortaDoIntermediador, a: Assunto, tipo: string, t: Texto): Promise<Assunto> {
+const quemFalou = (m: MsgGrupo, a: Assunto) =>
+  m.papel === 'bot' ? 'Aceleriq (aviso automático)'
+    : String(m.papel ?? '').startsWith('agencia') ? 'Almir (agência)'
+    : `${primeiroNome(m.remetente_nome)}${m.remetente === a.marcar_numero ? ' (pessoa marcada)' : ''} (cliente)`;
+
+/** Escreve o texto no contexto (escritor do painel), limpa e confere com o Jev; até 2 tentativas. */
+export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tipo: TipoDeTexto, falta?: string | null): Promise<{ texto: string } | { motivo: string }> {
+  const agora = porta.agora();
+  const [ctx, recentes] = await Promise.all([
+    porta.contextoDoCliente(a.client_id),
+    porta.mensagens(a.group_id, iso(agora - 3 * 86_400_000)),
+  ]);
+  const conversa = recentes.slice(-14).map((m) => `${quemFalou(m, a)}: ${conteudoDe(m).slice(0, 280)}`);
+  const nome = a.marcar_nome ? primeiroNome(a.marcar_nome) : null;
+  let corrigir: string | null = null;
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    const pedido = pedidoAoEscritor({
+      tipo, cliente: ctx.nome, primeiro_nome: nome, tema: a.tema, pergunta: a.pergunta, o_que_conta: a.o_que_conta,
+      falta: falta ?? null, ja_disse: a.ouvidas.map((o) => o.texto), conversa_recente: conversa, contexto: ctx.dossie, corrigir,
+    });
+    const bruto = await porta.escrever({ clientId: a.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: a.id });
+    if (!bruto) return { motivo: 'o escritor do painel não respondeu' };
+    const limpo = limparTexto(bruto, tipo);
+    if (limpo.problema) {
+      corrigir = limpo.problema;
+      await porta.evento(a.id, 'texto_conferido', { tipo, tentativa, problema: limpo.problema });
+      continue;
+    }
+    let notas: Record<string, number>;
+    try {
+      const q = perguntasDoTexto(tipo, a.o_que_conta, falta);
+      const mensagem = limpo.texto.split(MARCA).join(`@${nome ?? 'pessoa'}`);
+      const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, pontos: a.o_que_conta } }, q);
+      notas = Object.fromEntries(Object.keys(q).map((k) => [k, probabilidadeNoul(r.answers[k]) ?? (k === 'promete' ? 1 : 0)]));
+    } catch {
+      return { motivo: 'o Jev não conferiu o texto agora' };
+    }
+    const problema = problemaDoTexto(notas);
+    await porta.evento(a.id, 'texto_conferido', { tipo, tentativa, notas, problema });
+    if (!problema) return { texto: limpo.texto };
+    corrigir = problema;
+  }
+  return { motivo: `texto recusado duas vezes (${corrigir})` };
+}
+
+async function enviarAoGrupo(porta: PortaDoIntermediador, a: Assunto, tipo: TipoDeTexto, falta?: string | null): Promise<{ a: Assunto; ok: boolean }> {
   if (a.envios_ao_cliente >= MAXIMO_AO_CLIENTE) {
     await porta.evento(a.id, 'limite_de_mensagens', { tipo });
-    return a;
+    return { a, ok: false };
   }
+  const escrito = await escreverTexto(porta, a, tipo, falta);
+  if ('motivo' in escrito) {
+    await porta.evento(a.id, 'texto_segurado', { tipo, motivo: escrito.motivo });
+    return { a, ok: false };
+  }
+  const t = comPessoa(escrito.texto, a.marcar_numero, a.marcar_nome);
   const e = await porta.criarEnvio({ assunto_id: a.id, tipo, destino: 'grupo', texto: t.texto, texto_previa: t.texto_previa, mencoes: t.mencoes });
-  if (!e) return a;
-  return (await porta.atualizarAssunto(a.id, { envios_ao_cliente: a.envios_ao_cliente + 1 })) ?? a;
+  if (!e) return { a, ok: false };
+  return { a: (await porta.atualizarAssunto(a.id, { envios_ao_cliente: a.envios_ao_cliente + 1 })) ?? a, ok: true };
 }
 
 async function avisarDono(porta: PortaDoIntermediador, a: Assunto, motivo: string) {
@@ -479,7 +554,8 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     const metade = perguntadoMs + (a.prazo_horas * 3_600_000) / 2;
     if (lidoAte !== a.lido_ate) a = (await porta.atualizarAssunto(a.id, { lido_ate: lidoAte })) ?? a;
     if (a.estado === 'esperando' && !a.perguntou_de_volta && agora >= metade && emHorario('lembrete', agora) && a.envios_ao_cliente + 2 <= MAXIMO_AO_CLIENTE) {
-      a = await enviarAoGrupo(porta, a, 'lembrete', textoLembrete({ numero: a.marcar_numero, nome: a.marcar_nome, tema: a.tema }));
+      const r = await enviarAoGrupo(porta, a, 'lembrete');
+      if (!r.ok) return 'lembrete_segurado';
       await porta.atualizarAssunto(a.id, { estado: 'lembrado' }, ['esperando']);
       return 'lembrete';
     }
@@ -503,20 +579,28 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
   switch (d.acao) {
     case 'fechar':
     case 'fechar_parcial':
-      a = await enviarAoGrupo(porta, a, 'fechamento', semMencao(TEXTO_FECHAMENTO));
+      a = (await enviarAoGrupo(porta, a, 'fechamento')).a;
       await finalizar(porta, a, d.acao === 'fechar' ? 'respondido' : 'respondido_em_parte', n, d.acao === 'fechar' ? null : `faltou: ${d.faltam.join('; ')}`);
       return d.acao;
     case 'de_volta':
-      a = await enviarAoGrupo(porta, a, 'de_volta', textoDeVolta({ numero: a.marcar_numero, nome: a.marcar_nome, item: d.item as string }));
-      await porta.atualizarAssunto(a.id, { perguntou_de_volta: true });
+      {
+        const r = await enviarAoGrupo(porta, a, 'de_volta', d.item as string);
+        if (!r.ok) {
+          // Sem texto bom para a de volta: fecha com o que veio, em vez de deixar o cliente sem retorno.
+          a = (await enviarAoGrupo(porta, r.a, 'fechamento')).a;
+          await finalizar(porta, a, 'respondido_em_parte', n, `faltou: ${d.faltam.join('; ')}`);
+          return 'fechar_parcial';
+        }
+        await porta.atualizarAssunto(a.id, { perguntou_de_volta: true });
+      }
       return 'de_volta';
     case 'humano':
-      a = await enviarAoGrupo(porta, a, 'humano', semMencao(TEXTO_HUMANO));
+      a = (await enviarAoGrupo(porta, a, 'humano')).a;
       await avisarDono(porta, a, `O cliente pediu algo que é seu:\n"${novas.map((o) => o.texto).join(' ').slice(0, 600)}"`);
       await finalizar(porta, a, 'precisa_do_almir', n, 'o cliente pediu decisão, preço, prazo ou reclamou');
       return 'humano';
     case 'quem_e':
-      if (a.envios_ao_cliente + 2 <= MAXIMO_AO_CLIENTE) await enviarAoGrupo(porta, a, 'quem_e', semMencao(TEXTO_QUEM_E));
+      if (a.envios_ao_cliente + 2 <= MAXIMO_AO_CLIENTE) await enviarAoGrupo(porta, a, 'quem_e');
       return 'quem_e';
     default:
       return 'esperar';
@@ -552,10 +636,18 @@ export async function intermediadorRodada(input: unknown, ctx: AuthContext, port
     if (doDia.filter((x) => x.client_id === a.client_id).length >= ASSUNTOS_POR_CLIENTE_POR_DIA) continue;
     const ultimo = await porta.ultimoEnvioNoGrupo(a.group_id);
     if (ultimo && agora - Date.parse(ultimo) < INTERVALO_ENTRE_ASSUNTOS_MIN * 60_000) continue;
+    // Escrita que falhou há pouco espera 15 min (IA sem crédito não pode virar uma chamada por minuto).
+    const segurado = await porta.ultimoEvento(a.id, 'texto_segurado');
+    if (segurado && agora - Date.parse(segurado) < 15 * 60_000) continue;
     const aberto = await porta.atualizarAssunto(a.id, { estado: 'perguntando' }, ['na_fila']);
     if (!aberto) continue;
+    const r = await enviarAoGrupo(porta, aberto, 'pergunta');
+    if (!r.ok) {
+      await porta.atualizarAssunto(a.id, { estado: 'na_fila' }, ['perguntando']);
+      conta('pergunta_segurada');
+      continue;
+    }
     ocupados.add(a.group_id);
-    await enviarAoGrupo(porta, aberto, 'pergunta', textoPergunta({ numero: a.marcar_numero, nome: a.marcar_nome, tema: a.tema, pergunta: a.pergunta }));
     await porta.evento(a.id, 'perguntando', {});
     conta('pergunta');
   }
@@ -622,7 +714,7 @@ export const FERRAMENTAS_DO_INTERMEDIADOR: readonly ToolDefinition[] = [
     name: 'aceleriq_intermediador_pedir',
     title: 'Intermediador: perguntar ao cliente no grupo',
     description:
-      'Pede ao Intermediador dos grupos que pergunte algo ao cliente no grupo de WhatsApp dele, marcando a pessoa. Ele escuta só a resposta daquele tema (texto, áudio transcrito ou imagem descrita), faz no máximo uma pergunta de volta, agradece e devolve a resposta estruturada na sua caixa do Escritório. Um assunto por grupo de cada vez (os outros esperam na fila); pergunta nova só em dia útil, 8h às 19h; prazo padrão 24 h, com um lembrete. Escreva a pergunta como para o cliente: sem termo interno, sem cobrança, desconto ou contrato (isso é com o Almir), sem link nem travessão. o_que_conta lista os pontos que, respondidos, encerram o assunto. Não promete preço, prazo nem desconto. Repetir com a mesma idempotency_key não abre outro.',
+      'Pede ao Intermediador dos grupos que pergunte algo ao cliente no grupo de WhatsApp dele, marcando a pessoa. A mensagem é escrita na hora, no contexto do cliente e da conversa do grupo, e conferida pelo Jev antes de sair. Ele escuta só a resposta daquele tema (texto, áudio transcrito ou imagem descrita), faz no máximo uma pergunta de volta, agradece e devolve a resposta estruturada na sua caixa do Escritório. Um assunto por grupo de cada vez (os outros esperam na fila); pergunta nova só em dia útil, 8h às 19h; prazo padrão 24 h, com um lembrete. A pergunta é o que o time precisa saber (o assistente reescreve com naturalidade): sem termo interno, sem cobrança, desconto ou contrato (isso é com o Almir), sem link nem travessão. o_que_conta lista os pontos que, respondidos, encerram o assunto. Não promete preço, prazo nem desconto. Repetir com a mesma idempotency_key não abre outro.',
     scopes: ['aceleriq:write'],
     annotations: ESCRITA,
     inputSchema: {

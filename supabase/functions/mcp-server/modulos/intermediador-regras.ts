@@ -1,9 +1,9 @@
 /**
  * MCP 2.39.0 (25/11/2026): regras puras do Intermediador dos grupos de cliente.
  *
- * Tudo que decide o que o assistente diz e quando fica aqui, sem banco e sem rede, para ser testado.
- * O texto que vai ao cliente é sempre um destes modelos fixos (nada de texto livre de IA); o julgamento
- * de cada mensagem ouvida é do Jev (Choice + Nouls), e quem transforma as notas em ação é o código.
+ * O que decide quando o assistente fala, quem é ouvido e o que fazer com cada resposta fica aqui, sem banco e
+ * sem rede. O texto em si é escrito na hora (intermediador-escrita.ts); o julgamento de cada mensagem ouvida é do
+ * Jev (Choice + Nouls), e quem transforma as notas em ação é o código.
  */
 
 import type { PerguntaJev, ResultadoJev } from '../../_shared/jev.ts';
@@ -17,37 +17,9 @@ export const INTERVALO_ENTRE_ASSUNTOS_MIN = 30;
 export const ESTADOS_ABERTOS = ['perguntando', 'esperando', 'lembrado'] as const;
 export const ESTADOS_FINAIS = ['respondido', 'respondido_em_parte', 'vencido', 'precisa_do_almir', 'cancelado', 'previa'] as const;
 
-export const TEXTO_FECHAMENTO = 'Perfeito, obrigado! Já passei pro time. 🙌';
-export const TEXTO_HUMANO = 'Boa! Vou levar isso pro Almir e ele te responde por aqui.';
-export const TEXTO_QUEM_E = 'Sou o assistente da Aceleriq, ajudo o time a organizar essas confirmações. Qualquer coisa, o Almir está por aqui também.';
-
 export type Relacao = 'responde' | 'responde_parte' | 'pergunta_ao_assistente' | 'vai_ver' | 'reacao' | 'outro_assunto';
 export interface Notas { relacao: Relacao; itens: number[]; humano: number; quem_e: number }
 export type Acao = 'fechar' | 'fechar_parcial' | 'de_volta' | 'humano' | 'quem_e' | 'esperar';
-
-const primeiroNome = (nome: string | null | undefined) => {
-  const n = String(nome ?? '').trim().split(/\s+/)[0];
-  return n && !/^\+?\d+$/.test(n) ? n : 'pessoa marcada';
-};
-const jid = (numero: string) => `${numero}@s.whatsapp.net`;
-
-export interface Texto { texto: string; texto_previa: string; mencoes: string[] }
-
-/** No grupo a menção vai pelo número (o WhatsApp mostra o nome do contato); na prévia, pelo nome. */
-function comMencao(montar: (quem: string) => string, numero: string, nome: string | null): Texto {
-  return { texto: montar(`@${numero}`), texto_previa: montar(`@${primeiroNome(nome)}`), mencoes: [jid(numero)] };
-}
-
-export function textoPergunta(p: { numero: string; nome: string | null; tema: string; pergunta: string }): Texto {
-  return comMencao((q) => `Oi, ${q}! Tudo bem? Uma dúvida rápida sobre *${p.tema.trim()}*:\n\n${p.pergunta.trim()}\n\nPode responder por aqui mesmo, em texto ou áudio. 🙂`, p.numero, p.nome);
-}
-export function textoDeVolta(p: { numero: string; nome: string | null; item: string }): Texto {
-  return comMencao((q) => `Obrigado, ${q}! Só faltou uma coisa: ${p.item.trim().replace(/[?.!]+$/, '')}?`, p.numero, p.nome);
-}
-export function textoLembrete(p: { numero: string; nome: string | null; tema: string }): Texto {
-  return comMencao((q) => `Oi, ${q}, passando só pra lembrar da dúvida sobre *${p.tema.trim()}* aqui em cima. Quando der! 🙂`, p.numero, p.nome);
-}
-export const semMencao = (texto: string): Texto => ({ texto, texto_previa: texto, mencoes: [] });
 
 /** O que nunca sai na pergunta de um agente (o motivo volta ao agente). */
 export function perguntaProibida(t: string): string | null {

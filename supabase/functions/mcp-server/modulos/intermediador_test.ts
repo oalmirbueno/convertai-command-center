@@ -31,7 +31,13 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
   const id = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
   const assuntos: Assunto[] = [];
   const envios: Envio[] = [];
-  const eventos: { assunto_id: string | null; tipo: string; dados: Record<string, unknown> }[] = [];
+  const eventos: { assunto_id: string | null; tipo: string; dados: Record<string, unknown>; em: string }[] = [];
+  const escritas: string[] = [];
+  const textosConferidos: unknown[] = [];
+  let escritor: (usuario: string) => string | null = (u) => (u.includes('Tarefa: Escreva a mensagem que abre') ? 'Oi @{pessoa}, tudo certo? Vocês vão atender dia 24? E até que horas?'
+    : u.includes('Feche agradecendo') ? 'Perfeito, valeu! Anotado aqui.' : u.includes('pergunte só o ponto que faltou') ? '@{pessoa} show, e até que horas fica?'
+    : u.includes('lembrete') ? '@{pessoa} conseguiu ver aquela do horário?' : 'Boa, o Almir te responde por aqui.');
+  let conferencia: (q: Record<string, unknown>) => Record<string, number> = () => ({});
   const devolvidas: { para: string; texto: string; estado: string }[] = [];
   const mensagens: MsgGrupo[] = [];
   const jevChamadas: unknown[] = [];
@@ -80,9 +86,19 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
       const l = envios.filter((e) => ids.has(e.assunto_id) && e.destino === 'grupo' && e.estado !== 'cancelado').map((e) => e.criado_em).sort();
       return l.length ? l[l.length - 1] : null;
     },
-    evento: async (a, tipo, dados = {}) => { eventos.push({ assunto_id: a, tipo, dados }); },
+    evento: async (a, tipo, dados = {}) => { eventos.push({ assunto_id: a, tipo, dados, em: new Date(agora).toISOString() }); },
     devolver: async (a, texto) => { devolvidas.push({ para: a.responder_para, texto, estado: a.estado }); return id(); },
-    jev: async (state) => {
+    contextoDoCliente: async () => ({ nome: 'Verzelo Jardins', dossie: 'Verzelo presta serviço de jardinagem e poda em Curitiba.' }),
+    escrever: async (p) => { escritas.push(p.usuario); return escritor(p.usuario); },
+    ultimoEvento: async (a, tipo) => eventos.filter((e) => e.assunto_id === a && e.tipo === tipo).map((e) => e.em).sort().pop() ?? null,
+    jev: async (state, questions) => {
+      if ('promete' in questions) {
+        textosConferidos.push(state);
+        const n = conferencia(questions);
+        const answers: ResultadoJev['answers'] = {};
+        for (const k of Object.keys(questions)) answers[k] = { noul: n[k] ?? (k === 'promete' ? 0.05 : 0.9) };
+        return { answers, usage: null, modelo: 'jev-teste' };
+      }
       jevChamadas.push(state);
       const r = { relacao: 'responde', itens: [], humano: 0, quem_e: 0, ...jev(state) };
       const answers: ResultadoJev['answers'] = { relacao: { choice: r.relacao }, humano: { noul: r.humano }, quem_e: { noul: r.quem_e } };
@@ -91,7 +107,9 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     },
   };
   return {
-    porta, assuntos, envios, eventos, devolvidas, mensagens, jevChamadas,
+    porta, assuntos, envios, eventos, devolvidas, mensagens, jevChamadas, escritas, textosConferidos,
+    setEscritor: (f: (usuario: string) => string | null) => { escritor = f; },
+    setConferencia: (f: (q: Record<string, unknown>) => Record<string, number>) => { conferencia = f; },
     avancar: (min: number) => { agora += min * 60_000; },
     setJev: (f: Jev) => { jev = f; },
     cliente: (de: string, texto: string, extra: Partial<MsgGrupo> = {}) => {
@@ -145,8 +163,11 @@ Deno.test('rodada: só o processo roda; fila abre um assunto por grupo e mencion
   assertEquals(r.envios.length, 1);
   assertEquals(r.envios[0].chat_id, GRUPO);
   assertEquals(r.envios[0].mencoes, [`${MARCADA}@s.whatsapp.net`]);
-  assert(r.envios[0].texto.includes(`@${MARCADA}`));
-  assert(r.envios[0].texto_previa.includes('@Carla'));
+  assert(r.envios[0].texto.startsWith(`Oi @${MARCADA}, tudo certo?`));
+  assert(r.envios[0].texto_previa.startsWith('Oi @Carla, tudo certo?'));
+  // O escritor recebeu o contexto do cliente e a conversa; o Jev conferiu o texto antes de sair.
+  assert(m.escritas[0].includes('jardinagem e poda'));
+  assertEquals(m.textosConferidos.length, 1);
   assertEquals(m.assuntos.map((a) => a.estado), ['perguntando', 'na_fila']);
   // Rodada de novo não duplica a pergunta.
   assertEquals((await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta)).envios.length, 1);
@@ -204,7 +225,8 @@ Deno.test('faltou um ponto: pergunta de volta só ele, uma vez; depois fecha', a
   m.cliente(MARCADA, 'Abre sim');
   let r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
   const volta = r.envios.find((e) => e.tipo === 'de_volta')!;
-  assert(volta.texto.includes('Só faltou uma coisa: horário?'));
+  assert(volta.texto.startsWith(`@${MARCADA} show`));
+  assert(m.escritas.some((u) => u.includes('Ponto que faltou: horário')));
   await intermediadorEnvioFeito({ envio_id: volta.envio_id, resultado: 'enviado', message_id: '3EB0VOLTA' }, ctx(), m.porta);
   m.setJev(() => ({ relacao: 'responde', itens: [0.9, 0.85] }));
   m.avancar(5);
@@ -310,4 +332,33 @@ Deno.test('estado e cancelar: só quem pediu vê e cancela', async () => {
   assertEquals(((await intermediadorEstado({ assunto_id: r.assunto_id }, ctx(), m.porta)) as { estado: string }).estado, 'na_fila');
   const c = await intermediadorCancelar({ assunto_id: r.assunto_id, motivo: 'a peça mudou' }, ctx(), m.porta);
   assertEquals(c.estado, 'cancelado');
+});
+
+Deno.test('texto que o Jev recusa duas vezes não sai: a pergunta volta para a fila e espera 15 min', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setConferencia(() => ({ natural: 0.1 }));
+  await intermediadorPedir(PEDIDO, ctx(), m.porta);
+  let r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.length, 0);
+  assertEquals(r.feito.pergunta_segurada, 1);
+  assertEquals(m.assuntos[0].estado, 'na_fila');
+  assertEquals(m.escritas.length, 2);
+  assert(m.escritas[1].includes('cara de texto pronto'));
+  m.setConferencia(() => ({}));
+  m.avancar(5);
+  r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.length, 0); // ainda dentro dos 15 min
+  m.avancar(11);
+  r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.map((e) => e.tipo), ['pergunta']);
+});
+
+Deno.test('escritor fora do ar: nada sai e o pedido segue na fila', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setEscritor(() => null);
+  await intermediadorPedir(PEDIDO, ctx(), m.porta);
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.length, 0);
+  assertEquals(m.assuntos[0].estado, 'na_fila');
+  assert(m.eventos.some((e) => e.tipo === 'texto_segurado' && String(e.dados.motivo).includes('escritor')));
 });
