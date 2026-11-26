@@ -10,6 +10,7 @@ import type { PerguntaJev, ResultadoJev } from '../../_shared/jev.ts';
 import { probabilidadeNoul } from '../../_shared/jev.ts';
 
 export const CORTE = 0.6;
+export const CORTE_DA_REACAO = 0.8;
 export const FAIXA_DE_DUVIDA: [number, number] = [0.5, 0.7];
 export const MAXIMO_AO_CLIENTE = 3; // pergunta, uma de volta ou lembrete, fechamento
 export const ASSUNTOS_POR_CLIENTE_POR_DIA = 2;
@@ -31,16 +32,21 @@ export function perguntaProibida(t: string): string | null {
   return null;
 }
 
-/** Quem é ouvido: só gente do cliente, e só a pessoa marcada ou quem citou uma mensagem nossa. */
+/**
+ * Quem é ouvido depois da pergunta: só gente do cliente (agência e avisos automáticos nunca).
+ * 25/11: o Almir pediu "nunca deixe um cliente no vácuo" (na Casa dos Assados respondeu outra pessoa da equipe,
+ * não a marcada). Então qualquer pessoa do cliente é ouvida; o Jev separa resposta de outro assunto.
+ */
 export function ouvida(
   m: { papel: string | null; remetente: string | null; resposta_a: string | null },
-  a: { marcar_numero: string },
+  a: { marcar_numero: string; marcar_numeros?: string[] },
   nossos: Set<string>,
-): 'marcada' | 'citou' | null {
+): 'marcada' | 'citou' | 'outra_pessoa' | null {
   if (!String(m.papel ?? '').startsWith('cliente')) return null;
   if (m.resposta_a && nossos.has(m.resposta_a)) return 'citou';
-  if (m.remetente === a.marcar_numero) return 'marcada';
-  return null;
+  const marcados = a.marcar_numeros?.length ? a.marcar_numeros : [a.marcar_numero];
+  if (m.remetente && marcados.includes(m.remetente)) return 'marcada';
+  return 'outra_pessoa';
 }
 
 function horaSP(ms: number) {
@@ -58,6 +64,29 @@ export function emHorario(tipo: string, ms: number): boolean {
 }
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+
+export const MAXIMO_MARCADOS = 6;
+/** Fatia das mensagens do cliente acima da qual uma pessoa só é "quem responde" (sem nome no pedido). */
+export const QUEM_RESPONDE_SOZINHO = 0.8;
+
+/**
+ * Quem marcar (pedido do Almir: "sempre marcar o membro do grupo referente ou todos").
+ * Nome: essa pessoa. "dono": quem mais fala. "todos": todo mundo do cliente. Sem nada: a pessoa que responde
+ * quase sempre (80% ou mais das mensagens do cliente) ou, se não houver, todos. Nome desconhecido: [].
+ */
+export function escolherPessoas<P extends { numero: string; nome: string | null; mensagens: number }>(pessoas: P[], marcar: string | null | undefined): P[] {
+  const ordem = [...pessoas].sort((a, b) => b.mensagens - a.mensagens);
+  if (!ordem.length) return [];
+  const alvo = semAcento(String(marcar ?? ''));
+  const todos = ordem.slice(0, MAXIMO_MARCADOS);
+  if (['todos', 'todas', 'todo mundo', 'pessoal', 'equipe', 'grupo'].includes(alvo)) return todos;
+  if (!alvo) {
+    const total = ordem.reduce((s, p) => s + p.mensagens, 0);
+    return ordem.length === 1 || ordem[0].mensagens / Math.max(total, 1) >= QUEM_RESPONDE_SOZINHO ? [ordem[0]] : todos;
+  }
+  const um = escolherPessoa(ordem, marcar);
+  return um ? [um] : [];
+}
 
 /** "dono" ou vazio: quem do cliente mais fala no grupo. Nome: casa pelo nome (sem acento). */
 export function escolherPessoa<P extends { numero: string; nome: string | null; mensagens: number }>(pessoas: P[], marcar: string | null | undefined): P | null {
@@ -81,7 +110,7 @@ export function perguntasAoJev(itens: string[]): Record<string, PerguntaJev> {
   const q: Record<string, PerguntaJev> = {
     relacao: {
       type: 'choice',
-      instructions: 'O assistente da agência fez a pergunta em "pergunta_feita" ao cliente no grupo. Olhe as mensagens marcadas como novas em "mensagens_do_cliente" (as anteriores são contexto). Qual destas descreve melhor as mensagens novas?',
+      instructions: 'O assistente da agência fez a pergunta em "pergunta_feita" ao cliente no grupo; "conversa_do_assunto" traz em ordem tudo o que o assistente mandou e o que o cliente respondeu (uma resposta curta como "sim" responde à última pergunta do assistente antes dela). Olhe as mensagens do cliente marcadas como novas. Qual destas descreve melhor as mensagens novas?',
       criteria: RELACOES,
     },
     humano: {
@@ -97,8 +126,8 @@ export function perguntasAoJev(itens: string[]): Record<string, PerguntaJev> {
   itens.forEach((item, i) => {
     q[`item_${i}`] = {
       type: 'noul',
-      instructions: { pergunta: 'Somando todas as mensagens do cliente neste assunto, elas deixam claro este ponto da pergunta?', ponto: item },
-      criteria: { true: 'O cliente disse isso de forma clara (sim, não, um valor, uma data ou uma escolha)', false: 'O cliente não falou desse ponto ou ficou vago' },
+      instructions: { pergunta: 'Lendo "conversa_do_assunto" em ordem (uma resposta curta como "sim" ou "isso" confirma o que o assistente acabou de perguntar), este ponto da pergunta está resolvido? Conta como resolvido quando o cliente respondeu o ponto ou quando a resposta dele torna o ponto desnecessário (ex.: disse que não vai ter recesso, então as datas do recesso não se aplicam).', ponto: item },
+      criteria: { true: 'O cliente respondeu o ponto (sim, não, valor, data, escolha) ou a resposta dele já torna o ponto desnecessário', false: 'O ponto ainda faz sentido e o cliente não falou dele, ou ficou vago' },
     };
   });
   return q;
@@ -138,11 +167,14 @@ export function decidir(
   a: { o_que_conta: string[]; pode_perguntar_de_volta: boolean; perguntou_de_volta: boolean; envios_ao_cliente: number },
   n: Notas,
 ): { acao: Acao; item?: string; faltam: string[] } {
-  const faltam = a.o_que_conta.filter((_, i) => (n.itens[i] ?? 0) < CORTE);
+  // Reação sozinha ("👍", "ok") só fecha com nota alta: um joinha para "manda as fotos?" não entrega as fotos.
+  const corte = n.relacao === 'reacao' ? CORTE_DA_REACAO : CORTE;
+  const faltam = a.o_que_conta.filter((_, i) => (n.itens[i] ?? 0) < corte);
   const cobriuAlgum = faltam.length < a.o_que_conta.length;
-  if (n.humano >= CORTE || n.relacao === 'pergunta_ao_assistente') return { acao: 'humano', faltam };
-  if (faltam.length === 0) return { acao: 'fechar', faltam };
+  if (n.humano >= CORTE) return { acao: 'humano', faltam };
   if (n.quem_e >= CORTE) return { acao: 'quem_e', faltam };
+  if (n.relacao === 'pergunta_ao_assistente') return { acao: 'humano', faltam };
+  if (faltam.length === 0) return { acao: 'fechar', faltam };
   const respondeu = (n.relacao === 'responde' || n.relacao === 'responde_parte') && cobriuAlgum;
   if (!respondeu) return { acao: 'esperar', faltam };
   // Precisa sobrar espaço para a de volta E para o fechamento depois dela.
