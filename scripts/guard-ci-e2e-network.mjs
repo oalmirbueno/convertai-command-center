@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 // Only forwarded IPv4 traffic from the inspected Supabase bridge is filtered.
 // Host processes (including Docker's DNS proxy), Node and browser requests need
@@ -64,6 +65,29 @@ function projectLabels(labels, projectId) {
   return labels?.[LABEL] === projectId && labels?.[COMPOSE_LABEL] === projectId;
 }
 
+// Diagnostic only, never used for decisions. Names are reported solely when they
+// exactly equal a known Supabase CLI container name for this project; anything
+// else (labels, IDs, arbitrary names, env, responses) is never echoed.
+const KNOWN_SERVICES = ["db", "kong", "auth", "rest", "realtime", "storage", "imgproxy", "inbucket", "studio", "pg_meta", "edge_runtime", "analytics", "vector", "pooler", "differ"];
+function safeService(name, projectId) {
+  const bare = typeof name === "string" && name.startsWith("/") ? name.slice(1) : name;
+  if (bare === `realtime-dev.supabase_realtime_${projectId}`) return "realtime";
+  return KNOWN_SERVICES.find((service) => bare === `supabase_${service}_${projectId}`) ?? "unrecognized";
+}
+function membershipMismatch(projectId, projectContainers, members, containers) {
+  const memberIds = new Set(members.map(([id]) => id));
+  const projectIds = new Set(projectContainers.map((container) => container.Id));
+  const running = (container) => container?.Running === true ? true : container?.Running === false ? false : "unknown";
+  const entries = [
+    ...projectContainers.filter((container) => !memberIds.has(container.Id))
+      .map((container) => ({ service: safeService(container.Name, projectId), running: running(container), onNetwork: false })),
+    ...members.filter(([id]) => !projectIds.has(id))
+      .map(([id, member]) => ({ service: safeService(member?.Name, projectId), running: running(containers.find((item) => item.Id === id)), onNetwork: true })),
+  ].map((entry) => JSON.stringify(entry)).sort();
+  const limit = 16;
+  return `[${entries.slice(0, limit).join(",")}]${entries.length > limit ? ` (+${entries.length - limit} more)` : ""}`;
+}
+
 export function validateTopology(projectId, networks, containers) {
   assert(Array.isArray(networks) && Array.isArray(containers), "Docker inspection did not return arrays.");
   const expectedName = `supabase_network_${projectId}`;
@@ -92,7 +116,8 @@ export function validateTopology(projectId, networks, containers) {
   assert(new Set(containers.map((container) => container.Id)).size === containers.length, "Duplicate container inspection results.");
   const memberIds = members.map(([id]) => id).sort();
   const projectContainers = containers.filter((container) => container.Labels?.[LABEL] === projectId || container.Labels?.[COMPOSE_LABEL] === projectId || (container.Name?.startsWith("/supabase_") && container.Name.endsWith(`_${projectId}`)));
-  assert.deepEqual(projectContainers.map((container) => container.Id).sort(), memberIds, "All project containers must belong exclusively to the inspected network.");
+  const exclusive = isDeepStrictEqual(projectContainers.map((container) => container.Id).sort(), memberIds);
+  assert(exclusive, exclusive ? undefined : `All project containers must belong exclusively to the inspected network. Mismatch: ${membershipMismatch(projectId, projectContainers, members, containers)}`);
   const seenAddresses = new Set();
   const snapshot = members.map(([id, member]) => {
     const container = containers.find((item) => item.Id === id);
@@ -346,6 +371,19 @@ export async function selfTest() {
   await rejectedBeforeFirewall((f) => { f.containers[0].Networks[f.networks[0].Name].GlobalIPv6Address = "fd00::2"; }, /IPv6/);
   await rejectedBeforeFirewall((f) => { f.containers[0].Running = false; }, /running state/);
   await rejectedBeforeFirewall((f) => { f.containers.push({ ...f.containers[0], Id: "b".repeat(64) }); }, /All project/);
+  await rejectedBeforeFirewall((f) => {
+    f.containers.push({ ...f.containers[0], Id: "b".repeat(64), Name: `/supabase_edge_runtime_${f.projectId}`, Running: false, Networks: {} });
+  }, /exclusively to the inspected network\. Mismatch: \[\{"service":"edge_runtime","running":false,"onNetwork":false\}\]$/);
+  await test(async () => {
+    // Arbitrary names, labels, IDs, network modes and the project id never reach the error.
+    const f = fixture();
+    f.containers.push({ Id: "b".repeat(64), Name: `/supabase_tok3n-s3cr3t_${f.projectId}`, Labels: { [LABEL]: f.projectId, "private.k3y": "v4lue" }, Running: true, NetworkMode: "c0ntainer:x", Networks: {} });
+    const error = await executeGuard("--guard", f).then(() => assert.fail("expected rejection"), (rejection) => rejection);
+    assert.match(error.message, /Mismatch: \[\{"service":"unrecognized","running":true,"onNetwork":false\}\]$/);
+    assert(!/tok3n|s3cr3t|k3y|v4lue|c0ntainer|b{64}|aceleriq-os|Labels/.test(error.message));
+    assert(!f.calls.some(([command]) => command === "sudo"));
+    assert.equal(f.state, null);
+  });
   await rejectedBeforeFirewall((f) => { delete f.networks[0].Containers[f.containers[0].Id]; }, /must be running/);
   await test(async () => {
     const f = fixture();

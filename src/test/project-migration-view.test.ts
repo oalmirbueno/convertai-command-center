@@ -61,7 +61,7 @@ const plan = (entries = baseline().document.entries) =>
   planProjectMigrationView({ ...options, ledgerCsv: csv(entries) });
 
 describe("reviewed project forward-only migration view", () => {
-  it("emits exactly the 484 observed rows as aborting sentinels with no pending SQL", () => {
+  it("emits exactly the 484 observed rows as aborting sentinels and runs only the two new Corte migrations", () => {
     const current = loadReviewedProjectBaseline({ projectRef: reviewedProjectRef });
     const observed = current.document.entries;
     expect(observed).toHaveLength(484);
@@ -69,23 +69,32 @@ describe("reviewed project forward-only migration view", () => {
       projectRef: reviewedProjectRef,
       ledgerCsv: csv(observed),
     });
+    const pendingVersions = ["20261125202100", "20261125202200"];
     expect(view).toMatchObject({
-      status: "ready",
+      status: "pending",
       actual_count: 484,
-      expected_count: 484,
+      expected_count: 486,
       reviewed_count: 484,
       sentinel_count: 484,
-      pending_versions: [],
+      pending_versions: pendingVersions,
     });
-    expect(view.files).toHaveLength(484);
-    expect(view.files.every((file) => file.kind === "sentinel")).toBe(true);
-    expect(view.files.map((file) => file.version)).toEqual(
+    expect(view.files).toHaveLength(486);
+    const sentinels = view.files.filter((file) => file.kind === "sentinel");
+    expect(sentinels.map((file) => file.version)).toEqual(
       observed.map((entry) => entry.version),
     );
-    for (const file of view.files) {
+    for (const file of sentinels) {
       expect(file.bytes.toString("utf8")).toContain(
         `RAISE EXCEPTION 'Refusing to execute audited migration sentinel ${file.version}'`,
       );
+    }
+    const sources = current.document.pending_migrations;
+    const pendingFiles = view.files.filter((file) => file.kind === "pending");
+    expect(sources.map((entry) => entry.version)).toEqual(pendingVersions);
+    expect(pendingFiles.map((file) => file.version)).toEqual(pendingVersions);
+    for (const [index, file] of pendingFiles.entries()) {
+      expect(file.filename).toBe(basename(sources[index].path));
+      expect(file.bytes.equals(readFileSync(resolve(repoRoot, sources[index].path)))).toBe(true);
     }
     const renewal = view.files.find((file) => file.version === "20261021154113")!;
     expect(renewal.kind).toBe("sentinel");
