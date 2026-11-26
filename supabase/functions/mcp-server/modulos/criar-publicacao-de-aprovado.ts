@@ -29,6 +29,8 @@ import { dataScopeAllowsClient } from '../../_shared/mcp-security.ts';
 import { db } from '../../_shared/aceleriq-read-services.ts';
 import { rpcComoPessoa, umaVez } from '../../_shared/mcp-mesas-acoes.ts';
 import { payloadComPerfis, uuidEstavel, type PostExistente } from '../../estudio-arte/modulos/entrega-na-agenda.ts';
+import { audioDaEntrada, ESQUEMA_AUDIO_CONFIGURATION, gravarAudioDaPublicacao } from './audio-instagram.ts';
+import { problemaDoAudioNoConteudo } from './audio-instagram-regras.ts';
 
 const UUID = z.string().uuid();
 const ESCRITA = { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false };
@@ -42,6 +44,8 @@ export const criarPublicacaoSchema = z.object({
   external_account_id: UUID,
   confirmar: z.literal(true),
   idempotency_key: z.string().trim().min(8).max(120),
+  // MCP 2.39.3: opcional, só Reel do Instagram (regras em audio-instagram-regras.ts). Ausente = igual a antes.
+  audio_configuration: z.unknown().optional(),
 }).strict();
 
 export type PedidoDeCriarPublicacao = z.infer<typeof criarPublicacaoSchema>;
@@ -165,6 +169,8 @@ export interface DependenciasDaCriacao {
   /** Escrita como a pessoa conectada (auth.uid() = ela). */
   rpc: (nome: 'save_editorial_post', args: Record<string, unknown>, ctx: AuthContext) => Promise<unknown>;
   umaVez: typeof umaVez;
+  /** MCP 2.39.3: RPC do áudio do Reel, como a pessoa conectada. Só é chamada com audio_configuration. */
+  rpcAudio?: (nome: string, args: Record<string, unknown>, ctx: AuthContext) => Promise<unknown>;
 }
 
 function dependenciasPadrao(): DependenciasDaCriacao {
@@ -212,6 +218,9 @@ export async function criarPublicacaoDeAprovado(
   if (post.archived_at) {
     throw new Error('Post arquivado na Agenda: não nasce publicação nele. Use o post atual do conteúdo (a revisão mais nova).');
   }
+  // MCP 2.39.3: audio_configuration opcional, validado antes de qualquer escrita (Reel-only, volumes 1..100).
+  const audio = audioDaEntrada(input.audio_configuration, { content_type: post.content_type });
+  const rpcAudio = deps.rpcAudio ?? (rpcComoPessoa as unknown as NonNullable<DependenciasDaCriacao['rpcAudio']>);
 
   const [internoRes, pubsRes, arquivoRes] = await Promise.all([
     banco.from('editorial_post_internal')
@@ -243,9 +252,19 @@ export async function criarPublicacaoDeAprovado(
   if (vivas.length) {
     const daConta = vivas.find((p) => p.external_account_id === input.external_account_id);
     const principal = daConta || vivas[0];
+    let audioDaExistente: Record<string, unknown> | null = null;
+    if (audio) {
+      const problemaAudio = daConta ? problemaDoAudioNoConteudo({ content_type: post.content_type, platform: daConta.platform }) : null;
+      audioDaExistente = !daConta
+        ? { gravado: false, audio_configuration: audio, mensagem: 'O áudio não foi gravado: a publicação existente é de outra conta.' }
+        : problemaAudio
+        ? { gravado: false, audio_configuration: audio, mensagem: problemaAudio }
+        : await gravarAudioDaPublicacao(daConta.id, audio, ctx, rpcAudio);
+    }
     return {
       ok: true,
       ja_existia: true,
+      ...(audioDaExistente ? { audio: audioDaExistente } : {}),
       publicacao: paraResposta(principal),
       ...(vivas.length > 1 ? { publicacoes: vivas.map(paraResposta) } : {}),
       ...(daConta ? {} : {
@@ -275,6 +294,10 @@ export async function criarPublicacaoDeAprovado(
   const ligacoes = lido<unknown[] | null>(ligacaoRes, 'as contas do projeto') ?? [];
   const problema = problemaNaConta(conta, post.client_id, ligacoes.length > 0);
   if (problema) throw new Error(problema);
+  if (audio) {
+    const problemaAudio = problemaDoAudioNoConteudo({ content_type: post.content_type, platform: conta!.platform });
+    if (problemaAudio) throw new Error(`Invalid input: ${problemaAudio}`);
+  }
 
   const postParaSalvar: PostExistente = {
     ...post,
@@ -327,6 +350,7 @@ export async function criarPublicacaoDeAprovado(
         publicacao: paraResposta(criada),
         post_id: post.id,
         client_id: post.client_id,
+        ...(audio ? { audio: await gravarAudioDaPublicacao(criada.id, audio, ctx, rpcAudio) } : {}),
         proximo_passo: proximoPasso(criada),
       },
     };
@@ -337,7 +361,7 @@ const tool: ToolDefinition = {
   name: NOME,
   title: 'Criar publicação de post aprovado',
   description:
-    'Cria a publicação planejada, sem data, de um post da Agenda já aprovado pelo cliente que ainda não tem publicação (o caso de peça aprovada sem publication_id), na conta pedida (external_account_id: Instagram ou Facebook ativo, do cliente e ligado ao projeto do post). Usa o mesmo caminho do painel (save_editorial_post como a pessoa conectada). Não aprova, não agenda e não publica. Se o post já tem publicação viva, não cria nada e devolve a existente (ja_existia true); só cancelada recusa (reabrir é ação humana na Agenda). Devolve publicacao {id, version, status, external_account_id, platform} e proximo_passo: agendar com aceleriq_reagendar_publicacao (publication_id e expected_version=version). Exige confirmar=true, idempotency_key, editorial:write e o cliente no escopo.',
+    'Cria a publicação planejada, sem data, de um post da Agenda já aprovado pelo cliente que ainda não tem publicação (o caso de peça aprovada sem publication_id), na conta pedida (external_account_id: Instagram ou Facebook ativo, do cliente e ligado ao projeto do post). Usa o mesmo caminho do painel (save_editorial_post como a pessoa conectada). Não aprova, não agenda e não publica. Se o post já tem publicação viva, não cria nada e devolve a existente (ja_existia true); só cancelada recusa (reabrir é ação humana na Agenda). Devolve publicacao {id, version, status, external_account_id, platform} e proximo_passo: agendar com aceleriq_reagendar_publicacao (publication_id e expected_version=version). audio_configuration opcional (2.39.3): só Reel do Instagram, grava o áudio da Meta na publicação (aceleriq_definir_audio_reel). Exige confirmar=true, idempotency_key, editorial:write e o cliente no escopo.',
   scopes: ['editorial:write'],
   annotations: ESCRITA,
   inputSchema: {
@@ -349,6 +373,7 @@ const tool: ToolDefinition = {
       external_account_id: { type: 'string', format: 'uuid', description: 'Conta do Instagram ou página do Facebook do cliente, ligada ao projeto do post.' },
       confirmar: { type: 'boolean', const: true, description: 'Tem que ser true: cria a publicação que o cliente pode ver na Agenda.' },
       idempotency_key: { type: 'string', description: 'Chave estável de 8 a 120 caracteres. Repetir não cria de novo.' },
+      audio_configuration: ESQUEMA_AUDIO_CONFIGURATION,
     },
   },
   handler: async (input, ctx) => {

@@ -72,6 +72,7 @@ import { FERRAMENTAS_DA_AUDITORIA_DE_ASSINATURAS } from '../mcp-server/modulos/a
 import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publicacao-de-aprovado.ts';
 import { FERRAMENTA_DE_APROVACAO_INTERNA } from '../mcp-server/modulos/registrar-aprovacao-interna.ts';
+import { comAudioEMusica, FERRAMENTAS_DE_AUDIO_INSTAGRAM } from '../mcp-server/modulos/audio-instagram.ts';
 import { FERRAMENTA_DE_AGRUPAR_CARROSSEL } from '../mcp-server/modulos/arquivos-agrupar-carrossel.ts';
 import { FERRAMENTA_DE_POST_DE_ARQUIVO } from '../mcp-server/modulos/agenda-post-de-arquivo.ts';
 import { FERRAMENTA_DE_ENVIAR_ARQUIVO } from '../mcp-server/modulos/arquivos-enviar-para-aprovacao.ts';
@@ -402,6 +403,10 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_criar_publicacao_de_aprovado: 'editorial:write',
   // MCP 2.39.2 (25/11/2026): autoaprovação interna, só o cliente interno AcelerIQ.
   aceleriq_registrar_aprovacao_interna: 'editorial:write',
+  // MCP 2.39.3 (26/11/2026): Instagram Audio API (Reels) e música sugerida do post.
+  aceleriq_buscar_audios_instagram: 'editorial:read',
+  aceleriq_definir_audio_reel: 'editorial:write',
+  aceleriq_definir_musica_sugerida: 'editorial:write',
   // MCP 2.38 (20/11/2026): carrossel de Arquivos.
   aceleriq_arquivos_agrupar_carrossel: 'files:write',
   aceleriq_agenda_criar_post_de_arquivo: 'editorial:write',
@@ -878,7 +883,8 @@ const listEditorialCalendarTool = makeRead(
     required: ['client_id'],
     additionalProperties: false,
   },
-  (input, ctx) => listEditorialCalendar(input, ctx),
+  // MCP 2.39.3: post.musica_sugerida e publication.audio_reel entram como campo adicional (sem a migração, nada muda).
+  async (input, ctx) => await comAudioEMusica(await listEditorialCalendar(input, ctx)),
 );
 
 const getAgendaStatusTool = makeRead(
@@ -5144,6 +5150,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTA_DE_REAGENDAR,
   ...FERRAMENTA_DE_CRIAR_PUBLICACAO,
   ...FERRAMENTA_DE_APROVACAO_INTERNA,
+  ...FERRAMENTAS_DE_AUDIO_INSTAGRAM,
   ...FERRAMENTAS_DO_EMAIL,
   ...FERRAMENTA_DE_EDITAR_LEGENDA,
   ...FERRAMENTA_DE_AJUSTAR_FORMATO,
