@@ -31,8 +31,8 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
+import ExcluirClienteModal from "@/components/admin/ExcluirClienteModal";
 import { Switch } from "@/components/ui/switch";
-import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
 import MudarPlano from "@/components/admin/MudarPlano";
 import ExtrasDoCliente from "@/components/clientes/ExtrasDoCliente";
@@ -565,30 +565,6 @@ export default function EditClientDrawer({
       toast.error(err.message || "Erro ao salvar");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    try {
-      const res = await supabase.functions.invoke("manage-team", {
-        body: { action: "delete", user_id: client.id },
-      });
-      if (res.data?.error) throw new Error(res.data.error);
-      if (res.error) {
-        throw new Error(
-          await getSupabaseFunctionErrorMessage(
-            res.error,
-            "Erro ao excluir",
-          ),
-        );
-      }
-
-      toast.success("Cliente excluído com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      setConfirmDelete(false);
-      onClose();
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao excluir cliente");
     }
   };
 
@@ -1502,13 +1478,10 @@ export default function EditClientDrawer({
       </div>
 
       {isAdmin && (
-        <ConfirmModal
-          open={confirmDelete}
-          title="Excluir Cliente"
-          description={`Tem certeza que deseja excluir "${client.full_name}"? Todos os dados relacionados (projetos, arquivos, cobranças) serão removidos permanentemente.`}
-          confirmLabel="Excluir Cliente"
-          onConfirm={handleDelete}
-          onCancel={() => setConfirmDelete(false)}
+        <ExcluirClienteModal
+          cliente={confirmDelete ? { id: client.id, nome: String(client.company_name || client.full_name || "Cliente").trim() || "Cliente", plan_status: client.plan_status ?? null } : null}
+          aoFechar={() => setConfirmDelete(false)}
+          aoExcluir={onClose}
         />
       )}
 

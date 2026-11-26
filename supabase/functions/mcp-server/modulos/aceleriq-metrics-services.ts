@@ -23,6 +23,54 @@ const numero = (valor: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/**
+ * Frescor da coleta de cada conta de anúncios (26/11/2026). Sem isto o agente
+ * lia número velho como se fosse de agora: a coleta ficou parada de 24 a 26/11
+ * (token pessoal caído) e nada na resposta avisava. Números da conta e das
+ * campanhas atualizam a cada ~10 min; criativos a cada ~20 min.
+ */
+export const CADENCIA_DA_COLETA = 'Números da conta e das campanhas a cada ~10 min; criativos a cada ~20 min.';
+const ATRASO_MAXIMO_MS = 40 * 60 * 1000;
+
+export async function coletaDasContas(clientId?: string) {
+  let qa = db()
+    .from('external_accounts')
+    .select('id, client_id, external_id, display_name')
+    .eq('platform', 'meta_ads')
+    .eq('status', 'active')
+    .limit(READ_LIMITS.maxPageSize);
+  if (clientId) qa = qa.eq('client_id', clientId);
+  const { data: contasData, error } = await qa;
+  if (error) throw new Error(error.message);
+  const contas = (contasData || []) as Array<Record<string, unknown>>;
+  if (!contas.length) return { cadencia: CADENCIA_DA_COLETA, contas: [], alguma_atrasada: false };
+  const { data: fotos, error: erroFotos } = await db()
+    .from('ads_account_snapshot')
+    .select('external_account_id, coletado_em, tentado_em, erro, saldo_disponivel, currency, account_status')
+    .in('external_account_id', contas.map((c) => String(c.id)));
+  if (erroFotos) throw new Error(erroFotos.message);
+  const porConta = new Map(((fotos || []) as Array<Record<string, unknown>>).map((f) => [String(f.external_account_id), f]));
+  const agora = Date.now();
+  const lista = contas.map((c) => {
+    const f = porConta.get(String(c.id)) ?? {};
+    const coletadoEm = (f.coletado_em as string | null) ?? null;
+    const atrasada = !coletadoEm || agora - new Date(coletadoEm).getTime() > ATRASO_MAXIMO_MS;
+    return {
+      client_id: c.client_id,
+      conta: c.external_id,
+      nome: c.display_name ?? null,
+      coletado_em: coletadoEm,
+      atrasada,
+      // Erro só vale como atual quando a coleta está atrasada; senão é de uma tentativa antiga já superada.
+      erro: atrasada ? ((f.erro as string | null) ?? null) : null,
+      saldo_disponivel: f.saldo_disponivel ?? null,
+      moeda: f.currency ?? null,
+      account_status: f.account_status ?? null,
+    };
+  });
+  return { cadencia: CADENCIA_DA_COLETA, contas: lista, alguma_atrasada: lista.some((c) => c.atrasada) };
+}
+
 /** Semanas fechadas do Instagram: seguidores, alcance, interações. */
 export async function listSocialMetrics(opts: { client_id?: string; weeks?: number }) {
   const semanas = Math.min(Math.max(opts.weeks ?? 12, 1), 52);
@@ -113,7 +161,7 @@ export async function listAdsCampaigns(opts: { client_id?: string; only_active?:
 
   const { data, error } = await qb;
   if (error) throw new Error(error.message);
-  return { campaigns: data || [] };
+  return { campaigns: data || [], coleta: await coletaDasContas(opts.client_id) };
 }
 
 /**
@@ -252,9 +300,11 @@ export async function listAdsPerformance(opts: { client_id?: string; days?: numb
   const gastoTotal = Number(resumo.reduce((soma, campanha) => soma + campanha.spend, 0).toFixed(2));
   const vendasTotal = vendasRegistradas + vendasRastreadas;
 
+  const coleta = await coletaDasContas(opts.client_id);
   return {
     period_days: dias,
     since: desde.toISOString().slice(0, 10),
+    coleta,
     daily: linhas,
     by_campaign: resumo,
     // Vendas do período: cada registro manual (dia, canal, campanha, valor
@@ -375,8 +425,10 @@ export async function listAdsCreatives(opts: {
   });
 
   const comGasto = pecas.filter((p) => p.gasto > 0);
+  const coleta = await coletaDasContas(opts.client_id);
   return {
     periodo_dias: dias,
+    coleta,
     total_de_pecas: pecas.length,
     pecas: pecas.slice(0, teto),
     // O ranking existe para responder "o que repito na semana que vem?".

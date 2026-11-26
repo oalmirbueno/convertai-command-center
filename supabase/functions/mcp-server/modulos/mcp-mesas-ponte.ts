@@ -81,6 +81,9 @@ export const RPCS_DA_PONTE = [
   // (admin/gestor libera ao cliente; design/tráfego pede a revisão da agência). Não agenda nem publica.
   'admin_release_file_now',
   'request_file_agency_review',
+  // MCP 2.39.2: autoaprovação interna (só o cliente interno, decidido no código do MCP). O mesmo caminho do
+  // painel quando o admin aprova pelo cliente: a RPC exige admin/gestor e acesso ao cliente. Não agenda nem publica.
+  'aprovar_pelo_cliente',
 ] as const;
 export type RpcDaPonte = (typeof RPCS_DA_PONTE)[number];
 
