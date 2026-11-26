@@ -80,6 +80,7 @@ import { FERRAMENTA_DE_POST_DE_ARQUIVO } from '../mcp-server/modulos/agenda-post
 import { FERRAMENTA_DE_ENVIAR_ARQUIVO } from '../mcp-server/modulos/arquivos-enviar-para-aprovacao.ts';
 import { FERRAMENTAS_DO_PROJETO_RESTRITO } from '../mcp-server/modulos/projeto-restrito.ts';
 import { isProjectOnlyTool, projectGrantAllowsTool } from './mcp-project-access.ts';
+import { FERRAMENTA_META_CONEXOES_ESTADO } from '../mcp-server/modulos/meta-conexoes-estado.ts';
 import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
 import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';
@@ -5107,6 +5108,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTA_DE_ENVIAR_ARQUIVO,
   // MCP 2.39: Intermediador dos grupos de cliente (pergunta ao cliente no grupo e devolve a resposta).
   ...FERRAMENTAS_DO_INTERMEDIADOR,
+  // MCP 2.40: inventário orgânico da Meta (só leitura, só admin irrestrito, debug_token pela credencial exata).
+  ...FERRAMENTA_META_CONEXOES_ESTADO,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

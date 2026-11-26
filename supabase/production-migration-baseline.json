@@ -3329,6 +3329,14 @@
       "remote_name": "mcp_project_video_upload",
       "remote_statements_sha256": "e282d3c9bb7a14763affa7cda74159e1170f9495d7cdaa0aecb6b6fa141915df",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125211700",
+      "path": "supabase/migrations/20261125211700_meta_conexao_token_da_conta.sql",
+      "local_sha256": "e1c4f5934cd96f0e79de9df0ced57b01aa902db29d41acb32a05910864297931",
+      "remote_name": "meta_conexao_token_da_conta",
+      "remote_statements_sha256": "2db795200c1688df50937b238d97ceb57ffe92432e452705f518135fc3c7af1e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
