@@ -3331,8 +3331,16 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261125212200",
-      "path": "supabase/migrations/20261125212200_alcada_automatica.sql",
+      "version": "20261125211700",
+      "path": "supabase/migrations/20261125211700_meta_conexao_token_da_conta.sql",
+      "local_sha256": "e1c4f5934cd96f0e79de9df0ced57b01aa902db29d41acb32a05910864297931",
+      "remote_name": "meta_conexao_token_da_conta",
+      "remote_statements_sha256": "2db795200c1688df50937b238d97ceb57ffe92432e452705f518135fc3c7af1e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125221700",
+      "path": "supabase/migrations/20261125221700_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",

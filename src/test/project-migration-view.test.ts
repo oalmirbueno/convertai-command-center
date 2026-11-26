@@ -61,7 +61,7 @@ const plan = (entries = baseline().document.entries) =>
   planProjectMigrationView({ ...options, ledgerCsv: csv(entries) });
 
 describe("reviewed project forward-only migration view", () => {
-  it("emits exactly the 484 observed rows as aborting sentinels and runs only the two new Corte migrations", () => {
+  it("emits exactly the 484 observed rows as aborting sentinels and runs only the two Corte migrations and the Meta migration", () => {
     const current = loadReviewedProjectBaseline({ projectRef: reviewedProjectRef });
     const observed = current.document.entries;
     expect(observed).toHaveLength(484);
@@ -69,16 +69,16 @@ describe("reviewed project forward-only migration view", () => {
       projectRef: reviewedProjectRef,
       ledgerCsv: csv(observed),
     });
-    const pendingVersions = ["20261125202100", "20261125202200"];
+    const pendingVersions = ["20261125202100", "20261125202200", "20261125211700"];
     expect(view).toMatchObject({
       status: "pending",
       actual_count: 484,
-      expected_count: 486,
+      expected_count: 487,
       reviewed_count: 484,
       sentinel_count: 484,
       pending_versions: pendingVersions,
     });
-    expect(view.files).toHaveLength(486);
+    expect(view.files).toHaveLength(487);
     const sentinels = view.files.filter((file) => file.kind === "sentinel");
     expect(sentinels.map((file) => file.version)).toEqual(
       observed.map((entry) => entry.version),
@@ -92,6 +92,11 @@ describe("reviewed project forward-only migration view", () => {
     const pendingFiles = view.files.filter((file) => file.kind === "pending");
     expect(sources.map((entry) => entry.version)).toEqual(pendingVersions);
     expect(pendingFiles.map((file) => file.version)).toEqual(pendingVersions);
+    expect(pendingFiles.map((file) => file.filename)).toEqual([
+      "20261125202100_mcp_project_grants.sql",
+      "20261125202200_mcp_project_video_upload.sql",
+      "20261125211700_meta_conexao_token_da_conta.sql",
+    ]);
     for (const [index, file] of pendingFiles.entries()) {
       expect(file.filename).toBe(basename(sources[index].path));
       expect(file.bytes.equals(readFileSync(resolve(repoRoot, sources[index].path)))).toBe(true);
