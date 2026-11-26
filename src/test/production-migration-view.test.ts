@@ -63,7 +63,7 @@ const FORWARDS_AFTER_20261119233000 = [
   "20261125202200", // Corte: envio de vídeo do projeto
   "20261125211700", // Diagnóstico orgânico da Meta
   "20261126130551", // Anúncios quase em tempo real
-  "20261126150000", // Instagram Audio API e música sugerida
+  "20261126153016", // Instagram Audio API e música sugerida
 ];
 
 function temporaryRoot() {

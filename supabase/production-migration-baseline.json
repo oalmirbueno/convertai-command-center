@@ -3347,8 +3347,8 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261126150000",
-      "path": "supabase/migrations/20261126150000_instagram_audio_e_musica_sugerida.sql",
+      "version": "20261126153016",
+      "path": "supabase/migrations/20261126153016_instagram_audio_e_musica_sugerida.sql",
       "local_sha256": "8a88bb8577de5d8dcfe13725ba014860b1c70df0f5517740c40c2fcadf44d54a",
       "remote_name": "instagram_audio_e_musica_sugerida",
       "remote_statements_sha256": "0e6a083d786e8f80046d12e7843a1c991f359564ae649512f47bd0dac8c23fa9",

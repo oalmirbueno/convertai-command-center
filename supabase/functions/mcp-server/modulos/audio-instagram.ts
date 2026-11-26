@@ -9,7 +9,7 @@
  * - aceleriq_definir_audio_reel: grava (ou remove) o áudio da Meta numa
  *   publicação de Reel do Instagram. O publicador (editorial_autopublish_tick)
  *   lê essa escolha e manda audio_configuration no contêiner REELS, depois da
- *   migração 20261126150000 (PROPOSTA, ainda NÃO aplicada).
+ *   migração 20261126153016 (aplicada em produção em 26/11/2026, ok do Almir).
  * - aceleriq_definir_musica_sugerida: guarda a música que a agência sugere para
  *   o post (qualquer tipo: carrossel, imagem, reel, story), para quem publica
  *   ou edita escolher no app.
@@ -53,7 +53,7 @@ export const NOME_BUSCAR_AUDIOS = 'aceleriq_buscar_audios_instagram';
 export const NOME_DEFINIR_AUDIO = 'aceleriq_definir_audio_reel';
 export const NOME_DEFINIR_MUSICA = 'aceleriq_definir_musica_sugerida';
 
-/** RPCs da proposta 20261126150000 (escritas como a pessoa; a leitura também abre para service_role). */
+/** RPCs da migração 20261126153016 (escritas como a pessoa; a leitura também abre para service_role). */
 export const RPCS_DO_AUDIO = {
   definirAudio: 'editorial_reel_audio_definir',
   removerAudio: 'editorial_reel_audio_remover',
