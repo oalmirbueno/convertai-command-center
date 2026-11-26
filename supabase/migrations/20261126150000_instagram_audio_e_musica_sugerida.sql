@@ -19,7 +19,7 @@
 --        editorial_reel_audio_definir / editorial_reel_audio_remover
 --          (editorial_can_publish_client, o mesmo de transition_editorial_publication:
 --           admin, ou gestor do cliente; só Reel do Instagram; volumes 1..100;
---           publicação publicada/cancelada ou contêiner já criado recusa)
+--           publicação publicada/cancelada ou contêiner já pedido/criado na Meta recusa)
 --        editorial_post_musica_definir / editorial_post_musica_remover
 --          (editorial_staff_can_access_client, o mesmo de save_editorial_post;
 --           qualquer tipo de post; url só https)
@@ -196,13 +196,14 @@ BEGIN
   IF _pub.status IN ('published', 'cancelled') THEN
     RAISE EXCEPTION 'publicação % não recebe áudio', _pub.status USING ERRCODE = '55000';
   END IF;
+  -- O publicador já pediu (ou criou) o contêiner na Meta: a escolha não entraria mais nesta tentativa.
   IF EXISTS (
     SELECT 1 FROM social_private.autopublish_jobs AS job
      WHERE job.publication_id = _pub.id
-       AND job.container_id IS NOT NULL
        AND job.stage NOT IN ('done', 'failed')
+       AND (job.stage <> 'queued' OR job.container_id IS NOT NULL OR job.net_request_id IS NOT NULL)
   ) THEN
-    RAISE EXCEPTION 'o contêiner do Reel já foi criado na Meta: o áudio não muda nesta tentativa' USING ERRCODE = '55000';
+    RAISE EXCEPTION 'o publicador já está criando o Reel na Meta: o áudio não muda nesta tentativa' USING ERRCODE = '55000';
   END IF;
 
   INSERT INTO public.editorial_publication_audio AS a
@@ -256,6 +257,15 @@ BEGIN
   END IF;
   IF _pub.status = 'published' THEN
     RAISE EXCEPTION 'publicação já publicada: o áudio não muda mais' USING ERRCODE = '55000';
+  END IF;
+  -- Contêiner já pedido ou criado: tirar daqui não tira da Meta nesta tentativa.
+  IF EXISTS (
+    SELECT 1 FROM social_private.autopublish_jobs AS job
+     WHERE job.publication_id = _pub.id
+       AND job.stage NOT IN ('done', 'failed')
+       AND (job.stage <> 'queued' OR job.container_id IS NOT NULL OR job.net_request_id IS NOT NULL)
+  ) THEN
+    RAISE EXCEPTION 'o publicador já está criando o Reel na Meta: o áudio não muda nesta tentativa' USING ERRCODE = '55000';
   END IF;
   DELETE FROM public.editorial_publication_audio
    WHERE publication_id = _pub.id AND client_id = _pub.client_id;

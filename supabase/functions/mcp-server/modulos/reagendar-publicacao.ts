@@ -10,7 +10,7 @@ import { DataScopeError } from '../../_shared/mcp-auth.ts';
 import { dataScopeAllowsClient } from '../../_shared/mcp-security.ts';
 import { db } from '../../_shared/aceleriq-read-services.ts';
 import { rpcComoPessoa, umaVez } from '../../_shared/mcp-mesas-acoes.ts';
-import { audioDaEntrada, ESQUEMA_AUDIO_CONFIGURATION, gravarAudioDaPublicacao } from './audio-instagram.ts';
+import { audioDaEntrada, ESQUEMA_AUDIO_CONFIGURATION, gravarAudioAntesDeAgendar } from './audio-instagram.ts';
 import type { AudioConfiguration } from './audio-instagram-regras.ts';
 
 const UUID = z.string().uuid();
@@ -68,6 +68,8 @@ export async function reagendarPublicacao(
   }
   return await deps.umaVez('aceleriq_reagendar_publicacao', ctx, input.idempotency_key, async () => {
     if (ctx.resultRefHolder) ctx.resultRefHolder.value = `editorial_publications:${pub.id}`;
+    // O áudio grava ANTES de agendar: o publicador nunca pega o Reel sem o áudio pedido; se não grava, não agenda.
+    const audioGravado = audio ? await gravarAudioAntesDeAgendar(pub.id, audio, ctx, deps.rpc) : null;
     const resultado = await deps.rpc('transition_editorial_publication', {
       p_publication_id: pub.id,
       p_action: 'schedule',
@@ -80,7 +82,7 @@ export async function reagendarPublicacao(
       resultado: {
         publicacao: resultado,
         client_id: pub.client_id,
-        ...(audio ? { audio: await gravarAudioDaPublicacao(pub.id, audio, ctx, deps.rpc) } : {}),
+        ...(audioGravado ? { audio: audioGravado } : {}),
       },
     };
   });
@@ -90,7 +92,7 @@ const tool: ToolDefinition = {
   name: 'aceleriq_reagendar_publicacao',
   title: 'Reagendar publicação',
   description:
-    'Agenda (schedule) uma publicação que não está cancelada, pela transição oficial. Publicação cancelada não reabre por aqui: isso é ação humana na Agenda. audio_configuration opcional (2.39.3): só Reel do Instagram, grava o áudio da Meta na publicação. Exige confirmar=true, idempotency_key, editorial:write e o cliente no escopo.',
+    'Agenda (schedule) uma publicação que não está cancelada, pela transição oficial. Publicação cancelada não reabre por aqui: isso é ação humana na Agenda. audio_configuration opcional (2.39.3): só Reel do Instagram, grava o áudio da Meta na publicação ANTES de agendar (se não gravar, não agenda). Exige confirmar=true, idempotency_key, editorial:write e o cliente no escopo.',
   scopes: ['editorial:write'],
   annotations: ESCRITA,
   inputSchema: {

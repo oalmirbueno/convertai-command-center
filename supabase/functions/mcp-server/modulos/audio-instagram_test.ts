@@ -440,7 +440,7 @@ Deno.test('criar publicação: sem audio_configuration nada muda; com ele, Reel 
   assertEquals(sem.audio.mensagem, MENSAGEM_AGUARDANDO_MIGRACAO);
 });
 
-Deno.test('reagendar: sem audio_configuration lê e chama igual a antes; com ele, Reel grava depois do schedule; story recusa antes', async () => {
+Deno.test('reagendar: sem audio_configuration lê e chama igual a antes; com ele, grava o áudio ANTES do schedule e não agenda se falhar; story recusa antes', async () => {
   const montarReagendar = (t: Tabelas) => {
     const lidas: string[] = [];
     const chamadas: Array<{ nome: string; args: Record<string, unknown> }> = [];
@@ -461,8 +461,25 @@ Deno.test('reagendar: sem audio_configuration lê e chama igual a antes; com ele
 
   const b = montarReagendar(tabelasBase());
   const comAudio = await reagendarPublicacao({ ...base, publication_id: PUB_REEL, idempotency_key: 'reag-0002', audio_configuration: { audio_id: '1001', video_volume: 20 } }, ctx, b.deps) as Record<string, any>;
-  assertEquals(b.chamadas.map((c) => c.nome), ['transition_editorial_publication', RPCS_DO_AUDIO.definirAudio]);
+  assertEquals(b.chamadas.map((c) => c.nome), [RPCS_DO_AUDIO.definirAudio, 'transition_editorial_publication'], 'áudio antes de agendar');
   assertEquals(comAudio.audio.gravado, true);
+
+  // Sem a migração (ou com recusa do banco): não agenda.
+  for (const [falha, frase] of [['Could not find the function public.editorial_reel_audio_definir in the schema cache', 'aguardando a migração'], ['o publicador já está criando o Reel na Meta', 'Nada foi agendado']] as const) {
+    const t = tabelasBase();
+    const banco = bancoFalso(t);
+    const chamadas: string[] = [];
+    const deps: DependenciasDoReagendar = {
+      banco,
+      rpc: (nome) => {
+        chamadas.push(nome);
+        return nome === RPCS_DO_AUDIO.definirAudio ? Promise.reject(new Error(`mesa:rpc_recusada ${nome}: ${falha}`)) : Promise.resolve({ status: 'scheduled' });
+      },
+      umaVez: umaVezFalso(),
+    };
+    await assertRejects(() => reagendarPublicacao({ ...base, publication_id: PUB_REEL, idempotency_key: 'reag-0004', audio_configuration: { audio_id: '1001' } }, ctx, deps), Error, frase);
+    assertEquals(chamadas, [RPCS_DO_AUDIO.definirAudio], 'transition não roda');
+  }
 
   const c = montarReagendar(tabelasBase());
   await assertRejects(() => reagendarPublicacao({ ...base, publication_id: PUB_STORY, idempotency_key: 'reag-0003', audio_configuration: { audio_id: '1001' } }, ctx, c.deps), Error, 'use musica_sugerida');

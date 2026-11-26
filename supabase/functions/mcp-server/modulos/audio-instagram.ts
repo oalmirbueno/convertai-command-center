@@ -481,6 +481,40 @@ export async function gravarAudioDaPublicacao(
   }
 }
 
+/**
+ * Grava ANTES de uma ação que deixa a publicação pronta para sair (agendar):
+ * se o áudio não grava, a ação não acontece. RPC ausente vira aguardando_migracao.
+ */
+export async function gravarAudioAntesDeAgendar(
+  publicationId: string,
+  cfg: AudioConfiguration,
+  ctx: AuthContext,
+  rpc: DependenciasDoAudio['rpc'],
+): Promise<Record<string, unknown>> {
+  try {
+    await rpc(RPCS_DO_AUDIO.definirAudio, {
+      p_publication_id: publicationId,
+      p_audio_id: cfg.audio_id,
+      p_audio_volume: cfg.audio_volume ?? null,
+      p_video_volume: cfg.video_volume ?? null,
+      p_audio_title: null,
+      p_audio_artist: null,
+    }, ctx);
+    return { gravado: true, audio_configuration: cfg };
+  } catch (e) {
+    if (ehRpcAusente(e)) {
+      throw new ErroDaFerramenta(
+        'aguardando_migracao',
+        `${MENSAGEM_AGUARDANDO_MIGRACAO.replace(' o resto do pedido segue normal.', '')} Nada foi agendado.`,
+        'Para agendar sem o áudio, repita sem audio_configuration.',
+        false,
+      );
+    }
+    infraSobe(e);
+    throw new Error(`mesa:rpc_recusada O áudio não foi gravado (${motivoDaRecusa(e)}). Nada foi agendado.`);
+  }
+}
+
 // ------------------------------------------------------------------ leitura na Agenda (campo adicional)
 
 type LeituraDoAudio = {
