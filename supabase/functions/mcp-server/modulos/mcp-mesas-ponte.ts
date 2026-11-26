@@ -84,6 +84,12 @@ export const RPCS_DA_PONTE = [
   // MCP 2.39.2: autoaprovação interna (só o cliente interno, decidido no código do MCP). O mesmo caminho do
   // painel quando o admin aprova pelo cliente: a RPC exige admin/gestor e acesso ao cliente. Não agenda nem publica.
   'aprovar_pelo_cliente',
+  // MCP 2.39.3: áudio do Reel e música sugerida (migração 20261126150000, PROPOSTA). Cada RPC confere a permissão
+  // da pessoa no cliente; áudio só em Reel do Instagram. Não aprova, não agenda e não publica.
+  'editorial_reel_audio_definir',
+  'editorial_reel_audio_remover',
+  'editorial_post_musica_definir',
+  'editorial_post_musica_remover',
 ] as const;
 export type RpcDaPonte = (typeof RPCS_DA_PONTE)[number];
 

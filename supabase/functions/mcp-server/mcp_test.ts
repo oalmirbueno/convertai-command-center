@@ -222,6 +222,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_base_dos_agentes',
     'aceleriq_browser_act',
     'aceleriq_browser_session',
+    'aceleriq_buscar_audios_instagram',
     'aceleriq_cancel_contract',
     'aceleriq_capabilities',
     'aceleriq_central_instalar',
@@ -265,6 +266,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_create_report_draft',
     'aceleriq_create_task',
     'aceleriq_criar_publicacao_de_aprovado',
+    'aceleriq_definir_audio_reel',
+    'aceleriq_definir_musica_sugerida',
     'aceleriq_delete_opportunity',
     'aceleriq_delete_task',
     'aceleriq_dia_prioritario',
@@ -1974,7 +1977,7 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
 
 Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nenhum outro escopo concede', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.41.0');
+  assertEquals(MCP_VERSION, '2.42.0');
   const t = TOOL_MAP.get('aceleriq_escritorio_dono')!;
   assertEquals([...t.scopes], ['escritorio:write']);
   assert(ALL_SCOPES.includes('escritorio:write') && SCOPE_DESCRIPTIONS['escritorio:write'].sensitive);
@@ -1986,8 +1989,8 @@ Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nen
   assert(!canUseToolWithDataScope(restrictedCtx, t), 'chave restrita a cliente não fala como dono');
   const { STAFF_OAUTH_SCOPES } = await import('../_shared/mcp-security.ts').then((m) => ({ STAFF_OAUTH_SCOPES: JSON.stringify(m) }));
   assert(!STAFF_OAUTH_SCOPES.includes('escritorio:write'), 'o OAuth da equipe não recebe este escopo');
-  // 2.37.0: +1 (aceleriq_auditoria_assinaturas_listar). 2.38.0: +3 (carrossel de Arquivos). 2.39.0: Intermediador. 2.39.2: +1 (aprovação interna). 2.40.0: +1 (aceleriq_meta_conexoes_estado).
-  assertEquals(TOOLS.length, 236);
+  // 2.37.0: +1 (aceleriq_auditoria_assinaturas_listar). 2.38.0: +3 (carrossel de Arquivos). 2.39.0: Intermediador. 2.39.2: +1 (aprovação interna). 2.40.0: +1 (aceleriq_meta_conexoes_estado). 2.42.0: +3 (áudio do Instagram e música sugerida, da 2.39.3).
+  assertEquals(TOOLS.length, 239);
 });
 
 // ─── Menor privilégio: escritorio:identity só abre a identidade da chave API restrita ───
@@ -2067,7 +2070,7 @@ Deno.test('2.36: automações lê com aceleriq:read; ligar e desligar só com au
 
 Deno.test('2.37: aceleriq_auditoria_assinaturas_listar é só leitura, no guia (área mcp) e fechada para chave restrita a cliente', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.41.0');
+  assertEquals(MCP_VERSION, '2.42.0');
   const t = TOOL_MAP.get('aceleriq_auditoria_assinaturas_listar')!;
   assert(t, 'a ferramenta existe');
   assertEquals([...t.scopes], ['aceleriq:read']);
@@ -2077,14 +2080,14 @@ Deno.test('2.37: aceleriq_auditoria_assinaturas_listar é só leitura, no guia (
   assert(!canUseToolWithDataScope(restrictedCtx, t), 'chave restrita a cliente não lê a auditoria das credenciais');
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   assert(FERRAMENTAS_POR_AREA.mcp.includes('aceleriq_auditoria_assinaturas_listar'));
-  assertEquals(TOOLS.length, 236);
+  assertEquals(TOOLS.length, 239);
 });
 
 // ─── MCP 2.38.0 (20/11/2026): carrossel de Arquivos ───
 
 Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catálogo, nos escopos, no guia e na descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.41.0');
+  assertEquals(MCP_VERSION, '2.42.0');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
   const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
@@ -2120,7 +2123,7 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
   assert(TOOL_MAP.get('aceleriq_mesa_enviar_para_aprovacao')!.description.includes('aceleriq_arquivos_enviar_para_aprovacao'));
   assert(TOOL_MAP.get('aceleriq_arquivos_enviar_para_aprovacao')!.description.includes('aceleriq_mesa_enviar_para_aprovacao'));
   for (const r of ['admin_release_file_now', 'request_file_agency_review']) assert((RPCS_DA_PONTE as readonly string[]).includes(r));
-  assertEquals(TOOLS.length, 236);
+  assertEquals(TOOLS.length, 239);
   const d = descobertaDoMcp({
     servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
     protocolVersion: MCP_PROTOCOL_VERSION,
@@ -2128,14 +2131,14 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
     segundoCerebroConfigurado: false,
     agora: new Date('2026-11-20T12:00:00Z'),
   });
-  assertEquals(d.toolCount, 236);
+  assertEquals(d.toolCount, 239);
 });
 
 // ─── MCP 2.39.2 (25/11/2026): autoaprovação interna, só o cliente interno ───
 
 Deno.test('2.39.2: registrar aprovação interna no catálogo, editorial:write, área calendario, guia, ponte e descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.41.0');
+  assertEquals(MCP_VERSION, '2.42.0');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
   const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
@@ -2163,7 +2166,7 @@ Deno.test('2.39.2: registrar aprovação interna no catálogo, editorial:write, 
   assertEquals([...CLIENTES_COM_AUTOAPROVACAO_INTERNA], ['4dd691a7-d481-451f-800b-5e6b6fdc8721']);
   // A irmã do caminho dos outros clientes não mudou.
   assert(TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado')!.description.includes('Não aprova, não agenda e não publica'));
-  assertEquals(TOOLS.length, 236);
+  assertEquals(TOOLS.length, 239);
   const d = descobertaDoMcp({
     servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
     protocolVersion: MCP_PROTOCOL_VERSION,
@@ -2171,5 +2174,64 @@ Deno.test('2.39.2: registrar aprovação interna no catálogo, editorial:write, 
     segundoCerebroConfigurado: false,
     agora: new Date('2026-11-25T12:00:00Z'),
   });
-  assertEquals(d.toolCount, 236);
+  assertEquals(d.toolCount, 239);
+});
+
+// ─── MCP 2.39.3 (26/11/2026): Instagram Audio API (Reels) e música sugerida ───
+
+Deno.test('2.39.3: buscar áudios, definir áudio do Reel e música sugerida no catálogo, escopos, guia, ponte e descoberta', async () => {
+  const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
+  assertEquals(MCP_VERSION, '2.42.0');
+  const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
+  const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
+  const buscar = TOOL_MAP.get('aceleriq_buscar_audios_instagram')!;
+  const audio = TOOL_MAP.get('aceleriq_definir_audio_reel')!;
+  const musica = TOOL_MAP.get('aceleriq_definir_musica_sugerida')!;
+  assert(buscar && audio && musica, 'as três no catálogo');
+  assertEquals([...buscar.scopes], ['editorial:read']);
+  assertEquals(buscar.annotations?.readOnlyHint, true);
+  assertEquals(GRANULAR_SCOPE_BY_TOOL.aceleriq_buscar_audios_instagram, 'editorial:read');
+  assert(canInvoke(readCtx, buscar), 'leitura abre com aceleriq:read');
+  for (const t of [audio, musica]) {
+    assertEquals([...t.scopes], ['editorial:write']);
+    assertEquals(GRANULAR_SCOPE_BY_TOOL[t.name], 'editorial:write');
+    assertEquals(t.annotations?.readOnlyHint, false);
+    assertEquals(t.annotations?.destructiveHint, false);
+    assert(!canInvoke(readCtx, t));
+    assert(canInvoke(writeCtx, t));
+    const schema = t.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+    assertEquals(schema.additionalProperties, false);
+    assert(schema.required.includes('confirmar') && schema.required.includes('idempotency_key'));
+    assertEquals(schema.properties.confirmar.const, true);
+  }
+  for (const t of [buscar, audio, musica]) {
+    assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes(t.name), `${t.name} confere o cliente no handler`);
+    assert(canUseToolWithDataScope(restrictedCtx, t));
+    assert(FERRAMENTAS_POR_AREA.calendario.includes(t.name), `${t.name} na área calendario`);
+  }
+  for (const r of ['editorial_reel_audio_definir', 'editorial_reel_audio_remover', 'editorial_post_musica_definir', 'editorial_post_musica_remover']) {
+    assert((RPCS_DA_PONTE as readonly string[]).includes(r), r);
+  }
+  const regra = REGRAS_DE_ACAO.find((r) => r.includes('aceleriq_definir_audio_reel')) || '';
+  assert(regra.includes('aceleriq_buscar_audios_instagram') && regra.includes('aceleriq_definir_musica_sugerida') && regra.includes('aguardando_migracao'));
+  assert(audio.description.includes('a Meta só aceita audio_configuration em Reels; use musica_sugerida'));
+  // audio_configuration opcional nas tools que criam e agendam publicação; o resto do contrato igual.
+  for (const nome of ['aceleriq_criar_publicacao_de_aprovado', 'aceleriq_reagendar_publicacao']) {
+    const s = TOOL_MAP.get(nome)!.inputSchema as { required: string[]; properties: Record<string, Record<string, unknown>> };
+    assert('audio_configuration' in s.properties, nome);
+    assert(!s.required.includes('audio_configuration'), `${nome}: campo opcional`);
+  }
+  assertEquals([...(TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado')!.inputSchema as { required: string[] }).required].sort(), ['confirmar', 'external_account_id', 'idempotency_key', 'post_id']);
+  assertEquals([...(TOOL_MAP.get('aceleriq_reagendar_publicacao')!.inputSchema as { required: string[] }).required].sort(), ['confirmar', 'expected_version', 'idempotency_key', 'publication_id', 'scheduled_at']);
+  assertEquals(TOOLS.length, 239);
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-11-26T12:00:00Z'),
+  });
+  assertEquals(d.toolCount, 239);
 });

@@ -167,6 +167,10 @@ export const CLIENT_SCOPED_LEGACY_TOOLS = [
   'aceleriq_criar_publicacao_de_aprovado',
   // MCP 2.39.2: confere o cliente do post (escopo e cliente interno) no próprio handler, antes de qualquer escrita.
   'aceleriq_registrar_aprovacao_interna',
+  // MCP 2.39.3: conferem o cliente (da conta, da publicação ou do post) no próprio handler, antes de ler a Meta ou escrever.
+  'aceleriq_buscar_audios_instagram',
+  'aceleriq_definir_audio_reel',
+  'aceleriq_definir_musica_sugerida',
   // MCP 2.38: confere o cliente de todos os arquivos no próprio handler, antes de qualquer escrita.
   'aceleriq_arquivos_agrupar_carrossel',
   'aceleriq_agenda_criar_post_de_arquivo',
