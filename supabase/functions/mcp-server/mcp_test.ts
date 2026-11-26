@@ -1986,8 +1986,8 @@ Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nen
   assert(!canUseToolWithDataScope(restrictedCtx, t), 'chave restrita a cliente não fala como dono');
   const { STAFF_OAUTH_SCOPES } = await import('../_shared/mcp-security.ts').then((m) => ({ STAFF_OAUTH_SCOPES: JSON.stringify(m) }));
   assert(!STAFF_OAUTH_SCOPES.includes('escritorio:write'), 'o OAuth da equipe não recebe este escopo');
-  // 2.37.0: +1 (aceleriq_auditoria_assinaturas_listar). 2.38.0: +3 (carrossel de Arquivos). 2.39.0: Intermediador. 2.40.0: +1 (aceleriq_meta_conexoes_estado).
-  assertEquals(TOOLS.length, 235);
+  // 2.37.0: +1 (aceleriq_auditoria_assinaturas_listar). 2.38.0: +3 (carrossel de Arquivos). 2.39.0: Intermediador. 2.39.2: +1 (aprovação interna). 2.40.0: +1 (aceleriq_meta_conexoes_estado).
+  assertEquals(TOOLS.length, 236);
 });
 
 // ─── Menor privilégio: escritorio:identity só abre a identidade da chave API restrita ───
@@ -2077,7 +2077,7 @@ Deno.test('2.37: aceleriq_auditoria_assinaturas_listar é só leitura, no guia (
   assert(!canUseToolWithDataScope(restrictedCtx, t), 'chave restrita a cliente não lê a auditoria das credenciais');
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   assert(FERRAMENTAS_POR_AREA.mcp.includes('aceleriq_auditoria_assinaturas_listar'));
-  assertEquals(TOOLS.length, 235);
+  assertEquals(TOOLS.length, 236);
 });
 
 // ─── MCP 2.38.0 (20/11/2026): carrossel de Arquivos ───
@@ -2120,7 +2120,7 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
   assert(TOOL_MAP.get('aceleriq_mesa_enviar_para_aprovacao')!.description.includes('aceleriq_arquivos_enviar_para_aprovacao'));
   assert(TOOL_MAP.get('aceleriq_arquivos_enviar_para_aprovacao')!.description.includes('aceleriq_mesa_enviar_para_aprovacao'));
   for (const r of ['admin_release_file_now', 'request_file_agency_review']) assert((RPCS_DA_PONTE as readonly string[]).includes(r));
-  assertEquals(TOOLS.length, 235);
+  assertEquals(TOOLS.length, 236);
   const d = descobertaDoMcp({
     servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
     protocolVersion: MCP_PROTOCOL_VERSION,
@@ -2128,7 +2128,7 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
     segundoCerebroConfigurado: false,
     agora: new Date('2026-11-20T12:00:00Z'),
   });
-  assertEquals(d.toolCount, 235);
+  assertEquals(d.toolCount, 236);
 });
 
 // ─── MCP 2.39.2 (25/11/2026): autoaprovação interna, só o cliente interno ───
@@ -2163,7 +2163,7 @@ Deno.test('2.39.2: registrar aprovação interna no catálogo, editorial:write, 
   assertEquals([...CLIENTES_COM_AUTOAPROVACAO_INTERNA], ['4dd691a7-d481-451f-800b-5e6b6fdc8721']);
   // A irmã do caminho dos outros clientes não mudou.
   assert(TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado')!.description.includes('Não aprova, não agenda e não publica'));
-  assertEquals(TOOLS.length, 235);
+  assertEquals(TOOLS.length, 236);
   const d = descobertaDoMcp({
     servidor: { name: 'aceleriq-mcp', version: MCP_VERSION },
     protocolVersion: MCP_PROTOCOL_VERSION,
@@ -2171,5 +2171,5 @@ Deno.test('2.39.2: registrar aprovação interna no catálogo, editorial:write, 
     segundoCerebroConfigurado: false,
     agora: new Date('2026-11-25T12:00:00Z'),
   });
-  assertEquals(d.toolCount, 235);
+  assertEquals(d.toolCount, 236);
 });

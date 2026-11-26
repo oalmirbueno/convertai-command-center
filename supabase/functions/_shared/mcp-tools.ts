@@ -2058,7 +2058,7 @@ const listSocialPostsTool: ToolDefinition = {
 const getAdsCreativesTool: ToolDefinition = {
   name: 'aceleriq_get_ads_creatives',
   title: 'Meta Ads — desempenho por criativo',
-  description: 'O desempenho de cada PECA de anuncio, que e a pergunta que campanha nao responde: campanha diz quanto se gastou, criativo diz QUAL arte fez o trabalho. Traz nome, miniatura, imagem, titulo e texto de cada anuncio, mais gasto, impressoes, cliques, cliques no link, CTR medio e custo por clique no link no periodo, com dois rankings prontos. ATENCAO a duas coisas: o endereco da miniatura vem da Meta e EXPIRA, entao imagem que nao carrega e normal e nao defeito; e `maior_alcance_em_um_dia` NAO e a soma do alcance, porque a mesma pessoa alcancada em dois dias nao sao duas pessoas — somar daria um numero inventado.',
+  description: 'O desempenho de cada PECA de anuncio, que e a pergunta que campanha nao responde: campanha diz quanto se gastou, criativo diz QUAL arte fez o trabalho. Traz nome, miniatura, imagem, titulo e texto de cada anuncio, mais gasto, impressoes, cliques, cliques no link, CTR medio e custo por clique no link no periodo, com dois rankings prontos. ATENCAO a duas coisas: o endereco da miniatura vem da Meta e EXPIRA, entao imagem que nao carrega e normal e nao defeito; e `maior_alcance_em_um_dia` NAO e a soma do alcance, porque a mesma pessoa alcancada em dois dias nao sao duas pessoas — somar daria um numero inventado. COLETA: a resposta traz `coleta` por conta de anúncios (coletado_em, atrasada, erro, saldo_disponivel); se `atrasada` for true, diga que o número pode estar velho e cite o erro em vez de tratar como atual.',
   scopes: ['reports:read'] as const,
   annotations: READ_ANNOTATIONS,
   inputSchema: {
@@ -2085,7 +2085,7 @@ const getAdsCreativesTool: ToolDefinition = {
 const getAdsCampaignsTool: ToolDefinition = {
   name: 'aceleriq_get_ads_campaigns',
   title: 'Meta Ads — campanhas e situação',
-  description: 'As campanhas de Meta Ads do cliente com nome, objetivo, verba diária ou total configurada, datas e situação. Traz status (o que a equipe configurou) e effective_status (o que a Meta está realmente fazendo) — os dois discordam com frequência, e quem vale é o segundo: campanha marcada como ativa pode estar parada por verba, conta ou reprovação.',
+  description: 'As campanhas de Meta Ads do cliente com nome, objetivo, verba diária ou total configurada, datas e situação. Traz status (o que a equipe configurou) e effective_status (o que a Meta está realmente fazendo) — os dois discordam com frequência, e quem vale é o segundo: campanha marcada como ativa pode estar parada por verba, conta ou reprovação. COLETA: a resposta traz `coleta` por conta de anúncios (coletado_em, atrasada, erro, saldo_disponivel); se `atrasada` for true, diga que o número pode estar velho e cite o erro em vez de tratar como atual.',
   scopes: ['reports:read'] as const,
   annotations: READ_ANNOTATIONS,
   inputSchema: {
@@ -2110,7 +2110,7 @@ const getAdsCampaignsTool: ToolDefinition = {
 const getAdsPerformanceTool: ToolDefinition = {
   name: 'aceleriq_get_ads_performance',
   title: 'Meta Ads — desempenho por dia e por campanha',
-  description: 'O desempenho REAL das campanhas: investimento, alcance, exibições, cliques no link, os resultados por tipo (conversas iniciadas, cadastros, compras) e as VENDAS. Devolve o dia a dia (para ver tendência) E o total já agregado por campanha (para responder quanto rendeu). Vendas: `sales` em cada campanha e no total soma as registradas a mão no painel (WhatsApp, Instagram, balcão: dia, canal, campanha, valor quando se sabe) com as rastreadas pelo pixel, e traz custo por venda. Otimize por venda antes de otimizar por lead: campanha que vendeu recebe verba, campanha que gastou sem vender pausa ou troca criativo, lead sem venda é atendimento/oferta. ATENÇÃO ao ler: alcance NÃO se soma entre dias — a mesma pessoa alcançada em dois dias não são duas pessoas; o campo reach do agregado já é o maior dia, que é o piso honesto. Em results_by_type, qual tipo É o resultado depende do objetivo da campanha.',
+  description: 'O desempenho REAL das campanhas: investimento, alcance, exibições, cliques no link, os resultados por tipo (conversas iniciadas, cadastros, compras) e as VENDAS. Devolve o dia a dia (para ver tendência) E o total já agregado por campanha (para responder quanto rendeu). Vendas: `sales` em cada campanha e no total soma as registradas a mão no painel (WhatsApp, Instagram, balcão: dia, canal, campanha, valor quando se sabe) com as rastreadas pelo pixel, e traz custo por venda. Otimize por venda antes de otimizar por lead: campanha que vendeu recebe verba, campanha que gastou sem vender pausa ou troca criativo, lead sem venda é atendimento/oferta. ATENÇÃO ao ler: alcance NÃO se soma entre dias — a mesma pessoa alcançada em dois dias não são duas pessoas; o campo reach do agregado já é o maior dia, que é o piso honesto. Em results_by_type, qual tipo É o resultado depende do objetivo da campanha. COLETA: a resposta traz `coleta` por conta de anúncios (coletado_em, atrasada, erro, saldo_disponivel); se `atrasada` for true, diga que o número pode estar velho e cite o erro em vez de tratar como atual.',
   scopes: ['reports:read'] as const,
   annotations: READ_ANNOTATIONS,
   inputSchema: {

@@ -3337,6 +3337,14 @@
       "remote_name": "meta_conexao_token_da_conta",
       "remote_statements_sha256": "2db795200c1688df50937b238d97ceb57ffe92432e452705f518135fc3c7af1e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261126130551",
+      "path": "supabase/migrations/20261126130551_ads_coleta_quase_tempo_real.sql",
+      "local_sha256": "baa773f5b8b20a74faf04c0fab68d5539c973f91f3e4662adf384629b079a1b5",
+      "remote_name": "ads_coleta_quase_tempo_real",
+      "remote_statements_sha256": "07707ee1545f2c6a0da534c96b5390e02717bb4614b92e843b91645e75ab797f",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
