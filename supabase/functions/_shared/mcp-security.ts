@@ -165,6 +165,8 @@ export const CLIENT_SCOPED_LEGACY_TOOLS = [
   'aceleriq_reagendar_publicacao',
   // MCP 2.30: confere o cliente do post no próprio handler, antes de qualquer escrita (igual ao reagendar).
   'aceleriq_criar_publicacao_de_aprovado',
+  // MCP 2.39.2: confere o cliente do post (escopo e cliente interno) no próprio handler, antes de qualquer escrita.
+  'aceleriq_registrar_aprovacao_interna',
   // MCP 2.38: confere o cliente de todos os arquivos no próprio handler, antes de qualquer escrita.
   'aceleriq_arquivos_agrupar_carrossel',
   'aceleriq_agenda_criar_post_de_arquivo',
