@@ -51,6 +51,7 @@ import {
 import { CardSurface, Chip, OverflowMenu, ProgressBar, StatCard, StatusDot, StatusPill } from "@/components/ds";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
+import ExcluirClienteModal from "@/components/admin/ExcluirClienteModal";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
 import BotaoDoCrescimento from "@/components/clientes/BotaoDoCrescimento";
@@ -665,6 +666,8 @@ export default function Clients() {
 
   /** Botão direito na linha do cliente: abrir e copiar os contatos. */
   const [menuCliente, setMenuCliente] = useState<{ x: number; y: number; cliente: any } | null>(null);
+  // 26/11/2026 (dono): excluir cliente pelo "..." da linha, com a janela que mostra o que some e oferece Inativar.
+  const [excluindoCliente, setExcluindoCliente] = useState<{ id: string; nome: string; plan_status?: string | null } | null>(null);
 
   function itensDoCliente(c: any): ItemDeMenu[] {
     const copiar = (rotulo: string, valor: string) => () => {
@@ -700,6 +703,14 @@ export default function Clients() {
       itens.push({
         rotulo: concluido ? "Retomar cliente" : "Marcar avulso como concluído",
         acao: () => void toggleOneOffDone(c, !concluido),
+      });
+    }
+    if (isAdmin && !isInternalClient(c)) {
+      itens.push({ separador: true });
+      itens.push({
+        rotulo: "Excluir cliente...",
+        destrutivo: true,
+        acao: () => setExcluindoCliente({ id: String(c.id), nome: String(c.company_name || c.full_name || "Cliente").trim() || "Cliente", plan_status: c.plan_status ?? null }),
       });
     }
     return itens;
@@ -1816,6 +1827,15 @@ export default function Clients() {
           y={menuCliente.y}
           itens={itensDoCliente(menuCliente.cliente)}
           aoFechar={() => setMenuCliente(null)}
+        />
+      )}
+      {isAdmin && (
+        <ExcluirClienteModal
+          cliente={excluindoCliente}
+          aoFechar={() => setExcluindoCliente(null)}
+          aoExcluir={() => {
+            if (editClient && excluindoCliente && editClient.id === excluindoCliente.id) closeClientDrawer();
+          }}
         />
       )}
     </div>
