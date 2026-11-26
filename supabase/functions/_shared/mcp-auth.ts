@@ -10,6 +10,7 @@ import {
   validateOAuthJwtClaims,
 } from './mcp-security.ts';
 import { getMcpRuntimeConfig } from './mcp-runtime.ts';
+import { cachePrincipalFor, effectiveVideoWrite, grantScopes, hasOnlyProjectMarker, isProjectLive, isProjectScopedKey, projectAllowedForVideo, resolveGrantRows, type ProjectGrant } from './mcp-project-access.ts';
 
 export interface AuthContext {
   keyId: string;
@@ -29,6 +30,10 @@ export interface AuthContext {
   // age, como na tela. Nunca vai para log, resposta ou auditoria; só segue,
   // como Authorization, para as funções do próprio projeto (mcp-mesas-acoes.ts).
   userAccessToken?: string;
+  // Chave presa a um projeto e a um operador (mcp_project_grants). Ausente = credencial legada.
+  projectGrant?: ProjectGrant;
+  // Principal da chave de cache de leitura: inclui projeto e operador quando há concessão.
+  cachePrincipal?: string;
 }
 
 export interface ClientDataScope {
@@ -419,6 +424,46 @@ export async function dataScopeForApiKeyRow(row: {
   return dataScopeForUser(ownerId, 'api_key');
 }
 
+// Concessão ativa de uma chave com o marcador mcp:project. Só é chamada para chave marcada:
+// sem linha ativa, revogada, erro de leitura ou tabela ausente => null (nega ESTA chave).
+// Chave sem marcador nunca passa por aqui. Revalida, a cada autenticação, operador interno ativo
+// (internal_operators.slug) e projeto não apagado do mesmo cliente não apagado.
+async function loadProjectGrant(keyId: string): Promise<ProjectGrant | null> {
+  try {
+    // Lê TODAS as linhas da chave (revogadas inclusas): revogação é definitiva, então qualquer linha revogada
+    // ou extra nega; não existe "usar a ativa e ignorar a revogada".
+    const { data, error } = await admin()
+      .from('mcp_project_grants')
+      .select('api_key_id, project_id, client_id, operator_slug, allow_video_upload, created_by, created_at, revoked_at')
+      .eq('api_key_id', keyId)
+      .limit(2);
+    if (error) return null;
+    const record = resolveGrantRows(data, keyId);
+    if (!record) return null;
+    // Envio de MP4: opt-in imutável da concessão E projeto na allowlist explícita do servidor
+    // (MCP_PROJECT_VIDEO_PROJECT_IDS ∪ MCP_PROJECT_VIDEO_PROJECT_ID legado) E MCP_PROJECT_VIDEO_WRITE=true (kill switch).
+    // O banco reconfere chave, concessão, operador, projeto, autoria e tarefa na RPC.
+    const grant: ProjectGrant = {
+      projectId: record.projectId, clientId: record.clientId, operatorSlug: record.operatorSlug,
+      videoWrite: record.operatorSlug === 'corte'
+        && projectAllowedForVideo(record.projectId, Deno.env.get('MCP_PROJECT_VIDEO_PROJECT_IDS'), Deno.env.get('MCP_PROJECT_VIDEO_PROJECT_ID'))
+        && effectiveVideoWrite(record.allowVideoUpload, Deno.env.get('MCP_PROJECT_VIDEO_WRITE')),
+    };
+    const [op, proj, cli] = await Promise.all([
+      admin().from('internal_operators').select('slug').eq('slug', grant.operatorSlug).eq('status', 'active').limit(1),
+      admin().from('projects').select('id, client_id, status, deleted_at').eq('id', grant.projectId).eq('client_id', grant.clientId).is('deleted_at', null).limit(1),
+      admin().from('profiles').select('id').eq('id', grant.clientId).is('deleted_at', null).limit(1),
+    ]);
+    if (op.error || proj.error || cli.error) return null;
+    if (!op.data?.length || !cli.data?.length) return null;
+    // Projeto apagado, arquivado ou cancelado nega na hora (mesma regra de mcp_project_is_live()).
+    if (!isProjectLive(proj.data?.[0] as never, grant)) return null;
+    return grant;
+  } catch {
+    return null;
+  }
+}
+
 export function canAccessClient(ctx: AuthContext, clientId: string): boolean {
   return dataScopeAllowsClient(ctx.dataScope, clientId);
 }
@@ -443,6 +488,25 @@ export async function authenticate(req: Request): Promise<AuthResult> {
     const row = Array.isArray(data) ? data[0] : data;
     if (row) {
       const scopes = Array.isArray(row.scopes) ? row.scopes : [];
+      if (isProjectScopedKey(scopes)) {
+        // Chave project-scoped nasce SÓ com o marcador mcp:project. Qualquer outro escopo é inválido
+        // e a leitura vem exclusivamente da concessão ativa (nunca de escopo legado ou admin).
+        if (!hasOnlyProjectMarker(scopes)) return { ok: false, error: { kind: 'invalid' } };
+        const grant = await loadProjectGrant(row.id);
+        if (!grant) return { ok: false, error: { kind: 'invalid' } };
+        return {
+          ok: true,
+          ctx: {
+            keyId: row.id,
+            keyName: row.name,
+            scopes: grantScopes(grant),
+            origin: row.origin ?? null,
+            dataScope: { unrestricted: false, clientIds: [grant.clientId], principalUserId: null, source: 'api_key' },
+            projectGrant: grant,
+            cachePrincipal: cachePrincipalFor(row.id, grant),
+          },
+        };
+      }
       let dataScope: ClientDataScope;
       if (scopes.includes('admin')) {
         dataScope = {

@@ -15,7 +15,8 @@ describe("aceleriq_ritual_redigir", () => {
   const codigo = modulo.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 
   it("registrada no MCP 2.10 com escopo de escrita de relatório (gasta modelo pago)", () => {
-    expect(MCP_VERSION).toBe("2.36.0");
+    expect(MCP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(MCP_VERSION.localeCompare("2.10.0", "en", { numeric: true })).toBeGreaterThanOrEqual(0);
     expect(tools).toContain("aceleriq_ritual_redigir: 'reports:write'");
     expect(tools).toContain("name: 'aceleriq_ritual_redigir'");
     expect(tools).toContain("  ritualRedigirTool,\n");

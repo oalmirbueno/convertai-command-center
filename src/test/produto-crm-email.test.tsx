@@ -132,11 +132,13 @@ function estado(parte: Partial<EstadoDoProduto["conta"]> & { estado: NonNullable
   return {
     conta: {
       id: "c", nome: "Empresa", plano_id: "starter", usuarios_contratados: 2, crm_ativo: true, email_ativo: false, email_caixas_contratadas: 0,
-      teste_ate: null, atrasada_desde: null, acesso_ate: null, visibilidade: "todos", aparencia: {}, documento: null, email_cobranca: null, telefone: null, ...parte,
+      teste_ate: null, atrasada_desde: null, acesso_ate: null, visibilidade: "todos", aparencia: {}, documento: null, email_cobranca: null, telefone: null,
+      cobranca_por: "assinatura", tem_painel: false, perfil: {}, ...parte,
     },
-    eu: { membro_id: "m", papel, nome: "Ana", email: "ana@exemplo.com" },
+    eu: { membro_id: "m", papel, nome: "Ana", email: "ana@exemplo.com", cargo: "", gerente_id: null },
     plano: null, liberada, crm: liberada, email: false, dono_da_casa: false, pagamentos_ativos: true, tolerancia_dias: 5, teste_dias: 7,
     equipe: [], maquina_no_mes: 0, assinatura: null, convite: null,
+    ve_tudo: true, avisos_novos: 0, crm_da_empresa: null,
   };
 }
 

@@ -49,10 +49,11 @@ import {
   registrarMaquina,
 } from './modulos/nucleo.ts';
 import { scriptDoInstalador } from './modulos/instalador.ts';
+import { PREFLIGHT_CACHE } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const cors = { ...corsHeaders, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+const cors = { ...corsHeaders, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', ...PREFLIGHT_CACHE };
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -73,6 +74,8 @@ async function identificar(req: Request, banco: any): Promise<Quem | null> {
   if (token.startsWith('mcp_')) {
     const r = await authenticate(req);
     if (!r.ok) return null;
+    // Chave presa a um projeto e a um operador não usa a Central de Skills (negado por padrão).
+    if (r.ctx.projectGrant) return null;
     const s = expandScopesLocal(r.ctx.scopes);
     const admin = s.has('admin');
     return {

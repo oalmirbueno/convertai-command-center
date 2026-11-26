@@ -90,7 +90,7 @@ export default function SecondBrainPulseWidget() {
   const [todosCommits, setTodosCommits] = useState(false);
   const [todasPropostas, setTodasPropostas] = useState(false);
 
-  const poco = "min-w-0 rounded-2xl bg-muted/60 p-4";
+  const poco = "min-w-0 rounded-lg bg-muted/60 p-4";
   const rotulo = "mb-3 flex items-center text-[12px] font-medium text-muted-foreground";
 
   return (

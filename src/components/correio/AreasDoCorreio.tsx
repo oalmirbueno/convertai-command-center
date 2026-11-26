@@ -1,25 +1,25 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Bot, CalendarClock, Check, Clock, Minus, Plus, Sparkles, FileSignature, FolderClosed, Inbox, Link2, ListFilter, Megaphone, MessageSquareReply, Repeat2, Send, Share2, Undo2, Users, X, Zap, BellRing, BriefcaseBusiness, Palette } from "lucide-react";
 import { correio, correioDesligado, enderecosColados, type CaixaDoCorreio } from "@/lib/produto/email-central";
 import { COLUNAS, agruparCaixa, colunaDaMensagem, fraseDoDia, horaDaMensagem, hojeEmBrasilia, listarCompromissos, listarTarefas, type ColunaDoQuadro, type EuNoCorreio, type MensagemDaCaixa } from "@/lib/produto/correio-dia";
 import { contratarEmailExtras, diaLegivel, fraseDoErro, lerOfertas, lerPrecos, type CaixaDeEmail } from "@/lib/produto/api";
-import { Carregando, EstadoDeErro, EstadoVazio, botao, etiqueta, foco, juntar, texto } from "@/components/sistema";
+import { CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, botao, etiqueta, foco, juntar, superficie, texto, useAlturaQueCabe } from "@/components/sistema";
 import { AgendaDeHoje, TarefasDoDia, chaveDaAgenda, chaveDasTarefas } from "./PainelDoDia";
 import { CaixaEmPreparo, LeituraDaMensagem, categoriaDa, enderecoDe, nomeDe, useMensagensDaPasta } from "./CaixaPorPrioridade";
 import LogoDoRemetente from "./LogoDoRemetente";
 import MensagensComAMarca from "./MensagensComAMarca";
 import TrazerEmailsAntigos from "@/components/produto/TrazerEmailsAntigos";
 
-const cartao = "min-w-0 rounded-3xl bg-card p-5";
+const cartao = "min-w-0 rounded-lg bg-card p-5";
 const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 function Titulo({ titulo, frase, direita }: { titulo: string; frase: string; direita?: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-wrap items-end px-1 pt-2">
       <div className="min-w-0 flex-1">
-        <h1 className={texto.tituloPagina}>{titulo}</h1>
+        <CabecalhoDePagina titulo={titulo} />
         <p className={juntar(texto.auxiliar, "mt-1.5 max-w-[640px] leading-5")}>{frase}</p>
       </div>
       {direita}
@@ -64,6 +64,9 @@ export function QuadroDaCaixa({ caixa, eu }: { caixa: CaixaDoCorreio; eu?: EuNoC
     return g;
   }, [doQuadro]);
   const aberta = lista.filter((m) => m.id === abertaId)[0] || null;
+  // Altura das colunas e da leitura: mede de onde o quadro começa até o fim da janela (de 1024 px para cima).
+  const { ref: refDoQuadro, altura: alturaDoQuadro } = useAlturaQueCabe(!emPreparo && !mensagens.isLoading && !mensagens.isError);
+  const estiloDoQuadro = alturaDoQuadro ? ({ "--altura-do-quadro": `${alturaDoQuadro}px` } as CSSProperties) : undefined;
 
   return (
     <div className="min-w-0 space-y-4" data-quadro-da-caixa="">
@@ -87,12 +90,12 @@ export function QuadroDaCaixa({ caixa, eu }: { caixa: CaixaDoCorreio; eu?: EuNoC
       ) : mensagens.isError ? (
         <div className={cartao}><EstadoDeErro titulo={fraseDoErro(mensagens.error, "Não foi possível ler a caixa agora.")} acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void mensagens.refetch()}>Tentar de novo</button>} /></div>
       ) : (
-        <div className={juntar("grid min-w-0 grid-cols-1 gap-4", aberta ? "xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.9fr)]" : "")}>
+        <div ref={refDoQuadro} style={estiloDoQuadro} className={juntar("grid min-w-0 grid-cols-1 gap-4", aberta ? "xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.9fr)]" : "")}>
           <div className={juntar("grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2", aberta ? "" : "lg:grid-cols-4")}>
             {COLUNAS.map((c) => {
               const cartoes = porColuna[c.id];
               return (
-                <section key={c.id} className="flex min-w-0 flex-col rounded-3xl bg-card lg:h-[calc(100dvh-230px)]" aria-label={c.nome} data-coluna={c.id}>
+                <section key={c.id} className="flex min-w-0 flex-col rounded-lg bg-card lg:h-[var(--altura-do-quadro)]" aria-label={c.nome} data-coluna={c.id}>
                   <div className="flex items-center border-b border-border px-4 py-3">
                     <i className="mr-2 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COR_DA_COLUNA[c.id] }} aria-hidden="true" />
                     <span className="min-w-0 flex-1">
@@ -106,7 +109,7 @@ export function QuadroDaCaixa({ caixa, eu }: { caixa: CaixaDoCorreio; eu?: EuNoC
                       <p className={juntar(texto.auxiliar, "p-3 text-center")}>Nada aqui.</p>
                     ) : (
                       cartoes.map((m) => (
-                        <button key={m.id} type="button" onClick={() => setAbertaId(m.id)} aria-pressed={m.id === abertaId} className={juntar("mb-2 block w-full min-w-0 rounded-2xl border bg-card p-3 text-left transition-shadow hover:shadow-md", foco, m.id === abertaId ? "border-foreground" : "border-border")} style={{ borderLeft: `4px solid ${COR_DA_COLUNA[c.id]}` }} data-cartao={m.id}>
+                        <button key={m.id} type="button" onClick={() => setAbertaId(m.id)} aria-pressed={m.id === abertaId} className={juntar(superficie.painel, "mb-2 block w-full min-w-0 p-3 text-left transition-shadow hover:shadow-md", foco, m.id === abertaId ? "border-foreground" : "border-border")} style={{ borderLeft: `4px solid ${COR_DA_COLUNA[c.id]}` }} data-cartao={m.id}>
                           <span className="flex min-w-0 items-center">
                             <LogoDoRemetente endereco={enderecoDe(m.de)} nome={nomeDe(m.de)} tamanho={26} className="mr-2" />
                             <span className={juntar("min-w-0 flex-1 truncate text-[13px]", !m.lida ? "font-semibold" : "text-muted-foreground")}>{nomeDe(m.de)}</span>
@@ -122,7 +125,7 @@ export function QuadroDaCaixa({ caixa, eu }: { caixa: CaixaDoCorreio; eu?: EuNoC
             })}
           </div>
           {aberta && (
-            <article className="relative flex min-h-0 min-w-0 flex-col rounded-3xl bg-card xl:h-[calc(100dvh-230px)]" aria-label="Mensagem aberta" data-quadro-leitura="">
+            <article className="relative flex min-h-0 min-w-0 flex-col rounded-lg bg-card xl:h-[var(--altura-do-quadro)]" aria-label="Mensagem aberta" data-quadro-leitura="">
               <button type="button" className={juntar(botao.icone, "absolute right-3 top-3 z-[2]")} onClick={() => setAbertaId(null)} aria-label="Fechar a mensagem" title="Fechar">
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -235,7 +238,7 @@ export function CampanhasDoCorreio({ caixa }: { caixa: CaixaDoCorreio | null }) 
     }
   };
 
-  const campo = "w-full rounded-2xl border border-border bg-card px-4 py-3 text-[14px] outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring";
+  const campo = "w-full rounded-lg border border-border bg-card px-4 py-3 text-[14px] outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring";
   return (
     <div className="min-w-0 space-y-4" data-campanhas-do-correio="">
       <Titulo titulo="Campanhas" frase={`E-mail para uma lista, saindo de ${caixa.endereco}. Cada pessoa recebe o seu e as respostas voltam para a caixa.`} />
@@ -289,7 +292,7 @@ export function CampanhasDoCorreio({ caixa }: { caixa: CaixaDoCorreio | null }) 
             ) : (
               <ul className="space-y-2">
                 {historico.data.campanhas.slice(0, 12).map((c, i) => (
-                  <li key={`${c.quando}-${i}`} className="rounded-2xl bg-muted/60 px-3 py-2.5">
+                  <li key={`${c.quando}-${i}`} className="rounded-lg bg-muted/60 px-3 py-2.5">
                     <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.assunto || "(sem assunto)"}</span>
                     <span className={texto.auxiliar}>{diaLegivel(c.quando, true)} · {c.enviados} enviados{c.falhas ? ` · ${c.falhas} com erro` : ""}</span>
                   </li>
@@ -381,7 +384,7 @@ function ListaDeFerramentas({ aoIr, caixaId }: { aoIr?: (area: string) => void; 
     const Icone = f.icone;
     const conteudo = (
       <>
-        <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", f.pronta ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")} aria-hidden="true">
+        <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", f.pronta ? "bg-accent-soft text-primary" : "bg-muted text-muted-foreground")} aria-hidden="true">
           <Icone className="h-[18px] w-[18px]" />
         </span>
         <span className="min-w-0 flex-1">
@@ -395,9 +398,9 @@ function ListaDeFerramentas({ aoIr, caixaId }: { aoIr?: (area: string) => void; 
       </>
     );
     return f.pronta && f.area && aoIr ? (
-      <button key={f.nome} type="button" onClick={() => aoIr(f.area!)} className={juntar("flex min-w-0 items-start rounded-3xl bg-card p-4 text-left transition-shadow hover:shadow-md", foco)} data-ferramenta={f.nome}>{conteudo}</button>
+      <button key={f.nome} type="button" onClick={() => aoIr(f.area!)} className={juntar("flex min-w-0 items-start rounded-lg bg-card p-4 text-left transition-shadow hover:shadow-md", foco)} data-ferramenta={f.nome}>{conteudo}</button>
     ) : (
-      <article key={f.nome} className="flex min-w-0 items-start rounded-3xl bg-card p-4" data-ferramenta={f.nome}>{conteudo}</article>
+      <article key={f.nome} className="flex min-w-0 items-start rounded-lg bg-card p-4" data-ferramenta={f.nome}>{conteudo}</article>
     );
   };
   return (
@@ -461,7 +464,7 @@ function PlanosEPrecos({ caixas, master }: { caixas: CaixaDoCorreio[]; master: b
   return (
     <div className="min-w-0 space-y-4" data-planos-e-precos="">
       {feito && (
-        <div className="flex min-w-0 items-start rounded-3xl border border-primary/30 bg-accent-soft p-4" role="status" data-contratacao-feita="">
+        <div className="flex min-w-0 items-start rounded-lg border border-primary/30 bg-accent-soft p-4" role="status" data-contratacao-feita="">
           <Check className="mr-3 mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
           <span className="min-w-0 flex-1 text-[14px] leading-5">
             <b>Pedido recebido{(feito.itens || []).length ? `: ${feito.itens.join(", ")}` : ""}.</b>  {feito.mensal_a_mais > 0 && `${reais(feito.mensal_a_mais)} a mais por mês. `}{feito.unico > 0 && `${reais(feito.unico)} uma vez. `}A Aceleriq confirma e manda o link de pagamento.
@@ -472,11 +475,11 @@ function PlanosEPrecos({ caixas, master }: { caixas: CaixaDoCorreio[]; master: b
       <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-4">
           <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-            <section className="correio-plano relative min-w-0 rounded-3xl p-6" aria-label="Seu plano" data-plano-do-correio="">
-              <span className="absolute right-5 top-5 rounded-full bg-[hsl(var(--correio-neon))] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-[hsl(var(--correio-floresta))]">Seu plano</span>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] opacity-75">Essencial</p>
-              <h2 className="mt-1 text-[21px] font-semibold tracking-[-0.02em]">E-mail profissional</h2>
-              <p className="mt-3 text-[38px] font-semibold leading-none tabular-nums">{reais(p.email_mensal)}<span className="text-[14px] font-normal opacity-75"> por mês</span></p>
+            <section className="correio-plano relative min-w-0 rounded-lg p-6" aria-label="Seu plano" data-plano-do-correio="">
+              <span className="absolute right-5 top-5 rounded-full bg-[hsl(var(--correio-neon))] px-2.5 py-1 text-[11px] font-bold text-[hsl(var(--correio-floresta))]">Seu plano</span>
+              <p className="text-[12px] font-semibold opacity-75">Essencial</p>
+              <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.02em]">E-mail profissional</h2>
+              <p className="mt-3 text-[40px] font-semibold leading-none tabular-nums">{reais(p.email_mensal)}<span className="text-[14px] font-normal opacity-75"> por mês</span></p>
               <ul className="mt-4 space-y-1.5 text-[14px]">
                 <li className="flex items-start"><Check className="mr-2 mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{incluidas} {incluidas === 1 ? "caixa incluída" : "caixas incluídas"} com o domínio da empresa</li>
                 <li className="flex items-start"><Check className="mr-2 mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />Correio, quadro, agenda, tarefas e campanhas</li>
@@ -490,13 +493,13 @@ function PlanosEPrecos({ caixas, master }: { caixas: CaixaDoCorreio[]; master: b
               </div>
             </section>
 
-            <section className="flex min-w-0 flex-col rounded-3xl bg-card p-6" aria-label="Mais caixas" data-mais-caixas="">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-primary">Para a equipe crescer</p>
-              <h2 className="mt-1 text-[21px] font-semibold tracking-[-0.02em]">Mais caixas</h2>
-              <p className="mt-3 text-[38px] font-semibold leading-none tabular-nums">{reais(p.email_caixa_extra)}<span className="text-[14px] font-normal text-muted-foreground"> por caixa, por mês</span></p>
+            <section className="flex min-w-0 flex-col rounded-lg bg-card p-6" aria-label="Mais caixas" data-mais-caixas="">
+              <p className="text-[12px] font-semibold text-primary">Para a equipe crescer</p>
+              <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.02em]">Mais caixas</h2>
+              <p className="mt-3 text-[40px] font-semibold leading-none tabular-nums">{reais(p.email_caixa_extra)}<span className="text-[14px] font-normal text-muted-foreground"> por caixa, por mês</span></p>
               <p className={juntar(texto.auxiliar, "mt-3 leading-5")}>Uma caixa para cada pessoa ou setor (vendas, financeiro, contato), com o mesmo domínio e as mesmas ferramentas.</p>
               <div className="mt-auto pt-5">
-                <div className="flex items-center rounded-2xl bg-muted p-1.5" data-contador-de-caixas="">
+                <div className="flex items-center rounded-lg bg-muted p-1.5" data-contador-de-caixas="">
                   <button type="button" className={contador} onClick={() => setAMais((n) => Math.max(0, n - 1))} disabled={aMais === 0} aria-label="Uma caixa a menos"><Minus className="h-4 w-4" aria-hidden="true" /></button>
                   <span className="flex-1 text-center text-[15px] font-semibold tabular-nums" aria-live="polite">{aMais === 0 ? "Nenhuma a mais" : `${aMais} ${aMais === 1 ? "caixa a mais" : "caixas a mais"}`}</span>
                   <button type="button" className={contador} onClick={() => setAMais((n) => Math.min(50, n + 1))} disabled={aMais >= 50} aria-label="Uma caixa a mais" data-caixa-a-mais=""><Plus className="h-4 w-4" aria-hidden="true" /></button>
@@ -505,7 +508,7 @@ function PlanosEPrecos({ caixas, master }: { caixas: CaixaDoCorreio[]; master: b
             </section>
           </div>
 
-          <section className="min-w-0 rounded-3xl bg-card p-6" aria-label="Extras">
+          <section className="min-w-0 rounded-lg bg-card p-6" aria-label="Extras">
             <h2 className={texto.tituloSecao}>Extras para somar</h2>
             <p className={juntar(texto.auxiliar, "mt-1")}>Marque o que quer junto.</p>
             {ofertas.isLoading ? (
@@ -517,7 +520,7 @@ function PlanosEPrecos({ caixas, master }: { caixas: CaixaDoCorreio[]; master: b
                 {lista.map((o) => {
                   const marcada = escolhidas.indexOf(o.id) >= 0;
                   return (
-                    <button key={o.id} type="button" onClick={() => alternar(o.id)} aria-pressed={marcada} className={juntar("flex min-w-0 items-start rounded-2xl border-2 p-4 text-left transition-colors", foco, marcada ? "border-primary bg-accent-soft" : "border-border hover:border-primary/40")} data-oferta={o.id}>
+                    <button key={o.id} type="button" onClick={() => alternar(o.id)} aria-pressed={marcada} className={juntar("flex min-w-0 items-start rounded-lg border-2 p-4 text-left transition-colors", foco, marcada ? "border-primary bg-accent-soft" : "border-border hover:border-primary/40")} data-oferta={o.id}>
                       <span className={juntar("mr-3 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2", marcada ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card")} aria-hidden="true">{marcada && <Check className="h-3.5 w-3.5" />}</span>
                       <span className="min-w-0 flex-1">
                         <span className={juntar(texto.corpo, "block font-semibold")}>{o.nome}</span>
@@ -533,7 +536,7 @@ function PlanosEPrecos({ caixas, master }: { caixas: CaixaDoCorreio[]; master: b
         </div>
 
         <aside className="min-w-0 xl:sticky xl:top-16 xl:self-start" aria-label="Resumo da contratação" data-resumo-da-contratacao="">
-          <div className="rounded-3xl bg-card p-6 shadow-sm">
+          <div className="rounded-lg bg-card p-6 shadow-sm">
             <h2 className={texto.tituloSecao}>Resumo</h2>
             <dl className="mt-4 space-y-2.5 text-[14px]">
               <div className="flex justify-between"><dt className="text-muted-foreground">Hoje você paga</dt><dd className="font-semibold tabular-nums">{reais(mensalHoje)}<span className="font-normal text-muted-foreground">/mês</span></dd></div>

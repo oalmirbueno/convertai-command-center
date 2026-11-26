@@ -20,6 +20,7 @@ import {
   campo,
   foco,
   juntar,
+  rolagem,
   superficie,
   texto,
   useEstadoDaTela,
@@ -367,7 +368,7 @@ export default function Team() {
             <span className="w-24 shrink-0 text-right">Tarefas</span>
             <span className="w-10 shrink-0" />
           </div>
-          <ul aria-label="Membros da equipe" className="min-w-0 lg:max-h-[calc(100dvh-420px)] lg:min-h-[240px] lg:overflow-y-auto lg:overscroll-contain">
+          <ul aria-label="Membros da equipe" className={juntar("min-w-0 lg:min-h-[240px]", rolagem.lista)}>
             {visiveis.map((m: any) => (
               <li key={m.id} className="flex min-w-0 items-center rounded-md px-3 py-3 transition-colors hover:bg-muted/60 sm:px-4">
                 <Foto name={m.full_name} tone={m.role === "admin" ? "ink" : "accent"} />

@@ -222,11 +222,19 @@ for (const role of USER_ROLES) {
         );
         return target !== null && button.contains(target);
       }), { message: "The project back button must receive pointer input below the navbar" }).toBe(true);
-      const sections = page.getByRole("navigation", { name: "Seções do projeto", exact: true });
-      await sections.getByRole("button", { name: "Entregas", exact: true }).click();
-      await expect(sections.getByRole("button", { name: "Entregas", exact: true })).toHaveAttribute("aria-current", "page");
-      await sections.getByRole("button", { name: "Visão geral", exact: true }).click();
-      await expect(sections.getByRole("button", { name: "Visão geral", exact: true })).toHaveAttribute("aria-current", "page");
+      // Project sections are PillTabs (WAI-ARIA tabs): the open section is the
+      // tab with aria-selected="true". "Entregas" may carry a pending count.
+      const sections = page.getByRole("tablist", { name: "Seções do projeto", exact: true });
+      const overviewTab = sections.getByRole("tab", { name: "Visão geral", exact: true });
+      const deliveriesTab = sections.getByRole("tab", { name: /^Entregas(?:\s*\d+)?$/ });
+      await expect(overviewTab).toHaveCount(1);
+      await expect(deliveriesTab).toHaveCount(1);
+      await deliveriesTab.click();
+      await expect(deliveriesTab).toHaveAttribute("aria-selected", "true");
+      await expect(overviewTab).toHaveAttribute("aria-selected", "false");
+      await overviewTab.click();
+      await expect(overviewTab).toHaveAttribute("aria-selected", "true");
+      await expect(deliveriesTab).toHaveAttribute("aria-selected", "false");
       await backToProjects.click();
       await expect(list.getByText(fixture.projects[role].name, { exact: true })).toBeVisible();
     }

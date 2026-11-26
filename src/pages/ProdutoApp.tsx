@@ -309,7 +309,7 @@ export default function ProdutoApp() {
             {soIcone ? (
               i > 0 && <div className="mx-2 mb-2 border-t border-border" aria-hidden="true" />
             ) : (
-              <p className="mb-1.5 px-2.5 text-[11px] font-medium uppercase leading-4 tracking-[0.06em] text-muted-foreground">{g.grupo}</p>
+              <p className="mb-1.5 px-2.5 text-[11px] font-medium leading-4 text-muted-foreground">{g.grupo}</p>
             )}
             <div className="space-y-0.5">{g.itens.map((item) => linkDoMenu(item, soIcone))}</div>
           </div>
@@ -358,14 +358,14 @@ export default function ProdutoApp() {
           <LayoutGrid className="h-[18px] w-[18px]" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[280px] rounded-3xl p-2">
-        <p className="px-3 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Ir para</p>
+      <PopoverContent align="start" className="w-[280px] rounded-lg p-2">
+        <p className="px-3 pb-1.5 pt-2 text-[11px] font-semibold text-muted-foreground">Ir para</p>
         <ul>
           {destinos.map((d) => {
             const Icone = d.icone;
             return (
               <li key={d.id}>
-                <button type="button" onClick={() => { setIrParaAberto(false); d.ir(); }} className={juntar("flex w-full min-w-0 items-center rounded-2xl p-2.5 text-left hover:bg-muted", foco)} data-destino={d.id}>
+                <button type="button" onClick={() => { setIrParaAberto(false); d.ir(); }} className={juntar("flex w-full min-w-0 items-center rounded-lg p-2.5 text-left hover:bg-muted", foco)} data-destino={d.id}>
                   <span className="mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted" aria-hidden="true"><Icone className="h-4 w-4" /></span>
                   <span className="min-w-0">
                     <span className="block text-[14px] font-medium">{d.rotulo}</span>
@@ -471,7 +471,7 @@ export default function ProdutoApp() {
       {gaveta && comMenu && (
         <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-label="Todas as áreas" data-gaveta="">
           <button type="button" className="absolute inset-0 bg-black/50" aria-label="Fechar" onClick={() => setGaveta(false)} />
-          <div className="produto-entra absolute inset-x-0 bottom-0 flex max-h-[86vh] flex-col overflow-y-auto rounded-t-2xl border-t border-border bg-card px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3">
+          <div className="produto-entra absolute inset-x-0 bottom-0 flex max-h-[86vh] flex-col overflow-y-auto rounded-t-xl border-t border-border bg-card px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3">
             <div className="mb-3 flex items-center">
               <p className={juntar(texto.tituloSecao, "flex-1")}>Todas as áreas</p>
               <button type="button" className={botao.icone} onClick={() => setGaveta(false)} aria-label="Fechar"><X className="h-4 w-4" aria-hidden="true" /></button>

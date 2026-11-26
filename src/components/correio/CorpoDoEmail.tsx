@@ -59,7 +59,7 @@ body{padding:4px 2px}img{max-width:100%;height:auto}table{max-width:100%}pre{whi
       // Sem allow-scripts: nada do remetente roda. allow-same-origin só para medir a altura.
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       referrerPolicy="no-referrer"
-      className="block w-full rounded-2xl border-0 bg-white"
+      className="block w-full rounded-lg border-0 bg-white"
       style={{ height: altura }}
       data-corpo-html=""
     />

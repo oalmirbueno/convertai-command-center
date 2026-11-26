@@ -45,7 +45,7 @@ describe("base dos agentes", () => {
   });
 
   it("a fila do comercial entrega as fichas do Mercúrio", () => {
-    expect(ler("supabase/functions/_shared/aceleriq-commercial-services.ts")).toContain(".eq('agente', 'comercial.mercurio')");
+    expect(ler("supabase/functions/mcp-server/modulos/aceleriq-commercial-services.ts")).toContain(".eq('agente', 'comercial.mercurio')");
   });
 
   it("o gerador de imagem do Estúdio continua sem a base: ela vai para o diretor, que escreve o pedido de imagem", () => {

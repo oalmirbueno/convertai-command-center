@@ -11,8 +11,11 @@ import { shouldUseOAuthToolChallenge } from "../_shared/mcp-security.ts";
 import { COMO_PEDIR_ACESSO } from "./modulos/acesso-regras.ts";
 import {
   ALL_SCOPES,
+  authorizeTool,
   canInvoke,
   canUseToolWithDataScope,
+  catalogoDe,
+  toolFor,
   describeTool,
   SERVER_INFO,
   TOOL_MAP,
@@ -41,6 +44,7 @@ import {
   type JsonRpcResponse,
 } from "./modulos/mcp-response.ts";
 import { getMcpRuntimeConfig } from "../_shared/mcp-runtime.ts";
+import { authorizeGrantCall, isProjectOnlyTool, isProjectWriteTool } from "../_shared/mcp-project-access.ts";
 import { decidirGet, descobertaDoMcp } from "../_shared/mcp-descoberta.ts";
 import { bridgeStatusPublic } from "../_shared/second-brain-github.ts";
 import { executarFerramenta, resultadoDeErro, segundoPlanoPadrao } from "./modulos/executar-ferramenta.ts";
@@ -59,7 +63,8 @@ import {
 import { descritorEnxuto, lerRecurso, montarPrompt, PROMPTS, RECURSOS } from "./modulos/guia-do-painel.ts";
 
 // MCP 2.17: a credencial conferida vale 45 s (no OAuth eram cinco idas ao servidor por chamada).
-const credenciais = new CredencialEmCache<AuthResult>();
+// Chave presa a projeto/operador nunca fica em cache: revogação, troca de operador e projeto valem na próxima chamada.
+const credenciais = new CredencialEmCache<AuthResult>(undefined, undefined, (r) => r.ok && Boolean(r.ctx.projectGrant));
 const authenticate = (req: Request) => credenciais.autenticar(req, conferirCredencial);
 const ehForaDoEscopo = (e: unknown) => {
   const message = (e as Error)?.message ?? String(e);
@@ -82,8 +87,8 @@ const WWW_AUTH_TOOL_HEADER = `${WWW_AUTH_HEADER}, error="invalid_token", error_d
 // permissions are derived server-side after the user and tenant scope are
 // verified, so they must not be advertised as OAuth scopes to ChatGPT.
 const OAUTH_SCOPES = ["openid", "email", "profile"];
-// Uma unica fonte: a lista de escopos vive em mcp-tools.ts (ALL_SCOPES).
-// Copia local aqui ja ficou para tras duas vezes (clients:write, commercial:*).
+// Uma unica fonte: a lista de escopos vive em mcp-scope-list.ts (ALL_SCOPES),
+// reexportada por mcp-tools.ts. Copia local aqui ja ficou para tras duas vezes (clients:write, commercial:*).
 const INTERNAL_MCP_SCOPES: readonly string[] = ALL_SCOPES;
 
 function protectedResourceMetadata() {
@@ -226,8 +231,9 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
       // agente com lista menor consegue perceber sozinho que esta velha.
       capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } },
       serverInfo: SERVER_INFO,
-      instructions:
-        `Aceleriq OS ${SERVER_INFO.version}: este servidor expoe ${TOOLS.length} tools nesta versao. `
+      instructions: auth.ok && auth.ctx.projectGrant
+        ? "Aceleriq OS: acesso restrito a um projeto. Chame tools/list para ver o catalogo e aceleriq_escritorio_entrar para conferir sua identidade."
+        : `Aceleriq OS ${SERVER_INFO.version}: este servidor expoe ${TOOLS.length} tools nesta versao. `
         + "Se a sua lista de funcoes tiver menos que isso, ela esta velha: chame tools/list de novo "
         + "(o servidor nao empurra aviso de mudanca, entao a lista so atualiza quando voce pergunta). "
         + "Chame aceleriq_capabilities para ver os nomes exatos que a sua credencial pode invocar. "
@@ -258,8 +264,10 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
   }
 
   if (method === "tools/list") {
+    // Sem credencial: descoberta legada. As tools de projeto restrito vivem em catálogo separado (PROJECT_TOOLS)
+    // e só aparecem para chave com concessão.
     const visible = auth.ok
-      ? TOOLS.filter((t) => canInvoke(auth.ctx, t) && canUseToolWithDataScope(auth.ctx, t))
+      ? catalogoDe(auth.ctx).filter((t) => authorizeTool(auth.ctx, t))
       : TOOLS;
     // MCP 2.17: descrição curta e segurança sem o parágrafo repetido (o manual inteiro fica em aceleriq_guia).
     return rpcResult(id, { tools: visible.map((t) => descritorEnxuto(describeTool(t))) });
@@ -310,12 +318,22 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
   if (method === "tools/call") {
     const name = String((params?.name as string) ?? "");
     const args = (params?.arguments as unknown) ?? {};
-    const tool = TOOL_MAP.get(name);
+    const tool = toolFor(ctx, name);
     const correlationId = crypto.randomUUID();
     const started = Date.now();
+    // Guardamos o resultado e a autoria da chamada restrita, sem argumentos ou URLs temporárias.
+    const auditarChamadaDaTool: typeof auditLog = ctx.projectGrant
+      ? (entry) => auditLog({
+        ...entry,
+        toolName: tool?.name ?? "(unknown)",
+        input: null,
+        resultRef: null,
+        errorMessage: null,
+      })
+      : auditLog;
 
     if (!tool) {
-      await auditLog({
+      await auditarChamadaDaTool({
         correlationId,
         toolName: name || "(unknown)",
         origin: ctx.origin,
@@ -331,8 +349,33 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
       return rpcError(id, RpcErrors.toolNotFound, `Unknown tool: ${name}`);
     }
 
+    // Autorização central da concessão de projeto: ANTES de escopo, cache e handler.
+    // Tool fora da lista preparada ou identidade forjada (operador/projeto/cliente) é negada e auditada.
+    if (ctx.projectGrant) {
+      const decisao = authorizeGrantCall(ctx.projectGrant, name, args);
+      if (!decisao.ok) {
+        await auditarChamadaDaTool({
+          correlationId,
+          toolName: name,
+          origin: ctx.origin,
+          keyId: ctx.keyId,
+          scopes: ctx.scopes,
+          input: args,
+          success: false,
+          statusCode: 403,
+          durationMs: Date.now() - started,
+          errorCode: decisao.code,
+          errorMessage: decisao.message,
+        });
+        return rpcError(id, RpcErrors.forbidden, decisao.message);
+      }
+    } else if (isProjectOnlyTool(name)) {
+      // Tool de projeto restrito sem concessão: indisponível (mesma resposta de qualquer tool fora do escopo).
+      return rpcError(id, RpcErrors.forbidden, "Tool is unavailable for this credential");
+    }
+
     if (!canInvoke(ctx, tool)) {
-      await auditLog({
+      await auditarChamadaDaTool({
         correlationId,
         toolName: name,
         origin: ctx.origin,
@@ -352,8 +395,9 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
     // principals may therefore execute only handlers that explicitly resolve
     // and enforce their client assignment. Unhardened private tools fail
     // closed; admin/unrestricted principals preserve the existing surface.
-    if (!canUseToolWithDataScope(ctx, tool)) {
-      await auditLog({
+    // Com concessão de projeto a lista preparada já foi aplicada acima e o handler confere projeto/cliente.
+    if (!ctx.projectGrant && !canUseToolWithDataScope(ctx, tool)) {
+      await auditarChamadaDaTool({
         correlationId,
         toolName: name,
         origin: ctx.origin,
@@ -374,7 +418,9 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
     // MCP 2.19: quem assina é a credencial que chama (modulos/autoria.ts).
     // MCP 2.37.0: guarda o operador DECLARADO (antes da troca) na auditoria das assinaturas.
     const declarado = operadorDeclarado(args);
-    const auditaAssinatura = deveAuditar(tool.name, args, tool.annotations?.readOnlyHint === true);
+    // Concessão de projeto: Entrar e cada escrita (envio de MP4, pedido de revisão) assinam pelo operador da concessão.
+    const auditaAssinatura = Boolean(ctx.projectGrant && (tool.name === "aceleriq_escritorio_entrar" || isProjectWriteTool(tool.name)))
+      || deveAuditar(tool.name, args, tool.annotations?.readOnlyHint === true);
     const autoria = await prepararAutoria(tool, args, ctx);
     // Em segundo plano (não atrasa a resposta) e com a mesma leitura dos vínculos (a da autoria ou o cache de 60 s).
     const auditarAssinatura = (indisponivel: boolean) => {
@@ -384,8 +430,11 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
         toolName: tool.name,
         correlationId,
         declarado,
-        operadorFinal: operadorDeclarado(autoria.args),
-        vinculos: autoria.vinculos,
+        // Concessão de projeto: não depende dos vínculos legados; o operador é o da concessão (declarado preservado).
+        operadorFinal: ctx.projectGrant ? ctx.projectGrant.operatorSlug : operadorDeclarado(autoria.args),
+        vinculos: ctx.projectGrant
+          ? [{ operator_slug: ctx.projectGrant.operatorSlug, padrao: true }]
+          : autoria.vinculos,
         indisponivel,
         sinais,
       }));
@@ -398,7 +447,7 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult, sinais: SinaisDaR
       return rpcResult(id, resultadoDeErro("autoria", autoria.erro, "Assine com um operador desta credencial (aceleriq_operator_board mostra os slugs).", false, correlationId));
     }
     const desfecho = await executarFerramenta(tool, autoria.args, { ...ctx, correlationId }, {
-      auditar: auditLog,
+      auditar: auditarChamadaDaTool,
       emSegundoPlano: segundoPlanoPadrao,
       ehForaDoEscopo,
     });
@@ -567,8 +616,9 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 202, headers: corsHeaders });
   }
 
+  const restrita = auth.ok && !!auth.ctx.projectGrant;
   if (prefersSse(req)) {
-    return sseResponse(response);
+    return sseResponse(response, restrita ? { "Cache-Control": "no-store, no-transform" } : {});
   }
-  return jsonResponse(response);
+  return jsonResponse(response, 200, restrita ? { "Cache-Control": "no-store" } : {});
 });

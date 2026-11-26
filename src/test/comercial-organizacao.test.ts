@@ -46,7 +46,11 @@ describe("cada aba é uma área, com nome que diz o que é", () => {
 
   it("o menu leva à visão geral, ao CRM e à Agenda", () => {
     expect(layout).toContain('{ title: "Visão geral", url: "/comercial"');
-    expect(layout).toContain('{ title: "CRM de vendas", url: "/comercial/crm"');
+    // 19/11/2026: o CRM de vendas abre na casca nova (/vendas/crm); /comercial/crm segue vivo pela rota legada.
+    expect(layout).toContain('{ title: "CRM de vendas", url: "/vendas/crm"');
+    const rotas = ler("src/App.tsx");
+    expect(rotas).toContain('<Route path="/vendas/:aba" element={<ProtectedRoute><ComercialRoute><CrmDaCasa /></ComercialRoute></ProtectedRoute>} />');
+    expect(rotas).toContain('<Route path="/comercial/:aba" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />');
     expect(layout).toContain('{ title: "Agenda", url: "/comercial/agenda"');
     // Sem o fim exato, "Visão geral" ficaria acesa em todas as áreas.
     expect(layout).toContain("fimExato: true");

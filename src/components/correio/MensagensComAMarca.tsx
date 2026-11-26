@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Palette } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Carregando, juntar, texto } from "@/components/sistema";
+import { Carregando, juntar, superficie, texto } from "@/components/sistema";
 
 /**
  * Ateliê de Cor no Correio (19/11/2026): cada e-mail sai com o texto puro e com a
@@ -36,9 +36,9 @@ export default function MensagensComAMarca({ caixaId }: { caixaId: string | null
   }, [previa.data, escuro]);
 
   return (
-    <section className="min-w-0 rounded-3xl bg-card p-6" aria-label="Mensagens com a sua marca" data-mensagens-com-a-marca="">
+    <section className="min-w-0 rounded-lg bg-card p-6" aria-label="Mensagens com a sua marca" data-mensagens-com-a-marca="">
       <div className="flex min-w-0 items-start">
-        <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-primary" aria-hidden="true"><Palette className="h-[18px] w-[18px]" /></span>
+        <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-primary" aria-hidden="true"><Palette className="h-[18px] w-[18px]" /></span>
         <span className="min-w-0 flex-1">
           <h2 className={texto.tituloSecao}>Mensagens com a sua marca</h2>
           <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>Cada e-mail sai com o texto puro e também nas cores da empresa, legível no modo escuro do Gmail, Outlook e Apple Mail.</p>
@@ -59,7 +59,7 @@ export default function MensagensComAMarca({ caixaId }: { caixaId: string | null
               <button type="button" aria-pressed={escuro} onClick={() => setEscuro(true)} className={juntar("ml-0.5 rounded-full px-3 py-1 text-[12px]", escuro ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>Escuro</button>
             </span>
           </div>
-          <iframe title={escuro ? "Mensagem no modo escuro" : "Mensagem no modo claro"} sandbox="" srcDoc={html} className="h-[320px] w-full rounded-2xl border border-border bg-card" />
+          <iframe title={escuro ? "Mensagem no modo escuro" : "Mensagem no modo claro"} sandbox="" srcDoc={html} className={juntar(superficie.painel, "h-[320px] w-full")} />
         </div>
       )}
     </section>

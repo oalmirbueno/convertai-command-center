@@ -1059,7 +1059,7 @@ Deno.test('every mapped granular scope is on the resolved tool', () => {
 });
 
 // ─── Mesas (v1.46.0): estudar antes de rodar tráfego ──────────
-import { arteDoTrabalho, faltaNoBanco, kitParaLer, planoParaLer, tomadaParaLer } from '../_shared/mcp-mesas-formato.ts';
+import { arteDoTrabalho, faltaNoBanco, kitParaLer, planoParaLer, tomadaParaLer } from './modulos/mcp-mesas-formato.ts';
 
 const MESAS = ['aceleriq_mesa_ads_contexto', 'aceleriq_mesa_foto_contexto'];
 
@@ -1163,7 +1163,7 @@ Deno.test('mesas: foto sem tabela vira aviso; kit não expõe dados da autoriza�
 
 // ─── MCP 2.3: agir nas mesas e o cérebro do cliente ──────────
 import { folegoResponse } from './modulos/mcp-response.ts';
-import { chamarMesa, esperarOuSeguir } from '../_shared/mcp-mesas-acoes.ts';
+import { chamarMesa, esperarOuSeguir } from './modulos/mcp-mesas-acoes.ts';
 
 const ACOES_2_3 = [
   'aceleriq_mesa_calendario_pedido',
@@ -1343,7 +1343,7 @@ Deno.test('AB2: GET sem Bearer desafia, GET pedindo stream e 405, o resto e a de
 Deno.test('editar legenda aprovada: ferramenta no catálogo, escopo editorial:write e schema fechado', async () => {
   const { editarLegendaSchema, LIMITE_DA_LEGENDA } = await import('./modulos/editar-legenda-publicacao.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const tool = TOOL_MAP.get('aceleriq_editar_legenda_publicacao');
   assert(tool, 'ferramenta no catálogo');
   assert(tool.scopes.includes('editorial:write'));
@@ -1377,7 +1377,7 @@ Deno.test('editar legenda aprovada: ferramenta no catálogo, escopo editorial:wr
 Deno.test('ajustar formato aprovado: ferramenta no catálogo, escopo editorial:write e schema fechado', async () => {
   const { ajustarFormatoSchema, FORMATOS_DE_PECA_UNICA } = await import('./modulos/editar-legenda-publicacao.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   const tool = TOOL_MAP.get('aceleriq_ajustar_formato_publicacao');
   assert(tool, 'ferramenta no catálogo');
@@ -1436,7 +1436,7 @@ Deno.test('2.28: as três ferramentas estão no catálogo e contadas na descober
 Deno.test('revisão interna: escrita com mesas:write, cliente no escopo, RPC na ponte e schema fechado', async () => {
   const { revisarTrabalhoSchema, NOTA_MINIMA_DO_AJUSTE } = await import('./modulos/precisa-de-voce-e-revisao.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
   const tool = TOOL_MAP.get('aceleriq_revisar_trabalho_interno');
   assert(tool, 'ferramenta no catálogo');
@@ -1500,7 +1500,7 @@ Deno.test('caixa Precisa de você: só leitura, com cache curto e visível para 
 Deno.test('marcar para o dono: escrita sem vínculo obrigatório, sem ação escolhida pelo agente e com o limite na descrição', async () => {
   const { marcarPrecisaDeVoceSchema } = await import('./modulos/precisa-de-voce-e-revisao.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const tool = TOOL_MAP.get('aceleriq_marcar_precisa_de_voce');
   assert(tool, 'ferramenta no catálogo');
@@ -1843,7 +1843,7 @@ Deno.test('2.30: criar publicação de aprovado no catálogo, no guia e contada 
 Deno.test('criar publicação de aprovado: escrita editorial:write, schema fechado, ponte e mesma lista de cliente do reagendar', async () => {
   const { criarPublicacaoSchema } = await import('./modulos/criar-publicacao-de-aprovado.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const tool = TOOL_MAP.get('aceleriq_criar_publicacao_de_aprovado')!;
   assert(tool.scopes.includes('editorial:write'));
   assertEquals(GRANULAR_SCOPE_BY_TOOL.aceleriq_criar_publicacao_de_aprovado, 'editorial:write');
@@ -1989,6 +1989,57 @@ Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nen
   assertEquals(TOOLS.length, 235);
 });
 
+// ─── Menor privilégio: escritorio:identity só abre a identidade da chave API restrita ───
+
+Deno.test('escritorio:identity: só aceleriq_escritorio_entrar, só chave API restrita, nunca OAuth; legado intacto', async () => {
+  const ENTRAR = TOOL_MAP.get('aceleriq_escritorio_entrar')!;
+  assertEquals([...ENTRAR.scopes], ['aceleriq:read', 'escritorio:identity']);
+  assert(ALL_SCOPES.includes('escritorio:identity') && SCOPE_DESCRIPTIONS['escritorio:identity']);
+  const restrita: AuthContext = {
+    ...readCtx,
+    keyId: '00000000-0000-0000-0000-0000000000e1',
+    scopes: ['escritorio:identity'],
+    dataScope: { unrestricted: false, clientIds: ['00000000-0000-0000-0000-0000000000aa'], principalUserId: 'funcionario-1', source: 'api_key' },
+  };
+  assert(canInvoke(restrita, ENTRAR), 'chave API restrita completa entra com escritorio:identity');
+  assert(canUseToolWithDataScope(restrita, ENTRAR));
+  const capacidades = await TOOL_MAP.get('aceleriq_capabilities')!.handler({}, restrita) as {
+    catalogo: { nomes_visiveis: string[] };
+    tools: Array<{ name: string }>;
+  };
+  const visiveis = [...TOOLS.filter(t => t.scopes.length === 0).map(t => t.name), ENTRAR.name].sort();
+  assertEquals([...capacidades.catalogo.nomes_visiveis].sort(), visiveis);
+  assertEquals(capacidades.tools.map(t => t.name).sort(), visiveis);
+  // Legado preservado: aceleriq:read e admin seguem abrindo entrar.
+  assert(canInvoke(readCtx, ENTRAR));
+  assert(canInvoke(adminCtx, ENTRAR));
+  // Negativos: OAuth (keyId ou source), contexto incompleto ou irrestrito não usam o escopo.
+  const negados: AuthContext[] = [
+    { ...restrita, keyId: 'oauth:00000000-0000-0000-0000-000000000001' },
+    { ...restrita, dataScope: { ...restrita.dataScope!, source: 'oauth' } },
+    { ...restrita, dataScope: { ...restrita.dataScope!, unrestricted: true } },
+    { ...restrita, dataScope: { ...restrita.dataScope!, clientIds: [] } },
+    { ...restrita, dataScope: { ...restrita.dataScope!, principalUserId: null } },
+    { ...restrita, dataScope: undefined } as unknown as AuthContext,
+    { ...restrita, scopes: [] },
+  ];
+  for (const ctx of negados) assert(!canInvoke(ctx, ENTRAR), JSON.stringify({ k: ctx.keyId, s: ctx.scopes, d: ctx.dataScope }));
+  // Nenhuma outra ferramenta abre com escritorio:identity, nem mesmo se declarasse o escopo.
+  for (const t of TOOLS) {
+    if (t.name === ENTRAR.name || t.scopes.length === 0) continue;
+    assert(!canInvoke(restrita, t), `${t.name} não abre com escritorio:identity`);
+  }
+  assert(!canInvoke(restrita, { ...TOOL_MAP.get('aceleriq_escritorio_caixa')!, scopes: ['escritorio:identity'] }));
+  // Fora dos agregados e do OAuth da equipe.
+  for (const escopos of [['aceleriq:read'], ['aceleriq:write'], ['aceleriq:read', 'aceleriq:write', 'aceleriq:finance', 'escritorio:write']]) {
+    assert(!expandScopes(escopos).has('escritorio:identity'));
+  }
+  assert(!expandScopes(['escritorio:identity']).has('aceleriq:read'));
+  const { OAUTH_STAFF_SCOPES, oauthScopesForStaff } = await import('../_shared/mcp-security.ts');
+  assert(!(OAUTH_STAFF_SCOPES as readonly string[]).includes('escritorio:identity'));
+  assert(!(oauthScopesForStaff(true, 'aceleriq:read escritorio:identity') ?? []).includes('escritorio:identity'));
+});
+
 // ─── MCP 2.36.0 (19/11/2026): Central de Automações ───
 
 Deno.test('2.36: automações lê com aceleriq:read; ligar e desligar só com automacoes:write, que nenhum outro escopo concede', async () => {
@@ -2035,7 +2086,7 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
   assertEquals(MCP_VERSION, '2.40.0');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
-  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
   const { descobertaDoMcp } = await import('../_shared/mcp-descoberta.ts');
   const esperado: Record<string, string> = {
     aceleriq_arquivos_agrupar_carrossel: 'files:write',

@@ -14,7 +14,7 @@
  * Quem quiser guardar o texto usa aceleriq_create_report_draft e a revisão (aceleriq_central_review_preparar).
  */
 
-import { db, isUuid } from '../../_shared/aceleriq-read-services.ts';
+import { db, isUuid } from './aceleriq-read-services.ts';
 import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
 import { exigirClienteExistente } from '../../_shared/mcp-client-id-guard.ts';
 import { recortarDossie } from '../../_shared/dossie-recortado.ts';

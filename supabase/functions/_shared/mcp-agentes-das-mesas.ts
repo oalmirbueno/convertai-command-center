@@ -13,7 +13,7 @@
  */
 import { z } from 'https://esm.sh/zod@3.23.8';
 import type { ToolDefinition } from './mcp-tools.ts';
-import { db } from './aceleriq-read-services.ts';
+import { db } from '../mcp-server/modulos/aceleriq-read-services.ts';
 
 /** Agente da Mesa → (coluna agente, referencia_tipo). Os que exigem referência pedem referencia_id. */
 export const AGENTES_DAS_MESAS: Record<string, { agente: string; referencia: string; precisaReferencia?: boolean; nome: string }> = {

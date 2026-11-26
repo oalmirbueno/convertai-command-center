@@ -55,7 +55,7 @@ As funções estão prontas em `_shared`; nenhuma mesa foi editada por esta fren
 
 ## 5. MCP 2.3: ações nas mesas
 
-Arquivos: `_shared/mcp-mesas-acoes.ts` (chamadas), `_shared/mcp-mesas-ponte.ts` (regras puras), catálogo em `_shared/mcp-tools.ts`.
+Arquivos: `mcp-server/modulos/mcp-mesas-acoes.ts` (chamadas), `mcp-server/modulos/mcp-mesas-ponte.ts` (regras puras), catálogo em `_shared/mcp-tools.ts`.
 
 - Cada ação chama a **função da mesa** (`agente-calendario`, `mesa-ads`, `estudio-arte`) ou a RPC `mesa_enviar_para_aprovacao` com o **token OAuth da própria pessoa**. A mesa confere equipe, acesso ao cliente e regra como na tela, e grava `criado_por` = a pessoa. Lista fechada de ações em `ACOES_DA_PONTE`.
 - **Chave de API (`mcp_live_*`) não age**: recebe a recusa explicada. Para abrir no futuro, a ponte de serviço seria: as mesas aceitarem `x-cron-secret` + `x-mcp-ator` com o id da pessoa dona da chave (como `ia-gateway` e `materiais-classificar` já aceitam o segredo de cron) e trocarem as checagens com o JWT por `can_access_client` com o ator. Isso mexe nas mesas: fica para a frente dona delas.

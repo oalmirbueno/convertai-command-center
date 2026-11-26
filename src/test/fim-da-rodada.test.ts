@@ -43,16 +43,16 @@ function relatoCom(resposta: Record<string, unknown>, opcoes: { vinculoMudou?: b
   };
   const deps: Record<string, unknown> = {
     "./aceleriq-read-services.ts": { db: () => ({ from, rpc }), isUuid: () => true, READ_LIMITS: { queryTimeoutMs: 8000, maxPageSize: 500 } },
-    "./operator-freshness.ts": freshness,
-    "./operator-progress-detail.ts": progresso,
-    "./arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
-    "./vinculo-guard.ts": guardaDoVinculo,
-    "./trava-do-dono.ts": travaDoDono,
-    "./teto-de-operadores.ts": tetoDeOperadores,
-    "../mcp-server/modulos/rodada-e-prova.ts": rodadaEProva,
-    "./jev.ts": { jevPerguntar: async () => { throw new Error("sem Jev neste teste"); } },
+    "../../_shared/operator-freshness.ts": freshness,
+    "../../_shared/operator-progress-detail.ts": progresso,
+    "../../_shared/arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
+    "../../_shared/vinculo-guard.ts": guardaDoVinculo,
+    "../../_shared/trava-do-dono.ts": travaDoDono,
+    "../../_shared/teto-de-operadores.ts": tetoDeOperadores,
+    "./rodada-e-prova.ts": rodadaEProva,
+    "../../_shared/jev.ts": { jevPerguntar: async () => { throw new Error("sem Jev neste teste"); } },
   };
-  const fonte = readFileSync(resolve(__dirname, "../..", "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8");
+  const fonte = readFileSync(resolve(__dirname, "../..", "supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts"), "utf8");
   const js = transpileModule(fonte, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const exp: Record<string, unknown> = {};
   new Function("exports", "require", "Deno", "setTimeout", js)(exp, (n: string) => {

@@ -48,15 +48,15 @@ function servicosCom(operadores: Op[]) {
   };
   const deps: Record<string, unknown> = {
     "./aceleriq-read-services.ts": { db: () => ({ from, rpc }), isUuid: () => true, READ_LIMITS: { queryTimeoutMs: 8000, maxPageSize: 500 } },
-    "./operator-freshness.ts": {},
-    "./operator-progress-detail.ts": {},
-    "./vinculo-guard.ts": {},
-    "./trava-do-dono.ts": {},
-    "./jev.ts": {},
-    "./teto-de-operadores.ts": teto,
-    "../mcp-server/modulos/rodada-e-prova.ts": {},
+    "../../_shared/operator-freshness.ts": {},
+    "../../_shared/operator-progress-detail.ts": {},
+    "../../_shared/vinculo-guard.ts": {},
+    "../../_shared/trava-do-dono.ts": {},
+    "../../_shared/jev.ts": {},
+    "../../_shared/teto-de-operadores.ts": teto,
+    "./rodada-e-prova.ts": {},
   };
-  const fonte = readFileSync(resolve(__dirname, "../..", "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8");
+  const fonte = readFileSync(resolve(__dirname, "../..", "supabase/functions/mcp-server/modulos/aceleriq-operators-services.ts"), "utf8");
   const js = transpileModule(fonte, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const exp: Record<string, unknown> = {};
   new Function("exports", "require", "Deno", "setTimeout", js)(exp, (n: string) => {

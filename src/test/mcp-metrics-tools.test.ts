@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 const ler = (caminho: string) => readFileSync(resolve(__dirname, "../..", caminho), "utf8");
 
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
-const servicos = ler("supabase/functions/_shared/aceleriq-metrics-services.ts");
+const servicos = ler("supabase/functions/mcp-server/modulos/aceleriq-metrics-services.ts");
 const seguranca = ler("supabase/functions/_shared/mcp-security.ts");
 
 /**

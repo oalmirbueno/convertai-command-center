@@ -45,14 +45,75 @@ BEGIN
       ('auth.users','public','handle_new_user'),
       ('profiles','public','notify_ops_sync'),('profiles','public','update_updated_at_column'),
       ('profiles','app_private','capture_legacy_first_access_token'),('profiles','app_private','guard_profile_editable_fields'),
+      ('profiles','public','plano_mudou_atualiza_cobranca_e_crm'),
       ('projects','public','notify_ops_sync'),('projects','public','update_updated_at_column'),
       ('tasks','public','notify_ops_sync'),('tasks','public','update_updated_at_column'),
       ('tasks','public','update_milestone_progress'),('tasks','public','editorial_lock_task_sync_trigger'),
       ('tasks','public','editorial_task_delivery_type_guard'),('tasks','public','editorial_prevent_premature_task_completion'),
       ('tasks','public','editorial_sync_post_from_task_trigger'),('tasks','public','tasks_encerra_propostas'),
-      ('tasks','public','contexto_extra_enfileira'),('tasks','public','tasks_acao_feita_no_dossie')
+      ('tasks','public','contexto_extra_enfileira'),('tasks','public','tasks_acao_feita_no_dossie'),
+      ('user_roles','public','mcp_agent_author_serializa'),
+      ('team_client_assignments','public','mcp_agent_author_serializa'),
+      ('projects','public','mcp_agent_author_serializa'),
+      ('projects','public','mcp_project_grants_revoke_on_project_change')
     )
   ) THEN RAISE EXCEPTION 'E2E_UNREVIEWED_FIXTURE_TRIGGER'; END IF;
+  -- The plan trigger only reacts to UPDATE OF plan_value; the seed never
+  -- writes plan_value. Require exactly the reviewed binding, fail closed.
+  IF (SELECT count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+        JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE t.tgrelid='public.profiles'::regclass AND NOT t.tgisinternal
+        AND n.nspname='public' AND p.proname='plano_mudou_atualiza_cobranca_e_crm')<>1
+    OR NOT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+        JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE t.tgrelid='public.profiles'::regclass AND NOT t.tgisinternal
+        AND n.nspname='public' AND p.proname='plano_mudou_atualiza_cobranca_e_crm'
+        AND t.tgname='profiles_plano_mudou_trg' AND t.tgtype=17 AND t.tgenabled='O'
+        AND t.tgqual IS NULL AND t.tgnargs=0
+        AND t.tgoldtable IS NULL AND t.tgnewtable IS NULL
+        AND t.tgattr::text IS NOT DISTINCT FROM (
+          SELECT a.attnum::text FROM pg_attribute a WHERE a.attrelid=t.tgrelid
+            AND a.attname='plan_value' AND NOT a.attisdropped)) THEN
+    RAISE EXCEPTION 'E2E_PLAN_TRIGGER_BINDING_CHANGED';
+  END IF;
+  -- The canonical billing/CRM trigger stays active. The seed never updates
+  -- plan_value, so reject any binding that would broaden its firing events.
+  IF EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+    JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE t.tgrelid='public.profiles'::regclass AND NOT t.tgisinternal
+      AND (t.tgname='profiles_plano_mudou_trg'
+        OR (n.nspname='public' AND p.proname='plano_mudou_atualiza_cobranca_e_crm'))
+      AND (t.tgname<>'profiles_plano_mudou_trg'
+        OR t.tgfoid IS DISTINCT FROM to_regprocedure('public.plano_mudou_atualiza_cobranca_e_crm()')::oid
+        OR t.tgtype<>17 OR t.tgenabled<>'O' OR t.tgqual IS NOT NULL
+        OR t.tgattr::text IS DISTINCT FROM (
+          SELECT a.attnum::text FROM pg_attribute a WHERE a.attrelid=t.tgrelid AND a.attname='plan_value'
+        ))) THEN
+    RAISE EXCEPTION 'E2E_PROFILE_PLAN_TRIGGER_BINDING_CHANGED';
+  END IF;
+  -- Reviewed MCP Corte triggers (20261125202100/20261125202200). Without HTTP:
+  -- mcp_agent_author_serializa only locks matching mcp_agent_author_attestations
+  -- rows (none in this empty stack); the grant revocation reacts only to an
+  -- UPDATE of deleted_at/status/client_id or a DELETE, while the seed only
+  -- inserts projects. Retain these AFTER ROW bindings and reject rebinding.
+  IF EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+    JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE NOT t.tgisinternal AND n.nspname='public'
+      AND p.proname IN ('mcp_agent_author_serializa','mcp_project_grants_revoke_on_project_change')
+      AND t.tgrelid IN ('public.user_roles'::regclass,'public.team_client_assignments'::regclass,'public.projects'::regclass)
+      AND (t.tgenabled<>'O' OR t.tgqual IS NOT NULL
+        OR t.tgtype<>CASE
+            WHEN p.proname='mcp_project_grants_revoke_on_project_change' THEN 25
+            WHEN t.tgrelid='public.projects'::regclass THEN 21
+            ELSE 29 END
+        OR (SELECT array_agg(a.attname::text ORDER BY a.attname) FROM pg_attribute a
+              WHERE a.attrelid=t.tgrelid AND a.attnum=ANY(t.tgattr))
+          IS DISTINCT FROM CASE
+            WHEN p.proname='mcp_project_grants_revoke_on_project_change' THEN ARRAY['client_id','deleted_at','status']
+            WHEN t.tgrelid='public.projects'::regclass THEN ARRAY['client_id']
+            ELSE NULL::text[] END)) THEN
+    RAISE EXCEPTION 'E2E_REVIEWED_TRIGGER_BINDING_CHANGED';
+  END IF;
   -- These two reviewed triggers only react to an UPDATE of deletion/status.
   -- The seed inserts backlog tasks; retain both triggers and reject rebinding.
   IF EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid

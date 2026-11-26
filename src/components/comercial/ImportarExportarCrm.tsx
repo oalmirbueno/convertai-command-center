@@ -110,15 +110,15 @@ export function ImportarCrm({ aberta, onFechar, leads }: { aberta: boolean; onFe
       }
     >
       {fim ? (
-        <div className="flex items-start rounded-2xl bg-accent-soft p-4" data-importacao-feita="">
+        <div className="flex items-start rounded-lg bg-accent-soft p-4" data-importacao-feita="">
           <Check className="mr-3 mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
           <p className={texto.corpo}><b>{fim.entraram} negócios entraram no funil.</b>{fim.repetidos ? ` ${fim.repetidos} já estavam no CRM e ficaram de fora.` : ""}</p>
         </div>
       ) : !tabela.length ? (
         <div className="space-y-4">
           <p className={juntar(texto.corpo, "leading-6")}>No outro CRM, use <b>Exportar</b> e escolha <b>CSV</b>. Funciona com HubSpot, Pipedrive, RD Station, Agendor, Kommo, Excel e Google Planilhas. O painel acha sozinho o nome, a empresa, o e-mail, o telefone, a etapa e o valor.</p>
-          <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-border p-8 text-center hover:border-primary/50" data-escolher-arquivo="" onDragOver={(ev) => ev.preventDefault()} onDrop={(ev) => { ev.preventDefault(); void ler(ev.dataTransfer.files ? ev.dataTransfer.files[0] : null); }}>
-            <FileUp className="mb-2 h-7 w-7 text-primary" aria-hidden="true" />
+          <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border p-8 text-center hover:border-primary/50" data-escolher-arquivo="" onDragOver={(ev) => ev.preventDefault()} onDrop={(ev) => { ev.preventDefault(); void ler(ev.dataTransfer.files ? ev.dataTransfer.files[0] : null); }}>
+            <FileUp className="mb-2 h-7 w-7 text-muted-foreground" aria-hidden="true" />
             <span className={juntar(texto.corpo, "font-semibold")}>Escolher o arquivo CSV</span>
             <span className={texto.auxiliar}>ou arraste aqui</span>
             <input type="file" accept=".csv,text/csv,.txt" className="sr-only" onChange={(ev) => void ler(ev.target.files ? ev.target.files[0] : null)} />
@@ -129,9 +129,9 @@ export function ImportarCrm({ aberta, onFechar, leads }: { aberta: boolean; onFe
           <p className={texto.auxiliar}><b className="text-foreground">{arquivo}</b>: {linhas.length} linhas. Confira de onde vem cada informação.</p>
           <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
             {CAMPOS_IMPORTAVEIS.map((c) => (
-              <label key={c.id} className="flex min-w-0 items-center rounded-2xl bg-muted/60 px-3 py-2">
+              <label key={c.id} className="flex min-w-0 items-center rounded-lg bg-muted/60 px-3 py-2">
                 <span className="mr-2 w-[140px] shrink-0 text-[13px] font-medium">{c.rotulo}</span>
-                <select value={mapa ? mapa[c.id] : -1} onChange={(ev) => setMapa((m) => (m ? { ...m, [c.id]: Number(ev.target.value) } : m))} className="h-9 min-w-0 flex-1 rounded-xl border border-border bg-card px-2 text-[13px]" data-coluna-do-campo={c.id}>
+                <select value={mapa ? mapa[c.id] : -1} onChange={(ev) => setMapa((m) => (m ? { ...m, [c.id]: Number(ev.target.value) } : m))} className="h-9 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-[13px]" data-coluna-do-campo={c.id}>
                   <option value={-1}>Não trazer</option>
                   {cabecalhos.map((h, i) => <option key={`${h}-${i}`} value={i}>{h || `Coluna ${i + 1}`}</option>)}
                 </select>
@@ -144,7 +144,7 @@ export function ImportarCrm({ aberta, onFechar, leads }: { aberta: boolean; onFe
                 {resultado.negocios.length} novos para entrar
                 <span className="font-normal text-muted-foreground">{resultado.repetidos ? ` · ${resultado.repetidos} já estão no CRM` : ""}{resultado.vazios ? ` · ${resultado.vazios} linhas vazias` : ""}</span>
               </p>
-              <div className="overflow-x-auto rounded-2xl border border-border">
+              <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="w-full min-w-[560px] text-left text-[13px]">
                   <thead className="bg-muted/60 text-muted-foreground"><tr><th className="px-3 py-2 font-medium">Nome</th><th className="px-3 py-2 font-medium">Empresa</th><th className="px-3 py-2 font-medium">Contato</th><th className="px-3 py-2 font-medium">Etapa</th><th className="px-3 py-2 font-medium">Valor</th></tr></thead>
                   <tbody>

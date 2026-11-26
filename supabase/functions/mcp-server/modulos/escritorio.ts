@@ -18,7 +18,8 @@
 import { z } from 'https://esm.sh/zod@3.23.8';
 import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import { assertClientAccess, type AuthContext } from '../../_shared/mcp-auth.ts';
-import { db } from '../../_shared/aceleriq-read-services.ts';
+import { db } from './aceleriq-read-services.ts';
+import { isRestrictedApiKeyIdentityScope } from '../../_shared/mcp-security.ts';
 import { ErroDaFerramenta } from './robustez.ts';
 import { principalDaChamada, vinculosDaChave, type VinculoDaChave } from './autoria.ts';
 import { consumirTaxa } from './diario.ts';
@@ -74,8 +75,11 @@ export interface Conversa { id: string; tipo: 'direta' | 'grupo'; grupo_id: stri
 type NovaMensagem = Omit<Mensagem, 'id' | 'created_at'>;
 
 export interface PortaDoEscritorio {
-  vinculos(principal: string): Promise<VinculoDaChave[] | null>;
+  /** semCache: lê o vínculo direto do banco (só a identidade restrita pede). */
+  vinculos(principal: string, opcoes?: { semCache?: boolean }): Promise<VinculoDaChave[] | null>;
   operadores(): Promise<Operador[]>;
+  /** Um operador só, pelo slug (null se não existir). */
+  operador(slug: string): Promise<Operador | null>;
   grupos(): Promise<Grupo[]>;
   conversa(id: string): Promise<Conversa | null>;
   criarConversa(c: Omit<Conversa, 'id'>): Promise<Conversa>;
@@ -109,11 +113,16 @@ function falhou(onde: string, error: { code?: string; message?: string } | null)
 export function portaDoBanco(): PortaDoEscritorio {
   const b = db();
   return {
-    vinculos: (p) => vinculosDaChave(p, b),
+    vinculos: (p, opcoes) => vinculosDaChave(p, b, opcoes),
     async operadores() {
       const { data, error } = await b.from('internal_operators').select(COL_OPERADOR).limit(500);
       if (error) falhou('operadores', error);
       return (data ?? []) as Operador[];
+    },
+    async operador(slug) {
+      const { data, error } = await b.from('internal_operators').select(COL_OPERADOR).eq('slug', slug).maybeSingle();
+      if (error) falhou('operador', error);
+      return (data as Operador) ?? null;
     },
     async grupos() {
       const { data, error } = await b.from('escritorio_grupos')
@@ -272,9 +281,43 @@ async function caixaDe(eu: Operador, grupos: Grupo[], porta: PortaDoEscritorio, 
 
 const entrarSchema = z.object({ operator: z.string().max(40).optional() }).strict();
 
+/**
+ * Credencial restrita a clientes (chave API de funcionário não-admin): só confere a própria identidade.
+ * Mesmo predicado do despachante (isRestrictedApiKeyIdentityScope): chave API, unrestricted === false,
+ * dono efetivo e ao menos um cliente; sem escopo admin e sem OAuth. Exige EXATAMENTE um vínculo, com
+ * agente ativo. Lê só o vínculo e o próprio operador pelo slug: não lê caixa, salas nem organograma,
+ * não lista operadores e não devolve outro slug. Qualquer outro `operator` é recusado.
+ *
+ * O mcp-server legado guarda a credencial autenticada por até 45 s. A revogação da chave e as
+ * mudanças na carteira podem levar esse tempo para surtir efeito. Esta rota consulta o vínculo de
+ * autoria direto no banco a cada chamada. As demais ferramentas mantêm o cache de vínculos.
+ */
+async function entrarRestrito(pedido: string | undefined, ctx: AuthContext, porta: PortaDoEscritorio) {
+  const negar = (codigo: string, msg: string): never => {
+    throw new ErroDaFerramenta(codigo, msg, 'Credencial restrita a clientes só confere a própria identidade, com vínculo único e ativo no Escritório.', false);
+  };
+  if (!isRestrictedApiKeyIdentityScope(ctx.dataScope) || String(ctx.keyId ?? '').startsWith('oauth:') || ehAdmin(ctx)) {
+    negar('identidade_restrita_negada', 'Esta credencial não pode entrar no Escritório.');
+  }
+  const vinculos = await porta.vinculos(principalDaChamada(ctx), { semCache: true });
+  if (!vinculos || vinculos.length !== 1) return negar('identidade_restrita_sem_vinculo', 'Esta credencial não tem um vínculo único com um agente.');
+  const meu = vinculos[0].operator_slug;
+  const slug = slugDe(pedido);
+  if (slug && slug !== meu) negar('nao_e_voce', 'Esta credencial não responde por esse agente.');
+  const eu = await porta.operador(meu);
+  if (!eu || eu.slug !== meu || !ativo(eu)) return negar('identidade_restrita_inativa', 'O agente desta credencial não está ativo no Escritório.');
+  return {
+    voce: { ...cartao(eu), status: eu.status },
+    modo: 'identidade_restrita',
+    aviso: 'Credencial restrita a clientes: só a sua identidade. Caixa, salas e organograma ficam com a equipe.',
+  };
+}
+
 export async function escritorioEntrar(input: unknown, ctx: AuthContext, porta: PortaDoEscritorio = portaDoBanco()) {
   const p = entrarSchema.safeParse(input ?? {});
   if (!p.success) throw erroDeEntrada(p.error);
+  // Só unrestricted === true segue no fluxo legado; contexto ausente ou restrito cai na variante, que nega por padrão.
+  if (ctx.dataScope?.unrestricted !== true) return entrarRestrito(p.data.operator, ctx, porta);
   const todos = await porta.operadores();
   const eu = await quemChama(ctx, p.data.operator, porta, todos);
   const grupos = await porta.grupos();
@@ -649,8 +692,10 @@ export const FERRAMENTAS_DO_ESCRITORIO: readonly ToolDefinition[] = [
     name: 'aceleriq_escritorio_entrar',
     title: 'Escritório: entrar',
     description:
-      'Só leitura. A porta de entrada de qualquer agente, de qualquer plataforma: chame ao começar a sessão. Devolve quem você é (slug, plataforma, função, grau, escopo, a quem responde, equipe), o organograma por área, as regras da casa, a ordem de leitura da memória, onde estão as skills, as suas salas e as mensagens não lidas. A credencial só entra como os agentes ligados a ela.',
-    scopes: ['aceleriq:read'],
+      'Só leitura. Chame ao começar a sessão. A chave API restrita recebe apenas a identidade do seu único operador ativo vinculado. Credenciais com acesso amplo também recebem equipe, organograma, regras da casa, memória, salas e mensagens não lidas.',
+    // Qualquer um (OR): aceleriq:read legado ou escritorio:identity, que canInvoke só aceita
+    // em chave API restrita (isRestrictedApiKeyIdentityScope), nunca OAuth.
+    scopes: ['aceleriq:read', 'escritorio:identity'],
     annotations: LEITURA,
     inputSchema: { type: 'object', additionalProperties: false, properties: { operator: OPERATOR } },
     handler: (input, ctx) => escritorioEntrar(input, ctx),

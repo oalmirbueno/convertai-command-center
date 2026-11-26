@@ -72,7 +72,7 @@ function consulta(tabela: string) {
   return b;
 }
 
-vi.mock("../../supabase/functions/_shared/aceleriq-read-services.ts", () => ({
+vi.mock("../../supabase/functions/mcp-server/modulos/aceleriq-read-services.ts", () => ({
   db: () => ({ from: (t: string) => consulta(t) }),
   isUuid: (v: unknown) => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v),
   READ_LIMITS: { queryTimeoutMs: 5000 },
@@ -86,7 +86,7 @@ import {
   comercialRegistrarMensagem,
   resumoDaConfig,
   agoraEmSaoPaulo,
-} from "../../supabase/functions/_shared/aceleriq-commercial-services";
+} from "../../supabase/functions/mcp-server/modulos/aceleriq-commercial-services";
 import { avaliarEvidencias, pedeParaParar } from "../../supabase/functions/_shared/comercial-evidencia";
 import { FERRAMENTAS_POR_AREA } from "../../supabase/functions/mcp-server/modulos/guia-do-painel";
 import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";

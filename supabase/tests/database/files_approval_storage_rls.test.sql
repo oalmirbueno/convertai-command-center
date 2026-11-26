@@ -585,7 +585,8 @@ SELECT is(
       'brand',
       'first_access_used_at',
       'overdue_since',
-      'deleted_at'
+      'deleted_at',
+      'modo_aprovacao_do_cliente'
     ]) AS profile_column
     WHERE has_column_privilege(
       'authenticated',
@@ -594,7 +595,7 @@ SELECT is(
       'SELECT'
     )
   ),
-  19,
+  20,
   'authenticated can read exactly the browser profile allowlist'
 );
 SELECT is(
@@ -624,7 +625,8 @@ SELECT is(
           'brand',
           'first_access_used_at',
           'overdue_since',
-          'deleted_at'
+          'deleted_at',
+          'modo_aprovacao_do_cliente'
         ])
       )
       AND has_column_privilege(

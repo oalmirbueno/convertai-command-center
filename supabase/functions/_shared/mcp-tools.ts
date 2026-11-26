@@ -5,7 +5,11 @@
 
 import { z } from 'https://esm.sh/zod@3.23.8';
 import type { AuthContext } from './mcp-auth.ts';
-import { dataScopeAllowsTool } from './mcp-security.ts';
+import {
+  dataScopeAllowsTool,
+  isRestrictedApiKeyIdentityScope,
+  RESTRICTED_API_KEY_IDENTITY_TOOLS,
+} from './mcp-security.ts';
 import { MCP_VERSION } from './mcp-release.ts';
 import {
   ALLOWED_ENTITY_TYPES,
@@ -34,7 +38,7 @@ import {
   getCycleStatus,
   getAgendaStatus,
   db,
-} from './aceleriq-read-services.ts';
+} from '../mcp-server/modulos/aceleriq-read-services.ts';
 import {
   OPERATOR_EVENTS,
   operatorBoard,
@@ -54,7 +58,7 @@ import {
   studioDraft,
   studioRead,
   vaultOverview,
-} from './aceleriq-operators-services.ts';
+} from '../mcp-server/modulos/aceleriq-operators-services.ts';
 import { operatorDiary } from '../mcp-server/modulos/diario.ts';
 import { agentConversationsTool, agentHandoffTool } from './mcp-agentes-das-mesas.ts';
 import { browserActTool, browserSessionTool } from '../mcp-server/modulos/mcp-navegador.ts';
@@ -74,6 +78,8 @@ import { FERRAMENTA_DE_CRIAR_PUBLICACAO } from '../mcp-server/modulos/criar-publ
 import { FERRAMENTA_DE_AGRUPAR_CARROSSEL } from '../mcp-server/modulos/arquivos-agrupar-carrossel.ts';
 import { FERRAMENTA_DE_POST_DE_ARQUIVO } from '../mcp-server/modulos/agenda-post-de-arquivo.ts';
 import { FERRAMENTA_DE_ENVIAR_ARQUIVO } from '../mcp-server/modulos/arquivos-enviar-para-aprovacao.ts';
+import { FERRAMENTAS_DO_PROJETO_RESTRITO } from '../mcp-server/modulos/projeto-restrito.ts';
+import { isProjectOnlyTool, projectGrantAllowsTool } from './mcp-project-access.ts';
 import { FERRAMENTA_META_CONEXOES_ESTADO } from '../mcp-server/modulos/meta-conexoes-estado.ts';
 import { FERRAMENTAS_DO_EMAIL } from '../mcp-server/modulos/email-profissional.ts';
 import { FERRAMENTA_DE_AJUSTAR_FORMATO, FERRAMENTA_DE_EDITAR_LEGENDA } from '../mcp-server/modulos/editar-legenda-publicacao.ts';
@@ -104,7 +110,7 @@ import {
   comercialMaquinaCandidatos,
   comercialRegistrarFato,
   comercialRegistrarMensagem,
-} from './aceleriq-commercial-services.ts';
+} from '../mcp-server/modulos/aceleriq-commercial-services.ts';
 import { comercialBolsoLiberar, comercialBolsoPedir, comercialPedirProposta } from '../mcp-server/modulos/comercial-conduzir.ts';
 import { comercialCobrar, comercialEntradaNova, comercialFalar, comercialHorarios, comercialMarcarReuniao, comercialRepasseMarcar, comercialRepasses } from '../mcp-server/modulos/comercial-fechar.ts';
 import { TIPOS_DE_EVIDENCIA, type TipoDeEvidencia } from './comercial-evidencia.ts';
@@ -127,7 +133,7 @@ import {
   listFinanceEntries,
   listFinancePlans,
   listFinanceRecurringRules,
-} from './aceleriq-finance-services.ts';
+} from '../mcp-server/modulos/aceleriq-finance-services.ts';
 import {
   bridgeStatus,
   bridgeStatusPublic,
@@ -188,74 +194,13 @@ import {
   listContractsSchema,
   updateContract,
   updateContractSchema,
-} from './mcp-contracts-services.ts';
+} from '../mcp-server/modulos/mcp-contracts-services.ts';
 
-export type ToolScope =
-  // Aggregate scopes (kept for backward compat — expand into granular below).
-  | 'aceleriq:read'
-  | 'aceleriq:write'
-  | 'aceleriq:finance'
-  // Granular per-resource scopes (Bloco D).
-  | 'clients:read'
-  | 'clients:write'
-  | 'projects:read'
-  | 'projects:write'
-  | 'tasks:read'
-  | 'tasks:write'
-  | 'editorial:read'
-  | 'editorial:write'
-  | 'reports:read'
-  | 'reports:write'
-  | 'briefings:read'
-  | 'files:read'
-  | 'files:write'
-  | 'files:sensitive:read'
-  | 'files:archive'
-  | 'workspace:read'
-  | 'commercial:read'
-  | 'commercial:write'
-  | 'contracts:read'
-  | 'contracts:write'
-  | 'memory:read'
-  | 'memory:propose'
-  | 'memory:write'
-  | 'mesas:write'
-  | 'escritorio:write'
-  | 'automacoes:write'
-  | 'admin';
-
-export const ALL_SCOPES: readonly ToolScope[] = [
-  'aceleriq:read',
-  'aceleriq:write',
-  'aceleriq:finance',
-  'clients:read',
-  'clients:write',
-  'projects:read',
-  'projects:write',
-  'tasks:read',
-  'tasks:write',
-  'editorial:read',
-  'editorial:write',
-  'reports:read',
-  'reports:write',
-  'briefings:read',
-  'files:read',
-  'files:write',
-  'files:sensitive:read',
-  'files:archive',
-  'workspace:read',
-  'commercial:read',
-  'commercial:write',
-  'contracts:read',
-  'contracts:write',
-  'memory:read',
-  'memory:propose',
-  'memory:write',
-  'mesas:write',
-  'escritorio:write',
-  'automacoes:write',
-  'admin',
-] as const;
+// Lista de escopos: fonte única em mcp-scope-list.ts (o metadata OAuth lê de lá
+// sem puxar o catálogo). Reexportada aqui para os importadores de sempre.
+import { ALL_SCOPES, type ToolScope } from './mcp-scope-list.ts';
+export { ALL_SCOPES };
+export type { ToolScope };
 
 // Human-readable descriptions for the OAuth consent screen and audit logs.
 export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description: string; sensitive?: boolean }> = {
@@ -288,6 +233,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'mesas:write': { title: 'Mesas: agir', description: 'Agir nas mesas com a sessão da pessoa conectada (OAuth): pedir conteúdo e gravar na agenda, criar e editar campanha, briefing e imagens, salvar oferta da Mesa Ads e mandar peça para aprovação. Cada mesa confere acesso e regra como na tela. Não publica, não agenda post e não gasta verba de anúncio.', sensitive: true },
   'escritorio:write': { title: 'Escritório: falar como dono', description: 'Ler e escrever no Escritório dos agentes como o dono, fora do painel (app do Hermes). Nenhum outro escopo concede este; não alcança cliente, gasto nem publicação.', sensitive: true },
   'automacoes:write': { title: 'Automações: ligar e desligar', description: 'Ligar ou desligar fluxos do n8n de produção, com confirmação e motivo registrados. Nenhum outro escopo concede este.', sensitive: true },
+  'escritorio:identity': { title: 'Escritório: só identidade', description: 'Chave API restrita confere apenas quem ela é no Escritório (aceleriq_escritorio_entrar). Não abre caixa, organograma, outros agentes nem outra ferramenta; OAuth não recebe este escopo.' },
   'admin': { title: 'Administrador', description: 'Bypass total de escopo. Concede acesso a todas as ferramentas.', sensitive: true },
 };
 
@@ -619,8 +565,8 @@ const capabilitiesTool: ToolDefinition = {
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: READ_ANNOTATIONS,
   handler: (_input, ctx) => {
-    const visible = TOOLS
-      .filter(t => canInvoke(ctx, t) && canUseToolWithDataScope(ctx, t))
+    const visible = catalogoDe(ctx)
+      .filter(t => authorizeTool(ctx, t))
       .map(t => ({ name: t.name, description: t.description, requiredScopes: t.scopes }));
     const counts = {
       total: TOOLS.length,
@@ -2054,7 +2000,7 @@ import {
   listAdsPerformance as _listAdsPerformance,
   listSocialMetrics as _listSocialMetrics,
   listSocialPosts as _listSocialPosts,
-} from './aceleriq-metrics-services.ts';
+} from '../mcp-server/modulos/aceleriq-metrics-services.ts';
 
 const getSocialMetricsTool: ToolDefinition = {
   name: 'aceleriq_get_social_metrics',
@@ -2184,7 +2130,7 @@ const getAdsPerformanceTool: ToolDefinition = {
 };
 
 // ─── Mesas: estudar o que foi gerado antes de rodar tráfego (v1.46.0) ──────
-import { mesaAdsContexto as _mesaAdsContexto, mesaFotoContexto as _mesaFotoContexto } from './mcp-mesas-services.ts';
+import { mesaAdsContexto as _mesaAdsContexto, mesaFotoContexto as _mesaFotoContexto } from '../mcp-server/modulos/mcp-mesas-services.ts';
 
 const mesaAdsContextoTool: ToolDefinition = {
   name: 'aceleriq_mesa_ads_contexto',
@@ -2511,7 +2457,7 @@ const mesaFotoContextoTool: ToolDefinition = {
 // Ler não basta: quando precisar, o agente AGE nas mesas. Cada ação chama a
 // função da mesa pelo servidor, com a sessão da pessoa conectada (OAuth), e a
 // mesa confere acesso e regra como na tela. A regra de negócio fica na mesa
-// (mcp-mesas-acoes.ts só leva o pedido e devolve o resultado com a prova).
+// (mcp-server/modulos/mcp-mesas-acoes.ts só leva o pedido e devolve o resultado com a prova).
 import {
   adsArteGerar as _adsArteGerar,
   adsBriefingSalvar as _adsBriefingSalvar,
@@ -2525,7 +2471,7 @@ import {
   campanhaCriar as _campanhaCriar,
   campanhaSalvar as _campanhaSalvar,
   enviarParaAprovacao as _enviarParaAprovacao,
-} from './mcp-mesas-acoes.ts';
+} from '../mcp-server/modulos/mcp-mesas-acoes.ts';
 import { cerebroLer as _cerebroLer, cerebroRegistrar as _cerebroRegistrar } from './mcp-cerebro-services.ts';
 import { AREAS_DO_CEREBRO, CATEGORIAS_DO_CEREBRO } from './cerebro-do-cliente.ts';
 
@@ -4883,8 +4829,8 @@ const comercialCobrarTool = ferramentaDoCrm(
 const comercialHorariosTool = ferramentaDoCrm(
   'aceleriq_comercial_horarios', 'Horarios livres para reuniao com o Almir',
   'Devolve os proximos horarios livres: uma reuniao por dia, terca e quinta as 11h ou 16h, quarta as 11h. Mande em ocupados o que estiver no Google Agenda.',
-  false, z.object({ ocupados: z.array(z.object({ inicio: z.string(), fim: z.string() }).strict()).max(200).optional(), maximo: z.number().int().min(1).max(6).optional() }).strict(),
-  { type: 'object', properties: { ocupados: { type: 'array', items: { type: 'object', properties: { inicio: { type: 'string' }, fim: { type: 'string' } }, required: ['inicio', 'fim'], additionalProperties: false } }, maximo: { type: 'number' } }, additionalProperties: false },
+  false, z.object({ ocupados: z.array(z.object({ inicio: z.string(), fim: z.string() }).strict()).max(200).optional(), maximo: limite(6) }).strict(),
+  { type: 'object', properties: { ocupados: { type: 'array', items: { type: 'object', properties: { inicio: { type: 'string' }, fim: { type: 'string' } }, required: ['inicio', 'fim'], additionalProperties: false } }, maximo: { type: 'integer', minimum: 1, maximum: 6 } }, additionalProperties: false },
   comercialHorarios,
 );
 
@@ -4907,8 +4853,8 @@ const comercialFalarTool = ferramentaDoCrm(
 const comercialRepassesTool = ferramentaDoCrm(
   'aceleriq_comercial_repasses', 'Repasses da Caixa ainda nao avisados no WhatsApp',
   'Lista os itens novos da Caixa que ainda nao foram avisados no WhatsApp da Aceleriq, com o lead e o contexto.',
-  false, z.object({ limit: z.number().int().min(1).max(30).optional() }).strict(),
-  { type: 'object', properties: { limit: { type: 'number' } }, additionalProperties: false },
+  false, z.object({ limit: limite(30) }).strict(),
+  { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 30 } }, additionalProperties: false },
   comercialRepasses,
 );
 
@@ -5181,11 +5127,48 @@ export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(
 );
 ligarCatalogo(() => TOOLS);
 
+// Catálogo RESTRITO (chave presa a projeto/operador): separado do legado. TOOLS/TOOL_MAP continuam sendo o
+// contrato legado (229) em descoberta, initialize e contagens; estas tools só são roteáveis com concessão.
+export const PROJECT_TOOLS: readonly ToolDefinition[] = FERRAMENTAS_DO_PROJETO_RESTRITO;
+export const PROJECT_TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(PROJECT_TOOLS.map(t => [t.name, t]));
+
+/** Catálogo visível à credencial: com concessão, só o restrito; sem ela, só o legado. */
+export function catalogoDe(ctx: { projectGrant?: unknown }): readonly ToolDefinition[] {
+  return ctx.projectGrant ? PROJECT_TOOLS : TOOLS;
+}
+
+/** Roteamento por credencial. Com concessão o nome legado ainda resolve, para a autorização central negá-lo e auditá-lo. */
+export function toolFor(ctx: { projectGrant?: unknown }, name: string): ToolDefinition | undefined {
+  return ctx.projectGrant ? (PROJECT_TOOL_MAP.get(name) ?? TOOL_MAP.get(name)) : TOOL_MAP.get(name);
+}
+
 export function canInvoke(ctx: AuthContext, tool: ToolDefinition): boolean {
   if (tool.scopes.length === 0) return true;
   const expanded = expandScopes(ctx.scopes);
   if (expanded.has('admin')) return true;
-  return tool.scopes.some(s => expanded.has(s));
+  return tool.scopes.some(s => s === 'escritorio:identity'
+    ? expanded.has(s) && identityScopeApplies(ctx, tool)
+    : expanded.has(s));
+}
+
+const IDENTITY_SCOPE_TOOL_SET = new Set<string>(RESTRICTED_API_KEY_IDENTITY_TOOLS);
+
+/** escritorio:identity só vale para a própria ferramenta de identidade, em chave API restrita (nunca OAuth). */
+function identityScopeApplies(ctx: AuthContext, tool: ToolDefinition): boolean {
+  return IDENTITY_SCOPE_TOOL_SET.has(tool.name)
+    && isRestrictedApiKeyIdentityScope(ctx.dataScope)
+    && !String(ctx.keyId ?? '').startsWith('oauth:');
+}
+
+/**
+ * Autorização central (tools/list e tools/call), antes de cache e handler.
+ * - Chave com concessão de projeto: SÓ as tools preparadas (nega por padrão o resto, inclusive públicas e novas).
+ * - Demais credenciais: regras de sempre, e as tools de projeto restrito não aparecem nem rodam (sem concessão).
+ */
+export function authorizeTool(ctx: AuthContext, tool: ToolDefinition): boolean {
+  if (ctx.projectGrant) return projectGrantAllowsTool(tool.name, ctx.projectGrant) && canInvoke(ctx, tool);
+  if (isProjectOnlyTool(tool.name)) return false;
+  return canInvoke(ctx, tool) && canUseToolWithDataScope(ctx, tool);
 }
 
 export function canUseToolWithDataScope(ctx: AuthContext, tool: ToolDefinition): boolean {

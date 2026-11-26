@@ -8,7 +8,7 @@
  * UUID válido, cliente dentro do escopo do principal e cliente existente.
  */
 
-import { db, isUuid } from './aceleriq-read-services.ts';
+import { db, isUuid } from '../mcp-server/modulos/aceleriq-read-services.ts';
 import { assertClientAccess, type AuthContext } from './mcp-auth.ts';
 import { exigirClienteExistente } from './mcp-client-id-guard.ts';
 import { findIdempotentResult } from './mcp-write-services.ts';

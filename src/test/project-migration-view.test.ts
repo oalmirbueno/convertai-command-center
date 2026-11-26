@@ -61,7 +61,7 @@ const plan = (entries = baseline().document.entries) =>
   planProjectMigrationView({ ...options, ledgerCsv: csv(entries) });
 
 describe("reviewed project forward-only migration view", () => {
-  it("emits exactly the 484 observed rows as aborting sentinels and only the new Meta migration as pending SQL", () => {
+  it("emits exactly the 484 observed rows as aborting sentinels and runs only the two Corte migrations and the Meta migration", () => {
     const current = loadReviewedProjectBaseline({ projectRef: reviewedProjectRef });
     const observed = current.document.entries;
     expect(observed).toHaveLength(484);
@@ -69,15 +69,16 @@ describe("reviewed project forward-only migration view", () => {
       projectRef: reviewedProjectRef,
       ledgerCsv: csv(observed),
     });
+    const pendingVersions = ["20261125202100", "20261125202200", "20261125211700"];
     expect(view).toMatchObject({
       status: "pending",
       actual_count: 484,
-      expected_count: 485,
+      expected_count: 487,
       reviewed_count: 484,
       sentinel_count: 484,
-      pending_versions: ["20261125211700"],
+      pending_versions: pendingVersions,
     });
-    expect(view.files).toHaveLength(485);
+    expect(view.files).toHaveLength(487);
     const sentinels = view.files.filter((file) => file.kind === "sentinel");
     expect(sentinels.map((file) => file.version)).toEqual(
       observed.map((entry) => entry.version),
@@ -87,10 +88,19 @@ describe("reviewed project forward-only migration view", () => {
         `RAISE EXCEPTION 'Refusing to execute audited migration sentinel ${file.version}'`,
       );
     }
-    const pending = view.files.filter((file) => file.kind === "pending");
-    expect(pending.map((file) => file.filename)).toEqual(["20261125211700_meta_conexao_token_da_conta.sql"]);
-    const [source] = current.document.pending_migrations;
-    expect(pending[0].bytes).toEqual(readFileSync(resolve(repoRoot, source.path)));
+    const sources = current.document.pending_migrations;
+    const pendingFiles = view.files.filter((file) => file.kind === "pending");
+    expect(sources.map((entry) => entry.version)).toEqual(pendingVersions);
+    expect(pendingFiles.map((file) => file.version)).toEqual(pendingVersions);
+    expect(pendingFiles.map((file) => file.filename)).toEqual([
+      "20261125202100_mcp_project_grants.sql",
+      "20261125202200_mcp_project_video_upload.sql",
+      "20261125211700_meta_conexao_token_da_conta.sql",
+    ]);
+    for (const [index, file] of pendingFiles.entries()) {
+      expect(file.filename).toBe(basename(sources[index].path));
+      expect(file.bytes.equals(readFileSync(resolve(repoRoot, sources[index].path)))).toBe(true);
+    }
     const renewal = view.files.find((file) => file.version === "20261021154113")!;
     expect(renewal.kind).toBe("sentinel");
     expect(renewal.filename).toBe("20261021154113_production_ledger_sentinel.sql");

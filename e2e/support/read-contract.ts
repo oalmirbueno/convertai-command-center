@@ -5,7 +5,7 @@ const iso = (value: unknown): value is string => typeof value === "string"
   && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 
 // The reviewed STABLE RPC only reads the customer's public activity. Keep
-// every other RPC, internal-history flag, mutation and nonlocal URL blocked.
+// internal history, mutations and nonlocal URLs blocked.
 export function isClientHistoryRead(method: string, raw: string, body: string | null): boolean {
   try {
     const url = new URL(raw);
@@ -23,4 +23,12 @@ export function isClientHistoryRead(method: string, raw: string, body: string | 
   } catch {
     return false;
   }
+}
+
+// produto_estado() is STABLE, takes no arguments and reads the signed-in
+// caller's product state. The client dashboard uses it for the CRM shortcut.
+export function isProductStateRead(method: string, raw: string, body: string | null): boolean {
+  return method === "POST"
+    && raw === `${CI_E2E_API_ORIGIN}/rest/v1/rpc/produto_estado`
+    && body === "{}";
 }

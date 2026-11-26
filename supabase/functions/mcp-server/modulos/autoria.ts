@@ -11,7 +11,7 @@
  * como escrita quando escrevem (body; add/check): ler com outro operator continua livre.
  */
 
-import { db } from '../../_shared/aceleriq-read-services.ts';
+import { db } from './aceleriq-read-services.ts';
 // robustez.ts não importa nada daqui: sem import circular.
 import { ErroDaFerramenta } from './robustez.ts';
 
@@ -84,8 +84,13 @@ export function esquecerVinculos(principal?: string) {
  * MCP 2.37.0: qualquer OUTRO erro de leitura não libera mais a assinatura (antes virava null = livre, a falha
  * aberta). Lança vinculos_indisponiveis transitório e não guarda a falha no cache: a próxima chamada lê de novo.
  */
-export async function vinculosDaChave(principal: string, banco = db()): Promise<VinculoDaChave[] | null> {
-  const guardado = cache.get(principal);
+export async function vinculosDaChave(
+  principal: string,
+  banco = db(),
+  opcoes: { semCache?: boolean } = {},
+): Promise<VinculoDaChave[] | null> {
+  // semCache: lê direto do banco (a identidade restrita do Escritório usa) e renova o cache com o que leu.
+  const guardado = opcoes.semCache ? undefined : cache.get(principal);
   if (guardado && Date.now() - guardado.em < CACHE_MS) return guardado.vinculos;
   const { data, error } = await banco.from('operator_key_bindings')
     .select('operator_slug, padrao').eq('principal', principal).limit(200);

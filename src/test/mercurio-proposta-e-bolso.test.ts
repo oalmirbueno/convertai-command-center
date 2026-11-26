@@ -65,7 +65,7 @@ function consulta(tabela: string) {
   return b;
 }
 
-vi.mock("../../supabase/functions/_shared/aceleriq-read-services.ts", () => ({
+vi.mock("../../supabase/functions/mcp-server/modulos/aceleriq-read-services.ts", () => ({
   db: () => ({
     from: (t: string) => consulta(t),
     rpc: (nome: string, args: Record<string, unknown>) => {
@@ -277,7 +277,10 @@ describe("MCP 2.23 com as ferramentas do Mercúrio até o contrato", () => {
   const novas = ["aceleriq_comercial_pedir_proposta", "aceleriq_comercial_bolso_pedir", "aceleriq_comercial_bolso_liberar"];
 
   it("cada ferramenta existe com escopo de escrita do comercial, no guia e no roteiro; versão 2.23", () => {
-    expect(MCP_VERSION).toBe("2.40.0");
+    // Nasceram na 2.23; o número exato da release atual é conferido em mcp-precisa-de-voce.
+    const [maior, menor] = MCP_VERSION.split(".").map(Number);
+    expect(MCP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(maior > 2 || (maior === 2 && menor >= 23), MCP_VERSION).toBe(true);
     const tools = ler("supabase/functions/_shared/mcp-tools.ts");
     const lista = tools.slice(tools.indexOf("const RAW_TOOLS: readonly ToolDefinition[] = ["));
     const doc = ler("docs/comercial/MERCURIO.md");

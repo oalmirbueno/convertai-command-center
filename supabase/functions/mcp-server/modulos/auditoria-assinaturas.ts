@@ -15,7 +15,7 @@
  */
 
 import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
-import { db } from '../../_shared/aceleriq-read-services.ts';
+import { db } from './aceleriq-read-services.ts';
 import { ErroDaFerramenta } from './robustez.ts';
 import { assinaComoOperador, principalDaChamada, vinculosDaChave, type VinculoDaChave } from './autoria.ts';
 

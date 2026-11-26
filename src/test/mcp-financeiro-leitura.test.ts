@@ -19,7 +19,7 @@ import { ModuleKind, transpileModule } from "typescript";
 
 const raiz = resolve(__dirname, "../..");
 const servicos = readFileSync(
-  resolve(raiz, "supabase/functions/_shared/aceleriq-finance-services.ts"), "utf8",
+  resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-finance-services.ts"), "utf8",
 );
 const ferramentas = readFileSync(
   resolve(raiz, "supabase/functions/_shared/mcp-tools.ts"), "utf8",
@@ -204,7 +204,7 @@ describe("o painel financeiro inteiro, mes a mes", () => {
     const exports: Record<string, unknown> = {};
     const execute = new Function("exports", "require", "setTimeout", compiled);
     execute(exports, (dependency: string) => {
-      if (dependency !== "../../_shared/aceleriq-read-services.ts") throw new Error(`Unexpected test dependency: ${dependency}`);
+      if (dependency !== "./aceleriq-read-services.ts") throw new Error(`Unexpected test dependency: ${dependency}`);
       return { db: () => db, READ_LIMITS: { queryTimeoutMs: 8000, maxPageSize: 500 } };
     }, () => 0);
     const getDashboard = exports.getFinanceDashboard as (input: { competence: string }) => Promise<{

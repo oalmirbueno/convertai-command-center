@@ -3315,6 +3315,22 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261125202100",
+      "path": "supabase/migrations/20261125202100_mcp_project_grants.sql",
+      "local_sha256": "02bc14c59515938b6895c54c83cd37f260890cc1caebb359edd2af5e2dc94d16",
+      "remote_name": "mcp_project_grants",
+      "remote_statements_sha256": "afe80289ac2692add5bbafe572b740cdbd87d71bc068ed1235b3bb549955d3a2",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261125202200",
+      "path": "supabase/migrations/20261125202200_mcp_project_video_upload.sql",
+      "local_sha256": "05289667d228b8dd32a2a82494e0792341af7338c70a640b10f8af11d8229f63",
+      "remote_name": "mcp_project_video_upload",
+      "remote_statements_sha256": "e282d3c9bb7a14763affa7cda74159e1170f9495d7cdaa0aecb6b6fa141915df",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261125211700",
       "path": "supabase/migrations/20261125211700_meta_conexao_token_da_conta.sql",
       "local_sha256": "e1c4f5934cd96f0e79de9df0ced57b01aa902db29d41acb32a05910864297931",
