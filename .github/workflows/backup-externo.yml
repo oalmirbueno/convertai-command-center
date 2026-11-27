@@ -1,0 +1,159 @@
+name: Backup externo (banco e arquivos no R2)
+
+# Toda madrugada: copia o banco do painel, prova que a cópia restaura num Supabase local,
+# criptografa e guarda no Cloudflare R2; depois copia os arquivos novos do Storage.
+# Só lê a produção. Restauração passo a passo: docs/backup-externo.md.
+
+on:
+  schedule:
+    - cron: "15 6 * * *" # 03h15 em Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-externo
+  cancel-in-progress: false
+
+env:
+  R2_BUCKET: aceleriq-backup
+  SUPABASE_REF: jjjtkowvxemvituvywvf
+  SUPABASE_REGION: sa-east-1
+  RETER_DIAS: "30"
+
+jobs:
+  banco:
+    name: Banco (copia, restaura e guarda)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Conferir segredos
+        run: |
+          set -euo pipefail
+          for n in SUPABASE_DB_URL BACKUP_PASSPHRASE R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!n}" ]; then echo "::error::Falta o segredo $n"; exit 1; fi
+          done
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
+        with:
+          version: 2.109.1
+
+      - name: Instalar psql e rclone
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client rclone >/dev/null
+
+      - name: Copiar o banco de produção
+        run: |
+          set -euo pipefail
+          mkdir -p dump
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f dump/roles.sql --role-only
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f dump/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f dump/data.sql --data-only --use-copy
+          ls -lh dump
+
+      - name: Subir um Supabase local vazio
+        run: |
+          set -euo pipefail
+          mkdir -p restauro && cd restauro
+          supabase init --force >/dev/null
+          sed -i 's/^major_version = .*/major_version = 17/' supabase/config.toml
+          supabase start -x studio,imgproxy,mailpit,realtime,edge-runtime,logflare,vector,supavisor,postgres-meta,postgrest
+
+      - name: Restaurar a cópia no Supabase local
+        env:
+          LOCAL_DB: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          set -euo pipefail
+          psql "$LOCAL_DB" -q -v ON_ERROR_STOP=1 --single-transaction \
+            -f dump/roles.sql -f dump/schema.sql \
+            -c 'SET session_replication_role = replica' -f dump/data.sql
+
+      - name: Provar que as linhas voltaram
+        env:
+          LOCAL_DB: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          set -euo pipefail
+          # Linhas por tabela na cópia (blocos COPY do public) contra as linhas no banco restaurado.
+          awk '/^COPY "?public"?\./{t=$2; sub(/\(.*/,"",t); gsub(/"/,"",t); n=0; dentro=1; next}
+               dentro && /^\\\.$/{print t"\t"n; dentro=0; next}
+               dentro{n++}' dump/data.sql | sort > esperado.tsv
+          psql "$LOCAL_DB" -At -F $'\t' -c "
+            select 'public.'||table_name,
+                   (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from public.%I', table_name), false, true, '')))[1]::text
+            from information_schema.tables
+            where table_schema = 'public' and table_type = 'BASE TABLE'" | sort > restaurado.tsv
+          tabelas=$(wc -l < esperado.tsv)
+          linhas=$(awk -F'\t' '{s+=$2} END {print s+0}' esperado.tsv)
+          if ! join -t $'\t' esperado.tsv restaurado.tsv | awk -F'\t' '$2 != $3 {print; bad=1} END {exit bad}'; then
+            echo "::error::Alguma tabela não voltou com o mesmo número de linhas"; exit 1
+          fi
+          if [ "$tabelas" -lt 50 ] || [ "$linhas" -lt 1000 ]; then
+            echo "::error::Cópia pequena demais ($tabelas tabelas, $linhas linhas)"; exit 1
+          fi
+          echo "Restauração conferida: $tabelas tabelas, $linhas linhas." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Criptografar e guardar no R2
+        run: |
+          set -euo pipefail
+          nome="banco-$(date -u +%Y-%m-%dT%H%MZ).tar.gz.gpg"
+          tar -czf - -C dump . | gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase-fd 3 -o "$nome" 3<<<"$BACKUP_PASSPHRASE"
+          export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+            RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+            RCLONE_CONFIG_R2_ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+          rclone copyto "$nome" "r2:$R2_BUCKET/banco/$nome"
+          rclone lsl "r2:$R2_BUCKET/banco/$nome"
+          rclone delete --min-age "${RETER_DIAS}d" "r2:$R2_BUCKET/banco/"
+          echo "Guardado: banco/$nome ($(du -h "$nome" | cut -f1))." | tee -a "$GITHUB_STEP_SUMMARY"
+
+  arquivos:
+    name: Arquivos do Storage
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SUPABASE_S3_ACCESS_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
+      SUPABASE_S3_SECRET_ACCESS_KEY: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Conferir segredos
+        run: |
+          set -euo pipefail
+          for n in SUPABASE_S3_ACCESS_KEY_ID SUPABASE_S3_SECRET_ACCESS_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!n}" ]; then echo "::error::Falta o segredo $n"; exit 1; fi
+          done
+
+      - name: Instalar rclone
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rclone >/dev/null
+
+      - name: Copiar os arquivos novos para o R2
+        run: |
+          set -euo pipefail
+          export RCLONE_CONFIG_SB_TYPE=s3 RCLONE_CONFIG_SB_PROVIDER=Other \
+            RCLONE_CONFIG_SB_ACCESS_KEY_ID="$SUPABASE_S3_ACCESS_KEY_ID" RCLONE_CONFIG_SB_SECRET_ACCESS_KEY="$SUPABASE_S3_SECRET_ACCESS_KEY" \
+            RCLONE_CONFIG_SB_ENDPOINT="https://$SUPABASE_REF.storage.supabase.co/storage/v1/s3" RCLONE_CONFIG_SB_REGION="$SUPABASE_REGION" \
+            RCLONE_CONFIG_SB_FORCE_PATH_STYLE=true
+          export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+            RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+            RCLONE_CONFIG_R2_ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+          # copy (não sync): arquivo apagado no painel continua no backup.
+          rclone lsf --dirs-only sb: | tr -d '/' | while read -r balde; do
+            [ -n "$balde" ] || continue
+            echo "== $balde"
+            rclone copy "sb:$balde" "r2:$R2_BUCKET/arquivos/$balde" --transfers 8 --checkers 16 --size-only --stats-one-line --stats 60s
+          done
+          origem=$(rclone size sb: --json | python3 -c 'import sys,json;print(json.load(sys.stdin)["count"])')
+          copia=$(rclone size "r2:$R2_BUCKET/arquivos" --json | python3 -c 'import sys,json;print(json.load(sys.stdin)["count"])')
+          echo "Arquivos: $origem no Supabase, $copia no R2." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$copia" -lt "$origem" ]; then echo "::error::Faltam arquivos no R2"; exit 1; fi
