@@ -3401,6 +3401,14 @@
       "remote_name": "intermediador_contexto",
       "remote_statements_sha256": "d795c4535e52eec6eb596901bc0c7902b9ad187ac47a3e379511605abe2e8df8",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127210000",
+      "path": "supabase/migrations/20261127210000_intermediador_consulta.sql",
+      "local_sha256": "e21649f4f717af8255076a93e722b50a052bb52bc34c1130e5d8243d311faf5c",
+      "remote_name": "intermediador_consulta",
+      "remote_statements_sha256": "2aadaad73b10524c463a4fc6fa17d5c3d3afd6dac589d8bc86c8071663305604",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
