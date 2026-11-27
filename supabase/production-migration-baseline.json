@@ -3363,8 +3363,16 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261127152626",
-      "path": "supabase/migrations/20261127152626_alcada_automatica.sql",
+      "version": "20261127160000",
+      "path": "supabase/migrations/20261127160000_intermediador_mencoes.sql",
+      "local_sha256": "031c34cdebe61d36e47716e3cc3a1ccd7a8ec91ae5ac7935884c01a0790afba0",
+      "remote_name": "intermediador_mencoes",
+      "remote_statements_sha256": "05446fb564df31e3a757050badea33d1a9ead9e768e25e00e844ffaf6a3c6969",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127170000",
+      "path": "supabase/migrations/20261127170000_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",

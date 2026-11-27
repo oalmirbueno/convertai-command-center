@@ -1,5 +1,5 @@
 import { assert, assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { comPessoa, limparTexto, MARCA, pedidoAoEscritor, perguntasDoTexto, problemaDoTexto } from './intermediador-escrita.ts';
+import { comPessoa, corrido, limparTexto, MARCA, PARTE, pedidoAoEscritor, perguntasDoTexto, problemaDoTexto } from './intermediador-escrita.ts';
 
 const base = {
   cliente: 'Verzelo Jardins', primeiro_nome: 'Thiélo', tema: 'atendimento no fim de ano',
@@ -33,7 +33,7 @@ Deno.test('limparTexto: tira aspas e travessão, garante uma menção e recusa "
 
 Deno.test('limparTexto: fechamento sem menção e sem pergunta; termo interno e cobrança barrados', () => {
   assertEquals(limparTexto('Valeu, meu querido , entendi: chegou pelo post novo. anotado!', 'fechamento').texto, 'Valeu, meu querido, entendi: chegou pelo post novo. Anotado!');
-  assertEquals(limparTexto('@{pessoa} perfeito, anotado!', 'fechamento'), { texto: 'perfeito, anotado!', problema: null });
+  assertEquals(limparTexto('@{pessoa} perfeito, anotado!', 'fechamento'), { texto: 'Perfeito, anotado!', problema: null });
   assert(limparTexto('Perfeito! Mais alguma coisa?', 'fechamento').problema?.includes('pergunta'));
   assert(limparTexto('@{pessoa} o Hermes precisa saber se vocês atendem dia 24', 'pergunta').problema?.includes('termo interno'));
   assert(limparTexto('@{pessoa} e o boleto, conseguiu pagar?', 'pergunta').problema?.includes('cobrança'));
@@ -92,7 +92,17 @@ Deno.test('o escritor não presume gênero (caso Preserva Eco, 25/11)', () => {
 });
 
 Deno.test('só a pergunta e o lembrete marcam; a de volta tira a menção que o modelo puser', () => {
-  assertEquals(limparTexto('@{pessoa} show, e até que horas?', 'de_volta').texto, 'show, e até que horas?');
-  assertEquals(limparTexto('@Andreus, boa! E até que dia?', 'de_volta', 'Andreus').texto, 'boa! E até que dia?');
+  assertEquals(limparTexto('@{pessoa} show, e até que horas?', 'de_volta').texto, 'Show, e até que horas?');
+  assertEquals(limparTexto('@Andreus, boa! E até que dia?', 'de_volta', 'Andreus').texto, 'Boa! E até que dia?');
   assert(pedidoAoEscritor({ ...base, tipo: 'de_volta', falta: 'horário' }).usuario.includes('não marque ninguém'));
+});
+
+Deno.test('mensagens picadas: até 3 partes, menção só na primeira, sobra vai junto na última', () => {
+  const t = limparTexto('Oi @{pessoa}, tudo certo? /// pra gente fechar o post, vocês atendem dia 24?', 'pergunta', 'Thiélo');
+  assertEquals(t.texto, `Oi @{pessoa}, tudo certo?${PARTE}Pra gente fechar o post, vocês atendem dia 24?`);
+  assertEquals(t.problema, null);
+  const quatro = limparTexto('Boa!\n///\nAnotado aqui\n///\nJá passei pro time\n///\nValeu @{pessoa}', 'fechamento');
+  assertEquals(quatro.texto.split(PARTE), ['Boa!', 'Anotado aqui', 'Já passei pro time Valeu']);
+  assertEquals(corrido(quatro.texto), 'Boa!\nAnotado aqui\nJá passei pro time Valeu');
+  assert(pedidoAoEscritor({ ...base, tipo: 'pergunta' }).sistema.includes('///'));
 });

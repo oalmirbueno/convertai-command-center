@@ -13,7 +13,7 @@ import { perguntaProibida } from './intermediador-regras.ts';
 
 /** O escritor põe este marcador onde vai a menção; o código troca por @numero (grupo) ou @Nome (prévia). */
 export const MARCA = '@{pessoa}';
-export type TipoDeTexto = 'pergunta' | 'de_volta' | 'lembrete' | 'fechamento' | 'humano' | 'quem_e';
+export type TipoDeTexto = 'pergunta' | 'de_volta' | 'lembrete' | 'fechamento' | 'humano' | 'quem_e' | 'mencao';
 // Só abre e lembra marcando; no meio da conversa ninguém é marcado de novo (pedido do Almir, 25/11).
 export const COM_MENCAO: ReadonlySet<TipoDeTexto> = new Set(['pergunta', 'lembrete']);
 
@@ -46,6 +46,7 @@ const O_QUE_ESCREVER: Record<TipoDeTexto, string> = {
   lembrete: 'A pessoa ainda não respondeu a pergunta feita. Escreva um lembrete leve e curto, sem cobrar, retomando o assunto em poucas palavras.',
   fechamento: 'A pessoa respondeu tudo. Feche agradecendo, curto, mostrando que entendeu o que ela disse (uma referência rápida, sem repetir a resposta inteira). Não faça pergunta nova e não diga o que o time vai fazer com a resposta (no máximo "anotado" ou "já passei pro time").',
   humano: 'A pessoa pediu algo que só o Almir pode responder (preço, prazo, decisão) ou reclamou. Responda curto, com respeito, dizendo que o Almir vai responder por aqui. Não responda o pedido, não prometa nada e não peça desculpas exageradas.',
+  mencao: 'Alguém marcou você no grupo. Responda à pessoa que marcou, no contexto da conversa, fazendo o que a tarefa abaixo pede.',
   quem_e: 'A pessoa perguntou quem está falando. Diga, curto e simpático, que é o assistente da Aceleriq que ajuda o time a organizar essas confirmações e que o Almir está no grupo também. Não diga que é uma pessoa e não use a palavra robô.',
 };
 
@@ -59,6 +60,7 @@ export const SISTEMA_DO_INTERMEDIADOR = [
   `4. Só quando a tarefa pedir para chamar a pessoa (abrir o assunto ou lembrar), escreva exatamente ${MARCA} (o sistema troca pelo nome), uma vez só, perto do começo, e não escreva o nome dela de novo. No meio da conversa, não marque nem chame pelo nome.`,
   '4b. Não presuma gênero: tratamento como "querido", "querida" ou "meu querido" só se o Almir usa esse mesmo tratamento com essa pessoa nas mensagens recentes; se não, agradeça sem tratamento ("Valeu!", "Obrigado!" vale para qualquer um).',
   '5. Curta: de 1 a 3 frases. Nada de lista, título, negrito ou assinatura. No máximo um emoji, e só se couber.',
+  '5b. Escreva como gente escreve no WhatsApp: se ficar mais natural, quebre em 2 ou 3 mensagens curtas, separadas por uma linha só com ///, por exemplo o comentário numa e a pergunta na outra. Nunca mais de 3, e não quebre uma frase no meio.',
   '6. Nunca explique como responder (texto, áudio, "por aqui mesmo"): é óbvio.',
   '7. Nunca prometa preço, valor, prazo de entrega, desconto ou resultado, nem diga o que o time vai fazer depois (ajustar, mudar, investir). Nunca fale de cobrança, verba, pagamento ou contrato.',
   '8. Nunca cite ferramenta, sistema, agente, IA, painel ou nome de pessoa da equipe além do Almir.',
@@ -86,7 +88,15 @@ export function pedidoAoEscritor(p: PedidoDoTexto): { sistema: string; usuario: 
 const EXPLICA_COMO_RESPONDER = /(texto ou (em )?[áa]udio|[áa]udio ou (em )?texto|por aqui mesmo|pode responder (aqui|por aqui))/i;
 
 /** Limpa o que o escritor devolveu e diz o que impede de sair (null = pode seguir para o Jev). */
-export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | null | (string | null)[]): { texto: string; problema: string | null } {
+/** Separador das partes de uma mensagem picada (o VPS manda cada parte como uma mensagem, com pausa). */
+export const PARTE = '\n///\n';
+export const MAXIMO_DE_PARTES = 3;
+const QUEBRA_DO_ESCRITOR = /\n?[ \t]*\/\/\/[ \t]*\n?/;
+
+const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Limpa uma parte. `mencao`: esta parte é a que chama a pessoa (só a primeira, e só nos tipos que marcam). */
+function limparUmaParte(bruto: string, mencao: boolean, nome?: string | null | (string | null)[]): string {
   let t = String(bruto ?? '').trim().replace(/^["“”']+|["“”']+$/g, '').trim();
   t = t.replace(/\s*[—–]\s*/g, ', ').replace(/\*\*/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
   // Variações do marcador: "@{Thiélo}", "@{ pessoa }", "{pessoa}", "@pessoa" e o próprio "@Thiélo" escrito à mão.
@@ -94,36 +104,53 @@ export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | nu
   for (const n of Array.isArray(nome) ? nome : [nome]) {
     const primeiro = String(n ?? '').trim().split(/\s+/)[0];
     if (!primeiro || /^\+?\d+$/.test(primeiro)) continue;
-    const esc = primeiro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    t = t.replace(new RegExp(`@${esc}(?![\\p{L}\\d])`, 'gu'), MARCA);
+    t = t.replace(new RegExp(`@${esc(primeiro)}(?![\\p{L}\\d])`, 'gu'), MARCA);
   }
-  // "@{pessoa} e @{pessoa}" (duas pessoas escritas à mão) também vira uma menção só.
-  t = t.replace(new RegExp(`${MARCA.replace(/[{}]/g, '\\$&')}(\\s*(,|e)\\s*${MARCA.replace(/[{}]/g, '\\$&')})+`, 'g'), MARCA);
-  // "@{pessoa}, @{pessoa}," vira uma menção só.
-  t = t.replace(new RegExp(`(${MARCA.replace(/[{}]/g, '\\$&')})([\\s,]*${MARCA.replace(/[{}]/g, '\\$&')})+`, 'g'), MARCA);
-  if (COM_MENCAO.has(tipo)) {
+  // "@{pessoa} e @{pessoa}" e "@{pessoa}, @{pessoa}," viram uma menção só.
+  t = t.replace(new RegExp(`${esc(MARCA)}(\\s*(,|e)\\s*${esc(MARCA)})+`, 'g'), MARCA);
+  t = t.replace(new RegExp(`(${esc(MARCA)})([\\s,]*${esc(MARCA)})+`, 'g'), MARCA);
+  if (mencao) {
     const vezes = t.split(MARCA).length - 1;
     if (vezes === 0) t = `${MARCA}, ${t.charAt(0).toLowerCase()}${t.slice(1)}`;
     else if (vezes > 1) {
-      const i = t.indexOf(MARCA) + MARCA.length;
-      t = t.slice(0, i) + t.slice(i).split(MARCA).join('');
+      const k = t.indexOf(MARCA) + MARCA.length;
+      t = t.slice(0, k) + t.slice(k).split(MARCA).join('');
     }
     t = t.replace(/ {2,}/g, ' ');
   } else {
     t = t.split(MARCA).join('').replace(/^[,\s]+/, '').replace(/\s{2,}/g, ' ').trim();
   }
-  // Pontuação: sem espaço antes de vírgula ou ponto, maiúscula depois de ponto final, exclamação ou interrogação.
+  // Pontuação: sem espaço antes de vírgula ou ponto, maiúscula no começo e depois de ponto final, exclamação ou interrogação.
   t = t.replace(/\s+([,.!?;:])/g, '$1').replace(/([.!?]\s+)(\p{Ll})/gu, (_m, sep: string, letra: string) => sep + letra.toUpperCase());
-  if (t.length < 12) return { texto: t, problema: 'curto demais' };
-  if (t.length > 600) return { texto: t, problema: 'longo demais (máximo 3 frases curtas)' };
-  if (EXPLICA_COMO_RESPONDER.test(t)) return { texto: t, problema: 'explicou como responder (texto, áudio, por aqui); tire isso' };
-  const proibido = perguntaProibida(t);
+  if (!mencao) t = t.replace(/^\p{Ll}/u, (l) => l.toUpperCase());
+  return t;
+}
+
+/**
+ * Limpa o que o escritor devolveu e diz o que impede de sair (null = pode seguir para o Jev).
+ * O escritor pode quebrar em até 3 mensagens curtas com uma linha "///" (pedido do Almir, 27/11: "mandar mensagens
+ * picadas e não tudo no mesmo"); a menção fica só na primeira parte. O texto limpo volta com as partes unidas por PARTE.
+ */
+export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | null | (string | null)[]): { texto: string; problema: string | null } {
+  const pedacos = String(bruto ?? '').split(QUEBRA_DO_ESCRITOR).map((x) => x.trim()).filter(Boolean);
+  const partes = pedacos.slice(0, MAXIMO_DE_PARTES - 1).concat(pedacos.length > MAXIMO_DE_PARTES - 1 ? [pedacos.slice(MAXIMO_DE_PARTES - 1).join(' ')] : []);
+  const limpas = (partes.length ? partes : ['']).map((x, i) => limparUmaParte(x, COM_MENCAO.has(tipo) && i === 0, nome)).filter((x) => x.length > 0);
+  const t = limpas.join(PARTE);
+  const corrido = limpas.join(' ');
+  // Pergunta precisa ter corpo; um ok, um agradecimento ou um "Anotado! ✅" podem ser curtos.
+  if (corrido.length < (tipo === 'pergunta' || tipo === 'de_volta' || tipo === 'lembrete' ? 12 : 3)) return { texto: t, problema: 'curto demais' };
+  if (corrido.length > 600) return { texto: t, problema: 'longo demais (máximo 3 frases curtas)' };
+  if (EXPLICA_COMO_RESPONDER.test(corrido)) return { texto: t, problema: 'explicou como responder (texto, áudio, por aqui); tire isso' };
+  const proibido = perguntaProibida(corrido);
   if (proibido === 'termo_interno') return { texto: t, problema: 'citou termo interno, ferramenta ou agente' };
-  if (proibido === 'assunto_do_almir' && tipo !== 'humano') return { texto: t, problema: 'falou de cobrança, pagamento, contrato ou desconto' };
+  if (proibido === 'assunto_do_almir' && tipo !== 'humano' && tipo !== 'mencao') return { texto: t, problema: 'falou de cobrança, pagamento, contrato ou desconto' };
   if (proibido === 'link') return { texto: t, problema: 'pôs link' };
-  if (/\?/.test(t) && tipo === 'fechamento') return { texto: t, problema: 'o fechamento não pode fazer pergunta' };
+  if (/\?/.test(corrido) && tipo === 'fechamento') return { texto: t, problema: 'o fechamento não pode fazer pergunta' };
   return { texto: t, problema: null };
 }
+
+/** O texto como uma mensagem só (para o Jev e para a prévia corrida). */
+export const corrido = (texto: string) => texto.split(PARTE).join('\n');
 
 /** O Jev confere o texto escrito: cobre os pontos, não promete, não inventa, soa natural. */
 export function perguntasDoTexto(tipo: TipoDeTexto, itens: string[], falta?: string | null): Record<string, PerguntaJev> {

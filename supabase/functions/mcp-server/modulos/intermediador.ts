@@ -40,9 +40,14 @@ import {
   perguntasAoJev,
   precisaDeMediana,
 } from './intermediador-regras.ts';
-import { comPessoa, limparTexto, MARCA, pedidoAoEscritor, perguntasDoTexto, problemaDoTexto, type TipoDeTexto } from './intermediador-escrita.ts';
+import { comPessoa, corrido, limparTexto, MARCA, pedidoAoEscritor, perguntasDoTexto, problemaDoTexto, type TipoDeTexto } from './intermediador-escrita.ts';
 import { escolhaDoModelo, escreverComModeloDaCentral } from '../../_shared/modelo-da-central.ts';
 import { lerDossie } from '../../_shared/contexto-cliente.ts';
+import { registrarAprendizado } from '../../_shared/cerebro-do-cliente.ts';
+import {
+  CORTE_DO_FATO, ESPERA_DEPOIS_DA_MARCACAO_MS, JANELA_DE_ANOTAR_MS, JANELA_DE_RESPOSTA_MS, lerIntencao, lerPlano, MARCAS_DO_ASSISTENTE,
+  pedidoAoPlanejador, perguntasDaMencao, perguntasDosFatos, semMarca,
+} from './intermediador-mencoes.ts';
 
 export const SLUG_DO_INTERMEDIADOR = 'intermediador';
 export const ESPERA_O_CLIENTE_TERMINAR_MS = 90_000;
@@ -65,8 +70,17 @@ export interface Assunto {
   criado_em: string;
 }
 export interface Envio {
-  id: string; assunto_id: string; tipo: string; destino: 'grupo' | 'dono'; texto: string; texto_previa: string;
+  id: string; assunto_id: string | null; tipo: string; destino: 'grupo' | 'dono'; texto: string; texto_previa: string;
   mencoes: string[]; estado: string; message_id: string | null; criado_em: string; feito_em: string | null;
+  /** 2.43: envio de uma menção ao assistente (sem assunto) leva o próprio grupo. */
+  mencao_id?: string | null; client_id?: string | null; group_id?: string | null; grupo_nome?: string | null;
+  /** Ids de cada parte de uma mensagem picada. */
+  message_ids?: string[];
+}
+export interface MsgMencao extends MsgGrupo { client_id: string; group_id: string; rotulo: string }
+export interface Mencao {
+  id: string; provider_message_id: string; client_id: string; group_id: string; grupo_nome: string; autor_papel: string;
+  autor_numero: string | null; autor_nome: string | null; texto: string | null; ocorreu_em: string; estado: string;
 }
 export interface Pessoa { numero: string; nome: string | null; mensagens: number }
 export interface MsgGrupo {
@@ -91,7 +105,7 @@ export interface PortaDoIntermediador {
   atualizarAssunto(id: string, patch: Partial<Assunto>, seEstado?: readonly string[]): Promise<Assunto | null>;
   envios(f: { assunto_id?: string; estado?: string }): Promise<Envio[]>;
   envio(id: string): Promise<Envio | null>;
-  criarEnvio(e: Pick<Envio, 'assunto_id' | 'tipo' | 'destino' | 'texto' | 'texto_previa' | 'mencoes'>): Promise<Envio | null>;
+  criarEnvio(e: Pick<Envio, 'assunto_id' | 'tipo' | 'destino' | 'texto' | 'texto_previa' | 'mencoes'> & Partial<Pick<Envio, 'mencao_id' | 'client_id' | 'group_id' | 'grupo_nome'>>): Promise<Envio | null>;
   atualizarEnvio(id: string, patch: Partial<Envio>, seEstado?: string): Promise<Envio | null>;
   ultimoEnvioNoGrupo(groupId: string): Promise<string | null>;
   evento(assuntoId: string | null, tipo: string, dados?: Record<string, unknown>): Promise<void>;
@@ -102,12 +116,18 @@ export interface PortaDoIntermediador {
   /** O motor de escrita do painel. null = nenhum modelo respondeu. */
   escrever(p: { clientId: string; sistema: string; usuario: string; assuntoId: string }): Promise<string | null>;
   ultimoEvento(assuntoId: string, tipo: string): Promise<string | null>;
+  /** 2.43: marcações do assistente nos grupos lidos, ainda não tratadas. */
+  mencoesNovas(desde: string): Promise<MsgMencao[]>;
+  registrarMencao(m: Omit<Mencao, 'id' | 'estado'> & { estado: string }): Promise<Mencao | null>;
+  atualizarMencao(id: string, patch: Record<string, unknown>): Promise<void>;
+  registrarNoCerebro(f: { client_id: string; area: string; categoria: string; texto: string; evidencia: string }): Promise<{ id: string | null; acao: string }>;
+  avisarSala(sala: string, texto: string, clientId: string, chave: string): Promise<string | null>;
 }
 
 // ─── A porta para o banco ───────────────────────────────────────
 
 const COL_ASSUNTO = 'id, client_id, group_id, grupo_nome, tema, pergunta, para_que, marcar_numero, marcar_nome, marcar_numeros, marcar_nomes, o_que_conta, pode_perguntar_de_volta, prazo_horas, pedido_por, responder_para, idempotency_key, estado, pergunta_msg_id, perguntado_em, vence_em, lido_ate, envios_ao_cliente, perguntou_de_volta, itens, ouvidas, resposta, motivo, devolvido_em, fechado_em, criado_em';
-const COL_ENVIO = 'id, assunto_id, tipo, destino, texto, texto_previa, mencoes, estado, message_id, criado_em, feito_em';
+const COL_ENVIO = 'id, assunto_id, tipo, destino, texto, texto_previa, mencoes, estado, message_id, criado_em, feito_em, mencao_id, client_id, group_id, grupo_nome, message_ids';
 
 function falhou(onde: string, error: { code?: string; message?: string } | null): never {
   console.error('[mcp intermediador]', onde, { code: error?.code });
@@ -249,6 +269,38 @@ export function portaDoBanco(): PortaDoIntermediador {
         return null;
       });
       return r?.texto?.trim() || null;
+    },
+    async mencoesNovas(desde) {
+      const { data, error } = await b.rpc('intermediador_mencoes_novas', { p_desde: desde, p_marcas: [...MARCAS_DO_ASSISTENTE] });
+      if (error) falhou('menções', error);
+      return (data ?? []) as MsgMencao[];
+    },
+    async registrarMencao(m) {
+      const { data, error } = await b.from('intermediador_mencoes').insert(m).select('id, provider_message_id, client_id, group_id, grupo_nome, autor_papel, autor_numero, autor_nome, texto, ocorreu_em, estado').maybeSingle();
+      if (error?.code === '23505') return null;
+      if (error) falhou('registrar menção', error);
+      return (data as Mencao) ?? null;
+    },
+    async atualizarMencao(id, patch) {
+      const { error } = await b.from('intermediador_mencoes').update({ ...patch, atualizado_em: new Date().toISOString() }).eq('id', id);
+      if (error) falhou('atualizar menção', error);
+    },
+    async registrarNoCerebro(f) {
+      const r = await registrarAprendizado(b as unknown as Parameters<typeof registrarAprendizado>[0], {
+        client_id: f.client_id, area: f.area as never, categoria: f.categoria as never, texto: f.texto, motivo: null,
+        evidencia: f.evidencia, referencia_id: null, valido_dias: undefined, fonte: 'grupo-whatsapp', criado_por: null,
+      } as never, { julgar: async (state, questions) => (await jevPerguntar({ state, questions }, { timeoutMs: 12_000 })).answers as never });
+      return { id: (r as { id?: string | null }).id ?? null, acao: String((r as { acao?: string }).acao ?? 'gravado') };
+    },
+    async avisarSala(sala, texto, clientId, chave) {
+      const ja = await esc.mensagemPorChave(SLUG_DO_INTERMEDIADOR, chave);
+      if (ja) return ja.id;
+      const g = (await esc.grupos()).find((x) => x.slug === sala && x.ativo);
+      if (!g) return null;
+      const conversa = await esc.criarConversa({ tipo: 'grupo', grupo_id: g.id, assunto: 'Pedido do cliente no grupo', client_id: clientId, task_id: null, criada_por: SLUG_DO_INTERMEDIADOR });
+      const m = await esc.gravarMensagem({ conversa_id: conversa.id, de_slug: SLUG_DO_INTERMEDIADOR, de_tipo: 'operador', para_slug: null, grupo_id: g.id,
+        corpo: texto.slice(0, 3900), responde_a: null, client_id: clientId, task_id: null, idempotency_key: chave });
+      return m.id;
     },
     async ultimoEvento(assuntoId, tipo) {
       const { data, error } = await b.from('intermediador_eventos').select('em').eq('assunto_id', assuntoId).eq('tipo', tipo).order('em', { ascending: false }).limit(1);
@@ -503,7 +555,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
     let notas: Record<string, number>;
     try {
       const q = perguntasDoTexto(tipo, a.o_que_conta, falta);
-      const mensagem = limpo.texto.split(MARCA).join(`@${nome ?? 'pessoa'}`);
+      const mensagem = corrido(limpo.texto).split(MARCA).join(`@${nome ?? 'pessoa'}`);
       const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, pontos: a.o_que_conta } }, q);
       notas = Object.fromEntries(Object.keys(q).map((k) => [k, probabilidadeNoul(r.answers[k]) ?? (k === 'promete' ? 1 : 0)]));
     } catch {
@@ -560,7 +612,7 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     await finalizar(porta, a, 'vencido', null, 'sem resposta no prazo');
     return 'vencido';
   }
-  const nossos = new Set((await porta.envios({ assunto_id: a.id })).filter((e) => e.destino === 'grupo' && e.message_id).map((e) => e.message_id as string));
+  const nossos = new Set((await porta.envios({ assunto_id: a.id })).filter((e) => e.destino === 'grupo').flatMap((e) => [e.message_id, ...(e.message_ids ?? [])]).filter((x): x is string => !!x));
   if (a.pergunta_msg_id) nossos.add(a.pergunta_msg_id);
   const desde = a.lido_ate ?? a.perguntado_em ?? a.criado_em;
   const msgs = await porta.mensagens(a.group_id, desde);
@@ -652,6 +704,128 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
   }
 }
 
+// ─── 2.43: quando alguém marca o assistente ─────────────────────
+
+/** Trata as marcações novas: entende o pedido, anota na base, avisa o time, pergunta ou responde no grupo. */
+export async function cuidarDasMencoes(porta: PortaDoIntermediador): Promise<string[]> {
+  const agora = porta.agora();
+  const feitas: string[] = [];
+  const novas = await porta.mencoesNovas(iso(agora - JANELA_DE_ANOTAR_MS));
+  for (const m of novas) {
+    // Quem marcou pode estar escrevendo o resto: espera 90 s sem mensagem nova dessa pessoa.
+    if (agora - Date.parse(m.occurred_at) < ESPERA_DEPOIS_DA_MARCACAO_MS) { feitas.push('mencao_esperando'); continue; }
+    const papel = String(m.papel ?? '');
+    const daAgencia = papel.startsWith('agencia');
+    if (!daAgencia && !papel.startsWith('cliente')) continue;
+    const reg = await porta.registrarMencao({
+      provider_message_id: m.id, client_id: m.client_id, group_id: m.group_id, grupo_nome: m.rotulo, autor_papel: papel,
+      autor_numero: m.remetente, autor_nome: m.remetente_nome, texto: m.texto, ocorreu_em: m.occurred_at, estado: 'nova',
+    });
+    if (!reg) continue;
+    feitas.push(await tratarMencao(porta, reg, m, daAgencia));
+  }
+  return feitas;
+}
+
+async function tratarMencao(porta: PortaDoIntermediador, reg: Mencao, m: MsgMencao, daAgencia: boolean): Promise<string> {
+  const agora = porta.agora();
+  const quem = daAgencia ? 'Almir (agência)' : `${primeiroNome(m.remetente_nome)} (cliente)`;
+  const antes = await porta.mensagens(m.group_id, iso(Date.parse(m.occurred_at) - 3 * 3_600_000));
+  const ate = Date.parse(m.occurred_at) + ESPERA_DEPOIS_DA_MARCACAO_MS;
+  const conversa = antes.filter((x) => Date.parse(x.occurred_at) <= ate).slice(-20).map((x) => {
+    const q = x.papel === 'bot' ? 'assistente (você)' : String(x.papel ?? '').startsWith('agencia') ? 'Almir (agência)' : `${primeiroNome(x.remetente_nome)} (cliente)`;
+    return `${q}: ${semMarca(conteudoDe(x)).slice(0, 300)}`;
+  });
+  const mensagem = semMarca(conteudoDe(m));
+  let intencao: ReturnType<typeof lerIntencao>;
+  try {
+    intencao = lerIntencao(await porta.jev({ mensagem_que_marcou: { quem, texto: mensagem }, conversa }, perguntasDaMencao(daAgencia)), daAgencia);
+  } catch {
+    await porta.atualizarMencao(reg.id, { estado: 'nova', tentativas: 1, motivo: 'Jev fora do ar' });
+    return 'mencao_jev_falhou';
+  }
+  if (intencao.intencao === 'nada') {
+    await porta.atualizarMencao(reg.id, { estado: 'nada', intencao: 'nada', notas: intencao });
+    return 'mencao_nada';
+  }
+  const podeResponder = agora - Date.parse(m.occurred_at) <= JANELA_DE_RESPOSTA_MS;
+  const ctx = await porta.contextoDoCliente(m.client_id);
+  const pedido = pedidoAoPlanejador({ intencao: intencao.intencao, cliente: ctx.nome, contexto: ctx.dossie, conversa, quem_marcou: quem, mensagem, pode_responder: podeResponder });
+  const plano = lerPlano(await porta.escrever({ clientId: m.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: reg.id }));
+  if (!plano) {
+    await porta.atualizarMencao(reg.id, { estado: 'segurada', intencao: intencao.intencao, notas: intencao, motivo: 'o planejador não devolveu um plano' });
+    await avisarDonoDaMencao(porta, reg, `Me marcaram e não consegui montar o que fazer.\n"${mensagem.slice(0, 400)}"`);
+    return 'mencao_segurada';
+  }
+  const feito: Record<string, unknown> = { intencao: intencao.intencao };
+
+  // Fatos: só o que a conversa diz entra na base.
+  if (plano.fatos.length) {
+    try {
+      const r = await porta.jev({ conversa, mensagem_que_marcou: { quem, texto: mensagem } }, perguntasDosFatos(plano.fatos));
+      const gravados = [];
+      for (const [i, f] of plano.fatos.entries()) {
+        const nota = probabilidadeNoul(r.answers[`fato_${i}`]) ?? 0;
+        if (nota < CORTE_DO_FATO) { gravados.push({ texto: f.texto, nota, gravado: false }); continue; }
+        const g = await porta.registrarNoCerebro({ client_id: m.client_id, area: f.area, categoria: f.categoria, texto: f.texto, evidencia: `Grupo de WhatsApp, ${quem}, ${m.occurred_at.slice(0, 16)}: "${mensagem.slice(0, 200)}"` });
+        gravados.push({ texto: f.texto, nota, gravado: true, acao: g.acao });
+      }
+      feito.fatos = gravados;
+    } catch {
+      feito.fatos = 'Jev fora do ar: nada foi para a base';
+    }
+  }
+  // Recado ao time (alinhar).
+  if (plano.recado_ao_time && (intencao.intencao === 'alinhar' || intencao.humano >= CORTE)) {
+    const recado = `${m.rotulo}: ${plano.recado_ao_time}\n\nO que veio no grupo:\n${conversa.slice(-6).join('\n')}`;
+    feito.recado = await porta.avisarSala('clientes', recado, m.client_id, `intermediador:mencao:${reg.id}:recado`);
+  }
+  // Pergunta ao cliente: abre um assunto no fluxo de sempre.
+  if (plano.pergunta && intencao.intencao === 'perguntar') {
+    const pessoas = await porta.pessoasDoGrupo(m.client_id);
+    const escolhidas = escolherPessoas(pessoas, plano.pergunta.marcar ?? undefined);
+    if (escolhidas.length && !perguntaProibida(plano.pergunta.pergunta)) {
+      const a = await porta.criarAssunto({
+        client_id: m.client_id, group_id: m.group_id, grupo_nome: m.rotulo, tema: plano.pergunta.tema, pergunta: plano.pergunta.pergunta,
+        para_que: plano.pergunta.para_que ?? null, marcar_numero: escolhidas[0].numero, marcar_nome: escolhidas[0].nome,
+        marcar_numeros: escolhidas.map((p) => p.numero), marcar_nomes: escolhidas.map((p) => p.nome ?? ''), o_que_conta: plano.pergunta.o_que_conta,
+        pode_perguntar_de_volta: true, prazo_horas: 24, pedido_por: DONO, responder_para: DONO, idempotency_key: `mencao:${reg.provider_message_id}`,
+      });
+      feito.assunto = a.id;
+    }
+  }
+  // Resposta no grupo.
+  if (plano.resposta && podeResponder) {
+    const humano = intencao.humano >= CORTE && !daAgencia;
+    const limpo = limparTexto(plano.resposta, humano ? 'humano' : 'mencao');
+    let ok = !limpo.problema;
+    if (ok) {
+      try {
+        const q = perguntasDoTexto('mencao', []);
+        const r = await porta.jev({ mensagem: corrido(limpo.texto), contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { mensagem_que_marcou: mensagem } }, q);
+        const notas = Object.fromEntries(Object.keys(q).map((k) => [k, probabilidadeNoul(r.answers[k]) ?? (k === 'promete' ? 1 : 0)]));
+        const problema = problemaDoTexto(notas);
+        feito.texto_conferido = { notas, problema };
+        ok = !problema;
+      } catch {
+        ok = false;
+      }
+    } else feito.texto_conferido = { problema: limpo.problema };
+    if (ok) {
+      await porta.criarEnvio({ assunto_id: null, mencao_id: reg.id, client_id: m.client_id, group_id: m.group_id, grupo_nome: m.rotulo, tipo: 'mencao', destino: 'grupo', texto: limpo.texto, texto_previa: limpo.texto, mencoes: [] });
+      feito.resposta = limpo.texto;
+    }
+    if (humano) await avisarDonoDaMencao(porta, reg, `O cliente me marcou pedindo algo que é seu:\n"${mensagem.slice(0, 500)}"`);
+  }
+  await porta.atualizarMencao(reg.id, { estado: 'feita', intencao: intencao.intencao, notas: intencao, feito });
+  return `mencao_${intencao.intencao}`;
+}
+
+async function avisarDonoDaMencao(porta: PortaDoIntermediador, reg: Mencao, motivo: string) {
+  const texto = `Intermediador · ${reg.grupo_nome}\n${motivo}`.slice(0, 1500);
+  await porta.criarEnvio({ assunto_id: null, mencao_id: reg.id, client_id: reg.client_id, group_id: reg.group_id, grupo_nome: reg.grupo_nome, tipo: 'aviso_dono', destino: 'dono', texto, texto_previa: texto, mencoes: [] });
+}
+
 export async function intermediadorRodada(input: unknown, ctx: AuthContext, porta: PortaDoIntermediador = portaDoBanco()) {
   const p = rodadaSchema.safeParse(input ?? {});
   if (!p.success) throw erroDeEntrada(p.error);
@@ -659,6 +833,9 @@ export async function intermediadorRodada(input: unknown, ctx: AuthContext, port
   const agora = porta.agora();
   const feito: Record<string, number> = {};
   const conta = (k: string) => { feito[k] = (feito[k] ?? 0) + 1; };
+
+  // 0) Quem marcou o assistente no grupo (2.43).
+  for (const k of await cuidarDasMencoes(porta)) conta(k);
 
   // 1) Quem está esperando resposta.
   for (const a of await porta.assuntos({ estados: ['esperando', 'lembrado'] })) conta(await cuidarDoAssunto(porta, a));
@@ -702,6 +879,14 @@ export async function intermediadorRodada(input: unknown, ctx: AuthContext, port
   const porId = new Map<string, Assunto>();
   const envios = [];
   for (const e of pendentes) {
+    if (!e.assunto_id) {
+      if (!e.group_id || !e.grupo_nome || !e.client_id) continue;
+      envios.push({
+        envio_id: e.id, tipo: e.tipo, destino: e.destino, client_id: e.client_id, chat_id: e.destino === 'grupo' ? e.group_id : null,
+        grupo_nome: e.grupo_nome, texto: e.texto, texto_previa: e.texto_previa, mencoes: e.mencoes, criado_em: e.criado_em,
+      });
+      continue;
+    }
     const a = porId.get(e.assunto_id) ?? await porta.assunto(e.assunto_id);
     if (!a) continue;
     porId.set(a.id, a);
@@ -720,6 +905,7 @@ const envioFeitoSchema = z.object({
   envio_id: z.string().regex(UUID),
   resultado: z.enum(['enviado', 'previa', 'incerto']),
   message_id: z.string().min(4).max(128).optional(),
+  message_ids: z.array(z.string().min(4).max(128)).max(3).optional(),
 }).strict();
 
 export async function intermediadorEnvioFeito(input: unknown, ctx: AuthContext, porta: PortaDoIntermediador = portaDoBanco()) {
@@ -729,8 +915,9 @@ export async function intermediadorEnvioFeito(input: unknown, ctx: AuthContext, 
   const d = p.data;
   if (d.resultado === 'enviado' && !d.message_id) throw new ErroDaFerramenta('entrada_invalida', 'Envio feito precisa do message_id da ponte.', null, false);
   const agora = porta.agora();
-  const e = await porta.atualizarEnvio(d.envio_id, { estado: d.resultado, message_id: d.message_id ?? null, feito_em: iso(agora) }, 'pendente');
+  const e = await porta.atualizarEnvio(d.envio_id, { estado: d.resultado, message_id: d.message_id ?? null, feito_em: iso(agora), ...(d.message_ids ? { message_ids: d.message_ids } : {}) }, 'pendente');
   if (!e) return { ok: true, repetido: true, aviso: 'Este envio já tinha sido marcado (ou foi cancelado).' };
+  if (!e.assunto_id) return { ok: true, estado: e.estado };
   const a = await porta.assunto(e.assunto_id);
   if (!a) return { ok: true };
   await porta.evento(a.id, `envio_${d.resultado}`, { tipo: e.tipo, message_id: d.message_id ?? null });
@@ -835,7 +1022,7 @@ export const FERRAMENTAS_DO_INTERMEDIADOR: readonly ToolDefinition[] = [
       type: 'object',
       additionalProperties: false,
       required: ['envio_id', 'resultado'],
-      properties: { operator: OPERATOR, envio_id: { type: 'string', format: 'uuid' }, resultado: { type: 'string', enum: ['enviado', 'previa', 'incerto'] }, message_id: { type: 'string', minLength: 4, maxLength: 128 } },
+      properties: { operator: OPERATOR, envio_id: { type: 'string', format: 'uuid' }, resultado: { type: 'string', enum: ['enviado', 'previa', 'incerto'] }, message_id: { type: 'string', minLength: 4, maxLength: 128 }, message_ids: { type: 'array', maxItems: 3, items: { type: 'string', minLength: 4, maxLength: 128 }, description: 'Ids de cada parte de uma mensagem picada.' } },
     },
     handler: (input, ctx) => intermediadorEnvioFeito(input, ctx),
   },
