@@ -1,4 +1,4 @@
-import { Landmark, PiggyBank, Scale } from "lucide-react";
+import { Landmark, PiggyBank, Scale, Scissors } from "lucide-react";
 
 /*
  * As três leituras da área de Custos fixos. Separadas porque respondem a
@@ -13,6 +13,8 @@ export const ABAS_DOS_CUSTOS = [
   { id: "custos", rotulo: "Custos fixos", icone: Scale },
   { id: "prolabore", rotulo: "Pró-labore", icone: PiggyBank },
   { id: "tributaria", rotulo: "Tributária", icone: Landmark },
+  // 27/11/2026: pausadas e encerradas, quanto liberou e Reassinar.
+  { id: "corte", rotulo: "Corte de custos", icone: Scissors },
 ] as const;
 
 export type AbaDosCustos = (typeof ABAS_DOS_CUSTOS)[number]["id"];
