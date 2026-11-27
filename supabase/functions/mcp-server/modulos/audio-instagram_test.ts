@@ -191,8 +191,8 @@ Deno.test('buscar: com search_query e original_sound; audio_id lê o áudio (GET
   const b = montar({ resposta: { status: 200, corpo: { id: '2002', title: 'Um', display_artist: 'X', duration_in_ms: 1000 } } });
   const um = await buscarAudiosInstagram({ client_id: CLIENTE, audio_id: '2002' }, ctx, b.deps) as Record<string, any>;
   assertEquals(b.urls[0].pathname, '/v26.0/2002');
-  assert(b.urls[0].searchParams.get('fields')!.includes('on_platform_audio_preview_link'));
-  assertEquals(b.urls[0].searchParams.get('user_id'), null);
+  assertEquals(b.urls[0].searchParams.get('fields'), null, '2.42.1: a doc da Meta não usa fields');
+  assertEquals(b.urls[0].searchParams.get('user_id'), IG_USER, '2.42.1: GET /{id} leva user_id');
   assertEquals(um.audios[0].audio_id, '2002');
   await assertRejects(() => buscarAudiosInstagram({ client_id: CLIENTE, audio_id: '1&x=y' }, ctx, b.deps), Error, 'audio_id inválido');
 });
@@ -546,4 +546,36 @@ Deno.test('reagendar (2.42.0): versão velha não grava áudio; schedule recusad
 Deno.test('definições: três ferramentas, nomes e escopos', () => {
   assertEquals(FERRAMENTAS_DE_AUDIO_INSTAGRAM.map((t) => t.name), ['aceleriq_buscar_audios_instagram', 'aceleriq_definir_audio_reel', 'aceleriq_definir_musica_sugerida']);
   assertEquals(FERRAMENTAS_DE_AUDIO_INSTAGRAM.map((t) => t.scopes[0]), ['editorial:read', 'editorial:write', 'editorial:write']);
+});
+
+// 2.42.1: formato da doc oficial da Meta (lista em `audio`, capa em `cover_artwork_thumbnail_uri`).
+Deno.test('buscar: lê a lista no campo `audio` da resposta oficial da Meta', async () => {
+  const { deps } = montar({
+    resposta: {
+      status: 200,
+      corpo: {
+        audio: [
+          { audio_id: '587784541076604', cover_artwork_thumbnail_uri: 'https://scontent/c.jpg', display_artist: 'Shuba', duration_in_ms: 153760, audio_type: 'music', title: 'Birthday Wish', download_url: 'https://scontent/expira' },
+          { audio_id: '587784541076614', display_artist: 'Drake', duration_in_ms: 153760, audio_type: 'music', title: 'Birthday Wish', on_platform_audio_preview_link: 'https://www.instagram.com/x', is_ads_eligible: false },
+        ],
+      },
+    },
+  });
+  const r = await buscarAudiosInstagram({ client_id: CLIENTE }, ctx, deps) as Record<string, any>;
+  assertEquals(r.total, 2);
+  assertEquals(r.audios[0].audio_id, '587784541076604');
+  assertEquals(r.audios[0].capa, 'https://scontent/c.jpg');
+  assertEquals(r.audios[1].preview, 'https://www.instagram.com/x');
+  assert(!JSON.stringify(r).includes('scontent/expira'));
+  semToken(r);
+});
+
+Deno.test('buscar por audio_id: GET /{id} com user_id e sem fields', async () => {
+  const { deps, urls } = montar({ resposta: { status: 200, corpo: { audio_id: '587784541076604', title: 'Birthday Wish', cover_artwork_thumbnail_url: 'https://scontent/c.jpg' } } });
+  const r = await buscarAudiosInstagram({ client_id: CLIENTE, audio_id: '587784541076604' }, ctx, deps) as Record<string, any>;
+  const u = urls[0];
+  assertEquals(u.pathname, '/v26.0/587784541076604');
+  assertEquals(u.searchParams.get('user_id'), IG_USER);
+  assertEquals(u.searchParams.get('fields'), null);
+  assertEquals(r.audios[0].audio_id, '587784541076604');
 });

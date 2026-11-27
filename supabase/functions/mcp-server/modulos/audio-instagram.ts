@@ -165,7 +165,6 @@ async function provaDoSegredo(token: string, ambiente: DependenciasDoAudio['ambi
   return Array.from(assinatura).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const CAMPOS_DO_AUDIO = 'id,title,display_artist,duration_in_ms,cover_artwork_thumbnail_url,on_platform_audio_preview_link,audio_type';
 
 export async function buscarAudiosInstagram(
   input: z.infer<typeof buscarAudiosSchema>,
@@ -189,11 +188,10 @@ export async function buscarAudiosInstagram(
 
   const graph = `https://graph.facebook.com/${versaoDaGraph(deps.ambiente)}`;
   const u = audioId ? new URL(`${graph}/${encodeURIComponent(audioId)}`) : new URL(`${graph}/ig_audio`);
-  if (audioId) {
-    u.searchParams.set('fields', CAMPOS_DO_AUDIO);
-  } else {
+  // Doc da Meta (Audio API): GET /ig_audio?audio_type&user_id[&search_query] e GET /{ig_audio_id}?user_id; sem `fields`.
+  u.searchParams.set('user_id', t.igUserId);
+  if (!audioId) {
     u.searchParams.set('audio_type', audioType);
-    u.searchParams.set('user_id', t.igUserId);
     if (busca) u.searchParams.set('search_query', busca);
   }
   u.searchParams.set('access_token', t.token);
@@ -213,7 +211,9 @@ export async function buscarAudiosInstagram(
     throw new ErroDaFerramenta(e.codigo, e.mensagem, null, e.transitorio);
   }
 
-  const brutos = audioId ? [corpo as AudioDaMeta] : ((Array.isArray(corpo.data) ? corpo.data : []) as AudioDaMeta[]);
+  // A lista vem em `audio` (doc da Meta); `data` fica como reserva.
+  const lista = Array.isArray(corpo.audio) ? corpo.audio : Array.isArray(corpo.data) ? corpo.data : [];
+  const brutos = audioId ? [corpo as AudioDaMeta] : (lista as AudioDaMeta[]);
   const audios = brutos.map((a) => resumirAudio(a, audioType)).filter((a) => !!a.audio_id).slice(0, 50);
   if (!audios.length) {
     avisos.push(busca

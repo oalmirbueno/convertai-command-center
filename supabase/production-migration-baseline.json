@@ -3355,8 +3355,16 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261126163016",
-      "path": "supabase/migrations/20261126163016_alcada_automatica.sql",
+      "version": "20261127142626",
+      "path": "supabase/migrations/20261127142626_vigia_da_ponte_3429.sql",
+      "local_sha256": "031dd234621f1aeb6bd91680ac09b85e1dd37d74caccdd6433b1c114a9e9bd3c",
+      "remote_name": "vigia_da_ponte_3429",
+      "remote_statements_sha256": "0ec17680016b35b525f746a6fe81625a682b90a6b5451062d40c06d9ee158de4",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127152626",
+      "path": "supabase/migrations/20261127152626_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",

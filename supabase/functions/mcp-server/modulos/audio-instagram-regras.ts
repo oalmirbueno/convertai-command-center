@@ -153,6 +153,7 @@ export type AudioDaMeta = {
   display_artist?: unknown;
   duration_in_ms?: unknown;
   cover_artwork_thumbnail_url?: unknown;
+  cover_artwork_thumbnail_uri?: unknown;
   on_platform_audio_preview_link?: unknown;
   audio_type?: unknown;
   ig_username?: unknown;
@@ -174,7 +175,7 @@ export function resumirAudio(a: AudioDaMeta, tipoPedido: string) {
     artista: texto(a.display_artist) ?? texto(a.ig_username),
     duracao_s: Number.isFinite(ms) && ms > 0 ? Math.round(ms / 100) / 10 : null,
     tipo: texto(a.audio_type, 40) ?? tipoPedido,
-    capa: httpsOuNulo(a.cover_artwork_thumbnail_url),
+    capa: httpsOuNulo(a.cover_artwork_thumbnail_url) ?? httpsOuNulo(a.cover_artwork_thumbnail_uri),
     preview: httpsOuNulo(a.on_platform_audio_preview_link),
   };
 }
