@@ -166,7 +166,7 @@ describe("MCP 2.28: registro das três ferramentas", () => {
   const tools = ler("supabase/functions/_shared/mcp-tools.ts");
 
   it("versão, catálogo, escopo granular, fronteira de cliente, ponte e guia", () => {
-    expect(MCP_VERSION).toBe("2.44.0");
+    expect(MCP_VERSION).toBe("2.45.0");
     expect(ler("supabase/functions/_shared/mcp-release.ts")).toContain("// 2.28.0 (14/11/2026):");
     expect(tools).toContain("import { FERRAMENTAS_DE_PRECISA_DE_VOCE_E_REVISAO } from '../mcp-server/modulos/precisa-de-voce-e-revisao.ts';");
     // Dentro do catálogo RAW_TOOLS (releases posteriores entram depois dele, antes do "];").

@@ -14,7 +14,7 @@ import { pareceTerSegredo } from './escritorio-regras.ts';
 
 /** O escritor põe este marcador onde vai a menção; o código troca por @numero (grupo) ou @Nome (prévia). */
 export const MARCA = '@{pessoa}';
-export type TipoDeTexto = 'pergunta' | 'de_volta' | 'lembrete' | 'fechamento' | 'humano' | 'quem_e' | 'mencao';
+export type TipoDeTexto = 'pergunta' | 'de_volta' | 'lembrete' | 'fechamento' | 'humano' | 'quem_e' | 'mencao' | 'resposta';
 // Só abre e lembra marcando; no meio da conversa ninguém é marcado de novo (pedido do Almir, 25/11).
 export const COM_MENCAO: ReadonlySet<TipoDeTexto> = new Set(['pergunta', 'lembrete']);
 
@@ -33,6 +33,8 @@ export interface PedidoDoTexto {
   falta?: string | null;
   /** O que a pessoa já respondeu neste assunto (texto, transcrição, descrição). */
   ja_disse: string[];
+  /** Pontos que a conversa já respondeu (não perguntar de novo). */
+  ja_sabemos?: string[];
   /** As últimas mensagens do grupo, mais antigas primeiro, já com quem falou. */
   conversa_recente: string[];
   /** Dossiê do cliente, recortado. */
@@ -47,6 +49,7 @@ const O_QUE_ESCREVER: Record<TipoDeTexto, string> = {
   lembrete: 'A pessoa ainda não respondeu a pergunta feita. Escreva um lembrete leve e curto, sem cobrar, retomando o assunto em poucas palavras.',
   fechamento: 'A pessoa respondeu tudo. Feche agradecendo, curto, mostrando que entendeu o que ela disse (uma referência rápida, sem repetir a resposta inteira). Não faça pergunta nova e não diga o que o time vai fazer com a resposta (no máximo "anotado" ou "já passei pro time").',
   humano: 'A pessoa pediu algo que só o Almir pode responder (preço, prazo, decisão) ou reclamou. Responda curto, com respeito, dizendo que o Almir vai responder por aqui. Não responda o pedido, não prometa nada e não peça desculpas exageradas.',
+  resposta: 'O cliente perguntou algo a você sobre este assunto. Responda curto, usando só a conversa e o contexto do cliente, e se fizer sentido retome o ponto que ainda falta. Se não der para responder sem inventar, responda exatamente [ALMIR] e nada mais.',
   mencao: 'Alguém marcou você no grupo. Responda à pessoa que marcou, no contexto da conversa, fazendo o que a tarefa abaixo pede.',
   quem_e: 'A pessoa perguntou quem está falando. Diga, curto e simpático, que é o assistente da Aceleriq que ajuda o time a organizar essas confirmações e que o Almir está no grupo também. Não diga que é uma pessoa e não use a palavra robô.',
 };
@@ -63,6 +66,7 @@ export const SISTEMA_DO_INTERMEDIADOR = [
   '5. Curta: de 1 a 3 frases. Nada de lista, título, negrito ou assinatura. No máximo um emoji, e só se couber.',
   '5b. Escreva como gente escreve no WhatsApp: se ficar mais natural, quebre em 2 ou 3 mensagens curtas, separadas por uma linha só com ///, por exemplo o comentário numa e a pergunta na outra. Nunca mais de 3, e não quebre uma frase no meio.',
   '6. Nunca explique como responder (texto, áudio, "por aqui mesmo"): é óbvio.',
+  '6b. Antes de perguntar, leia as mensagens recentes, inclusive as imagens descritas: nunca pergunte o que alguém já disse ou mostrou. Pergunte só o que falta, como quem prestou atenção na conversa.',
   '7. Nunca prometa preço, valor, prazo de entrega, desconto ou resultado, nem diga o que o time vai fazer depois (ajustar, mudar, investir). Nunca fale de cobrança, verba, pagamento ou contrato.',
   '8. Nunca cite ferramenta, sistema, agente, IA, painel ou nome de pessoa da equipe além do Almir.',
   '9. Sem travessão. Responda só com o texto da mensagem, sem aspas e sem explicação.',
@@ -80,6 +84,7 @@ export function pedidoAoEscritor(p: PedidoDoTexto): { sistema: string; usuario: 
     `Pontos que a resposta precisa trazer: ${p.o_que_conta.join('; ')}`,
     p.ja_disse.length ? `O que a pessoa já disse sobre isso:\n${p.ja_disse.map((t) => `- ${t}`).join('\n')}` : '',
     p.falta ? `Ponto que faltou: ${p.falta}` : '',
+    p.ja_sabemos?.length ? `Já está respondido na conversa (NÃO pergunte de novo; se ajudar, mostre que viu, ex.: "vi na arte que é R$ 69,90"): ${p.ja_sabemos.join('; ')}` : '',
     `Tarefa: ${O_QUE_ESCREVER[p.tipo]}`,
     p.corrigir ? `A versão anterior foi recusada por isto, corrija: ${p.corrigir}` : '',
   ].filter(Boolean);
