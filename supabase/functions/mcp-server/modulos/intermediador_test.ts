@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertRejects } from 'https://deno.land/std@0.224.0/assert/mod.ts';
+import { PARTE } from './intermediador-escrita.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import type { ResultadoJev } from '../../_shared/jev.ts';
 import {
@@ -11,7 +12,9 @@ import {
   intermediadorPedir,
   intermediadorRodada,
   conversaDoAssunto,
+  type Mencao,
   type MsgGrupo,
+  type MsgMencao,
   type PortaDoIntermediador,
 } from './intermediador.ts';
 
@@ -35,6 +38,13 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
   const envios: Envio[] = [];
   const eventos: { assunto_id: string | null; tipo: string; dados: Record<string, unknown>; em: string }[] = [];
   const escritas: string[] = [];
+  const mencoesNaFila: MsgMencao[] = [];
+  const mencoes: (Mencao & Record<string, unknown>)[] = [];
+  const cerebro: Record<string, unknown>[] = [];
+  const salas: { sala: string; texto: string }[] = [];
+  const jevMencao: unknown[] = [];
+  let intencaoDaVez: { intencao: string; humano?: number } = { intencao: 'nada' };
+  let notaDosFatos = 0.9;
   const textosConferidos: unknown[] = [];
   let escritor: (usuario: string) => string | null = (u) => (u.includes('Tarefa: Escreva a mensagem que abre') ? 'Oi @{pessoa}, tudo certo? Vocês vão atender dia 24? E até que horas?'
     : u.includes('Feche agradecendo') ? 'Perfeito, valeu! Anotado aqui.' : u.includes('pergunte só o ponto que faltou') ? '@{pessoa} show, e até que horas fica?'
@@ -85,15 +95,34 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     },
     ultimoEnvioNoGrupo: async (g) => {
       const ids = new Set(assuntos.filter((a) => a.group_id === g).map((a) => a.id));
-      const l = envios.filter((e) => ids.has(e.assunto_id) && e.destino === 'grupo' && e.estado !== 'cancelado' && e.estado !== 'previa').map((e) => e.criado_em).sort();
+      const l = envios.filter((e) => ids.has(e.assunto_id ?? "") && e.destino === 'grupo' && e.estado !== 'cancelado' && e.estado !== 'previa').map((e) => e.criado_em).sort();
       return l.length ? l[l.length - 1] : null;
     },
     evento: async (a, tipo, dados = {}) => { eventos.push({ assunto_id: a, tipo, dados, em: new Date(agora).toISOString() }); },
     devolver: async (a, texto) => { devolvidas.push({ para: a.responder_para, texto, estado: a.estado }); return id(); },
+    mencoesNovas: async () => mencoesNaFila.filter((x) => !mencoes.some((y) => y.provider_message_id === x.id)),
+    registrarMencao: async (r) => {
+      if (mencoes.some((y) => y.provider_message_id === r.provider_message_id)) return null;
+      const n = { ...r, id: id() } as Mencao & Record<string, unknown>;
+      mencoes.push(n);
+      return structuredClone(n);
+    },
+    atualizarMencao: async (i, patch) => { Object.assign(mencoes.find((x) => x.id === i)!, patch); },
+    registrarNoCerebro: async (f) => { cerebro.push(f); return { id: id(), acao: 'gravado' }; },
+    avisarSala: async (sala, texto) => { salas.push({ sala, texto }); return id(); },
     contextoDoCliente: async () => ({ nome: 'Verzelo Jardins', dossie: 'Verzelo presta serviço de jardinagem e poda em Curitiba.' }),
     escrever: async (p) => { escritas.push(p.usuario); return escritor(p.usuario); },
     ultimoEvento: async (a, tipo) => eventos.filter((e) => e.assunto_id === a && e.tipo === tipo).map((e) => e.em).sort().pop() ?? null,
     jev: async (state, questions) => {
+      if ('intencao' in questions) {
+        jevMencao.push(state);
+        return { answers: { intencao: { choice: intencaoDaVez.intencao, confidence: 0.9 }, humano: { noul: intencaoDaVez.humano ?? 0.05 } }, usage: null, modelo: 'jev-teste' };
+      }
+      if ('fato_0' in questions) {
+        const answers: ResultadoJev['answers'] = {};
+        for (const k of Object.keys(questions)) answers[k] = { noul: notaDosFatos };
+        return { answers, usage: null, modelo: 'jev-teste' };
+      }
       if ('promete' in questions) {
         textosConferidos.push(state);
         const n = conferencia(questions);
@@ -109,7 +138,15 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     },
   };
   return {
-    porta, assuntos, envios, eventos, devolvidas, mensagens, jevChamadas, escritas, textosConferidos,
+    porta, assuntos, envios, eventos, devolvidas, mensagens, jevChamadas, escritas, textosConferidos, mencoes, cerebro, salas, jevMencao, mencoesNaFila,
+    setIntencao: (x: { intencao: string; humano?: number }) => { intencaoDaVez = x; },
+    setNotaDosFatos: (x: number) => { notaDosFatos = x; },
+    marcar: (texto: string, extra: Partial<MsgMencao> = {}) => {
+      const em = new Date(agora - 120_000).toISOString();
+      const msg = { id: `MEN${mencoesNaFila.length + 1}`, client_id: CLIENTE, group_id: GRUPO, rotulo: 'Verzelo - MKT - Aceleriq', remetente: '554198848435', remetente_nome: 'Almir B. Bueno', papel: 'agencia', tipo: 'texto', texto, transcricao: null, transcricao_status: 'nao_aplicavel', descricao_midia: null, resposta_a: null, occurred_at: em, received_at: new Date(agora).toISOString(), ...extra };
+      mencoesNaFila.push(msg);
+      mensagens.push(msg);
+    },
     setEscritor: (f: (usuario: string) => string | null) => { escritor = f; },
     setConferencia: (f: (q: Record<string, unknown>) => Record<string, number>) => { conferencia = f; },
     avancar: (min: number) => { agora += min * 60_000; },
@@ -428,4 +465,110 @@ Deno.test('espera o cliente terminar de escrever antes de responder (90 s sem me
   r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
   assertEquals(m.jevChamadas.length, 1);
   assertEquals(m.assuntos[0].estado, 'respondido');
+});
+
+// ─── 2.43: marcação do assistente ───────────────────────────────
+
+const PLANO = (p: Record<string, unknown>) => JSON.stringify({ fatos: [], resposta: null, recado_ao_time: null, pergunta: null, ...p });
+
+Deno.test('marcação "já atualiza na base": anota no cérebro e responde curto no grupo, sem marcar ninguém (caso Casa dos Assados)', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'anotar' });
+  m.setEscritor(() => PLANO({ fatos: [{ texto: 'Telefone e WhatsApp da Casa: (48) 99166-8819', area: 'geral', categoria: 'aprendizado' }], resposta: 'Anotado! ✅' }));
+  m.marcar('48991668819\n\n@251990663757916 esse é o número ok já atualiza na base');
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.feito.mencao_anotar, 1);
+  assertEquals(m.cerebro.length, 1);
+  assertEquals((m.cerebro[0] as { texto: string }).texto, 'Telefone e WhatsApp da Casa: (48) 99166-8819');
+  const env = r.envios.find((e) => e.tipo === 'mencao')!;
+  assertEquals(env.texto, 'Anotado! ✅');
+  assertEquals(env.chat_id, GRUPO);
+  assertEquals(env.mencoes, []);
+  assertEquals(m.mencoes[0].estado, 'feita');
+  // O assistente aparece para o Jev como @assistente, nunca pelo número.
+  assert(JSON.stringify(m.jevMencao[0]).includes('@assistente') && !JSON.stringify(m.jevMencao[0]).includes('251990663757916'));
+  // Não trata duas vezes.
+  assertEquals((await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta)).feito.mencao_anotar, undefined);
+});
+
+Deno.test('marcação "já alinhe isso": registra o pedido, avisa o time na sala Clientes e confirma ao cliente', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'alinhar' });
+  m.setEscritor(() => PLANO({
+    fatos: [{ texto: 'Na Black, pôr os valores no post, igual à promo anterior', area: 'arte', categoria: 'preferencia' }],
+    recado_ao_time: 'Pôr os valores no post da Black e usar imagens nítidas.',
+    resposta: 'Combinado!\n///\nJá passei pro time ajustar o post da Black com os valores.',
+  }));
+  m.cliente(OUTRA, 'No black gostaria que colocassem os valores');
+  m.marcar('Ótimo deixa com a gente \n@251990663757916 já alinhe isso');
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.feito.mencao_alinhar, 1);
+  assertEquals(m.cerebro.length, 1);
+  assertEquals(m.salas[0].sala, 'clientes');
+  assert(m.salas[0].texto.includes('No black gostaria'));
+  assertEquals(r.envios.find((e) => e.tipo === 'mencao')!.texto.split(PARTE), ['Combinado!', 'Já passei pro time ajustar o post da Black com os valores.']);
+});
+
+Deno.test('marcação antiga (mais de 2 h): anota, mas não responde no grupo', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'anotar' });
+  m.setEscritor(() => PLANO({ fatos: [{ texto: 'Telefone: (48) 99166-8819', area: 'geral', categoria: 'aprendizado' }], resposta: 'Anotado!' }));
+  m.marcar('esse é o número @251990663757916 atualiza', { occurred_at: new Date(QUARTA_10H - 5 * 3_600_000).toISOString() });
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.cerebro.length, 1);
+  assertEquals(r.envios.filter((e) => e.tipo === 'mencao').length, 0);
+  assert(m.escritas[0].includes('marcação é antiga'));
+});
+
+Deno.test('marcação de 10 s atrás: espera quem marcou terminar de escrever', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'anotar' });
+  m.marcar('@251990663757916 anota', { occurred_at: new Date(QUARTA_10H - 10_000).toISOString() });
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.feito.mencao_esperando, 1);
+  assertEquals(m.mencoes.length, 0);
+});
+
+Deno.test('planejador sem plano: não faz nada no grupo e avisa o Almir', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'responder' });
+  m.setEscritor(() => 'não sei');
+  m.marcar('@251990663757916 responde ela');
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.mencoes[0].estado, 'segurada');
+  assertEquals(r.envios.map((e) => `${e.tipo}:${e.destino}`), ['aviso_dono:dono']);
+});
+
+Deno.test('fato que a conversa não diz não entra na base', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'anotar' });
+  m.setNotaDosFatos(0.3);
+  m.setEscritor(() => PLANO({ fatos: [{ texto: 'O cliente prefere fundo preto', area: 'arte', categoria: 'preferencia' }], resposta: 'Anotado!' }));
+  m.marcar('@251990663757916 anota aí');
+  await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.cerebro.length, 0);
+  assertEquals((m.mencoes[0].feito as { fatos: { gravado: boolean }[] }).fatos[0].gravado, false);
+});
+
+Deno.test('cliente marca pedindo preço: responde que o Almir responde e avisa o Almir', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'responder', humano: 0.9 });
+  m.setEscritor(() => PLANO({ resposta: 'Boa! O Almir já te responde por aqui.' }));
+  m.marcar('@251990663757916 quanto fica pra fazer mais 4 posts?', { papel: 'cliente_equipe', remetente: OUTRA, remetente_nome: 'Rui' });
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.map((e) => `${e.tipo}:${e.destino}`).sort(), ['aviso_dono:dono', 'mencao:grupo']);
+});
+
+Deno.test('Almir manda perguntar: abre um assunto normal, que responde ao dono', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'perguntar' });
+  m.setEscritor((u) => u.includes('Responda SÓ com um JSON') || u.includes('O que fazer:')
+    ? PLANO({ pergunta: { tema: 'horário do sábado', pergunta: 'Vocês abrem sábado?', para_que: 'para o post', o_que_conta: ['abre sábado'], marcar: 'Carla' } })
+    : 'Oi @{pessoa}, tudo certo? Vocês abrem sábado?');
+  m.marcar('@251990663757916 pergunta pra Carla se eles abrem sábado');
+  await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  const a = m.assuntos.find((x) => x.idempotency_key.startsWith('mencao:'))!;
+  assert(a, 'abriu assunto');
+  assertEquals(a.pedido_por, 'dono');
+  assertEquals(a.marcar_numeros, [MARCADA]);
 });
