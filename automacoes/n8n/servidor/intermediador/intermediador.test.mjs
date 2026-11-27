@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { destinoConfere, diarioEmMapa, lerGrupos, mencoesConferem, modoDoEnvio, planoDoEnvio, textoDaPrevia, ultimoPorGrupo, TENTATIVAS_RECUSADAS } from './intermediador.mjs';
+import { destinoConfere, diarioEmMapa, lerGrupos, mencoesConferem, modoDoEnvio, partesDoEnvio, pausaAntes, PARTE, planoDoEnvio, textoDaPrevia, ultimoPorGrupo, TENTATIVAS_RECUSADAS } from './intermediador.mjs';
 
 const GRUPO = '120363000000000001@g.us';
 const grupos = lerGrupos({ schemaVersion: 1, groups: [{ chat_id: GRUPO, group_name: 'Verzelo - MKT - Aceleriq', client_id: 'c1' }] });
@@ -61,4 +61,17 @@ test('piloto: com o modo geral em prévia, só o cliente liberado sai no grupo',
   const outro = lerGrupos({ groups: [{ chat_id: GRUPO, group_name: 'Verzelo - MKT - Aceleriq', client_id: 'c1' }, { chat_id: '120363000000000002@g.us', group_name: 'Stop', client_id: 'c2' }] });
   const daStop = { ...pergunta, client_id: 'c2', chat_id: '120363000000000002@g.us', grupo_nome: 'Stop' };
   assert.deepEqual(planoDoEnvio(daStop, { ...base, grupos: outro, modo: 'previa', clientesReais: piloto }), { acao: 'previa' });
+});
+
+test('mensagem picada: cada parte vira uma mensagem, a menção vai só na parte que tem o @numero', () => {
+  const env = { ...pergunta, texto: 'Oi @554799990000, tudo certo?' + PARTE + 'Vocês atendem dia 24?', texto_previa: 'Oi @Carla, tudo certo?' + PARTE + 'Vocês atendem dia 24?' };
+  assert.deepEqual(partesDoEnvio(env), [
+    { message: 'Oi @554799990000, tudo certo?', mentions: ['554799990000@s.whatsapp.net'] },
+    { message: 'Vocês atendem dia 24?' },
+  ]);
+  assert.equal(mencoesConferem(env), true);
+  assert.ok(textoDaPrevia(env).endsWith('Oi @Carla, tudo certo?\n\nVocês atendem dia 24?'));
+  assert.equal(partesDoEnvio({ texto: 'a' + PARTE + 'b' + PARTE + 'c' + PARTE + 'd', mencoes: [] }).length, 3);
+  assert.equal(pausaAntes('ok'), 2000);
+  assert.equal(pausaAntes('x'.repeat(400)), 7000);
 });

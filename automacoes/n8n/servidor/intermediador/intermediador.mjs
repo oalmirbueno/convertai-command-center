@@ -48,8 +48,22 @@ export function mencoesConferem(envio) {
   if (envio.destino !== 'grupo') return m.length === 0;
   return m.length <= 6 && m.every((j) => { const n = /^(\d{10,16})@s\.whatsapp\.net$/.exec(j); return !!n && String(envio.texto).includes('@' + n[1]); });
 }
+// Mensagem picada (27/11/2026, pedido do Almir): o painel separa as partes com esta linha; cada parte sai como uma
+// mensagem, com uma pausa do tamanho de quem digita. A menção vai só na parte que tem o @numero escrito.
+export const PARTE = '\n///\n';
+export function partesDoEnvio(envio) {
+  return String(envio.texto || '').split(PARTE).map((t) => t.trim()).filter(Boolean).slice(0, 3).map((message) => {
+    const mentions = (envio.mencoes || []).filter((j) => message.includes('@' + j.split('@')[0]));
+    return mentions.length ? { message, mentions } : { message };
+  });
+}
+/** Pausa antes da próxima parte: 2 a 7 s, mais longa para parte maior. */
+export function pausaAntes(parte) {
+  return Math.max(2000, Math.min(7000, 1500 + String(parte || '').length * 45));
+}
 export function textoDaPrevia(envio) {
-  return envio.destino === 'dono' ? envio.texto : '[Prévia → "' + envio.grupo_nome + '" · ' + envio.tipo + ']\n\n' + envio.texto_previa;
+  const corpo = (envio.destino === 'dono' ? envio.texto : envio.texto_previa).split(PARTE).join('\n\n');
+  return envio.destino === 'dono' ? corpo : '[Prévia → "' + envio.grupo_nome + '" · ' + envio.tipo + ']\n\n' + corpo;
 }
 /** Último envio automático por nome de grupo nos outros diários. */
 export function ultimoPorGrupo(linhas) {
@@ -128,8 +142,9 @@ async function ponte(token, corpo) {
 // Recusa antes de enviar (trava, nome do grupo, desconectado): nada saiu. Erro 500 ou tempo esgotado: incerto.
 const nadaSaiu = (e) => [400, 401, 403, 503].includes(e && e.status);
 
-async function confirmar(chave, envio_id, resultado, message_id) {
-  return mcp(chave, 'aceleriq_intermediador_envio_feito', Object.assign({ operator: OPERADOR, envio_id, resultado }, message_id ? { message_id } : {}));
+async function confirmar(chave, envio_id, resultado, message_id, message_ids) {
+  return mcp(chave, 'aceleriq_intermediador_envio_feito', Object.assign({ operator: OPERADOR, envio_id, resultado }, message_id ? { message_id } : {},
+    message_ids && message_ids.length > 1 ? { message_ids } : {}));
 }
 
 async function main() {
@@ -153,14 +168,26 @@ async function main() {
       log({ evento: 'incerto_nao_repetido', id, tipo: envio.tipo, motivo: plano.motivo });
       continue;
     }
-    const corpo = plano.acao === 'grupo'
-      ? Object.assign({ chatId: envio.chat_id, message: envio.texto }, envio.mencoes.length ? { mentions: envio.mencoes } : {})
-      : { chatId: DONO, message: textoDaPrevia(envio) };
-    anotar({ fase: 'intencao', id, grupo: envio.grupo_nome, tipo: envio.tipo, para: plano.acao });
+    const corpos = plano.acao === 'grupo'
+      ? partesDoEnvio(envio).map((x) => Object.assign({ chatId: envio.chat_id }, x))
+      : [{ chatId: DONO, message: textoDaPrevia(envio) }];
+    anotar({ fase: 'intencao', id, grupo: envio.grupo_nome, tipo: envio.tipo, para: plano.acao, partes: corpos.length });
     let r;
+    const ids = [];
     try {
-      r = await ponte(token, corpo);
+      for (const [i, corpo] of corpos.entries()) {
+        if (i > 0) await dormir(pausaAntes(corpo.message));
+        r = await ponte(token, corpo);
+        if (r.messageId) ids.push(r.messageId);
+      }
     } catch (e) {
+      if (ids.length) {
+        // Parte já saiu: confirma o que saiu e nunca repete o resto sozinho.
+        anotar({ fase: 'envio', id, grupo: envio.grupo_nome, tipo: envio.tipo, para: plano.acao, message_id: ids[ids.length - 1], partes_enviadas: ids.length, enviado_em: new Date().toISOString() });
+        await confirmar(chave, id, 'enviado', ids[ids.length - 1], ids).catch(() => {});
+        log({ evento: 'enviado_em_parte', id, tipo: envio.tipo, partes: ids.length + '/' + corpos.length, erro: String(e.message).slice(0, 160) });
+        continue;
+      }
       if (nadaSaiu(e)) {
         anotar({ fase: 'intencao', id, grupo: envio.grupo_nome, desfeita: true });
         anotar({ fase: 'recusa', id, grupo: envio.grupo_nome, erro: String(e.message).slice(0, 160) });
@@ -171,10 +198,11 @@ async function main() {
       }
       continue;
     }
-    anotar({ fase: 'envio', id, grupo: envio.grupo_nome, tipo: envio.tipo, para: plano.acao, message_id: r.messageId || null, enviado_em: new Date().toISOString() });
+    const ultimo = ids[ids.length - 1] || null;
+    anotar({ fase: 'envio', id, grupo: envio.grupo_nome, tipo: envio.tipo, para: plano.acao, message_id: ultimo, partes: ids.length, enviado_em: new Date().toISOString() });
     // Prévia de texto ao grupo vira "previa" no painel; aviso ao dono e envio real viram "enviado".
     const resultado = plano.acao === 'previa' ? 'previa' : 'enviado';
-    await confirmar(chave, id, resultado, plano.acao === 'previa' ? undefined : r.messageId);
+    await confirmar(chave, id, resultado, plano.acao === 'previa' ? undefined : ultimo, plano.acao === 'previa' ? undefined : ids);
     feitos++;
     log({ evento: resultado === 'previa' ? 'previa_ao_dono' : plano.acao === 'dono' ? 'aviso_ao_dono' : 'enviado_no_grupo', id, tipo: envio.tipo });
     await dormir(3000);
