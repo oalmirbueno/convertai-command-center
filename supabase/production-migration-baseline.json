@@ -3353,6 +3353,14 @@
       "remote_name": "instagram_audio_e_musica_sugerida",
       "remote_statements_sha256": "0e6a083d786e8f80046d12e7843a1c991f359564ae649512f47bd0dac8c23fa9",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127120000",
+      "path": "supabase/migrations/20261127120000_agenda_respeita_aprovacao_dispensada.sql",
+      "local_sha256": "eb0e53a4ed2ff16946fce72007174da3b4388cb8f69ab1f8fbb2ab3d979670c8",
+      "remote_name": "agenda_respeita_aprovacao_dispensada",
+      "remote_statements_sha256": "fb4080dd6601992bd71750694473fe6905e5a7b7eea79f55ca7460b29e121a4d",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

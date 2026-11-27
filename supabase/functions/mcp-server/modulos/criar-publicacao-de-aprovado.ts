@@ -19,6 +19,13 @@
  * cancelado). Por isso, se o post já tem qualquer publicação viva, a RPC não
  * é chamada: devolve a existente (ja_existia=true). Só cancelada: recusa
  * (reabrir é ação humana na Agenda, igual ao reagendar).
+ *
+ * MCP 2.42.2 (27/11/2026): cliente com profiles.modo_aprovacao_do_cliente
+ * exatamente 'dispensada' e arquivo principal aprovado pela agência (interno
+ * ou liberado, sem decisão nem trava) também passa; post pronto sem selo deixa
+ * o save canônico gravar o primeiro selo. Não grava aprovação nem
+ * decisão do cliente; o banco (migration 20261127120000) confere a mesma regra
+ * no save, no agendamento e no envio e registra a dispensa em cada publicação.
  */
 
 import { z } from 'https://esm.sh/zod@3.23.8';
@@ -75,6 +82,41 @@ export function aprovadoPeloCliente(f: ArquivoDaAprovacao | null): boolean {
   if (!f || f.parent_file_id || f.archived_at) return false;
   if ((f.status || 'ready') !== 'ready' || f.agency_approval_status !== 'approved' || !f.locked_at) return false;
   return f.approval_status === 'approved' && !!f.client_decided_at;
+}
+
+/** MCP 2.42.2: campos a mais lidos só para conferir a dispensa (o caminho do portal não os usa). */
+export interface ArquivoDaDispensa extends ArquivoDaAprovacao {
+  client_id?: string | null;
+  project_id?: string | null;
+  requires_approval?: boolean | null;
+  client_decided_by?: string | null;
+}
+
+/** A regra EXATA do cadastro. Qualquer outro valor, ausente ou ilegível, é o portal. */
+export const MODO_DISPENSADA = 'dispensada' as const;
+
+/**
+ * MCP 2.42.2 (27/11/2026): espelho de editorial_file_client_approval_waived
+ * (migration 20261127120000). Cliente com modo_aprovacao_do_cliente =
+ * 'dispensada' e a raiz do próprio cliente/projeto aprovada pela agência, sem
+ * decisão do cliente e sem trava, em um de dois estados: interno
+ * (internal/none/requires_approval false, o normal da agência) ou liberado
+ * (approval/pending/requires_approval true). Não aprova nem decide nada: o
+ * banco confere de novo no save, no agendamento e no envio, com o cadastro ao vivo.
+ */
+export function aprovacaoDispensada(
+  f: ArquivoDaDispensa | null,
+  modo: unknown,
+  post: { client_id: string; project_id: string },
+): boolean {
+  if (modo !== MODO_DISPENSADA) return false;
+  if (!f || f.parent_file_id || f.archived_at) return false;
+  if (f.client_id !== post.client_id || f.project_id !== post.project_id) return false;
+  if ((f.status || 'ready') !== 'ready' || f.agency_approval_status !== 'approved') return false;
+  if (f.client_decided_at || f.client_decided_by || f.locked_at) return false;
+  const interno = f.visibility === 'internal' && f.approval_status === 'none' && f.requires_approval === false;
+  const liberado = f.visibility === 'approval' && f.approval_status === 'pending' && f.requires_approval === true;
+  return interno || liberado;
 }
 
 export interface ContaExterna {
@@ -232,21 +274,63 @@ export async function criarPublicacaoDeAprovado(
       .eq('post_id', post.id),
     post.primary_file_id
       ? banco.from('files')
-        .select('id, parent_file_id, archived_at, status, agency_approval_status, locked_at, visibility, approval_status, client_decided_at')
+        .select('id, client_id, project_id, parent_file_id, archived_at, status, agency_approval_status, locked_at, visibility, approval_status, requires_approval, client_decided_at, client_decided_by')
         .eq('id', post.primary_file_id)
         .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
   const interno = lido<(PostExistente['internal'] & { approval_fingerprint: string | null }) | null>(internoRes, 'o estado interno do post');
   const pubs = lido<PublicacaoLida[] | null>(pubsRes, 'as publicações do post') ?? [];
-  const arquivo = lido<ArquivoDaAprovacao | null>(arquivoRes, 'o arquivo principal do post');
+  const arquivo = lido<ArquivoDaDispensa | null>(arquivoRes, 'o arquivo principal do post');
 
   // Aprovação real: a mesma do painel. O banco ainda confere o fingerprint
   // contra editorial_compute_approval_fingerprint (a função não abre para a
   // chave de serviço); se não bater, a recusa volta traduzida.
-  if (post.production_status !== 'ready' || !aprovadoPeloCliente(arquivo) || !interno?.approval_fingerprint) {
+  // MCP 2.42.2: sem decisão do cliente, só a regra exata do cadastro
+  // (modo_aprovacao_do_cliente = 'dispensada') abre a exceção. O cadastro só é
+  // lido quando o arquivo não tem a aprovação do cliente: o portal segue igual.
+  let dispensada = false;
+  if (!aprovadoPeloCliente(arquivo) && arquivo) {
+    const perfil = lido<{ modo_aprovacao_do_cliente?: unknown } | null>(
+      await banco.from('profiles').select('id, modo_aprovacao_do_cliente').eq('id', post.client_id).maybeSingle(),
+      'a regra de aprovação do cliente',
+    );
+    dispensada = aprovacaoDispensada(arquivo, perfil?.modo_aprovacao_do_cliente, post);
+  }
+  // Selo ausente: só a dispensa exata deixa o save canônico gravar o PRIMEIRO
+  // selo (o banco confere de novo; selo presente e divergente segue recusado).
+  if (
+    post.production_status !== 'ready'
+    || !(aprovadoPeloCliente(arquivo) || dispensada)
+    || (!interno?.approval_fingerprint && !dispensada)
+    || (!interno && dispensada)
+  ) {
     throw new Error('Post sem aprovação do cliente: o arquivo principal precisa estar aprovado pelo cliente e o post pronto na Agenda. Esta ferramenta não aprova.');
   }
+  const regraDaDispensa = {
+    modo: MODO_DISPENSADA,
+    origem: 'profiles.modo_aprovacao_do_cliente',
+    decisao_do_cliente: 'nenhuma: nada foi aprovado nem decidido em nome do cliente',
+    arquivo: `a regra vale para o arquivo anexado ao post (${arquivo?.id ?? 'sem id'}), lido agora`,
+  };
+  // Criada agora: o gatilho do banco grava o evento na mesma transação do save.
+  const aprovacaoDoCliente = dispensada
+    ? {
+      aprovacao_do_cliente: {
+        ...regraDaDispensa,
+        registro: 'o banco grava editorial_events client_approval_waived na publicação ao criar, agendar e publicar',
+      },
+    }
+    : {};
+  // Publicação existente: nenhum evento foi lido aqui; não afirma que existe.
+  const aprovacaoDaExistente = dispensada
+    ? {
+      aprovacao_do_cliente: {
+        ...regraDaDispensa,
+        registro: 'não conferido: esta leitura não consulta o histórico de eventos da publicação existente',
+      },
+    }
+    : {};
 
   const vivas = pubs.filter((p) => p.status !== 'cancelled');
   if (vivas.length) {
@@ -264,6 +348,7 @@ export async function criarPublicacaoDeAprovado(
     return {
       ok: true,
       ja_existia: true,
+      ...aprovacaoDaExistente,
       ...(audioDaExistente ? { audio: audioDaExistente } : {}),
       publicacao: paraResposta(principal),
       ...(vivas.length > 1 ? { publicacoes: vivas.map(paraResposta) } : {}),
@@ -350,6 +435,7 @@ export async function criarPublicacaoDeAprovado(
         publicacao: paraResposta(criada),
         post_id: post.id,
         client_id: post.client_id,
+        ...aprovacaoDoCliente,
         ...(audio ? { audio: await gravarAudioDaPublicacao(criada.id, audio, ctx, rpcAudio) } : {}),
         proximo_passo: proximoPasso(criada),
       },
@@ -361,7 +447,7 @@ const tool: ToolDefinition = {
   name: NOME,
   title: 'Criar publicação de post aprovado',
   description:
-    'Cria a publicação planejada, sem data, de um post da Agenda já aprovado pelo cliente que ainda não tem publicação (o caso de peça aprovada sem publication_id), na conta pedida (external_account_id: Instagram ou Facebook ativo, do cliente e ligado ao projeto do post). Usa o mesmo caminho do painel (save_editorial_post como a pessoa conectada). Não aprova, não agenda e não publica. Se o post já tem publicação viva, não cria nada e devolve a existente (ja_existia true); só cancelada recusa (reabrir é ação humana na Agenda). Devolve publicacao {id, version, status, external_account_id, platform} e proximo_passo: agendar com aceleriq_reagendar_publicacao (publication_id e expected_version=version). audio_configuration opcional (2.39.3): só Reel do Instagram, grava o áudio da Meta na publicação (aceleriq_definir_audio_reel). Exige confirmar=true, idempotency_key, editorial:write e o cliente no escopo.',
+    'Cria a publicação planejada, sem data, de um post da Agenda já aprovado pelo cliente que ainda não tem publicação (o caso de peça aprovada sem publication_id), na conta pedida. Exceção (2.42.2): cliente com modo_aprovacao_do_cliente exatamente "dispensada" no cadastro e arquivo principal aprovado pela agência (interno ou já liberado), sem decisão do cliente e sem trava; sem pedir o cliente; o banco registra a dispensa na publicação criada (aprovacao_do_cliente na resposta vale para o arquivo anexado) e nunca grava aprovação do cliente. Portal ou regra desconhecida: só com a aprovação do cliente; só compartilhado, ajuste pedido, arquivado ou sem aprovação interna recusam. Conta (external_account_id: Instagram ou Facebook ativo, do cliente e ligado ao projeto do post). Usa o mesmo caminho do painel (save_editorial_post como a pessoa conectada). Não aprova, não agenda e não publica. Se o post já tem publicação viva, não cria nada e devolve a existente (ja_existia true); só cancelada recusa (reabrir é ação humana na Agenda). Devolve publicacao {id, version, status, external_account_id, platform} e proximo_passo: agendar com aceleriq_reagendar_publicacao (publication_id e expected_version=version). audio_configuration opcional (2.39.3): só Reel do Instagram, grava o áudio da Meta na publicação (aceleriq_definir_audio_reel). Exige confirmar=true, idempotency_key, editorial:write e o cliente no escopo.',
   scopes: ['editorial:write'],
   annotations: ESCRITA,
   inputSchema: {

@@ -2451,6 +2451,14 @@
       "local_sha256": "e1c4f5934cd96f0e79de9df0ced57b01aa902db29d41acb32a05910864297931",
       "statements_sha256": "2db795200c1688df50937b238d97ceb57ffe92432e452705f518135fc3c7af1e",
       "hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127120000",
+      "name": "agenda_respeita_aprovacao_dispensada",
+      "path": "supabase/migrations/20261127120000_agenda_respeita_aprovacao_dispensada.sql",
+      "local_sha256": "eb0e53a4ed2ff16946fce72007174da3b4388cb8f69ab1f8fbb2ab3d979670c8",
+      "statements_sha256": "fb4080dd6601992bd71750694473fe6905e5a7b7eea79f55ca7460b29e121a4d",
+      "hash_mode": "supabase_cli_split"
     }
   ]
 }

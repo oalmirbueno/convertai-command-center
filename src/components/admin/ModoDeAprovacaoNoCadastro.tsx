@@ -18,7 +18,10 @@ import {
  * (todos) ou a revisão interna basta (exceção). Só o admin altera; a equipe
  * lê. Salva sozinho, sem depender do "Salvar" do cadastro.
  *
- * É o registro da regra. A agenda e a publicação não leem este campo.
+ * Desde 27/11/2026 a Agenda e o publicador usam a regra exata 'dispensada'
+ * (migration 20261127120000): a peça aprovada pela agência segue sem a
+ * decisão do cliente e cada publicação registra a dispensa. Salvar aqui não
+ * agenda nem publica nada.
  */
 export default function ModoDeAprovacaoNoCadastro({ clientId, admin }: { clientId: string; admin: boolean }) {
   const queryClient = useQueryClient();
@@ -63,7 +66,7 @@ export default function ModoDeAprovacaoNoCadastro({ clientId, admin }: { clientI
       titulo="Como este cliente aprova as peças"
       divisoria
       descricao={descricao}
-      ajuda="A regra combinada com o cliente. Pelo portal: a peça só segue depois que ele aprova. A revisão interna basta: exceção, a agência revisa e a peça segue. É só o registro da regra; a agenda e a publicação ainda não leem este campo."
+      ajuda="A regra combinada com o cliente. Pelo portal: a peça só segue depois que ele aprova. A revisão interna basta: exceção, a agência revisa e a peça segue. A Agenda e a publicação seguem esta regra; mudar aqui não agenda nem publica nada."
     >
       <div className="min-w-0 space-y-2" data-modo-de-aprovacao-cadastro="">
         {isError && <p className={texto.auxiliar}>A regra deste cliente não pôde ser lida agora. O resto do cadastro funciona normalmente.</p>}

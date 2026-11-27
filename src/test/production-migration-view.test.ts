@@ -47,8 +47,8 @@ const temporaryRoots: string[] = [];
 const LEGACY = 96;
 const ATTESTATIONS = 2;
 const ALIASES = 12;
-const FORWARD = 419;
-const CLI_SPLIT = 414;
+const FORWARD = 420;
+const CLI_SPLIT = 415;
 const RUNNER_EXACT = 5;
 const UNALIASED = FORWARD - ALIASES;
 const LEDGER_ROWS = LEGACY + FORWARD;
@@ -64,6 +64,7 @@ const FORWARDS_AFTER_20261119233000 = [
   "20261125211700", // Diagnóstico orgânico da Meta
   "20261126130551", // Anúncios quase em tempo real
   "20261126153016", // Instagram Audio API e música sugerida
+  "20261127120000", // Agenda respeita a aprovação dispensada (PROPOSTA)
 ];
 
 function temporaryRoot() {

@@ -3,6 +3,7 @@ import { assert, assertEquals, assertRejects } from 'https://deno.land/std@0.224
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { uuidEstavel } from '../../estudio-arte/modulos/entrega-na-agenda.ts';
 import {
+  aprovacaoDispensada,
   aprovadoPeloCliente,
   criarPublicacaoDeAprovado,
   sementesDaCriacao,
@@ -289,6 +290,171 @@ Deno.test('2.35.1: falha da sessão do dono sobe como mesa:dono_da_chave, não c
   const real = await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, recusa.deps), Error);
   assert(real.message.startsWith('mesa:rpc_recusada '), real.message);
   assert(real.message.includes('cancelada de propósito'));
+});
+
+// ------------------------------------------------------------------ 2.42.2: aprovação dispensada no cadastro
+
+/** O caso real da Softy: agência aprovou, liberado para aprovação, sem decisão e sem trava. */
+function tabelasPendentes(modo: string | null): Tabelas {
+  const t = tabelasBase();
+  Object.assign(t.files[0], {
+    client_id: CLIENTE_A, project_id: PROJETO, locked_at: null, visibility: 'approval', approval_status: 'pending',
+    requires_approval: true, client_decided_at: null, client_decided_by: null,
+  });
+  t.editorial_posts[0].content_type = 'reel';
+  if (modo !== null) t.profiles = [{ id: CLIENTE_A, modo_aprovacao_do_cliente: modo }];
+  return t;
+}
+
+Deno.test('2.42.2 dispensada: cria pela mesma RPC, sem data, e responde a origem da dispensa', async () => {
+  const { deps, chamadas, tabelas } = montar(tabelasPendentes('dispensada'));
+  const r = await criarPublicacaoDeAprovado(pedido(), ctx, deps) as Record<string, any>;
+  assertEquals(chamadas.length, 1);
+  assertEquals(chamadas[0].nome, 'save_editorial_post');
+  assert(!JSON.stringify(chamadas[0].args).includes('scheduled_at'), 'não agenda');
+  assertEquals(r.ja_existia, false);
+  assertEquals(r.publicacao.status, 'planned');
+  assertEquals(r.aprovacao_do_cliente.modo, 'dispensada');
+  assertEquals(r.aprovacao_do_cliente.origem, 'profiles.modo_aprovacao_do_cliente');
+  assert(String(r.aprovacao_do_cliente.decisao_do_cliente).includes('nada foi aprovado nem decidido em nome do cliente'));
+  assert(String(r.aprovacao_do_cliente.arquivo).includes(ARQUIVO), 'a regra vale para o arquivo anexado');
+  assert(String(r.aprovacao_do_cliente.registro).includes('client_approval_waived'));
+  // Nada no arquivo muda: a ferramenta não aprova nem decide.
+  assertEquals(tabelas.files[0].approval_status, 'pending');
+  assertEquals(tabelas.files[0].client_decided_at, null);
+  assertEquals(tabelas.files[0].locked_at, null);
+  assert(chamadas.every((c) => !/decide_file_approval|aprovar_pelo_cliente|release_file/.test(c.nome)));
+});
+
+Deno.test('2.42.2 dispensada com publicação viva: devolve a existente e a origem, sem RPC', async () => {
+  const t = tabelasPendentes('dispensada');
+  t.editorial_publications.push({ id: 'pub-ig', post_id: POST, version: 2, status: 'planned', platform: 'instagram', external_account_id: IG });
+  const { deps, chamadas } = montar(t);
+  const r = await criarPublicacaoDeAprovado(pedido(), ctx, deps) as Record<string, any>;
+  assertEquals(chamadas.length, 0);
+  assertEquals(r.ja_existia, true);
+  assertEquals(r.aprovacao_do_cliente.modo, 'dispensada');
+  assert(String(r.aprovacao_do_cliente.arquivo).includes(ARQUIVO));
+  // Nenhum evento foi lido: a resposta não afirma que o registro existe.
+  assert(String(r.aprovacao_do_cliente.registro).startsWith('não conferido'), r.aprovacao_do_cliente.registro);
+  assert(!String(r.aprovacao_do_cliente.registro).includes('grava'));
+});
+
+/** Estado normal da agência: aprovado internamente, ainda sem pedir o cliente. Vídeo. */
+function tabelasInternas(modo: string | null): Tabelas {
+  const t = tabelasPendentes(modo);
+  Object.assign(t.files[0], { visibility: 'internal', approval_status: 'none', requires_approval: false, mime_type: 'video/mp4' });
+  t.editorial_posts[0].content_type = 'video';
+  return t;
+}
+
+Deno.test('2.42.2 dispensada no estado interno aprovado pela agência (vídeo): cria sem pedir o cliente', async () => {
+  const { deps, chamadas, tabelas } = montar(tabelasInternas('dispensada'));
+  const r = await criarPublicacaoDeAprovado(pedido(), ctx, deps) as Record<string, any>;
+  assertEquals(chamadas.length, 1);
+  assertEquals(chamadas[0].nome, 'save_editorial_post');
+  assertEquals(r.aprovacao_do_cliente.modo, 'dispensada');
+  assertEquals(tabelas.files[0].visibility, 'internal', 'não libera ao cliente');
+  assertEquals(tabelas.files[0].approval_status, 'none');
+  assert(chamadas.every((c) => !/release_file|decide_file_approval|aprovar_pelo_cliente/.test(c.nome)));
+});
+
+Deno.test('2.42.2 portal no estado interno aprovado pela agência: recusa', async () => {
+  for (const modo of ['portal', 'Dispensada', null]) {
+    const { deps, chamadas } = montar(tabelasInternas(modo));
+    await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, deps), Error, 'sem aprovação do cliente', String(modo));
+    assertEquals(chamadas.length, 0, String(modo));
+  }
+});
+
+Deno.test('2.42.2 dispensada com post pronto sem selo: o save canônico grava o primeiro selo; portal segue recusando', async () => {
+  for (const tabelas of [tabelasPendentes('dispensada'), tabelasInternas('dispensada')]) {
+    tabelas.editorial_post_internal[0].approval_fingerprint = null;
+    const { deps, chamadas } = montar(tabelas);
+    const r = await criarPublicacaoDeAprovado(pedido(), ctx, deps) as Record<string, any>;
+    assertEquals(chamadas.length, 1);
+    assertEquals(chamadas[0].args.p_expected_version, 7, 'versão conferida pelo banco');
+    assertEquals(r.ja_existia, false);
+  }
+  const portal = tabelasPendentes('portal');
+  portal.editorial_post_internal[0].approval_fingerprint = null;
+  const recusa = montar(portal);
+  await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, recusa.deps), Error, 'sem aprovação do cliente');
+  assertEquals(recusa.chamadas.length, 0);
+  // Selo presente e divergente: quem recusa é o banco, e a frase volta traduzida.
+  const divergente = montar(tabelasPendentes('dispensada'), { rpcFalha: 'approved editorial copy is immutable; create a revision' });
+  await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, divergente.deps), Error, 'A aprovação do cliente não bate mais');
+});
+
+Deno.test('2.42.2 portal, regra desconhecida ou cadastro ausente: as mesmas condições recusam como antes', async () => {
+  for (const modo of ['portal', 'Dispensada', 'dispensada ', '', null]) {
+    const { deps, chamadas } = montar(tabelasPendentes(modo));
+    await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, deps), Error, 'sem aprovação do cliente', String(modo));
+    assertEquals(chamadas.length, 0, String(modo));
+  }
+});
+
+Deno.test('2.42.2 dispensada não abre: ajuste, só compartilhado, sem agência, arquivado, trava, estado misto, outro cliente/projeto, sem estado interno', async () => {
+  const casos: Array<[string, (t: Tabelas) => void]> = [
+    ['pedido de ajuste do cliente', (t) => Object.assign(t.files[0], { approval_status: 'rejected', client_decided_at: '2026-11-20T10:00:00Z', locked_at: '2026-11-20T10:00:00Z' })],
+    ['só compartilhado', (t) => Object.assign(t.files[0], { visibility: 'client_shared', approval_status: 'none', requires_approval: false })],
+    ['sem aprovação interna', (t) => { t.files[0].agency_approval_status = 'pending'; }],
+    ['agência recusou', (t) => { t.files[0].agency_approval_status = 'rejected'; }],
+    ['arquivado', (t) => { t.files[0].archived_at = '2026-11-21T00:00:00Z'; }],
+    ['travado sem decisão', (t) => { t.files[0].locked_at = '2026-11-21T00:00:00Z'; }],
+    ['decidido por alguém', (t) => { t.files[0].client_decided_by = CLIENTE_A; }],
+    ['sem requires_approval', (t) => { t.files[0].requires_approval = false; }],
+    ['lâmina filha', (t) => { t.files[0].parent_file_id = 'raiz'; }],
+    ['arquivo de outro cliente', (t) => { t.files[0].client_id = CLIENTE_B; }],
+    ['arquivo de outro projeto', (t) => { t.files[0].project_id = '33333333-3333-4333-8333-3333333333ff'; }],
+    ['interno com requires_approval', (t) => Object.assign(t.files[0], { visibility: 'internal', approval_status: 'none', requires_approval: true })],
+    ['interno pendente', (t) => Object.assign(t.files[0], { visibility: 'internal', approval_status: 'pending', requires_approval: false })],
+    ['interno decidido', (t) => Object.assign(t.files[0], { visibility: 'internal', approval_status: 'none', requires_approval: false, client_decided_at: '2026-11-21T00:00:00Z' })],
+    ['sem estado interno do post', (t) => { t.editorial_post_internal.splice(0); }],
+    ['post não pronto', (t) => { t.editorial_posts[0].production_status = 'in_production'; }],
+  ];
+  for (const [nome, mexer] of casos) {
+    const t = tabelasPendentes('dispensada');
+    mexer(t);
+    const { deps, chamadas } = montar(t);
+    await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, deps), Error, 'sem aprovação do cliente', nome);
+    assertEquals(chamadas.length, 0, nome);
+  }
+});
+
+Deno.test('2.42.2 dispensada: escopo do cliente, conta e recusa do banco seguem valendo', async () => {
+  const fora = montar(tabelasPendentes('dispensada'));
+  await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctxDeOutroCliente, fora.deps), Error, 'outside this MCP principal data scope');
+  assertEquals(fora.chamadas.length, 0);
+  const conta = montar(tabelasPendentes('dispensada'));
+  await assertRejects(() => criarPublicacaoDeAprovado(pedido({ external_account_id: DE_OUTRO }), ctx, conta.deps), Error, 'Conta não encontrada');
+  assertEquals(conta.chamadas.length, 0);
+  // Revogada entre a leitura e a escrita: o banco recusa e a frase volta traduzida.
+  const revogada = montar(tabelasPendentes('dispensada'), { rpcFalha: 'approved editorial media is unavailable, unsupported or outside the project' });
+  await assertRejects(() => criarPublicacaoDeAprovado(pedido(), ctx, revogada.deps), Error, 'O arquivo aprovado não está disponível');
+});
+
+Deno.test('2.42.2 aprovacaoDispensada: só a regra exata e os dois estados coerentes', () => {
+  const post = { client_id: CLIENTE_A, project_id: PROJETO };
+  const f = {
+    id: ARQUIVO, client_id: CLIENTE_A, project_id: PROJETO, parent_file_id: null, archived_at: null, status: 'ready',
+    agency_approval_status: 'approved', locked_at: null, visibility: 'approval', approval_status: 'pending',
+    requires_approval: true, client_decided_at: null, client_decided_by: null,
+  };
+  assert(aprovacaoDispensada(f, 'dispensada', post));
+  assert(!aprovacaoDispensada(f, 'portal', post));
+  assert(!aprovacaoDispensada(f, undefined, post));
+  assert(!aprovacaoDispensada(null, 'dispensada', post));
+  assert(!aprovacaoDispensada({ ...f, approval_status: 'approved' }, 'dispensada', post), 'aprovado segue pelo caminho normal');
+  assert(!aprovadoPeloCliente(f), 'a dispensa não vira aprovação do cliente');
+  const interno = { ...f, visibility: 'internal', approval_status: 'none', requires_approval: false };
+  assert(aprovacaoDispensada(interno, 'dispensada', post));
+  assert(!aprovacaoDispensada(interno, 'portal', post));
+  assert(!aprovacaoDispensada({ ...interno, requires_approval: null }, 'dispensada', post));
+  assert(!aprovacaoDispensada({ ...interno, agency_approval_status: 'not_requested' }, 'dispensada', post));
+  assert(!aprovacaoDispensada({ ...interno, client_decided_by: CLIENTE_A }, 'dispensada', post));
+  assert(!aprovacaoDispensada({ ...f, visibility: 'internal' }, 'dispensada', post), 'estado misto não vale');
+  assert(!aprovadoPeloCliente(interno));
 });
 
 Deno.test('aprovadoPeloCliente: a regra do painel mais a decisão do cliente', () => {

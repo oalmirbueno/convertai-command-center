@@ -129,6 +129,7 @@ const eventLabels: Record<string, string> = {
     "Ajustes editoriais pedidos pelo cliente",
   caption_edited_after_approval: "Legenda editada após aprovação",
   content_type_adjusted_after_approval: "Formato ajustado após aprovação",
+  client_approval_waived: "Aprovação do cliente dispensada",
 };
 
 const ROTULO_DO_FORMATO: Record<string, string> = {
@@ -1331,7 +1332,9 @@ export default function EditorialDetailSheet({
                   }
                 >
                   <FileCheck2 className="mr-1 h-3 w-3" />
-                  {isFilePublishable(post.primaryFile)
+                  {post.primaryFile?.client_approval_waived
+                    ? "Aprovação do cliente dispensada"
+                    : isFilePublishable(post.primaryFile)
                     ? "Principal aprovado"
                     : "Aprovação pendente"}
                 </Badge>
@@ -1504,7 +1507,9 @@ export default function EditorialDetailSheet({
                             : "border-warning/30 bg-warning/10 text-warning"
                         }
                       >
-                        {isFilePublishable(effectiveFile)
+                        {effectiveFile?.client_approval_waived
+                          ? "Aprovação do cliente dispensada"
+                          : isFilePublishable(effectiveFile)
                           ? "Double-gate aprovado"
                           : "Aprovação pendente"}
                       </Badge>

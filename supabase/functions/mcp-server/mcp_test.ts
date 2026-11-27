@@ -48,6 +48,7 @@ import {
   normalizePath,
   SecondBrainError,
 } from '../_shared/second-brain-github.ts';
+import './modulos/criar-publicacao-de-aprovado_test.ts';
 
 const readCtx: AuthContext = {
   keyId: '00000000-0000-0000-0000-000000000001',
@@ -1977,7 +1978,7 @@ Deno.test('2.34: versão, as oito ferramentas do Escritório no catálogo e no g
 
 Deno.test('2.35: aceleriq_escritorio_dono só abre com escritorio:write, que nenhum outro escopo concede', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.42.1');
+  assertEquals(MCP_VERSION, '2.42.2');
   const t = TOOL_MAP.get('aceleriq_escritorio_dono')!;
   assertEquals([...t.scopes], ['escritorio:write']);
   assert(ALL_SCOPES.includes('escritorio:write') && SCOPE_DESCRIPTIONS['escritorio:write'].sensitive);
@@ -2070,7 +2071,7 @@ Deno.test('2.36: automações lê com aceleriq:read; ligar e desligar só com au
 
 Deno.test('2.37: aceleriq_auditoria_assinaturas_listar é só leitura, no guia (área mcp) e fechada para chave restrita a cliente', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.42.1');
+  assertEquals(MCP_VERSION, '2.42.2');
   const t = TOOL_MAP.get('aceleriq_auditoria_assinaturas_listar')!;
   assert(t, 'a ferramenta existe');
   assertEquals([...t.scopes], ['aceleriq:read']);
@@ -2087,7 +2088,7 @@ Deno.test('2.37: aceleriq_auditoria_assinaturas_listar é só leitura, no guia (
 
 Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catálogo, nos escopos, no guia e na descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.42.1');
+  assertEquals(MCP_VERSION, '2.42.2');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
   const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
@@ -2138,7 +2139,7 @@ Deno.test('2.38: agrupar carrossel, post de arquivo e envio de Arquivos no catá
 
 Deno.test('2.39.2: registrar aprovação interna no catálogo, editorial:write, área calendario, guia, ponte e descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.42.1');
+  assertEquals(MCP_VERSION, '2.42.2');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
   const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
@@ -2181,7 +2182,7 @@ Deno.test('2.39.2: registrar aprovação interna no catálogo, editorial:write, 
 
 Deno.test('2.39.3: buscar áudios, definir áudio do Reel e música sugerida no catálogo, escopos, guia, ponte e descoberta', async () => {
   const { MCP_VERSION } = await import('../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.42.1');
+  assertEquals(MCP_VERSION, '2.42.2');
   const { FERRAMENTAS_POR_AREA, REGRAS_DE_ACAO } = await import('./modulos/guia-do-painel.ts');
   const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
   const { RPCS_DA_PONTE } = await import('./modulos/mcp-mesas-ponte.ts');
