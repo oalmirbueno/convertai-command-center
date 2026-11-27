@@ -47,8 +47,8 @@ const temporaryRoots: string[] = [];
 const LEGACY = 96;
 const ATTESTATIONS = 2;
 const ALIASES = 12;
-const FORWARD = 425;
-const CLI_SPLIT = 420;
+const FORWARD = 426;
+const CLI_SPLIT = 421;
 const RUNNER_EXACT = 5;
 const UNALIASED = FORWARD - ALIASES;
 const LEDGER_ROWS = LEGACY + FORWARD;
@@ -70,6 +70,7 @@ const FORWARDS_AFTER_20261119233000 = [
   "20261127180000", // Intermediador: escritor de reserva (Codex)
   "20261127190000", // Intermediador: resposta ao cliente dentro do assunto
   "20261127200000", // Intermediador: contexto do agente que pede
+  "20261127210000", // Intermediador: consulta ao agente antes do Almir
 ];
 
 function temporaryRoot() {

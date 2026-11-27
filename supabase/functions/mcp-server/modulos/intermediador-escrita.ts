@@ -14,7 +14,7 @@ import { pareceTerSegredo } from './escritorio-regras.ts';
 
 /** O escritor põe este marcador onde vai a menção; o código troca por @numero (grupo) ou @Nome (prévia). */
 export const MARCA = '@{pessoa}';
-export type TipoDeTexto = 'pergunta' | 'de_volta' | 'lembrete' | 'fechamento' | 'humano' | 'quem_e' | 'mencao' | 'resposta';
+export type TipoDeTexto = 'pergunta' | 'de_volta' | 'lembrete' | 'fechamento' | 'humano' | 'quem_e' | 'mencao' | 'resposta' | 'confirmando';
 // Só abre e lembra marcando; no meio da conversa ninguém é marcado de novo (pedido do Almir, 25/11).
 export const COM_MENCAO: ReadonlySet<TipoDeTexto> = new Set(['pergunta', 'lembrete']);
 
@@ -52,6 +52,7 @@ const O_QUE_ESCREVER: Record<TipoDeTexto, string> = {
   fechamento: 'A pessoa respondeu tudo. Feche agradecendo, curto, mostrando que entendeu o que ela disse (uma referência rápida, sem repetir a resposta inteira). Não faça pergunta nova e não diga o que o time vai fazer com a resposta (no máximo "anotado" ou "já passei pro time").',
   humano: 'A pessoa pediu algo que só o Almir pode responder (preço, prazo, decisão) ou reclamou. Responda curto, com respeito, dizendo que o Almir vai responder por aqui. Não responda o pedido, não prometa nada e não peça desculpas exageradas.',
   resposta: 'O cliente perguntou algo a você sobre este assunto. Responda curto, usando só a conversa e o contexto do cliente, e se fizer sentido retome o ponto que ainda falta. Se não der para responder sem inventar, responda exatamente [ALMIR] e nada mais.',
+  confirmando: 'O cliente perguntou algo do assunto que você precisa confirmar com o time antes de responder. Diga, curto e natural, que vai confirmar e já volta com a resposta. Não responda a dúvida, não chute, não diga horário nem quem vai confirmar.',
   mencao: 'Alguém marcou você no grupo. Responda à pessoa que marcou, no contexto da conversa, fazendo o que a tarefa abaixo pede.',
   quem_e: 'A pessoa perguntou quem está falando. Diga, curto e simpático, que é o assistente da Aceleriq que ajuda o time a organizar essas confirmações e que o Almir está no grupo também. Não diga que é uma pessoa e não use a palavra robô.',
 };
@@ -176,6 +177,12 @@ export function perguntasDoTexto(tipo: TipoDeTexto, itens: string[], falta?: str
         type: 'noul',
         instructions: 'A mensagem em "mensagem" promete ao cliente prazo ("hoje", "até amanhã", uma data), preço, valor, desconto ou resultado, ou afirma algo que não está no contexto nem na conversa? Dizer que o time vai cuidar ou ajustar o que o cliente pediu NÃO conta: o dono da agência já assumiu isso na conversa.',
         criteria: { true: 'Promete prazo, preço, desconto ou resultado, ou inventa fato', false: 'Só confirma que recebeu e que o time vai cuidar do pedido' },
+      }
+      : tipo === 'confirmando'
+      ? {
+        type: 'noul',
+        instructions: 'A mensagem em "mensagem" responde a dúvida do cliente chutando, ou promete preço, valor, desconto, resultado ou um horário ou data específicos? Dizer que vai confirmar e já volta NÃO conta.',
+        criteria: { true: 'Chuta a resposta ou promete algo', false: 'Só diz que vai confirmar e já volta' },
       }
       : abre
       ? {

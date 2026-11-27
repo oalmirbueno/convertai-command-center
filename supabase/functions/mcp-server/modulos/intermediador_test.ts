@@ -11,6 +11,7 @@ import {
   intermediadorEscritaFeita,
   intermediadorEstado,
   intermediadorPedir,
+  intermediadorResponder,
   intermediadorRodada,
   conversaDoAssunto,
   type Mencao,
@@ -56,6 +57,7 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     : u.includes('lembrete') ? '@{pessoa} conseguiu ver aquela do horário?' : 'Boa, o Almir te responde por aqui.');
   let conferencia: (q: Record<string, unknown>) => Record<string, number> = () => ({});
   const devolvidas: { para: string; texto: string; estado: string }[] = [];
+  const consultas: { assunto_id: string; para: string; texto: string }[] = [];
   const mensagens: MsgGrupo[] = [];
   const jevChamadas: unknown[] = [];
   let jev: Jev = opcoes.jev ?? (() => ({ relacao: 'responde', itens: [0.9, 0.9], humano: 0.05, quem_e: 0.02 }));
@@ -105,6 +107,7 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     },
     evento: async (a, tipo, dados = {}) => { eventos.push({ assunto_id: a, tipo, dados, em: new Date(agora).toISOString() }); },
     devolver: async (a, texto) => { devolvidas.push({ para: a.responder_para, texto, estado: a.estado }); return id(); },
+    consultarAgente: async (a, para, texto) => { consultas.push({ assunto_id: a.id, para, texto }); return id(); },
     mencoesNovas: async () => mencoesNaFila.filter((x) => !mencoes.some((y) => y.provider_message_id === x.id && y.estado !== 'nova')),
     ultimoEventoGeral: async (tipo) => eventos.filter((e) => e.tipo === tipo).map((e) => e.em).sort().pop() ?? null,
     escritorFalhouDesde: async (desde) => eventos.some((e) => e.tipo === 'texto_segurado' && e.em >= desde && String(e.dados.motivo).includes('escritor')),
@@ -165,7 +168,7 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     },
   };
   return {
-    porta, assuntos, envios, eventos, devolvidas, mensagens, jevChamadas, escritas, textosConferidos, mencoes, cerebro, salas, jevMencao, mencoesNaFila,
+    porta, assuntos, envios, eventos, devolvidas, consultas, mensagens, jevChamadas, escritas, textosConferidos, mencoes, cerebro, salas, jevMencao, mencoesNaFila,
     setIntencao: (x: { intencao: string; humano?: number }) => { intencaoDaVez = x; },
     reserva,
     ligarReserva: () => { reservaLigada = true; },
@@ -720,5 +723,81 @@ Deno.test('cliente pergunta algo do assunto: o assistente responde pelo contexto
   m2.avancar(3);
   m2.cliente(MARCADA, 'Vocês vão mudar o logo?');
   r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m2.porta);
+  // 2.47: antes do Almir, a dúvida vai ao agente que pediu (Fred).
+  assertEquals(m2.assuntos[0].estado, 'esperando');
+  assertEquals(m2.consultas[0].para, 'fred');
+  m2.avancar(26);
+  r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m2.porta);
   assertEquals(m2.assuntos[0].estado, 'precisa_do_almir');
+});
+
+// ─── 2.47: dúvida do cliente vai ao agente que pediu antes do Almir ───
+
+const ADMIN = () => ctx(['aceleriq:read', 'aceleriq:write', 'admin']);
+
+async function duvidaQueNaoSei(m: ReturnType<typeof memoria>) {
+  m.setEscritor((u) => u.includes('O cliente perguntou algo a você')
+    ? (u.includes('Resposta do time à dúvida') ? 'É pro post de fim de ano, sai semana que vem.' : '[ALMIR]')
+    : u.includes('vai confirmar') ? 'Vou confirmar aqui e já te falo!' : 'Oi @{pessoa}, tudo certo? Vocês atendem dia 24? E até que horas?');
+  await perguntar(m);
+  m.avancar(3);
+  m.cliente(MARCADA, 'É pra qual post isso?');
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  for (const e of r.envios) await intermediadorEnvioFeito({ envio_id: e.envio_id, resultado: 'enviado', message_id: `3EB0${e.envio_id.slice(-6)}` }, ctx(), m.porta);
+  return r;
+}
+
+Deno.test('dúvida que o assistente não sabe: vai à caixa do Fred e o cliente ouve "vou confirmar"', async () => {
+  const m = memoria({ slug: 'intermediador', jev: () => ({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1], humano: 0.1 }) });
+  const r = await duvidaQueNaoSei(m);
+  assertEquals(r.envios.map((e) => e.tipo), ['confirmando']);
+  assertEquals(m.assuntos[0].estado, 'esperando');
+  assertEquals(m.consultas.length, 1);
+  assert(m.consultas[0].texto.includes('É pra qual post isso?') && m.consultas[0].texto.includes(m.assuntos[0].id));
+  assertEquals(m.assuntos[0].envios_ao_cliente, 1); // "vou confirmar" não gasta o limite
+  assert(!m.envios.some((e) => e.destino === 'dono'));
+  // Sem resposta ainda: não faz nada e não consulta de novo.
+  m.avancar(5);
+  const r2 = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r2.envios.length, 0);
+  assertEquals(m.consultas.length, 1);
+});
+
+Deno.test('o Fred responde: o assistente responde o cliente com as palavras dele e o assunto segue aberto', async () => {
+  const m = memoria({ slug: 'intermediador', jev: () => ({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1], humano: 0.1 }) });
+  await duvidaQueNaoSei(m);
+  const x = await intermediadorResponder({ assunto_id: m.assuntos[0].id, resposta: 'É o post de fim de ano, sai dia 2.' }, ADMIN(), m.porta);
+  assertEquals((x as { ok: boolean }).ok, true);
+  m.avancar(1);
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.map((e) => e.tipo), ['resposta']);
+  assert(m.escritas[m.escritas.length - 1].includes('É o post de fim de ano, sai dia 2.'));
+  assertEquals(m.assuntos[0].estado, 'esperando');
+  assert(m.assuntos[0].consulta?.usada_em);
+  // Responder de novo não muda nada.
+  const y = await intermediadorResponder({ assunto_id: m.assuntos[0].id, resposta: 'outra' }, ADMIN(), m.porta);
+  assertEquals((y as { repetido?: boolean }).repetido, true);
+});
+
+Deno.test('o Fred não sabe: vai ao Almir na hora; quem não é o consultado não responde', async () => {
+  const m = memoria({ slug: 'intermediador', jev: () => ({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1], humano: 0.1 }) });
+  await duvidaQueNaoSei(m);
+  await assertRejects(() => intermediadorResponder({ assunto_id: m.assuntos[0].id, nao_sei: true }, ctx(), m.porta));
+  await intermediadorResponder({ assunto_id: m.assuntos[0].id, nao_sei: true }, ADMIN(), m.porta);
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.assuntos[0].estado, 'precisa_do_almir');
+  assert(r.envios.some((e) => e.destino === 'dono' && e.texto.includes('também não sabe')));
+});
+
+Deno.test('pedido do próprio Almir (menção) não consulta ninguém: vai direto a ele', async () => {
+  const m = memoria({ slug: 'intermediador', jev: () => ({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1], humano: 0.1 }) });
+  m.setEscritor((u) => u.includes('O cliente perguntou algo a você') ? '[ALMIR]' : 'Oi @{pessoa}, tudo certo? Vocês atendem dia 24? E até que horas?');
+  await intermediadorPedir({ ...PEDIDO, responder_para: 'dono' }, ctx(), m.porta);
+  const r0 = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  await intermediadorEnvioFeito({ envio_id: r0.envios[0].envio_id, resultado: 'enviado', message_id: '3EB0PERGUNTA' }, ctx(), m.porta);
+  m.avancar(3);
+  m.cliente(MARCADA, 'É pra qual post isso?');
+  await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.consultas.length, 0);
+  assertEquals(m.assuntos[0].estado, 'precisa_do_almir');
 });
