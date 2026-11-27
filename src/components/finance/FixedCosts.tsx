@@ -4,12 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Plus, Pencil, PiggyBank, Wrench, Scale, CheckCircle2, XCircle, Trash2,
-  CalendarDays, Landmark, Loader2, Wallet, SlidersHorizontal,
+  CalendarDays, Landmark, Loader2, Wallet, SlidersHorizontal, PauseCircle,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useFinanceSettings, useFinanceRecurringRules, useFinanceMutations } from "@/hooks/useFinanceV2";
 import { interpolateProLabore, nextProLaboreTier, PRO_LABORE_LADDER } from "@/lib/directorPlan";
 import AreaTributaria from "@/components/finance/AreaTributaria";
+import CorteDeCustos from "@/components/finance/CorteDeCustos";
+import { pausar } from "@/lib/financeiro/corteDeCustos";
 // Frente CFO (30/09): a trava do limite do mês nos custos fixos novos.
 import { useTravaDeGasto } from "@/components/cfo/TravaDeGasto";
 import { custoMensal, diasAteVencer, proximoVencimento } from "@/lib/tributos";
@@ -64,7 +66,7 @@ interface Props {
   onAba?: (aba: AbaDosCustos) => void;
 }
 
-/* As três leituras desta área (abasDosCustos.ts). */
+/* As leituras desta área (abasDosCustos.ts). */
 const ABAS = ABAS_DOS_CUSTOS;
 
 export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThisMonth = 0, aba: abaDeFora, onAba }: Props) {
@@ -168,7 +170,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
   const endRecurrence = async (e: any) => {
     const { error } = await supabase.from("expenses").update({ recurrence: "none" }).eq("id", e.id);
     if (error) return toast.error(error.message);
-    toast.success("Recorrência encerrada. O lançamento original permanece no histórico.");
+    toast.success("Recorrência encerrada. Fica em Corte de custos, onde dá para reassinar.");
     invalidate();
   };
 
@@ -329,6 +331,8 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
       )}
 
       {aba === "tributaria" && <AreaTributaria brutoRecebidoNoMes={grossReceivedThisMonth} />}
+
+      {aba === "corte" && <CorteDeCustos />}
 
       {aba === "prolabore" && (
         <div className="min-w-0 space-y-6">
@@ -574,7 +578,11 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
                             label={`Mais ações de ${e.description}`}
                             items={[
                               { label: "Editar", icon: <Pencil className="h-3.5 w-3.5" />, onSelect: () => setCostModal({ ...e, amount: String(e.amount) }) },
-                              { label: "Encerrar recorrência", hint: "Mantém o histórico", icon: <XCircle className="h-3.5 w-3.5" />, onSelect: () => endRecurrence(e) },
+                              ...(isProLaboreExpense(e) ? [] : [{
+                                label: "Pausar", hint: "Volta em Corte de custos", icon: <PauseCircle className="h-3.5 w-3.5" />,
+                                onSelect: () => void pausar(e.id).then(() => { toast.success(`${e.description} pausada. Volta em Corte de custos.`); invalidate(); }, (err: Error) => toast.error(err.message)),
+                              }]),
+                              { label: "Encerrar recorrência", hint: "Reassina em Corte de custos", icon: <XCircle className="h-3.5 w-3.5" />, onSelect: () => endRecurrence(e) },
                               { label: "Remover", icon: <Trash2 className="h-3.5 w-3.5" />, danger: true, separatorBefore: true, onSelect: () => setConfirmDel(e) },
                             ]}
                           />
