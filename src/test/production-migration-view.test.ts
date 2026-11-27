@@ -47,8 +47,8 @@ const temporaryRoots: string[] = [];
 const LEGACY = 96;
 const ATTESTATIONS = 2;
 const ALIASES = 12;
-const FORWARD = 421;
-const CLI_SPLIT = 416;
+const FORWARD = 422;
+const CLI_SPLIT = 417;
 const RUNNER_EXACT = 5;
 const UNALIASED = FORWARD - ALIASES;
 const LEDGER_ROWS = LEGACY + FORWARD;
@@ -66,6 +66,7 @@ const FORWARDS_AFTER_20261119233000 = [
   "20261126153016", // Instagram Audio API e música sugerida
   "20261127142626", // Vigia da ponte do 3429
   "20261127160000", // Intermediador: marcação do assistente e mensagens picadas
+  "20261127170000", // Intermediador: IA do painel sem crédito
 ];
 
 function temporaryRoot() {

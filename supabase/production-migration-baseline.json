@@ -3369,6 +3369,14 @@
       "remote_name": "intermediador_mencoes",
       "remote_statements_sha256": "05446fb564df31e3a757050badea33d1a9ead9e768e25e00e844ffaf6a3c6969",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127170000",
+      "path": "supabase/migrations/20261127170000_intermediador_ia_sem_credito.sql",
+      "local_sha256": "af566a1656ae8092deb826c848ce7cbed3a2634551710ff3d376a87a80080104",
+      "remote_name": "intermediador_ia_sem_credito",
+      "remote_statements_sha256": "0d9762a63539365a480b6045616136597df132b7be4d959ed7b6a5b9ea93cd0e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
