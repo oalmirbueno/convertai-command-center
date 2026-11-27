@@ -10,6 +10,7 @@
 
 import type { PerguntaJev } from '../../_shared/jev.ts';
 import { perguntaProibida } from './intermediador-regras.ts';
+import { pareceTerSegredo } from './escritorio-regras.ts';
 
 /** O escritor põe este marcador onde vai a menção; o código troca por @numero (grupo) ou @Nome (prévia). */
 export const MARCA = '@{pessoa}';
@@ -145,6 +146,8 @@ export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | nu
   if (proibido === 'termo_interno') return { texto: t, problema: 'citou termo interno, ferramenta ou agente' };
   if (proibido === 'assunto_do_almir' && tipo !== 'humano' && tipo !== 'mencao') return { texto: t, problema: 'falou de cobrança, pagamento, contrato ou desconto' };
   if (proibido === 'link') return { texto: t, problema: 'pôs link' };
+  // Texto que veio da reserva (Codex) nunca carrega segredo nem caminho de arquivo do servidor.
+  if (pareceTerSegredo(corrido) || /(^|\s)\/(etc|root|opt|var|home|usr|tmp|srv)\//.test(corrido)) return { texto: t, problema: 'trouxe dado do servidor' };
   if (/\?/.test(corrido) && tipo === 'fechamento') return { texto: t, problema: 'o fechamento não pode fazer pergunta' };
   return { texto: t, problema: null };
 }

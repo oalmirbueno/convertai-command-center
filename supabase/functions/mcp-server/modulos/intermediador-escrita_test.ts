@@ -112,3 +112,7 @@ Deno.test('alinhar: dizer que o time vai cuidar passa; prazo, preço e resultado
   assert(q.includes('prazo') && q.includes('NÃO conta'));
   assert(!JSON.stringify(perguntasDoTexto('mencao', []).promete).includes('NÃO conta'));
 });
+
+Deno.test('limparTexto: caminho de arquivo do servidor nunca sai', () => {
+  assert(limparTexto('@{pessoa}, olha o que achei em /etc/mercurio-pilot/bridge.token', 'pergunta').problema?.includes('servidor'));
+});

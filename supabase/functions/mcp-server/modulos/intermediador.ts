@@ -51,6 +51,14 @@ import {
 
 export const SLUG_DO_INTERMEDIADOR = 'intermediador';
 export const ESPERA_O_CLIENTE_TERMINAR_MS = 90_000;
+/** Quanto a reserva do escritor tem para devolver um pedido antes de contar como falha. */
+export const ESPERA_DA_RESERVA_MS = 10 * 60_000;
+
+async function hashDoPedido(sistema: string, usuario: string) {
+  const bytes = new TextEncoder().encode(`${sistema}\u0000${usuario}`);
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(d, (x) => x.toString(16).padStart(2, '0')).join('');
+}
 const QUEM_RODA = new Set([SLUG_DO_INTERMEDIADOR, 'default']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LEITURA = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false };
@@ -114,7 +122,14 @@ export interface PortaDoIntermediador {
   /** Nome e dossiê do cliente para o escritor. */
   contextoDoCliente(clientId: string): Promise<{ nome: string; dossie: string | null }>;
   /** O motor de escrita do painel. null = nenhum modelo respondeu. */
-  escrever(p: { clientId: string; sistema: string; usuario: string; assuntoId: string }): Promise<string | null>;
+  /**
+   * O motor de escrita do painel. Se ele não responder, o pedido vai para a fila da reserva (Codex no VPS) e volta
+   * { pendente: true }; na rodada seguinte o texto da reserva chega por aqui. null = nem o painel nem a reserva.
+   */
+  escrever(p: { clientId: string; sistema: string; usuario: string; assuntoId: string }): Promise<string | null | { pendente: true }>;
+  /** 2.44: pedidos de escrita que a reserva do VPS precisa fazer, e a volta deles. */
+  escritasPendentes(limite: number): Promise<{ id: string; sistema: string; usuario: string }[]>;
+  concluirEscrita(id: string, r: { texto?: string; motivo?: string; quem?: string }): Promise<boolean>;
   ultimoEvento(assuntoId: string, tipo: string): Promise<string | null>;
   /** 2.43: marcações do assistente nos grupos lidos, ainda não tratadas. */
   mencoesNovas(desde: string): Promise<MsgMencao[]>;
@@ -264,6 +279,17 @@ export function portaDoBanco(): PortaDoIntermediador {
       return { nome: p?.company_name || p?.full_name || 'cliente', dossie };
     },
     async escrever(p) {
+      const chave = await hashDoPedido(p.sistema, p.usuario);
+      // A reserva já escreveu este mesmo pedido? Usa (não gasta o motor de novo).
+      const { data: ja } = await b.from('intermediador_escritas').select('id, estado, texto, criado_em').eq('chave', chave).maybeSingle();
+      const escrita = ja as { id: string; estado: string; texto: string | null; criado_em: string } | null;
+      if (escrita?.estado === 'feita' && escrita.texto) return escrita.texto;
+      if (escrita?.estado === 'falhou') return null;
+      if (escrita?.estado === 'pendente') {
+        if (Date.now() - Date.parse(escrita.criado_em) < ESPERA_DA_RESERVA_MS) return { pendente: true };
+        await b.from('intermediador_escritas').update({ estado: 'falhou', motivo: 'a reserva não respondeu a tempo', feito_em: new Date().toISOString() }).eq('id', escrita.id).eq('estado', 'pendente');
+        return null;
+      }
       const r = await escreverComModeloDaCentral({
         clientId: p.clientId, sistema: p.sistema, usuario: p.usuario, escolha: escolhaDoModelo(undefined, undefined),
         temperatura: 0.6, maxTokensSaida: 600, criadoPor: null, referencia: { tipo: 'intermediador_assunto', id: p.assuntoId },
@@ -271,7 +297,25 @@ export function portaDoBanco(): PortaDoIntermediador {
         console.error('[mcp intermediador] escrever', { erro: e instanceof Error ? e.message.slice(0, 80) : 'erro' });
         return null;
       });
-      return r?.texto?.trim() || null;
+      const texto = r?.texto?.trim();
+      if (texto) return texto;
+      // Motor do painel fora (ex.: OpenRouter sem crédito): pede à reserva do VPS.
+      const { error } = await b.from('intermediador_escritas').insert({ chave, referencia: p.assuntoId, sistema: p.sistema, usuario: p.usuario });
+      if (error && error.code !== '23505') return null;
+      return { pendente: true };
+    },
+    async escritasPendentes(limite) {
+      const { data, error } = await b.from('intermediador_escritas').select('id, sistema, usuario').eq('estado', 'pendente')
+        .gte('criado_em', new Date(Date.now() - ESPERA_DA_RESERVA_MS).toISOString()).order('criado_em', { ascending: true }).limit(limite);
+      if (error) return [];
+      return (data ?? []) as { id: string; sistema: string; usuario: string }[];
+    },
+    async concluirEscrita(id, r) {
+      const { data, error } = await b.from('intermediador_escritas').update({
+        estado: r.texto ? 'feita' : 'falhou', texto: r.texto ?? null, motivo: r.motivo ?? null, quem_escreveu: r.quem ?? null, feito_em: new Date().toISOString(),
+      }).eq('id', id).eq('estado', 'pendente').select('id').maybeSingle();
+      if (error) falhou('concluir escrita', error);
+      return !!data;
     },
     async mencoesNovas(desde) {
       const { data, error } = await b.rpc('intermediador_mencoes_novas', { p_desde: desde, p_marcas: [...MARCAS_DO_ASSISTENTE] });
@@ -290,7 +334,7 @@ export function portaDoBanco(): PortaDoIntermediador {
       return (data as Mencao) ?? null;
     },
     async atualizarMencao(id, patch) {
-      const { error } = await b.from('intermediador_mencoes').update({ ...patch, atualizado_em: new Date().toISOString() }).eq('id', id);
+      const { error } = await b.from('intermediador_mencoes').update({ atualizado_em: new Date().toISOString(), ...patch }).eq('id', id);
       if (error) falhou('atualizar menção', error);
     },
     async registrarNoCerebro(f) {
@@ -547,7 +591,7 @@ const quemFalou = (m: MsgGrupo, a: Assunto) =>
     : `${primeiroNome(m.remetente_nome)}${marcadosDe(a).some((p) => p.numero === m.remetente) ? ' (marcada)' : ''} (cliente)`;
 
 /** Escreve o texto no contexto (escritor do painel), limpa e confere com o Jev; até 2 tentativas. */
-export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tipo: TipoDeTexto, falta?: string | null): Promise<{ texto: string } | { motivo: string }> {
+export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tipo: TipoDeTexto, falta?: string | null): Promise<{ texto: string } | { motivo: string; pendente?: boolean }> {
   const agora = porta.agora();
   const [ctx, recentes] = await Promise.all([
     porta.contextoDoCliente(a.client_id),
@@ -564,6 +608,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
     });
     const bruto = await porta.escrever({ clientId: a.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: a.id });
     if (!bruto) return { motivo: 'o escritor do painel não respondeu' };
+    if (typeof bruto !== 'string') return { motivo: 'aguardando a reserva do escritor', pendente: true };
     const limpo = limparTexto(bruto, tipo, marcados.map((p) => p.nome));
     if (limpo.problema) {
       corrigir = limpo.problema;
@@ -595,7 +640,8 @@ async function enviarAoGrupo(porta: PortaDoIntermediador, a: Assunto, tipo: Tipo
   }
   const escrito = await escreverTexto(porta, a, tipo, falta);
   if ('motivo' in escrito) {
-    await porta.evento(a.id, 'texto_segurado', { tipo, motivo: escrito.motivo });
+    // Esperando a reserva não é falha: não conta para a espera de 15 min nem para o aviso ao dono.
+    await porta.evento(a.id, escrito.pendente ? 'texto_aguardando_reserva' : 'texto_segurado', { tipo, motivo: escrito.motivo });
     return { a, ok: false };
   }
   const t = comPessoa(escrito.texto, marcadosDe(a).map((p) => p.numero), marcadosDe(a).map((p) => p.nome));
@@ -771,6 +817,11 @@ async function tratarMencao(porta: PortaDoIntermediador, reg: Mencao, m: MsgMenc
   const ctx = await porta.contextoDoCliente(m.client_id);
   const pedido = pedidoAoPlanejador({ intencao: intencao.intencao, cliente: ctx.nome, contexto: ctx.dossie, conversa, quem_marcou: quem, mensagem, pode_responder: podeResponder });
   const bruto = await porta.escrever({ clientId: m.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: reg.id });
+  if (bruto && typeof bruto !== 'string') {
+    // A reserva vai escrever: volta na próxima rodada (a fila de menções relê depois de 15 min; adianta para já).
+    await porta.atualizarMencao(reg.id, { estado: 'nova', intencao: intencao.intencao, notas: intencao, motivo: 'aguardando a reserva do escritor', atualizado_em: iso(agora - 15 * 60_000 - 1_000) });
+    return 'mencao_aguardando_reserva';
+  }
   if (!bruto) {
     // IA do painel sem resposta (ex.: sem crédito): tenta de novo em 15 min, sem incomodar ninguém.
     await porta.atualizarMencao(reg.id, { estado: 'nova', intencao: intencao.intencao, notas: intencao, tentativas: (reg.tentativas ?? 0) + 1, motivo: 'o escritor do painel não respondeu' });
@@ -938,7 +989,9 @@ export async function intermediadorRodada(input: unknown, ctx: AuthContext, port
       grupo_nome: a.grupo_nome, texto: e.texto, texto_previa: e.texto_previa, mencoes: e.mencoes, criado_em: e.criado_em,
     });
   }
-  return { modo: p.data.modo, feito, envios };
+  // 4) O que a reserva do escritor (Codex no VPS) precisa escrever.
+  const escritas = await porta.escritasPendentes(3);
+  return { modo: p.data.modo, feito, envios, escritas };
 }
 
 // ─── 5) Envio feito (só o processo do VPS) ──────────────────────
@@ -978,6 +1031,28 @@ export async function intermediadorEnvioFeito(input: unknown, ctx: AuthContext, 
   await avisarDono(porta, a, 'A ponte não confirmou se a pergunta saiu no grupo. Não repeti para não duplicar: confira no WhatsApp.');
   await finalizar(porta, a, 'precisa_do_almir', null, 'envio da pergunta incerto');
   return { ok: true, estado: 'precisa_do_almir' };
+}
+
+// ─── 6) Escrita feita pela reserva (só o processo do VPS) ────────
+
+const escritaFeitaSchema = z.object({
+  operator: z.string().max(40).optional(),
+  escrita_id: z.string().regex(UUID),
+  texto: z.string().trim().min(1).max(4000).optional(),
+  motivo: z.string().max(200).optional(),
+  quem: z.string().max(40).optional(),
+}).strict();
+
+export async function intermediadorEscritaFeita(input: unknown, ctx: AuthContext, porta: PortaDoIntermediador = portaDoBanco()) {
+  const p = escritaFeitaSchema.safeParse(input ?? {});
+  if (!p.success) throw erroDeEntrada(p.error);
+  await exigirQuemRoda(ctx, p.data.operator, porta);
+  if (p.data.texto && pareceTerSegredo(p.data.texto)) {
+    await porta.concluirEscrita(p.data.escrita_id, { motivo: 'o texto da reserva parecia ter segredo', quem: p.data.quem });
+    return { ok: true, recusado: true };
+  }
+  const ok = await porta.concluirEscrita(p.data.escrita_id, { texto: p.data.texto, motivo: p.data.motivo, quem: p.data.quem });
+  return ok ? { ok: true } : { ok: true, repetido: true, aviso: 'Esta escrita já tinha sido concluída (ou venceu).' };
 }
 
 // ─── As ferramentas ─────────────────────────────────────────────
@@ -1054,6 +1129,20 @@ export const FERRAMENTAS_DO_INTERMEDIADOR: readonly ToolDefinition[] = [
     annotations: ENVIA,
     inputSchema: { type: 'object', additionalProperties: false, required: ['modo'], properties: { operator: OPERATOR, modo: { type: 'string', enum: ['previa', 'grupos'] } } },
     handler: (input, ctx) => intermediadorRodada(input, ctx),
+  },
+  {
+    name: 'aceleriq_intermediador_escrita_feita',
+    title: 'Intermediador: texto da reserva do escritor (só o processo do VPS)',
+    description: 'Uso exclusivo do processo do Intermediador: devolve o texto que a reserva do escritor (Codex no VPS) escreveu para um pedido de escrita da rodada, ou o motivo da falha. O texto ainda passa pela limpeza e pela conferência do Jev antes de ir a qualquer grupo.',
+    scopes: ['aceleriq:write'],
+    annotations: ESCRITA,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['escrita_id'],
+      properties: { operator: OPERATOR, escrita_id: { type: 'string', format: 'uuid' }, texto: { type: 'string', minLength: 1, maxLength: 4000 }, motivo: { type: 'string', maxLength: 200 }, quem: { type: 'string', maxLength: 40 } },
+    },
+    handler: (input, ctx) => intermediadorEscritaFeita(input, ctx),
   },
   {
     name: 'aceleriq_intermediador_envio_feito',
