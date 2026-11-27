@@ -3361,6 +3361,14 @@
       "remote_name": "vigia_da_ponte_3429",
       "remote_statements_sha256": "0ec17680016b35b525f746a6fe81625a682b90a6b5451062d40c06d9ee158de4",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127160000",
+      "path": "supabase/migrations/20261127160000_intermediador_mencoes.sql",
+      "local_sha256": "031c34cdebe61d36e47716e3cc3a1ccd7a8ec91ae5ac7935884c01a0790afba0",
+      "remote_name": "intermediador_mencoes",
+      "remote_statements_sha256": "05446fb564df31e3a757050badea33d1a9ead9e768e25e00e844ffaf6a3c6969",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
