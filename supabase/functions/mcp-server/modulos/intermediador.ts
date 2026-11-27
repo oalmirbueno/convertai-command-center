@@ -55,6 +55,11 @@ export const ESPERA_O_CLIENTE_TERMINAR_MS = 90_000;
 export const CONTEXTO_ANTES_DA_PERGUNTA_MS = 6 * 3_600_000;
 /** Quanto a reserva do escritor tem para devolver um pedido antes de contar como falha. */
 export const ESPERA_DA_RESERVA_MS = 10 * 60_000;
+/**
+ * 2.47 (pedido do Almir, 27/11): dúvida do cliente que o assistente não sabe responder vai primeiro ao agente que pediu
+ * (o Fred lê a caixa a cada 15 min). Sem resposta neste tempo, vai ao Almir: o cliente nunca fica no vácuo.
+ */
+export const ESPERA_DA_CONSULTA_MS = 25 * 60_000;
 
 async function hashDoPedido(sistema: string, usuario: string) {
   const bytes = new TextEncoder().encode(`${sistema}\u0000${usuario}`);
@@ -70,6 +75,11 @@ const ENVIA = { readOnlyHint: false, idempotentHint: false, destructiveHint: fal
 // ─── Tipos ──────────────────────────────────────────────────────
 
 export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou' | 'outra_pessoa' | 'agencia'; tipo: string; texto: string; em: string; /** número de quem falou (nunca sai para o agente) */ de?: string | null; /** id da mensagem citada */ cita?: string | null }
+/** 2.47: dúvida do cliente que o assistente não soube responder e levou ao agente que pediu, antes do Almir. */
+export interface Consulta {
+  para: string; pergunta: string; perguntou_em: string; mensagem_id: string | null;
+  resposta?: string | null; nao_sabe?: boolean; respondida_em?: string | null; usada_em?: string | null;
+}
 export interface Assunto {
   id: string; client_id: string; group_id: string; grupo_nome: string; tema: string; pergunta: string; para_que: string | null; contexto?: string | null;
   marcar_numero: string; marcar_nome: string | null; marcar_numeros: string[]; marcar_nomes: string[]; o_que_conta: string[]; pode_perguntar_de_volta: boolean;
@@ -78,6 +88,7 @@ export interface Assunto {
   envios_ao_cliente: number; perguntou_de_volta: boolean; itens: Record<string, unknown>; ouvidas: Ouvida[];
   resposta: Record<string, unknown> | null; motivo: string | null; devolvido_em: string | null; fechado_em: string | null;
   criado_em: string;
+  consulta?: Consulta | null;
 }
 export interface Envio {
   id: string; assunto_id: string | null; tipo: string; destino: 'grupo' | 'dono'; texto: string; texto_previa: string;
@@ -120,6 +131,8 @@ export interface PortaDoIntermediador {
   ultimoEnvioNoGrupo(groupId: string): Promise<string | null>;
   evento(assuntoId: string | null, tipo: string, dados?: Record<string, unknown>): Promise<void>;
   devolver(a: Assunto, texto: string): Promise<string | null>;
+  /** 2.47: leva a dúvida do cliente à caixa do Escritório do agente que pediu. */
+  consultarAgente(a: Assunto, para: string, texto: string): Promise<string | null>;
   jev(state: unknown, questions: Record<string, PerguntaJev>): Promise<ResultadoJev>;
   /** Nome e dossiê do cliente para o escritor. */
   contextoDoCliente(clientId: string): Promise<{ nome: string; dossie: string | null }>;
@@ -146,7 +159,7 @@ export interface PortaDoIntermediador {
 
 // ─── A porta para o banco ───────────────────────────────────────
 
-const COL_ASSUNTO = 'id, client_id, group_id, grupo_nome, tema, pergunta, para_que, contexto, marcar_numero, marcar_nome, marcar_numeros, marcar_nomes, o_que_conta, pode_perguntar_de_volta, prazo_horas, pedido_por, responder_para, idempotency_key, estado, pergunta_msg_id, perguntado_em, vence_em, lido_ate, envios_ao_cliente, perguntou_de_volta, itens, ouvidas, resposta, motivo, devolvido_em, fechado_em, criado_em';
+const COL_ASSUNTO = 'id, client_id, group_id, grupo_nome, tema, pergunta, para_que, contexto, marcar_numero, marcar_nome, marcar_numeros, marcar_nomes, o_que_conta, pode_perguntar_de_volta, prazo_horas, pedido_por, responder_para, idempotency_key, estado, pergunta_msg_id, perguntado_em, vence_em, lido_ate, envios_ao_cliente, perguntou_de_volta, itens, ouvidas, resposta, motivo, devolvido_em, fechado_em, criado_em, consulta';
 const COL_ENVIO = 'id, assunto_id, tipo, destino, texto, texto_previa, mencoes, estado, message_id, criado_em, feito_em, mencao_id, client_id, group_id, grupo_nome, message_ids';
 
 function falhou(onde: string, error: { code?: string; message?: string } | null): never {
@@ -267,6 +280,19 @@ export function portaDoBanco(): PortaDoIntermediador {
       });
       const m = await esc.gravarMensagem({
         conversa_id: conversa.id, de_slug: SLUG_DO_INTERMEDIADOR, de_tipo: 'operador', para_slug: a.responder_para, grupo_id: null,
+        corpo: texto, responde_a: null, client_id: a.client_id, task_id: null, idempotency_key: chave,
+      });
+      return m.id;
+    },
+    async consultarAgente(a, para, texto) {
+      const chave = `intermediador:${a.id}:consulta`;
+      const ja = await esc.mensagemPorChave(SLUG_DO_INTERMEDIADOR, chave);
+      if (ja) return ja.id;
+      const conversa = await esc.criarConversa({
+        tipo: 'direta', grupo_id: null, assunto: `Dúvida do cliente: ${a.tema}`.slice(0, 160), client_id: a.client_id, task_id: null, criada_por: SLUG_DO_INTERMEDIADOR,
+      });
+      const m = await esc.gravarMensagem({
+        conversa_id: conversa.id, de_slug: SLUG_DO_INTERMEDIADOR, de_tipo: 'operador', para_slug: para, grupo_id: null,
         corpo: texto, responde_a: null, client_id: a.client_id, task_id: null, idempotency_key: chave,
       });
       return m.id;
@@ -397,6 +423,7 @@ export function mostrarAssunto(a: Assunto) {
     perguntado_em: a.perguntado_em, vence_em: a.vence_em, mensagens_ao_cliente: a.envios_ao_cliente,
     ouvidas: a.ouvidas.map((o) => ({ como: o.como, tipo: o.tipo, texto: o.texto, em: o.em })),
     ...(a.resposta ? { resposta: a.resposta } : {}), ...(a.motivo ? { motivo: a.motivo } : {}), fechado_em: a.fechado_em,
+    ...(a.consulta ? { consulta: { para: a.consulta.para, pergunta_do_cliente: a.consulta.pergunta, perguntou_em: a.consulta.perguntou_em, respondida: !!a.consulta.respondida_em, ...(a.consulta.resposta ? { resposta: a.consulta.resposta } : {}), ...(a.consulta.nao_sabe ? { nao_sabe: true } : {}) } } : {}),
   };
 }
 
@@ -626,7 +653,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
   let corrigir: string | null = null;
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     const pedido = pedidoAoEscritor({
-      tipo, cliente: ctx.nome, primeiro_nome: nome, marcados: marcados.length, tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, contexto_do_agente: a.contexto ?? null, o_que_conta: a.o_que_conta,
+      tipo, cliente: ctx.nome, primeiro_nome: nome, marcados: marcados.length, tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, contexto_do_agente: contextoDoAgente(a), o_que_conta: a.o_que_conta,
       falta: falta ?? null, ja_disse: a.ouvidas.map((o) => o.texto), ja_sabemos: jaSabemos(a), conversa_recente: conversa, contexto: ctx.dossie, corrigir,
     });
     const bruto = await porta.escrever({ clientId: a.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: a.id });
@@ -642,7 +669,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
     try {
       const q = perguntasDoTexto(tipo, a.o_que_conta.filter((it) => !jaSabemos(a).includes(it)), falta);
       const mensagem = corrido(limpo.texto).split(MARCA).join(`@${nome ?? 'pessoa'}`);
-      const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, contexto_do_agente: a.contexto ?? null, pontos: a.o_que_conta } }, q);
+      const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, contexto_do_agente: contextoDoAgente(a), pontos: a.o_que_conta } }, q);
       notas = Object.fromEntries(Object.keys(q).map((k) => [k, probabilidadeNoul(r.answers[k]) ?? (k === 'promete' ? 1 : 0)]));
     } catch {
       return { motivo: 'o Jev não conferiu o texto agora' };
@@ -699,6 +726,7 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     await finalizar(porta, a, 'vencido', null, 'sem resposta no prazo');
     return 'vencido';
   }
+  if (a.consulta && !a.consulta.usada_em) return await cuidarDaConsulta(porta, a);
   const nossos = new Set((await porta.envios({ assunto_id: a.id })).filter((e) => e.destino === 'grupo').flatMap((e) => [e.message_id, ...(e.message_ids ?? [])]).filter((x): x is string => !!x));
   if (a.pergunta_msg_id) nossos.add(a.pergunta_msg_id);
   const desde = a.lido_ate ?? a.perguntado_em ?? a.criado_em;
@@ -796,6 +824,8 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
         if (e) { await porta.atualizarAssunto(a.id, { envios_ao_cliente: a.envios_ao_cliente + 1 }); return 'responder'; }
       }
       if ('motivo' in escrito && escrito.pendente) return 'responder_aguardando_reserva';
+      const agente = quemConsultar(a);
+      if (agente) return await consultarAgente(porta, a, agente, novas.map((o) => o.texto).join(' '));
       a = (await enviarAoGrupo(porta, a, 'humano')).a;
       await avisarDono(porta, a, `O cliente perguntou algo que não consegui responder pela conversa:\n"${novas.map((o) => o.texto).join(' ').slice(0, 600)}"`);
       await finalizar(porta, a, 'precisa_do_almir', n, 'o cliente perguntou algo que só o Almir responde');
@@ -804,6 +834,74 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     default:
       return 'esperar';
   }
+}
+
+/** O que o agente que pediu já sabe, mais a resposta dele à dúvida do cliente (quando houve consulta). */
+export function contextoDoAgente(a: Pick<Assunto, 'contexto' | 'consulta'>): string | null {
+  const c = a.consulta;
+  const resposta = c?.resposta ? `Resposta do time à dúvida do cliente ("${c.pergunta.slice(0, 300)}"): ${c.resposta}` : null;
+  return [a.contexto, resposta].filter(Boolean).join('\n') || null;
+}
+
+/** A quem levar a dúvida do cliente: o agente que pediu (nunca o Almir, o próprio assistente ou a credencial padrão). Uma vez por assunto. */
+export function quemConsultar(a: Pick<Assunto, 'responder_para' | 'pedido_por' | 'consulta'>): string | null {
+  if (a.consulta) return null;
+  return [a.responder_para, a.pedido_por].find((s) => !!s && s !== DONO && s !== SLUG_DO_INTERMEDIADOR && s !== 'default') ?? null;
+}
+
+async function irAoAlmir(porta: PortaDoIntermediador, a0: Assunto, aviso: string, motivo: string) {
+  const a = (await enviarAoGrupo(porta, a0, 'humano')).a;
+  await avisarDono(porta, a, aviso);
+  await finalizar(porta, a, 'precisa_do_almir', null, motivo);
+  return 'humano';
+}
+
+/** Leva a dúvida ao agente e diz ao cliente, curto, que vai confirmar (essa mensagem não conta no limite). */
+async function consultarAgente(porta: PortaDoIntermediador, a: Assunto, para: string, pergunta: string): Promise<string> {
+  const texto = [
+    `Dúvida do cliente no grupo ${a.grupo_nome}, dentro do assunto "${a.tema}":`,
+    `"${pergunta.slice(0, 600)}"`,
+    '',
+    `Você sabe responder? Chame aceleriq_intermediador_responder com assunto_id ${a.id} e a resposta (curta, só o que é fato; sem preço, prazo ou desconto que o Almir não aprovou), ou nao_sei: true.`,
+    `O assistente responde o cliente com as palavras dele. Sem retorno em ${ESPERA_DA_CONSULTA_MS / 60_000} min, vai para o Almir.`,
+  ].join('\n');
+  const msg = await porta.consultarAgente(a, para, texto);
+  const consulta: Consulta = { para, pergunta: pergunta.slice(0, 600), perguntou_em: iso(porta.agora()), mensagem_id: msg };
+  const b = (await porta.atualizarAssunto(a.id, { consulta }, ESTADOS_ABERTOS)) ?? { ...a, consulta };
+  await porta.evento(a.id, 'consultou_agente', { para });
+  const escrito = await escreverTexto(porta, b, 'confirmando');
+  if ('texto' in escrito) {
+    const t = comPessoa(escrito.texto, marcadosDe(b).map((x) => x.numero), marcadosDe(b).map((x) => x.nome));
+    await porta.criarEnvio({ assunto_id: b.id, tipo: 'confirmando', destino: 'grupo', texto: t.texto, texto_previa: t.texto_previa, mencoes: [] });
+  }
+  return 'consultando_agente';
+}
+
+/** Consulta em andamento: com a resposta do agente, responde o cliente; sem saber ou sem retorno no tempo, vai ao Almir. */
+async function cuidarDaConsulta(porta: PortaDoIntermediador, a: Assunto): Promise<string> {
+  const c = a.consulta as Consulta;
+  const usada = { ...c, usada_em: iso(porta.agora()) };
+  if (c.resposta) {
+    const escrito = a.envios_ao_cliente + 2 <= MAXIMO_AO_CLIENTE ? await escreverTexto(porta, a, 'resposta', null) : { motivo: 'sem espaço' };
+    if ('motivo' in escrito && escrito.pendente) return 'responder_aguardando_reserva';
+    if ('texto' in escrito && !escrito.texto.includes('[ALMIR]')) {
+      const t = comPessoa(escrito.texto, marcadosDe(a).map((x) => x.numero), marcadosDe(a).map((x) => x.nome));
+      const e = await porta.criarEnvio({ assunto_id: a.id, tipo: 'resposta', destino: 'grupo', texto: t.texto, texto_previa: t.texto_previa, mencoes: [] });
+      if (e) {
+        await porta.atualizarAssunto(a.id, { envios_ao_cliente: a.envios_ao_cliente + 1, consulta: usada });
+        await porta.evento(a.id, 'respondeu_com_o_agente', { para: c.para });
+        return 'respondeu_com_o_agente';
+      }
+    }
+    const b = (await porta.atualizarAssunto(a.id, { consulta: usada })) ?? a;
+    return await irAoAlmir(porta, b, `O cliente perguntou e o ${c.para} respondeu, mas não consegui passar a resposta sem inventar:\n"${c.pergunta}"\nResposta do ${c.para}: ${c.resposta}`, 'a resposta do agente não fechou a dúvida do cliente');
+  }
+  const venceu = porta.agora() - Date.parse(c.perguntou_em) >= ESPERA_DA_CONSULTA_MS;
+  if (!c.nao_sabe && !venceu) return 'consultando_agente';
+  const b = (await porta.atualizarAssunto(a.id, { consulta: usada })) ?? a;
+  return await irAoAlmir(porta, b,
+    `O cliente perguntou algo que não consegui responder e o ${c.para} ${c.nao_sabe ? 'também não sabe' : `não respondeu em ${ESPERA_DA_CONSULTA_MS / 60_000} min`}:\n"${c.pergunta}"`,
+    c.nao_sabe ? 'o agente que pediu não sabia responder a dúvida do cliente' : 'o agente que pediu não respondeu a dúvida do cliente a tempo');
 }
 
 /** Pontos que a conversa já respondeu (nota ≥ corte), para o escritor não perguntar de novo. */
@@ -1135,6 +1233,32 @@ export async function intermediadorEscritaFeita(input: unknown, ctx: AuthContext
   return ok ? { ok: true } : { ok: true, repetido: true, aviso: 'Esta escrita já tinha sido concluída (ou venceu).' };
 }
 
+const responderSchema = z.object({
+  operator: z.string().max(40).optional(),
+  assunto_id: z.string().regex(UUID),
+  resposta: z.string().trim().min(2).max(800).optional(),
+  nao_sei: z.boolean().optional(),
+}).strict().refine((x) => !!x.resposta !== !!x.nao_sei, { message: 'mande a resposta ou nao_sei: true (um dos dois)' });
+
+/** 2.47: o agente que pediu responde a dúvida do cliente que o assistente levou à caixa dele. */
+export async function intermediadorResponder(input: unknown, ctx: AuthContext, porta: PortaDoIntermediador = portaDoBanco()) {
+  const p = responderSchema.safeParse(input ?? {});
+  if (!p.success) throw erroDeEntrada(p.error);
+  const eu = await porta.quemChama(ctx, p.data.operator);
+  const a = await porta.assunto(p.data.assunto_id);
+  if (!a) throw new ErroDaFerramenta('nao_encontrado', 'Assunto não encontrado.', null, false);
+  const c = a.consulta;
+  if (!c) throw new ErroDaFerramenta('sem_consulta', 'O assistente não levou dúvida deste assunto a ninguém.', null, false);
+  if (c.para !== eu.slug && !ehAdmin(ctx) && eu.grau !== 'orquestrador') throw new ErroDaFerramenta('nao_e_seu', `Esta dúvida foi levada ao ${c.para}.`, null, false);
+  if (c.respondida_em || c.usada_em) return { ok: true, repetido: true, aviso: c.usada_em && !c.respondida_em ? 'Já passou do tempo: a dúvida foi ao Almir.' : 'Esta dúvida já tinha resposta.' };
+  if (p.data.resposta && pareceTerSegredo(p.data.resposta)) throw new ErroDaFerramenta('tem_segredo', 'A resposta parece ter senha, token ou chave. Nada foi gravado.', null, false);
+  const consulta: Consulta = { ...c, respondida_em: iso(porta.agora()), ...(p.data.resposta ? { resposta: p.data.resposta } : { nao_sabe: true }) };
+  const feito = await porta.atualizarAssunto(a.id, { consulta }, ESTADOS_ABERTOS);
+  if (!feito) return { ok: true, ja_fechado: true, estado: a.estado };
+  await porta.evento(a.id, 'agente_respondeu', { por: eu.slug, nao_sabe: !!p.data.nao_sei });
+  return { ok: true, o_que_acontece: p.data.resposta ? 'Na próxima rodada (até 1 min) o assistente responde o cliente com isso, com as palavras dele.' : 'A dúvida vai para o Almir na próxima rodada.' };
+}
+
 // ─── As ferramentas ─────────────────────────────────────────────
 
 const OPERATOR = { type: 'string', description: 'O seu slug de agente. Sem ele vale o agente padrão desta credencial.' } as const;
@@ -1224,6 +1348,25 @@ export const FERRAMENTAS_DO_INTERMEDIADOR: readonly ToolDefinition[] = [
       properties: { operator: OPERATOR, escrita_id: { type: 'string', format: 'uuid' }, texto: { type: 'string', minLength: 1, maxLength: 4000 }, motivo: { type: 'string', maxLength: 200 }, quem: { type: 'string', maxLength: 40 } },
     },
     handler: (input, ctx) => intermediadorEscritaFeita(input, ctx),
+  },
+  {
+    name: 'aceleriq_intermediador_responder',
+    title: 'Intermediador: responder a dúvida do cliente que chegou na sua caixa',
+    description: 'Quando o cliente pergunta no grupo algo do assunto que o assistente não sabe responder, ele leva a dúvida à caixa do Escritório do agente que pediu (mensagem "Dúvida do cliente..." com o assunto_id) e diz ao cliente que vai confirmar. Responda aqui: resposta curta, só o que é fato (o assistente reescreve com as palavras dele e confere com o Jev), ou nao_sei: true. Nunca prometa preço, prazo ou desconto que o Almir não aprovou. Sem retorno em 25 min, a dúvida vai ao Almir.',
+    scopes: ['aceleriq:write'],
+    annotations: ESCRITA,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['assunto_id'],
+      properties: {
+        operator: OPERATOR,
+        assunto_id: { type: 'string', format: 'uuid', description: 'O assunto_id que veio na mensagem da sua caixa.' },
+        resposta: { type: 'string', minLength: 2, maxLength: 800, description: 'O que responder ao cliente (fato, curto). Sem segredo.' },
+        nao_sei: { type: 'boolean', description: 'true se você também não sabe: vai ao Almir.' },
+      },
+    },
+    handler: (input, ctx) => intermediadorResponder(input, ctx),
   },
   {
     name: 'aceleriq_intermediador_envio_feito',
