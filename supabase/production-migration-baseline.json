@@ -3377,6 +3377,14 @@
       "remote_name": "intermediador_ia_sem_credito",
       "remote_statements_sha256": "0d9762a63539365a480b6045616136597df132b7be4d959ed7b6a5b9ea93cd0e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127180000",
+      "path": "supabase/migrations/20261127180000_intermediador_escritor_reserva.sql",
+      "local_sha256": "c5cb24644e3c8ad5805909a1fd4a6fe6e2fcdb366e6241ff4a35d26f3020c409",
+      "remote_name": "intermediador_escritor_reserva",
+      "remote_statements_sha256": "437b1e17bc70734501f36c6d1f5835bb2ae7cb47c30305e6bf693b9e5d8392f1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
