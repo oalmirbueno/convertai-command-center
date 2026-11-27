@@ -100,9 +100,12 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     },
     evento: async (a, tipo, dados = {}) => { eventos.push({ assunto_id: a, tipo, dados, em: new Date(agora).toISOString() }); },
     devolver: async (a, texto) => { devolvidas.push({ para: a.responder_para, texto, estado: a.estado }); return id(); },
-    mencoesNovas: async () => mencoesNaFila.filter((x) => !mencoes.some((y) => y.provider_message_id === x.id)),
+    mencoesNovas: async () => mencoesNaFila.filter((x) => !mencoes.some((y) => y.provider_message_id === x.id && y.estado !== 'nova')),
+    ultimoEventoGeral: async (tipo) => eventos.filter((e) => e.tipo === tipo).map((e) => e.em).sort().pop() ?? null,
+    escritorFalhouDesde: async (desde) => eventos.some((e) => e.tipo === 'texto_segurado' && e.em >= desde && String(e.dados.motivo).includes('escritor')),
     registrarMencao: async (r) => {
-      if (mencoes.some((y) => y.provider_message_id === r.provider_message_id)) return null;
+      const ja = mencoes.find((y) => y.provider_message_id === r.provider_message_id);
+      if (ja) return ja.estado === 'nova' ? structuredClone(ja) : null;
       const n = { ...r, id: id() } as Mencao & Record<string, unknown>;
       mencoes.push(n);
       return structuredClone(n);
@@ -396,12 +399,12 @@ Deno.test('texto que o Jev recusa duas vezes não sai: a pergunta volta para a f
   assertEquals(r.envios.map((e) => e.tipo), ['pergunta']);
 });
 
-Deno.test('escritor fora do ar: nada sai e o pedido segue na fila', async () => {
+Deno.test('escritor fora do ar: nada sai no grupo, o pedido segue na fila e só o Almir é avisado', async () => {
   const m = memoria({ slug: 'intermediador' });
   m.setEscritor(() => null);
   await intermediadorPedir(PEDIDO, ctx(), m.porta);
   const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
-  assertEquals(r.envios.length, 0);
+  assertEquals(r.envios.map((e) => `${e.tipo}:${e.destino}`), ['aviso_dono:dono']);
   assertEquals(m.assuntos[0].estado, 'na_fila');
   assert(m.eventos.some((e) => e.tipo === 'texto_segurado' && String(e.dados.motivo).includes('escritor')));
 });
@@ -571,4 +574,26 @@ Deno.test('Almir manda perguntar: abre um assunto normal, que responde ao dono',
   assert(a, 'abriu assunto');
   assertEquals(a.pedido_por, 'dono');
   assertEquals(a.marcar_numeros, [MARCADA]);
+});
+
+Deno.test('IA do painel sem crédito: marcação espera nova tentativa, lembrete não tenta a cada minuto e o Almir é avisado uma vez', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setIntencao({ intencao: 'anotar' });
+  m.setEscritor(() => null);
+  m.marcar('@251990663757916 anota esse número 48991668819');
+  let r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.feito.mencao_sem_escritor, 1);
+  assertEquals(m.mencoes[0].estado, 'nova');
+  assertEquals(r.envios.map((e) => `${e.tipo}:${e.destino}`), ['aviso_dono:dono']);
+  assert(r.envios[0].texto.includes('IA do painel'));
+  // Na rodada seguinte não repete o aviso.
+  m.avancar(1);
+  r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.feito.aviso_escritor_parado, undefined);
+  // A IA voltou: a mesma marcação é tratada.
+  m.setEscritor(() => JSON.stringify({ fatos: [{ texto: 'Telefone: (48) 99166-8819', area: 'geral', categoria: 'aprendizado' }], resposta: 'Anotado!', recado_ao_time: null, pergunta: null }));
+  m.avancar(16);
+  r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.mencoes[0].estado, 'feita');
+  assertEquals(m.cerebro.length, 1);
 });
