@@ -8,6 +8,7 @@ import {
   type Ouvida,
   intermediadorCancelar,
   intermediadorEnvioFeito,
+  intermediadorEscritaFeita,
   intermediadorEstado,
   intermediadorPedir,
   intermediadorRodada,
@@ -38,6 +39,8 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
   const envios: Envio[] = [];
   const eventos: { assunto_id: string | null; tipo: string; dados: Record<string, unknown>; em: string }[] = [];
   const escritas: string[] = [];
+  const reserva: { id: string; sistema: string; usuario: string; texto: string | null }[] = [];
+  let reservaLigada = false;
   const mencoesNaFila: MsgMencao[] = [];
   const mencoes: (Mencao & Record<string, unknown>)[] = [];
   const cerebro: Record<string, unknown>[] = [];
@@ -114,7 +117,17 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     registrarNoCerebro: async (f) => { cerebro.push(f); return { id: id(), acao: 'gravado' }; },
     avisarSala: async (sala, texto) => { salas.push({ sala, texto }); return id(); },
     contextoDoCliente: async () => ({ nome: 'Verzelo Jardins', dossie: 'Verzelo presta serviço de jardinagem e poda em Curitiba.' }),
-    escrever: async (p) => { escritas.push(p.usuario); return escritor(p.usuario); },
+    escrever: async (p) => {
+      escritas.push(p.usuario);
+      const pronta = reserva.find((x) => x.usuario === p.usuario);
+      if (pronta?.texto) return pronta.texto;
+      const t = escritor(p.usuario);
+      if (t !== null || !reservaLigada) return t;
+      if (!pronta) reserva.push({ id: id(), sistema: p.sistema, usuario: p.usuario, texto: null });
+      return { pendente: true as const };
+    },
+    escritasPendentes: async () => reserva.filter((x) => !x.texto).map(({ id, sistema, usuario }) => ({ id, sistema, usuario })),
+    concluirEscrita: async (i, r) => { const x = reserva.find((y) => y.id === i); if (!x || x.texto) return false; x.texto = r.texto ?? null; return true; },
     ultimoEvento: async (a, tipo) => eventos.filter((e) => e.assunto_id === a && e.tipo === tipo).map((e) => e.em).sort().pop() ?? null,
     jev: async (state, questions) => {
       if ('intencao' in questions) {
@@ -143,6 +156,8 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
   return {
     porta, assuntos, envios, eventos, devolvidas, mensagens, jevChamadas, escritas, textosConferidos, mencoes, cerebro, salas, jevMencao, mencoesNaFila,
     setIntencao: (x: { intencao: string; humano?: number }) => { intencaoDaVez = x; },
+    reserva,
+    ligarReserva: () => { reservaLigada = true; },
     setNotaDosFatos: (x: number) => { notaDosFatos = x; },
     marcar: (texto: string, extra: Partial<MsgMencao> = {}) => {
       const em = new Date(agora - 120_000).toISOString();
@@ -596,4 +611,31 @@ Deno.test('IA do painel sem crédito: marcação espera nova tentativa, lembrete
   r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
   assertEquals(m.mencoes[0].estado, 'feita');
   assertEquals(m.cerebro.length, 1);
+});
+
+Deno.test('OpenRouter fora: a pergunta vai para a reserva (Codex), a rodada devolve o pedido e o texto da reserva sai conferido', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setEscritor(() => null);
+  m.ligarReserva();
+  await intermediadorPedir(PEDIDO, ctx(), m.porta);
+  let r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.length, 0); // sem aviso ao dono: a reserva está cuidando
+  assertEquals(r.escritas.length, 1);
+  assertEquals(m.assuntos[0].estado, 'na_fila');
+  assert(!m.eventos.some((e) => e.tipo === 'texto_segurado'));
+  await intermediadorEscritaFeita({ escrita_id: r.escritas[0].id, texto: 'Oi @{pessoa}, tudo certo? Vocês atendem dia 24? E até que horas?', quem: 'codex' }, ctx(), m.porta);
+  r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.map((e) => e.tipo), ['pergunta']);
+  assert(r.envios[0].texto.startsWith(`Oi @${MARCADA}, tudo certo?`));
+  assertEquals(m.textosConferidos.length, 1); // passou pelo Jev como qualquer texto
+});
+
+Deno.test('reserva: texto com cara de segredo é recusado; caminho de arquivo do servidor não sai', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setEscritor(() => null);
+  m.ligarReserva();
+  await intermediadorPedir(PEDIDO, ctx(), m.porta);
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  const x = await intermediadorEscritaFeita({ escrita_id: r.escritas[0].id, texto: 'token: sk-proj-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, ctx(), m.porta);
+  assertEquals((x as { recusado?: boolean }).recusado, true);
 });

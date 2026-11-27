@@ -10,6 +10,7 @@
 
 import type { PerguntaJev } from '../../_shared/jev.ts';
 import { perguntaProibida } from './intermediador-regras.ts';
+import { pareceTerSegredo } from './escritorio-regras.ts';
 
 /** O escritor põe este marcador onde vai a menção; o código troca por @numero (grupo) ou @Nome (prévia). */
 export const MARCA = '@{pessoa}';
@@ -145,6 +146,8 @@ export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | nu
   if (proibido === 'termo_interno') return { texto: t, problema: 'citou termo interno, ferramenta ou agente' };
   if (proibido === 'assunto_do_almir' && tipo !== 'humano' && tipo !== 'mencao') return { texto: t, problema: 'falou de cobrança, pagamento, contrato ou desconto' };
   if (proibido === 'link') return { texto: t, problema: 'pôs link' };
+  // Texto que veio da reserva (Codex) nunca carrega segredo nem caminho de arquivo do servidor.
+  if (pareceTerSegredo(corrido) || /(^|\s)\/(etc|root|opt|var|home|usr|tmp|srv)\//.test(corrido)) return { texto: t, problema: 'trouxe dado do servidor' };
   if (/\?/.test(corrido) && tipo === 'fechamento') return { texto: t, problema: 'o fechamento não pode fazer pergunta' };
   return { texto: t, problema: null };
 }
@@ -153,12 +156,20 @@ export function limparTexto(bruto: string, tipo: TipoDeTexto, nome?: string | nu
 export const corrido = (texto: string) => texto.split(PARTE).join('\n');
 
 /** O Jev confere o texto escrito: cobre os pontos, não promete, não inventa, soa natural. */
-export function perguntasDoTexto(tipo: TipoDeTexto, itens: string[], falta?: string | null): Record<string, PerguntaJev> {
+export function perguntasDoTexto(tipo: TipoDeTexto, itens: string[], falta?: string | null, opcoes: { podeDizerQueOTimeFaz?: boolean } = {}): Record<string, PerguntaJev> {
   // Pergunta, de volta e lembrete podem dizer para que o time precisa do dado (vem do pedido, até com prazo).
   // Fechamento e resposta de "é com o Almir" não dizem o que o time vai fazer nem quando.
   const abre = tipo === 'pergunta' || tipo === 'de_volta' || tipo === 'lembrete';
   const q: Record<string, PerguntaJev> = {
-    promete: abre
+    promete: opcoes.podeDizerQueOTimeFaz
+      // Alinhar: o Almir já disse "deixa com a gente"; dizer que o time vai cuidar não é promessa. Prazo, preço,
+      // desconto e resultado continuam barrados.
+      ? {
+        type: 'noul',
+        instructions: 'A mensagem em "mensagem" promete ao cliente prazo ("hoje", "até amanhã", uma data), preço, valor, desconto ou resultado, ou afirma algo que não está no contexto nem na conversa? Dizer que o time vai cuidar ou ajustar o que o cliente pediu NÃO conta: o dono da agência já assumiu isso na conversa.',
+        criteria: { true: 'Promete prazo, preço, desconto ou resultado, ou inventa fato', false: 'Só confirma que recebeu e que o time vai cuidar do pedido' },
+      }
+      : abre
       ? {
         type: 'noul',
         instructions: 'A mensagem em "mensagem" promete ao cliente preço, valor, desconto ou resultado, ou afirma algo sobre o cliente que não está em "contexto", na conversa nem em "pedido"? O que está em "pedido" (a pergunta e o para_que do time, inclusive datas) é verdade: dizer para que e para quando o time precisa do dado não é promessa.',

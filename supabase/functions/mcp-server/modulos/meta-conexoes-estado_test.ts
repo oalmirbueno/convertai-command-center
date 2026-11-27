@@ -143,7 +143,7 @@ Deno.test('catálogo: escopo admin, só leitura, no guia, prazo do despachante e
   const { TOOL_MAP, canInvoke, canUseToolWithDataScope } = await import('../../_shared/mcp-tools.ts');
   const { FERRAMENTAS_POR_AREA } = await import('./guia-do-painel.ts');
   const { MCP_VERSION } = await import('../../_shared/mcp-release.ts');
-  assertEquals(MCP_VERSION, '2.43.0');
+  assertEquals(MCP_VERSION, '2.44.0');
   const t = TOOL_MAP.get('aceleriq_meta_conexoes_estado')!;
   assert(t, 'existe');
   assertEquals([...t.scopes], ['admin']);
