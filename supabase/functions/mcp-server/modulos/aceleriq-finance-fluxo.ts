@@ -261,10 +261,10 @@ export async function getFinanceCashFlow(opts: { meses?: number; segmento?: stri
       .sort((a, b) => b.valor - a.valor),
     a_pagar: {
       total: cents(
-        operacionais.filter((e) => texto(e.status) !== 'paid').reduce((s, e) => s + numero(e.amount), 0),
+        operacionais.filter((e) => texto(e.status) !== 'paid' && texto(e.status) !== 'cancelled').reduce((s, e) => s + numero(e.amount), 0),
       ),
       vencidas: operacionais.filter(
-        (e) => texto(e.status) !== 'paid' && (texto(e.due_date) ?? '') < new Date().toISOString().slice(0, 10),
+        (e) => texto(e.status) !== 'paid' && texto(e.status) !== 'cancelled' && (texto(e.due_date) ?? '') < new Date().toISOString().slice(0, 10),
       ).length,
     },
     leitura:

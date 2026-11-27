@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { KanbanSquare, Mail, Send, UserPlus } from "lucide-react";
-import { casa, fraseDoErro, type PapelNaConta } from "@/lib/produto/api";
+import { KanbanSquare, Link2, Mail, Send, UserPlus } from "lucide-react";
+import { casa, copiarLinkDeAcesso, fraseDoErro, type PapelNaConta } from "@/lib/produto/api";
+import { avisarComLink } from "@/lib/produto/avisoComLink";
 import type { CrmDoCliente } from "@/lib/crmPeloPlano";
 import { ROTULO_DO_MODO, lerContaDoCliente, modoDaConta, mudarModoDaConta, type ModoDeCobranca } from "@/lib/produto/produtosDoCliente";
 import { botao, etiqueta, foco, juntar, texto } from "@/components/sistema";
@@ -45,7 +46,7 @@ export default function ProdutosNoPlano({ clientId, crm }: { clientId: string; c
     setConvidando(true);
     try {
       const r = await casa.convidar({ conta_id: c.id, nome: form.nome.trim(), email, papel: form.papel });
-      toast.success(r.enviado ? `Convite enviado para ${email}: o link para criar a senha já está no e-mail.` : `${form.nome.trim()} entrou na equipe. O e-mail não saiu: reenvie pela Central.`);
+      await avisarComLink(r.enviado ? `Convite enviado para ${email}.` : `${form.nome.trim()} entrou na equipe. O e-mail não saiu.`, r.link);
       setForm({ nome: "", email: "", papel: "usuario" });
       await qc.invalidateQueries({ queryKey: ["crm-do-cliente", clientId] });
     } catch (e) {
@@ -100,6 +101,18 @@ export default function ProdutosNoPlano({ clientId, crm }: { clientId: string; c
                 <li key={p.id} className="flex min-w-0 items-center text-[13px]">
                   <span className="min-w-0 flex-1 truncate"><b className="font-medium">{p.nome || p.email}</b> <span className="text-muted-foreground">{p.email}</span></span>
                   <span className={juntar(etiqueta, "ml-2 h-6 px-2.5", p.estado === "ativo" ? "bg-accent-soft text-primary" : "bg-warning-soft text-warning")}>{ESTADO_DA_PESSOA[p.estado] || p.estado}</span>
+                  {/* 27/11: o link de acesso de cada pessoa, a qualquer hora (vale uma vez; gerar de novo não estraga nada). */}
+                  <button
+                    type="button"
+                    className={juntar(botao.discreto, "ml-1 h-7 shrink-0 px-2 text-[12px]")}
+                    aria-label={`Copiar o link de acesso de ${p.email}`}
+                    title="Copiar link de acesso (para mandar por WhatsApp)"
+                    onClick={() => void copiarLinkDeAcesso(p.id).then((e) => toast.success(`Link de acesso de ${e} copiado. Vale uma vez.`)).catch((e) => toast.error(fraseDoErro(e)))}
+                    data-copiar-link-de-acesso=""
+                  >
+                    <Link2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                    Link
+                  </button>
                 </li>
               ))}
             </ul>

@@ -37,4 +37,5 @@
 // 2.45.0 (27/11/2026): Intermediador lê a conversa como gente: antes de perguntar confere as últimas 6 h do grupo (com imagens descritas) e não pergunta o que já foi dito ou mostrado (tudo respondido = fecha sem perguntar); o Jev julga a resposta lendo a conversa inteira em ordem, de antes da pergunta até agora, e o que o Almir diz no grupo também resolve; pergunta do cliente sobre o assunto é respondida pelo contexto (sem dar, vai ao Almir).
 // 2.46.0 (27/11/2026): aceleriq_intermediador_pedir aceita `contexto` (o que o agente que pede já sabe do assunto); o escritor e o Jev usam para não perguntar o óbvio e para responder dúvidas do cliente.
 // 2.47.0 (27/11/2026): dúvida do cliente que o Intermediador não sabe responder vai primeiro à caixa do Escritório do agente que pediu (o cliente ouve "vou confirmar"); o agente responde com aceleriq_intermediador_responder (ou nao_sei) e o assistente responde o cliente; sem retorno em 25 min, vai ao Almir.
-export const MCP_VERSION = '2.47.0';
+// 2.47.1 (27/11/2026): o a pagar das despesas (painel do financeiro e fluxo) ignora status cancelled, a parcela que o dono não deve de uma assinatura encerrada.
+export const MCP_VERSION = '2.47.1';

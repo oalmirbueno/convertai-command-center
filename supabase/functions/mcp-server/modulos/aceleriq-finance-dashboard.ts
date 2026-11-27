@@ -524,7 +524,7 @@ export async function listFinanceExpenses(opts: {
         doMes.filter((e) => texto(e.status) === 'paid').reduce((s, e) => s + numero(e.amount), 0),
       ),
       a_pagar_no_mes: cents(
-        doMes.filter((e) => texto(e.status) !== 'paid').reduce((s, e) => s + numero(e.amount), 0),
+        doMes.filter((e) => texto(e.status) !== 'paid' && texto(e.status) !== 'cancelled').reduce((s, e) => s + numero(e.amount), 0),
       ),
       despesas_no_banco: linhas.length,
     },

@@ -500,7 +500,8 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const accountsPayable = useMemo(() => {
     return (expenses || [])
-      .filter((e: any) => e.status !== "paid")
+      // 27/11: "cancelled" = parcela que o dono não deve (assinatura encerrada): sai do a pagar.
+      .filter((e: any) => e.status !== "paid" && e.status !== "cancelled")
       .map((e: any) => {
         const due = parseDate(e.due_date)!;
         const overdue = due < today;

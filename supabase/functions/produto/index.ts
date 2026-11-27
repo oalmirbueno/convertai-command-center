@@ -211,6 +211,13 @@ async function mandarLinkPorEmail(membroId: string, quemConvidou: string | null,
   return { enviado: !error, message_id: id, link: gerado };
 }
 
+/** O e-mail de uma pessoa do CRM (para gerar o link quando o convite não gerou). */
+async function lerEmailDoMembro(membroId: string): Promise<string | null> {
+  const { data } = await servico().from("produto_membros").select("email, estado").eq("id", membroId).maybeSingle();
+  const m = data as { email?: string; estado?: string } | null;
+  return m && m.email && m.estado !== "removido" ? m.email : null;
+}
+
 async function enviarConvite(membroId: string, quemConvidou: string | null): Promise<boolean> {
   return (await mandarLinkPorEmail(membroId, quemConvidou)).enviado;
 }
@@ -890,8 +897,10 @@ async function adminCrmPeloPlano(ch: Chamador, corpo: Record<string, unknown>) {
   });
   if (error || !data) throw erroDoBanco(error, "Não foi possível ligar o CRM agora.");
   const r = data as { conta_id: string; membro_id: string | null; estado: string; acesso_ate: string | null; liberada: boolean };
-  const enviado = r.membro_id ? await enviarConvite(r.membro_id, ch.userId) : false;
-  return json({ ...r, convite_enviado: enviado });
+  // 27/11: o link volta junto (para o WhatsApp), mesmo quando o e-mail não sai.
+  const envio = r.membro_id ? await mandarLinkPorEmail(r.membro_id, ch.userId) : null;
+  const link = r.membro_id && !(envio && envio.link) ? await lerEmailDoMembro(r.membro_id).then((e) => (e ? gerarLinkDeAcesso(e) : null)).catch(() => null) : envio ? envio.link : null;
+  return json({ ...r, convite_enviado: !!(envio && envio.enviado), link });
 }
 
 async function adminGerarCheckout(ch: Chamador, corpo: Record<string, unknown>) {

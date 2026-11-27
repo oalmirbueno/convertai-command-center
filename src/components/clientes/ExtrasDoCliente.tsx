@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { avisarComLink } from "@/lib/produto/avisoComLink";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
@@ -309,7 +310,7 @@ function EditarExtra({ extra, crm, loginDoPainel, aoFechar, aoMudar }: { extra: 
         } else {
           try {
             const r = await ligarCrmPeloPlano({ extraId: extra.id, planoId: formCrm.planoId, usuarios: nCrm.usuarios, email: formCrm.email, nome: formCrm.nome });
-            toast.success(avisoDoCrmLigado(r, formCrm.email));
+            await avisarComLink(avisoDoCrmLigado(r, formCrm.email), r.link);
           } catch (e) {
             toast.error(`${nome.trim()} salvo, mas o CRM não ligou: ${fraseDoErro(e)}`);
             await aoMudar();
@@ -558,7 +559,7 @@ function JanelaDoExtra({ clientId, nomeDoCliente, crm, crmVivo, loginDoPainel, a
       if (ehCrm && criado?.id) {
         try {
           const r = await ligarCrmPeloPlano({ extraId: String(criado.id), planoId: crmAtual.planoId, usuarios: nCrm.usuarios, email: crmAtual.email, nome: crmAtual.nome });
-          toast.success(avisoDoCrmLigado(r, crmAtual.email));
+          await avisarComLink(avisoDoCrmLigado(r, crmAtual.email), r.link);
         } catch (e) {
           toast.error(`${nome.trim()} adicionado, mas o CRM não ligou: ${fraseDoErro(e)} Termine em "Ligar o CRM", na linha do extra.`);
         }
