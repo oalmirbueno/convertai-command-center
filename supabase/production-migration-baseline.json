@@ -3385,6 +3385,14 @@
       "remote_name": "intermediador_escritor_reserva",
       "remote_statements_sha256": "437b1e17bc70734501f36c6d1f5835bb2ae7cb47c30305e6bf693b9e5d8392f1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127190000",
+      "path": "supabase/migrations/20261127190000_intermediador_resposta.sql",
+      "local_sha256": "1bf93f45cf36fb6180d975d3fc5a4302cf036ecc664ba14eb695c501bdedd2c7",
+      "remote_name": "intermediador_resposta",
+      "remote_statements_sha256": "6e7b7205469b6eb6da9e4b909b00bc2ce1d45c56554e6ca9979f27600bc4cdb5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
