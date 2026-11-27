@@ -908,7 +908,8 @@ export async function lerFaturamento(mes: string): Promise<FaturamentoDoProduto>
 
 export const casa = {
   criarConta: (p: Record<string, unknown>) => chamar<{ conta_id: string; enviado: boolean; membro_id?: string; link?: string | null }>({ acao: "admin_criar_conta", ...p }),
-  convidar: (p: { conta_id: string; email: string; nome?: string; papel?: PapelNaConta }) => chamar<{ membro_id: string; enviado: boolean }>({ acao: "admin_convidar", ...p }),
+  // 27/11: com_link devolve o link de acesso junto, para mandar por WhatsApp.
+  convidar: (p: { conta_id: string; email: string; nome?: string; papel?: PapelNaConta }) => chamar<{ membro_id: string; enviado: boolean; link?: string | null }>({ acao: "admin_convidar", com_link: true, ...p }),
   sincronizar: (contaId: string) => chamar<{ valor: number }>({ acao: "admin_sincronizar", conta_id: contaId }),
   testarAsaas: () => chamar<{ ok: boolean; ambiente?: string; link?: string; expira_em?: string; etapa?: string; mensagem?: string }>({ acao: "admin_testar_asaas" }),
   gerarCheckout: (contaId: string) => chamar<{ link?: string; atualizado?: boolean; agendado?: boolean; valor?: number }>({ acao: "admin_gerar_checkout", conta_id: contaId }),

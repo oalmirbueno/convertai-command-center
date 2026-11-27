@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { avisarComLink } from "@/lib/produto/avisoComLink";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
@@ -407,7 +408,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         } else {
           try {
             const r = await ligarCrmPeloPlano({ extraId: String(extraCrm.id), planoId: crmForm.planoId, usuarios: crmNumeros.usuarios, email: crmForm.email, nome: crmForm.nome });
-            toast.success(avisoDoCrmLigado(r, crmForm.email));
+            await avisarComLink(avisoDoCrmLigado(r, crmForm.email), r.link);
           } catch (e) {
             toast.warning(`Entrada salva e o CRM ficou em Extras e produtos, mas não ligou: ${fraseDoErro(e)} Termine na ficha do cliente, em Extras e produtos.`);
           }

@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
+import { avisarComLink } from "@/lib/produto/avisoComLink";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CalendarClock, CircleDollarSign, CreditCard, Handshake, Link2, RefreshCw, UserPlus, Users } from "lucide-react";
@@ -172,7 +173,7 @@ export default function JanelaDaEmpresa({
       const r = await casa.convidar({ conta_id: conta.id, email: convite.email.trim(), nome: convite.nome.trim(), papel: convite.admin ? "admin" : "usuario" });
       setConvite({ email: "", nome: "", admin: false });
       await onMudou();
-      toast.success(r.enviado ? "Convite enviado." : "Pessoa adicionada. O e-mail não saiu: reenvie o convite.");
+      await avisarComLink(r.enviado ? "Convite enviado." : "Pessoa adicionada. O e-mail não saiu.", r.link);
     } catch (e) {
       toast.error(fraseDoErro(e, "Não foi possível convidar."));
     } finally {
@@ -341,13 +342,14 @@ export default function JanelaDaEmpresa({
                       </span>
                       <button
                         type="button"
-                        className={juntar(botao.icone, "ml-1")}
+                        className={juntar(botao.discreto, "ml-1 h-8 px-2")}
                         aria-label={`Copiar o link de acesso de ${m.email}`}
                         title="Copiar link de acesso (para mandar por WhatsApp)"
                         onClick={() => void copiarLinkDeAcesso(m.id).then((e) => toast.success(`Link de acesso de ${e} copiado. Vale uma vez.`)).catch((e) => toast.error(fraseDoErro(e)))}
                         data-copiar-link-de-acesso=""
                       >
-                        <Link2 className="h-4 w-4" aria-hidden="true" />
+                        <Link2 className="h-4 w-4 sm:mr-1" aria-hidden="true" />
+                        <span className="hidden text-[12px] sm:inline">Link</span>
                       </button>
                       {m.estado === "convidado" && (
                         <button

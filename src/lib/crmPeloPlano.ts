@@ -33,7 +33,7 @@ export type CrmDoCliente = {
   assinatura_no_cartao: boolean;
 };
 
-export type CrmLigado = { conta_id: string; membro_id: string | null; estado: string; acesso_ate: string | null; liberada: boolean; convite_enviado: boolean };
+export type CrmLigado = { conta_id: string; membro_id: string | null; estado: string; acesso_ate: string | null; liberada: boolean; convite_enviado: boolean; link?: string | null };
 
 /** Os campos do formulário do CRM, como o dono digita. */
 export type FormDoCrm = { planoId: string; usuarios: string; valor: string; email: string; nome: string };
