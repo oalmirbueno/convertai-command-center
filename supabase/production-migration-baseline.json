@@ -3409,6 +3409,14 @@
       "remote_name": "intermediador_consulta",
       "remote_statements_sha256": "2aadaad73b10524c463a4fc6fa17d5c3d3afd6dac589d8bc86c8071663305604",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127220000",
+      "path": "supabase/migrations/20261127220000_financeiro_corte_de_custos.sql",
+      "local_sha256": "ff81970f2b48da55d41d31a0e9ee0f9f2efcf1f78fabd820218ef4c4a49f4528",
+      "remote_name": "financeiro_corte_de_custos",
+      "remote_statements_sha256": "f1b5f878d005faffe665ab84fbf5812969a5d838915390539f3f6c8410970508",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
