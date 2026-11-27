@@ -3353,6 +3353,14 @@
       "remote_name": "instagram_audio_e_musica_sugerida",
       "remote_statements_sha256": "0e6a083d786e8f80046d12e7843a1c991f359564ae649512f47bd0dac8c23fa9",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127142626",
+      "path": "supabase/migrations/20261127142626_vigia_da_ponte_3429.sql",
+      "local_sha256": "031dd234621f1aeb6bd91680ac09b85e1dd37d74caccdd6433b1c114a9e9bd3c",
+      "remote_name": "vigia_da_ponte_3429",
+      "remote_statements_sha256": "0ec17680016b35b525f746a6fe81625a682b90a6b5451062d40c06d9ee158de4",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
