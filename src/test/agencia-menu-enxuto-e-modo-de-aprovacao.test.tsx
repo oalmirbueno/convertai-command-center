@@ -9,8 +9,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * 14/11/2026, agência autogerenciável:
  *  - o menu perde o que não se usa (Pedidos), por uma lista reversível, sem
  *    tirar rota, página nem tabela;
- *  - a ficha do cliente mostra como ele aprova as peças (só admin altera), e
- *    isso continua sendo só o registro da regra.
+ *  - a ficha do cliente mostra como ele aprova as peças (só admin altera).
+ * 27/11/2026: a regra exata 'dispensada' passou a valer na Agenda e no
+ * publicador (migration 20261127120000), sem aprovar pelo cliente.
  */
 
 const banco = vi.hoisted(() => ({
@@ -245,12 +246,50 @@ describe("ficha do cliente: como este cliente aprova as peças", () => {
     expect(servicos).toBeGreaterThan(modo);
   });
 
-  it("a regra continua sendo só registro: agenda e publicação não leem a coluna", () => {
+  it("27/11: a Agenda lê a regra só pela lib, como marca de tela; o banco decide e nada aprova pelo cliente", () => {
     for (const arquivo of ["src/lib/editorialScheduler.ts", "src/hooks/useEditorialCalendar.ts", "src/components/editorial/EditorialScheduleDialog.tsx"]) {
       expect(ler(arquivo), arquivo).not.toContain("modo_aprovacao_do_cliente");
     }
+    expect(ler("src/hooks/useEditorialCalendar.ts")).toContain("lerClientesComAprovacaoDispensada(");
     const lib = ler("src/lib/clientes/modoDeAprovacao.ts");
-    expect(lib.match(/\.from\("profiles"\)/g)).toHaveLength(2);
+    expect(lib.match(/\.from\("profiles"\)/g)).toHaveLength(3);
     expect(lib).not.toMatch(/\.rpc\(|functions\.invoke/);
+    expect(lib.match(/\.update\(/g)).toHaveLength(1);
+    expect(lib).toContain('modo_aprovacao_do_cliente === "dispensada"');
+    const sql = ler("supabase/migrations/20261127120000_agenda_respeita_aprovacao_dispensada.sql");
+    expect(sql).toContain("client_profile.modo_aprovacao_do_cliente = 'dispensada'");
+    expect(sql).not.toMatch(/SET\s+(approval_status|client_decided_at|client_decided_by|locked_at)\s*=/);
+    expect(sql).not.toMatch(/UPDATE\s+public\.(profiles|files)\b/);
+  });
+
+  it("27/11: a marca de tela só vale para a equipe, para a regra exata e para a peça aprovada pela agência sem decisão", async () => {
+    const { marcarAprovacaoDispensada } = await import("@/lib/clientes/modoDeAprovacao");
+    const { isEditorialFilePublishable, isEditorialFileEditable } = await import("@/lib/editorial");
+    const liberado = {
+      client_id: "c1", parent_file_id: null, archived_at: null, status: "ready", agency_approval_status: "approved",
+      visibility: "approval", approval_status: "pending", requires_approval: true,
+      client_decided_at: null, client_decided_by: null, locked_at: null,
+    };
+    // Estado normal da agência: aprovada internamente, ainda sem pedir o cliente.
+    const interno = { ...liberado, visibility: "internal", approval_status: "none", requires_approval: false };
+    for (const [nome, arquivo] of [["liberado", liberado], ["interno", interno]] as const) {
+      expect(isEditorialFilePublishable(arquivo), nome).toBe(false);
+      expect(isEditorialFileEditable(arquivo), nome).toBe(false);
+      expect(isEditorialFilePublishable(marcarAprovacaoDispensada(arquivo, new Set(["c1"]))), nome).toBe(true);
+      expect(isEditorialFilePublishable(marcarAprovacaoDispensada(arquivo, new Set(["c2"]))), nome).toBe(false);
+    }
+    for (const mudanca of [
+      { approval_status: "rejected" }, { agency_approval_status: "pending" }, { archived_at: "2026-11-27" },
+      { visibility: "client_shared" }, { parent_file_id: "raiz" }, { requires_approval: false },
+      { client_decided_at: "2026-11-27" }, { client_decided_by: "u1" }, { locked_at: "2026-11-27" }, { status: "processing" },
+    ]) {
+      expect(isEditorialFilePublishable(marcarAprovacaoDispensada({ ...liberado, ...mudanca }, new Set(["c1"]))), JSON.stringify(mudanca)).toBe(false);
+    }
+    for (const mudanca of [
+      { requires_approval: true }, { requires_approval: null }, { approval_status: "pending" }, { agency_approval_status: "not_requested" },
+      { client_decided_by: "u1" }, { locked_at: "2026-11-27" },
+    ]) {
+      expect(isEditorialFilePublishable(marcarAprovacaoDispensada({ ...interno, ...mudanca }, new Set(["c1"]))), JSON.stringify(mudanca)).toBe(false);
+    }
   });
 });

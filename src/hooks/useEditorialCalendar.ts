@@ -19,6 +19,11 @@ import {
   type EditorialTaskLinkRow,
 } from "@/lib/editorialTaskLinks";
 import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
+import {
+  arquivoLiberadoSemDecisao,
+  lerClientesComAprovacaoDispensada,
+  marcarAprovacaoDispensada,
+} from "@/lib/clientes/modoDeAprovacao";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 
 // The generated Database type is updated only after this unapplied migration
@@ -143,11 +148,17 @@ export interface EditorialFileRow {
   approval_status: string;
   agency_approval_status?: string;
   visibility: string;
+  /** Só a leitura da equipe (staff_files_secure) traz estes três. */
+  requires_approval?: boolean | null;
+  client_decided_at?: string | null;
+  client_decided_by?: string | null;
   locked_at: string | null;
   status: string | null;
   archived_at: string | null;
   parent_file_id: string | null;
   created_at?: string | null;
+  /** Marca só de tela (aprovação dispensada no cadastro); o banco decide. */
+  client_approval_waived?: boolean | null;
 }
 
 export interface EditorialEventRow {
@@ -729,8 +740,9 @@ async function readEditorialCalendar(
             editorialDb
               .from(actualStaff ? "staff_files_secure" : "files")
               .select(
+                // 27/11/2026: a equipe lê requires_approval e client_decided_* para a marca da dispensa.
                 actualStaff
-                  ? "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at"
+                  ? "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, requires_approval, client_decided_at, client_decided_by, locked_at, status, archived_at, parent_file_id, created_at"
                   : "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
               )
               .in("id", chunk),
@@ -763,7 +775,18 @@ async function readEditorialCalendar(
     publicationInternalRows.map((row) => [row.publication_id, row]),
   );
   const accountById = new Map(accountRows.map((row) => [row.id, row]));
-  const fileById = new Map(fileRows.map((row) => [row.id, row]));
+  // 27/11/2026: para a equipe, a raiz aprovada pela agência (interna ou liberada),
+  // sem decisão, de um cliente com a aprovação dispensada recebe a marca de tela
+  // (o banco confere).
+  // Só na visão interna: a equipe pré-visualizando a visão do cliente não vê a marca.
+  const clientesDispensados = exposeInternal
+    ? await lerClientesComAprovacaoDispensada(
+        fileRows.filter((row) => arquivoLiberadoSemDecisao(row)).map((row) => row.client_id),
+      )
+    : new Set<string>();
+  const fileById = new Map(
+    fileRows.map((row) => [row.id, marcarAprovacaoDispensada(row, clientesDispensados)]),
+  );
   const childrenByParentId = new Map<string, EditorialFileRow[]>();
   childFileRows.forEach((file) => {
     if (!file.parent_file_id) return;
@@ -1167,7 +1190,7 @@ export function useEditorialEditorOptions(
         rawAccounts,
         accountConnections,
         accountPermission,
-        files,
+        rawFiles,
         tasks,
         assignments,
         usedPrimaryFiles,
@@ -1219,7 +1242,7 @@ export function useEditorialEditorOptions(
               editorialDb
                 .from("staff_files_secure")
                 .select(
-                  "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
+                  "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, requires_approval, client_decided_at, client_decided_by, locked_at, status, archived_at, parent_file_id, created_at",
                 )
                 .eq("client_id", clientId)
                 // Arquivo do cliente SEM projeto também entra: o upload em
@@ -1288,6 +1311,19 @@ export function useEditorialEditorOptions(
             .not("file_id", "is", null),
         ),
       ]);
+
+      // Marca de dispensa só para arquivo já do projeto (sem projeto não recebe).
+      const elegiveis = rawFiles.filter(
+        (file) => file.project_id === projectId && arquivoLiberadoSemDecisao(file),
+      );
+      const clientesDispensados = elegiveis.length > 0
+        ? await lerClientesComAprovacaoDispensada([clientId])
+        : new Set<string>();
+      const files = rawFiles.map((file) =>
+        file.project_id === projectId
+          ? marcarAprovacaoDispensada(file, clientesDispensados)
+          : file,
+      );
 
       const linkedAccountIds = unique(
         links.map((link) => link.external_account_id),

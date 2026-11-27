@@ -133,6 +133,13 @@ export interface EditorialApprovalFile {
   locked_at?: string | null;
   status?: string | null;
   archived_at?: string | null;
+  /**
+   * 27/11/2026: marca só de tela, posta pelo carregador da Agenda para a
+   * equipe quando o cliente tem modo_aprovacao_do_cliente = 'dispensada'
+   * (src/lib/clientes/modoDeAprovacao.ts). Quem decide é o banco
+   * (editorial_file_client_approval_waived); a marca só evita esconder o botão.
+   */
+  client_approval_waived?: boolean | null;
 }
 
 export interface EditorialPublicationLike {
@@ -231,16 +238,31 @@ export function isEditorialFilePublishable(
   // - fluxo de aprovação concluído (cliente aprovou no painel ou no grupo);
   // - material DISPONIBILIZADO ao cliente (client_shared): a regra da casa é
   //   que disponibilizar dispensa a aprovação do cliente.
+  // 27/11/2026: terceiro estado, só com a marca do carregador: aprovação do
+  // cliente dispensada no cadastro, peça aprovada pela agência (interna ou
+  // liberada) e ainda sem decisão nem trava.
   return Boolean(
     file
     && file.agency_approval_status === "approved"
-    && (
-      (file.visibility === "approval" && file.approval_status === "approved")
-      || file.visibility === "client_shared"
-    )
-    && file.locked_at
     && file.archived_at == null
-    && (file.status ?? "ready") === "ready",
+    && (file.status ?? "ready") === "ready"
+    && (
+      (
+        file.locked_at
+        && (
+          (file.visibility === "approval" && file.approval_status === "approved")
+          || file.visibility === "client_shared"
+        )
+      )
+      || (
+        file.client_approval_waived === true
+        && !file.locked_at
+        && (
+          (file.visibility === "approval" && file.approval_status === "pending")
+          || (file.visibility === "internal" && file.approval_status === "none")
+        )
+      )
+    ),
   );
 }
 
@@ -303,7 +325,7 @@ export function getEditorialApprovalStage(
   ) {
     return "agency_review";
   }
-  if (files.some((file) => file.approval_status === "pending")) {
+  if (files.some((file) => file.approval_status === "pending" && file.client_approval_waived !== true)) {
     return "client_review";
   }
   if (files.every(isEditorialFilePublishable)) return "approved";
