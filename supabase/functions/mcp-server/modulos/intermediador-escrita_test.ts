@@ -106,3 +106,9 @@ Deno.test('mensagens picadas: até 3 partes, menção só na primeira, sobra vai
   assertEquals(corrido(quatro.texto), 'Boa!\nAnotado aqui\nJá passei pro time Valeu');
   assert(pedidoAoEscritor({ ...base, tipo: 'pergunta' }).sistema.includes('///'));
 });
+
+Deno.test('alinhar: dizer que o time vai cuidar passa; prazo, preço e resultado não', () => {
+  const q = JSON.stringify(perguntasDoTexto('mencao', [], null, { podeDizerQueOTimeFaz: true }).promete);
+  assert(q.includes('prazo') && q.includes('NÃO conta'));
+  assert(!JSON.stringify(perguntasDoTexto('mencao', []).promete).includes('NÃO conta'));
+});

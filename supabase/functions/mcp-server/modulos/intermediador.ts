@@ -827,7 +827,7 @@ async function tratarMencao(porta: PortaDoIntermediador, reg: Mencao, m: MsgMenc
     let ok = !limpo.problema;
     if (ok) {
       try {
-        const q = perguntasDoTexto('mencao', []);
+        const q = perguntasDoTexto('mencao', [], null, { podeDizerQueOTimeFaz: intencao.intencao === 'alinhar' });
         const r = await porta.jev({ mensagem: corrido(limpo.texto), contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { mensagem_que_marcou: mensagem } }, q);
         const notas = Object.fromEntries(Object.keys(q).map((k) => [k, probabilidadeNoul(r.answers[k]) ?? (k === 'promete' ? 1 : 0)]));
         const problema = problemaDoTexto(notas);
