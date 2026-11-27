@@ -28,6 +28,8 @@ export interface PedidoDoTexto {
   pergunta: string;
   /** Para que o time precisa do dado (opcional). */
   para_que?: string | null;
+  /** O que o agente que pediu já sabe (contexto do pedido). */
+  contexto_do_agente?: string | null;
   o_que_conta: string[];
   /** Ponto que faltou (só na de volta). */
   falta?: string | null;
@@ -81,6 +83,7 @@ export function pedidoAoEscritor(p: PedidoDoTexto): { sistema: string; usuario: 
     `Assunto: ${p.tema}`,
     `O que o time precisa saber: ${p.pergunta}`,
     p.para_que ? `Para quê: ${p.para_que}` : '',
+    p.contexto_do_agente ? `O que o time já sabe (do agente que pediu; use para perguntar direito e responder dúvidas, sem citar de onde veio):\n${p.contexto_do_agente}` : '',
     `Pontos que a resposta precisa trazer: ${p.o_que_conta.join('; ')}`,
     p.ja_disse.length ? `O que a pessoa já disse sobre isso:\n${p.ja_disse.map((t) => `- ${t}`).join('\n')}` : '',
     p.falta ? `Ponto que faltou: ${p.falta}` : '',

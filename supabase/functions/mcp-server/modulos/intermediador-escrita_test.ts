@@ -116,3 +116,8 @@ Deno.test('alinhar: dizer que o time vai cuidar passa; prazo, preço e resultado
 Deno.test('limparTexto: caminho de arquivo do servidor nunca sai', () => {
   assert(limparTexto('@{pessoa}, olha o que achei em /etc/mercurio-pilot/bridge.token', 'pergunta').problema?.includes('servidor'));
 });
+
+Deno.test('o contexto que o agente mandou no pedido chega ao escritor', () => {
+  const { usuario } = pedidoAoEscritor({ ...base, tipo: 'pergunta', contexto_do_agente: 'A promo anterior foi Frango + Coca 69,90.' });
+  assert(usuario.includes('O que o time já sabe') && usuario.includes('69,90'));
+});
