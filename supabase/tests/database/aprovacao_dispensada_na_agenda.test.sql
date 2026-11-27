@@ -498,7 +498,7 @@ SELECT throws_ok($sql$
   SELECT public.transition_editorial_publication(
     pg_temp.id_de('D_pub'), 'cancel',
     (SELECT version FROM public.editorial_publications WHERE id = pg_temp.id_de('D_pub')) + 1)
-$sql$, '40001', 'publication changed; refresh before transitioning', 'cancelar confere a versão');
+$sql$, 'P0001', 'publication changed; refresh before transitioning', 'cancelar confere a versão');
 SELECT lives_ok($sql$
   SELECT public.transition_editorial_publication(
     pg_temp.id_de('D_pub'), 'cancel',
