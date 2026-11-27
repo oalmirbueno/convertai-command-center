@@ -51,6 +51,8 @@ import {
 
 export const SLUG_DO_INTERMEDIADOR = 'intermediador';
 export const ESPERA_O_CLIENTE_TERMINAR_MS = 90_000;
+/** Quanto da conversa antes da pergunta o Jev e o escritor leem (imagens e respostas que já vieram). */
+export const CONTEXTO_ANTES_DA_PERGUNTA_MS = 6 * 3_600_000;
 /** Quanto a reserva do escritor tem para devolver um pedido antes de contar como falha. */
 export const ESPERA_DA_RESERVA_MS = 10 * 60_000;
 
@@ -67,7 +69,7 @@ const ENVIA = { readOnlyHint: false, idempotentHint: false, destructiveHint: fal
 
 // ─── Tipos ──────────────────────────────────────────────────────
 
-export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou' | 'outra_pessoa'; tipo: string; texto: string; em: string; /** número de quem falou (nunca sai para o agente) */ de?: string | null; /** id da mensagem citada */ cita?: string | null }
+export interface Ouvida { id: string; quem: string; como: 'marcada' | 'citou' | 'outra_pessoa' | 'agencia'; tipo: string; texto: string; em: string; /** número de quem falou (nunca sai para o agente) */ de?: string | null; /** id da mensagem citada */ cita?: string | null }
 export interface Assunto {
   id: string; client_id: string; group_id: string; grupo_nome: string; tema: string; pergunta: string; para_que: string | null;
   marcar_numero: string; marcar_nome: string | null; marcar_numeros: string[]; marcar_nomes: string[]; o_que_conta: string[]; pode_perguntar_de_volta: boolean;
@@ -569,13 +571,31 @@ export function conversaDoAssunto(envios: Envio[], ouvidas: Ouvida[], quantasNov
   return [...nossas.map(({ id: _id, ...x }) => x), ...doCliente].sort((x, y) => Date.parse(x.em) - Date.parse(y.em)).map(({ em: _em, ...x }) => x);
 }
 
-async function julgar(porta: PortaDoIntermediador, a: Assunto, ouvidas: Ouvida[], quantasNovas: number): Promise<Notas> {
+/** A conversa do grupo em ordem, de antes da pergunta até agora, para o Jev ler como gente lê. */
+export function conversaDoGrupo(msgs: MsgGrupo[], novas: Set<string>, nossos: Map<string, string>) {
+  return msgs.slice(-40).map((m) => {
+    const papel = String(m.papel ?? '');
+    const quem = papel === 'bot' ? 'assistente da agência' : papel.startsWith('agencia') ? 'Almir (agência)' : `${String(m.remetente_nome ?? 'cliente').split(/\s+/)[0]} (cliente)`;
+    return { quem, ...(novas.has(m.id) ? { nova: true } : {}), ...(m.resposta_a && nossos.has(m.resposta_a) ? { respondendo_a: nossos.get(m.resposta_a) } : {}), texto: conteudoDe(m).slice(0, 700) };
+  });
+}
+
+async function lerConversaDoGrupo(porta: PortaDoIntermediador, a: Assunto, novas: Set<string>) {
   const envios = await porta.envios({ assunto_id: a.id });
+  const nossos = new Map<string, string>();
+  for (const e of envios) for (const id of [e.message_id, ...(e.message_ids ?? [])]) if (id) nossos.set(id, NOME_DO_ENVIO[e.tipo] ?? e.tipo);
+  const inicio = Date.parse(a.perguntado_em ?? a.criado_em) - CONTEXTO_ANTES_DA_PERGUNTA_MS;
+  const msgs = await porta.mensagens(a.group_id, iso(inicio));
+  return conversaDoGrupo(msgs.filter((m) => Date.parse(m.occurred_at) >= inicio), novas, nossos);
+}
+
+async function julgar(porta: PortaDoIntermediador, a: Assunto, ouvidas: Ouvida[], quantasNovas: number): Promise<Notas> {
+  const novasIds = new Set(ouvidas.slice(ouvidas.length - quantasNovas).map((o) => o.id));
   const state = {
     tema: a.tema,
     pergunta_feita: a.pergunta,
     pontos_pedidos: a.o_que_conta,
-    conversa_do_assunto: conversaDoAssunto(envios, ouvidas, quantasNovas),
+    conversa_do_assunto: await lerConversaDoGrupo(porta, a, novasIds),
     mensagens_do_cliente: ouvidas.map((o, i) => ({ n: i + 1, nova: i >= ouvidas.length - quantasNovas, como: o.como === 'citou' ? 'citou a pergunta' : o.como === 'marcada' ? 'pessoa marcada' : 'outra pessoa do cliente', tipo: o.tipo, texto: o.texto })),
   };
   const q = perguntasAoJev(a.o_que_conta);
@@ -604,7 +624,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     const pedido = pedidoAoEscritor({
       tipo, cliente: ctx.nome, primeiro_nome: nome, marcados: marcados.length, tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, o_que_conta: a.o_que_conta,
-      falta: falta ?? null, ja_disse: a.ouvidas.map((o) => o.texto), conversa_recente: conversa, contexto: ctx.dossie, corrigir,
+      falta: falta ?? null, ja_disse: a.ouvidas.map((o) => o.texto), ja_sabemos: jaSabemos(a), conversa_recente: conversa, contexto: ctx.dossie, corrigir,
     });
     const bruto = await porta.escrever({ clientId: a.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: a.id });
     if (!bruto) return { motivo: 'o escritor do painel não respondeu' };
@@ -617,7 +637,7 @@ export async function escreverTexto(porta: PortaDoIntermediador, a: Assunto, tip
     }
     let notas: Record<string, number>;
     try {
-      const q = perguntasDoTexto(tipo, a.o_que_conta, falta);
+      const q = perguntasDoTexto(tipo, a.o_que_conta.filter((it) => !jaSabemos(a).includes(it)), falta);
       const mensagem = corrido(limpo.texto).split(MARCA).join(`@${nome ?? 'pessoa'}`);
       const r = await porta.jev({ mensagem, contexto: ctx.dossie ?? '', conversa_recente: conversa, pedido: { tema: a.tema, pergunta: a.pergunta, para_que: a.para_que, pontos: a.o_que_conta } }, q);
       notas = Object.fromEntries(Object.keys(q).map((k) => [k, probabilidadeNoul(r.answers[k]) ?? (k === 'promete' ? 1 : 0)]));
@@ -764,9 +784,62 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
     case 'quem_e':
       if (a.envios_ao_cliente + 2 <= MAXIMO_AO_CLIENTE) await enviarAoGrupo(porta, a, 'quem_e');
       return 'quem_e';
+    case 'responder': {
+      // O cliente perguntou algo do assunto: responde pelo contexto; se não der sem inventar, é com o Almir.
+      const escrito = a.envios_ao_cliente + 2 <= MAXIMO_AO_CLIENTE ? await escreverTexto(porta, a, 'resposta', d.faltam[0] ?? null) : { motivo: 'sem espaço' };
+      if ('texto' in escrito && !escrito.texto.includes('[ALMIR]')) {
+        const t = comPessoa(escrito.texto, marcadosDe(a).map((x) => x.numero), marcadosDe(a).map((x) => x.nome));
+        const e = await porta.criarEnvio({ assunto_id: a.id, tipo: 'resposta', destino: 'grupo', texto: t.texto, texto_previa: t.texto_previa, mencoes: [] });
+        if (e) { await porta.atualizarAssunto(a.id, { envios_ao_cliente: a.envios_ao_cliente + 1 }); return 'responder'; }
+      }
+      if ('motivo' in escrito && escrito.pendente) return 'responder_aguardando_reserva';
+      a = (await enviarAoGrupo(porta, a, 'humano')).a;
+      await avisarDono(porta, a, `O cliente perguntou algo que não consegui responder pela conversa:\n"${novas.map((o) => o.texto).join(' ').slice(0, 600)}"`);
+      await finalizar(porta, a, 'precisa_do_almir', n, 'o cliente perguntou algo que só o Almir responde');
+      return 'humano';
+    }
     default:
       return 'esperar';
   }
+}
+
+/** Pontos que a conversa já respondeu (nota ≥ corte), para o escritor não perguntar de novo. */
+export function jaSabemos(a: Pick<Assunto, 'itens' | 'o_que_conta'>): string[] {
+  return a.o_que_conta.filter((it) => Number((a.itens ?? {})[it] ?? 0) >= CORTE);
+}
+
+/**
+ * 27/11 (caso Casa dos Assados): a cliente mandou as artes com os preços e escreveu "Esses são os preços"; um minuto
+ * depois saiu a pergunta dos preços. Agora, antes de abrir, o Jev lê as últimas 6 h do grupo (com as imagens descritas):
+ * tudo respondido → fecha sem perguntar e devolve ao agente o que estava na conversa; parte → pergunta só o resto.
+ */
+export async function conferirAntesDePerguntar(porta: PortaDoIntermediador, a: Assunto): Promise<'ja_respondido' | 'jev_falhou' | { itens: Record<string, number> }> {
+  const agora = porta.agora();
+  const msgs = (await porta.mensagens(a.group_id, iso(agora - CONTEXTO_ANTES_DA_PERGUNTA_MS)));
+  const temGente = msgs.some((m) => String(m.papel ?? '').startsWith('cliente') || String(m.papel ?? '').startsWith('agencia'));
+  if (!temGente) return { itens: {} };
+  const state = { tema: a.tema, pergunta_feita: a.pergunta, pontos_pedidos: a.o_que_conta, conversa_do_assunto: conversaDoGrupo(msgs, new Set(), new Map()), mensagens_do_cliente: [] };
+  let n: Notas;
+  try {
+    const q = perguntasAoJev(a.o_que_conta);
+    n = lerNotas(await porta.jev(state, q), a.o_que_conta.length);
+    if (precisaDeMediana(n)) n = combinarNotas([n, ...(await Promise.all([porta.jev(state, q), porta.jev(state, q)])).map((r) => lerNotas(r, a.o_que_conta.length))]);
+  } catch {
+    return 'jev_falhou';
+  }
+  const itens = Object.fromEntries(a.o_que_conta.map((it, i) => [it, Number(n.itens[i].toFixed(2))]));
+  await porta.evento(a.id, 'conferido_antes_de_perguntar', { itens });
+  if (a.o_que_conta.every((_, i) => n.itens[i] >= CORTE)) {
+    // Tudo já está na conversa: nada vai ao cliente; o agente recebe o que estava lá.
+    const doGrupo: Ouvida[] = msgs.filter((m) => m.papel !== 'bot').slice(-12).map((m) => ({
+      id: m.id, quem: String(m.papel ?? '').startsWith('agencia') ? 'Almir' : (m.remetente_nome ?? 'cliente'), como: String(m.papel ?? '').startsWith('agencia') ? 'agencia' : 'outra_pessoa',
+      tipo: m.tipo ?? 'texto', texto: conteudoDe(m), em: m.occurred_at,
+    }));
+    const b = (await porta.atualizarAssunto(a.id, { itens, ouvidas: doGrupo }, ['na_fila'])) ?? a;
+    await finalizar(porta, b, 'respondido', n, 'já estava na conversa do grupo; nada foi perguntado ao cliente');
+    return 'ja_respondido';
+  }
+  return { itens };
 }
 
 // ─── 2.43: quando alguém marca o assistente ─────────────────────
@@ -938,7 +1011,11 @@ export async function intermediadorRodada(input: unknown, ctx: AuthContext, port
     // Escrita que falhou há pouco espera 15 min (IA sem crédito não pode virar uma chamada por minuto).
     const segurado = await porta.ultimoEvento(a.id, 'texto_segurado');
     if (segurado && agora - Date.parse(segurado) < 15 * 60_000) continue;
-    const aberto = await porta.atualizarAssunto(a.id, { estado: 'perguntando' }, ['na_fila']);
+    // Antes de perguntar, lê a conversa recente (com as imagens): o que já foi dito não se pergunta de novo.
+    const previa = await conferirAntesDePerguntar(porta, a);
+    if (previa === 'ja_respondido') { conta('ja_estava_na_conversa'); continue; }
+    if (previa === 'jev_falhou') continue;
+    const aberto = await porta.atualizarAssunto(a.id, { estado: 'perguntando', itens: previa.itens }, ['na_fila']);
     if (!aberto) continue;
     const r = await enviarAoGrupo(porta, aberto, 'pergunta');
     if (!r.ok) {

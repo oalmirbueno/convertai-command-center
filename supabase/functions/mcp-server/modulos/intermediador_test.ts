@@ -39,6 +39,8 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
   const envios: Envio[] = [];
   const eventos: { assunto_id: string | null; tipo: string; dados: Record<string, unknown>; em: string }[] = [];
   const escritas: string[] = [];
+  const preChecagens: unknown[] = [];
+  let preJev: Jev = () => ({});
   const reserva: { id: string; sistema: string; usuario: string; texto: string | null }[] = [];
   let reservaLigada = false;
   const mencoesNaFila: MsgMencao[] = [];
@@ -146,6 +148,15 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
         for (const k of Object.keys(questions)) answers[k] = { noul: n[k] ?? (k === 'promete' ? 0.05 : 0.9) };
         return { answers, usage: null, modelo: 'jev-teste' };
       }
+      // Conferência antes de perguntar (sem mensagens do cliente no assunto): por padrão nada respondido ainda.
+      if (Array.isArray((state as { mensagens_do_cliente?: unknown[] }).mensagens_do_cliente) && (state as { mensagens_do_cliente: unknown[] }).mensagens_do_cliente.length === 0) {
+        preChecagens.push(state);
+        const r0 = { relacao: 'outro_assunto', itens: [], humano: 0, quem_e: 0, ...preJev(state) };
+        const answers0: ResultadoJev['answers'] = { relacao: { choice: r0.relacao }, humano: { noul: r0.humano }, quem_e: { noul: r0.quem_e } };
+        (r0.itens as number[]).forEach((x, i) => { answers0[`item_${i}`] = { noul: x }; });
+        for (const k of Object.keys(questions)) if (k.startsWith('item_') && !answers0[k]) answers0[k] = { noul: 0.1 };
+        return { answers: answers0, usage: null, modelo: 'jev-teste' };
+      }
       jevChamadas.push(state);
       const r = { relacao: 'responde', itens: [], humano: 0, quem_e: 0, ...jev(state) };
       const answers: ResultadoJev['answers'] = { relacao: { choice: r.relacao }, humano: { noul: r.humano }, quem_e: { noul: r.quem_e } };
@@ -158,6 +169,8 @@ function memoria(opcoes: { slug?: string; grau?: string; jev?: Jev } = {}) {
     setIntencao: (x: { intencao: string; humano?: number }) => { intencaoDaVez = x; },
     reserva,
     ligarReserva: () => { reservaLigada = true; },
+    preChecagens,
+    setPreJev: (f: Jev) => { preJev = f; },
     setNotaDosFatos: (x: number) => { notaDosFatos = x; },
     marcar: (texto: string, extra: Partial<MsgMencao> = {}) => {
       const em = new Date(agora - 120_000).toISOString();
@@ -638,4 +651,74 @@ Deno.test('reserva: texto com cara de segredo é recusado; caminho de arquivo do
   const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
   const x = await intermediadorEscritaFeita({ escrita_id: r.escritas[0].id, texto: 'token: sk-proj-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }, ctx(), m.porta);
   assertEquals((x as { recusado?: boolean }).recusado, true);
+});
+
+// ─── 27/11: não perguntar o que já está na conversa (caso Casa dos Assados) ───
+
+Deno.test('antes de perguntar lê a conversa: os preços já vieram nas artes, então nada vai ao cliente e o agente recebe o que estava lá', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setPreJev(() => ({ itens: [0.92, 0.9] }));
+  m.cliente(OUTRA, '', { tipo: 'imagem', texto: null, descricao_midia: 'Arte "Frango + Coca-Cola", preço R$ 69,90' });
+  m.cliente(OUTRA, 'Esses são os preços');
+  await intermediadorPedir(PEDIDO, ctx(), m.porta);
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.feito.ja_estava_na_conversa, 1);
+  assertEquals(r.envios.length, 0);
+  assertEquals(m.assuntos[0].estado, 'respondido');
+  assert(m.devolvidas[0].texto.includes('R$ 69,90'));
+  assert(JSON.stringify(m.preChecagens[0]).includes('Frango + Coca-Cola'));
+});
+
+Deno.test('antes de perguntar: parte já respondida vai ao escritor como "não pergunte de novo" e o Jev só cobra o resto', async () => {
+  const m = memoria({ slug: 'intermediador' });
+  m.setPreJev(() => ({ itens: [0.95, 0.1] }));
+  m.cliente(OUTRA, 'Dia 24 a gente abre sim');
+  await intermediadorPedir(PEDIDO, ctx(), m.porta);
+  const r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.map((e) => e.tipo), ['pergunta']);
+  assert(m.escritas[0].includes('NÃO pergunte de novo') && m.escritas[0].includes('abre ou não dia 24'));
+  const conferido = m.textosConferidos[0] as Record<string, unknown>;
+  assert(conferido);
+});
+
+Deno.test('o que veio antes da pergunta entra no julgamento: "os mesmos da imagem" resolve o preço', async () => {
+  const m = memoria({ slug: 'intermediador', jev: (st) => JSON.stringify(st).includes('R$ 69,90') && JSON.stringify(st).includes('Os mesmos da imagem')
+    ? { relacao: 'responde', itens: [0.9, 0.9] } : { relacao: 'responde_parte', itens: [0.9, 0.1] } });
+  m.cliente(OUTRA, '', { tipo: 'imagem', texto: null, descricao_midia: 'Arte "Frango + Coca-Cola", preço R$ 69,90' });
+  m.setPreJev(() => ({ itens: [0.2, 0.2] }));
+  await perguntar(m);
+  m.avancar(3);
+  m.cliente(MARCADA, 'Os mesmos da imagem', { resposta_a: '3EB0PERGUNTA' });
+  await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.assuntos[0].estado, 'respondido');
+});
+
+Deno.test('o Almir responde no lugar do cliente ("Já foi confirmado na imagem 69,90") e o assunto fecha', async () => {
+  const m = memoria({ slug: 'intermediador', jev: (st) => JSON.stringify(st).includes('Já foi confirmado') ? { relacao: 'responde', itens: [0.9, 0.9] } : { relacao: 'outro_assunto', itens: [0.1, 0.1] } });
+  await perguntar(m);
+  m.avancar(3);
+  m.mensagens.push({ id: 'ALMIR1', remetente: '554198848435', remetente_nome: 'Almir B. Bueno', papel: 'agencia', tipo: 'texto', texto: 'Já foi confirmado na imagem 69,90', transcricao: null, transcricao_status: 'nao_aplicavel', descricao_midia: null, resposta_a: null, occurred_at: new Date(QUARTA_10H + 60_000).toISOString(), received_at: new Date(QUARTA_10H + 3 * 60_000).toISOString() });
+  await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(m.assuntos[0].estado, 'respondido');
+  assertEquals(m.assuntos[0].ouvidas[0].como, 'agencia');
+  assertEquals(m.assuntos[0].marcar_numeros, [MARCADA]); // o Almir nunca vira "marcado"
+});
+
+Deno.test('cliente pergunta algo do assunto: o assistente responde pelo contexto; se não der, vai ao Almir', async () => {
+  const m = memoria({ slug: 'intermediador', jev: () => ({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1], humano: 0.1 }) });
+  m.setEscritor((u) => u.includes('O cliente perguntou algo a você') ? 'É pro post de fim de ano, que sai na semana que vem.' : 'Oi @{pessoa}, tudo certo? Vocês atendem dia 24? E até que horas?');
+  await perguntar(m);
+  m.avancar(3);
+  m.cliente(MARCADA, 'É pra qual post isso?');
+  let r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m.porta);
+  assertEquals(r.envios.map((e) => e.tipo), ['resposta']);
+  assertEquals(m.assuntos[0].estado, 'esperando');
+
+  const m2 = memoria({ slug: 'intermediador', jev: () => ({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1], humano: 0.1 }) });
+  m2.setEscritor((u) => u.includes('O cliente perguntou algo a você') ? '[ALMIR]' : 'Oi @{pessoa}, tudo certo? Vocês atendem dia 24? E até que horas?');
+  await perguntar(m2);
+  m2.avancar(3);
+  m2.cliente(MARCADA, 'Vocês vão mudar o logo?');
+  r = await intermediadorRodada({ modo: 'grupos' }, ctx(), m2.porta);
+  assertEquals(m2.assuntos[0].estado, 'precisa_do_almir');
 });

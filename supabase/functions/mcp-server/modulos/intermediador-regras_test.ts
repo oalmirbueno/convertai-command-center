@@ -21,13 +21,13 @@ Deno.test('perguntaProibida: termo interno, cobrança e travessão não saem; pr
   assertEquals(perguntaProibida('Dá uma olhada em https://x.y'), 'link');
 });
 
-Deno.test('ouvida: cliente marcado, quem citou ou outra pessoa do cliente; agência e bot nunca', () => {
+Deno.test('ouvida: cliente marcado, quem citou, outra pessoa do cliente ou o Almir; bot nunca', () => {
   const a = { marcar_numero: '554799990000' };
   const nossos = new Set(['3EB0AAA']);
   assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554799990000', resposta_a: null }, a, nossos), 'marcada');
   assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554711112222', resposta_a: '3EB0AAA' }, a, nossos), 'citou');
   assertEquals(ouvida({ papel: 'cliente_equipe', remetente: '554711112222', resposta_a: null }, a, nossos), 'outra_pessoa');
-  assertEquals(ouvida({ papel: 'agencia', remetente: '554799990000', resposta_a: '3EB0AAA' }, a, nossos), null);
+  assertEquals(ouvida({ papel: 'agencia', remetente: '554799990000', resposta_a: '3EB0AAA' }, a, nossos), 'agencia'); // o Almir também resolve
   assertEquals(ouvida({ papel: 'bot', remetente: '554197483429', resposta_a: null }, a, nossos), null);
 });
 
@@ -78,7 +78,8 @@ Deno.test('decidir: sem pergunta de volta disponível fecha em parte', () => {
 
 Deno.test('decidir: humano tem prioridade; quem_e responde; vai ver, reação e outro assunto esperam', () => {
   assertEquals(decidir(base, notas({ humano: 0.8 })).acao, 'humano');
-  assertEquals(decidir(base, notas({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1, 0.1], humano: 0.3 })).acao, 'humano');
+  assertEquals(decidir(base, notas({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1, 0.1], humano: 0.3 })).acao, 'responder');
+  assertEquals(decidir(base, notas({ relacao: 'pergunta_ao_assistente', itens: [0.1, 0.1, 0.1], humano: 0.8 })).acao, 'humano');
   assertEquals(decidir(base, notas({ relacao: 'outro_assunto', itens: [0.1, 0.1, 0.1], quem_e: 0.9 })).acao, 'quem_e');
   for (const relacao of ['vai_ver', 'reacao', 'outro_assunto'] as const) {
     assertEquals(decidir(base, notas({ relacao, itens: [0.1, 0.1, 0.1] })).acao, 'esperar');

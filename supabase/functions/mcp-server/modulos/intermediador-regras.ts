@@ -20,7 +20,7 @@ export const ESTADOS_FINAIS = ['respondido', 'respondido_em_parte', 'vencido', '
 
 export type Relacao = 'responde' | 'responde_parte' | 'pergunta_ao_assistente' | 'vai_ver' | 'reacao' | 'outro_assunto';
 export interface Notas { relacao: Relacao; itens: number[]; humano: number; quem_e: number }
-export type Acao = 'fechar' | 'fechar_parcial' | 'de_volta' | 'humano' | 'quem_e' | 'esperar';
+export type Acao = 'fechar' | 'fechar_parcial' | 'de_volta' | 'humano' | 'quem_e' | 'responder' | 'esperar';
 
 /** O que nunca sai na pergunta de um agente (o motivo volta ao agente). */
 export function perguntaProibida(t: string): string | null {
@@ -41,7 +41,9 @@ export function ouvida(
   m: { papel: string | null; remetente: string | null; resposta_a: string | null },
   a: { marcar_numero: string; marcar_numeros?: string[] },
   nossos: Set<string>,
-): 'marcada' | 'citou' | 'outra_pessoa' | null {
+): 'marcada' | 'citou' | 'outra_pessoa' | 'agencia' | null {
+  // 27/11: o que o Almir diz no grupo também resolve o assunto ("Já foi confirmado na imagem 69,90").
+  if (String(m.papel ?? '').startsWith('agencia')) return 'agencia';
   if (!String(m.papel ?? '').startsWith('cliente')) return null;
   if (m.resposta_a && nossos.has(m.resposta_a)) return 'citou';
   const marcados = a.marcar_numeros?.length ? a.marcar_numeros : [a.marcar_numero];
@@ -110,7 +112,7 @@ export function perguntasAoJev(itens: string[]): Record<string, PerguntaJev> {
   const q: Record<string, PerguntaJev> = {
     relacao: {
       type: 'choice',
-      instructions: 'O assistente da agência fez a pergunta em "pergunta_feita" ao cliente no grupo; "conversa_do_assunto" traz em ordem tudo o que o assistente mandou e o que o cliente respondeu (uma resposta curta como "sim" responde à última pergunta do assistente antes dela). Olhe as mensagens do cliente marcadas como novas. Qual destas descreve melhor as mensagens novas?',
+      instructions: 'O assistente da agência fez a pergunta em "pergunta_feita" ao cliente no grupo; "conversa_do_assunto" traz em ordem a conversa do grupo, de antes da pergunta até agora: imagens descritas, o que o cliente, o Almir e o assistente disseram (uma resposta curta como "sim" ou "os mesmos da imagem" se refere ao que veio antes dela). Olhe as mensagens marcadas como novas. Qual destas descreve melhor as mensagens novas?',
       criteria: RELACOES,
     },
     humano: {
@@ -126,8 +128,8 @@ export function perguntasAoJev(itens: string[]): Record<string, PerguntaJev> {
   itens.forEach((item, i) => {
     q[`item_${i}`] = {
       type: 'noul',
-      instructions: { pergunta: 'Lendo "conversa_do_assunto" em ordem (uma resposta curta como "sim" ou "isso" confirma o que o assistente acabou de perguntar), este ponto da pergunta está resolvido? Conta como resolvido quando o cliente respondeu o ponto ou quando a resposta dele torna o ponto desnecessário (ex.: disse que não vai ter recesso, então as datas do recesso não se aplicam).', ponto: item },
-      criteria: { true: 'O cliente respondeu o ponto (sim, não, valor, data, escolha) ou a resposta dele já torna o ponto desnecessário', false: 'O ponto ainda faz sentido e o cliente não falou dele, ou ficou vago' },
+      instructions: { pergunta: 'Lendo "conversa_do_assunto" inteira e em ordem, este ponto já está resolvido? Vale o que o cliente disse, o que mostrou em imagem (preço, data, nome escritos na arte ou no print) e o que o Almir confirmou; uma resposta curta como "sim", "isso" ou "os mesmos da imagem" se refere ao que veio antes. Também conta como resolvido quando a resposta torna o ponto desnecessário (ex.: disse que não vai ter recesso, então as datas do recesso não se aplicam).', ponto: item },
+      criteria: { true: 'A conversa já responde o ponto (dito, mostrado em imagem ou confirmado pelo Almir) ou ele deixou de fazer sentido', false: 'O ponto ainda faz sentido e ninguém respondeu, ou ficou vago' },
     };
   });
   return q;
@@ -173,7 +175,8 @@ export function decidir(
   const cobriuAlgum = faltam.length < a.o_que_conta.length;
   if (n.humano >= CORTE) return { acao: 'humano', faltam };
   if (n.quem_e >= CORTE) return { acao: 'quem_e', faltam };
-  if (n.relacao === 'pergunta_ao_assistente') return { acao: 'humano', faltam };
+  // Pergunta do cliente sobre o assunto: o assistente responde pelo contexto (se não der, vira humano lá na frente).
+  if (n.relacao === 'pergunta_ao_assistente') return { acao: 'responder', faltam };
   if (faltam.length === 0) return { acao: 'fechar', faltam };
   const respondeu = (n.relacao === 'responde' || n.relacao === 'responde_parte') && cobriuAlgum;
   if (!respondeu) return { acao: 'esperar', faltam };

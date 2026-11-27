@@ -3388,7 +3388,15 @@
     },
     {
       "version": "20261127190000",
-      "path": "supabase/migrations/20261127190000_alcada_automatica.sql",
+      "path": "supabase/migrations/20261127190000_intermediador_resposta.sql",
+      "local_sha256": "1bf93f45cf36fb6180d975d3fc5a4302cf036ecc664ba14eb695c501bdedd2c7",
+      "remote_name": "intermediador_resposta",
+      "remote_statements_sha256": "6e7b7205469b6eb6da9e4b909b00bc2ce1d45c56554e6ca9979f27600bc4cdb5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127200000",
+      "path": "supabase/migrations/20261127200000_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",
