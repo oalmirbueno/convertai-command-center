@@ -80,7 +80,7 @@ export interface Envio {
 export interface MsgMencao extends MsgGrupo { client_id: string; group_id: string; rotulo: string }
 export interface Mencao {
   id: string; provider_message_id: string; client_id: string; group_id: string; grupo_nome: string; autor_papel: string;
-  autor_numero: string | null; autor_nome: string | null; texto: string | null; ocorreu_em: string; estado: string;
+  autor_numero: string | null; autor_nome: string | null; texto: string | null; ocorreu_em: string; estado: string; tentativas?: number;
 }
 export interface Pessoa { numero: string; nome: string | null; mensagens: number }
 export interface MsgGrupo {
@@ -122,6 +122,9 @@ export interface PortaDoIntermediador {
   atualizarMencao(id: string, patch: Record<string, unknown>): Promise<void>;
   registrarNoCerebro(f: { client_id: string; area: string; categoria: string; texto: string; evidencia: string }): Promise<{ id: string | null; acao: string }>;
   avisarSala(sala: string, texto: string, clientId: string, chave: string): Promise<string | null>;
+  /** Quando foi o último evento deste tipo (de qualquer assunto) e se o escritor falhou desde um momento. */
+  ultimoEventoGeral(tipo: string): Promise<string | null>;
+  escritorFalhouDesde(desde: string): Promise<boolean>;
 }
 
 // ─── A porta para o banco ───────────────────────────────────────
@@ -276,8 +279,13 @@ export function portaDoBanco(): PortaDoIntermediador {
       return (data ?? []) as MsgMencao[];
     },
     async registrarMencao(m) {
-      const { data, error } = await b.from('intermediador_mencoes').insert(m).select('id, provider_message_id, client_id, group_id, grupo_nome, autor_papel, autor_numero, autor_nome, texto, ocorreu_em, estado').maybeSingle();
-      if (error?.code === '23505') return null;
+      const COLS = 'id, provider_message_id, client_id, group_id, grupo_nome, autor_papel, autor_numero, autor_nome, texto, ocorreu_em, estado, tentativas';
+      const { data, error } = await b.from('intermediador_mencoes').insert(m).select(COLS).maybeSingle();
+      if (error?.code === '23505') {
+        // Já registrada: só volta se ainda está esperando nova tentativa (o escritor não tinha respondido).
+        const { data: ja } = await b.from('intermediador_mencoes').select(COLS).eq('provider_message_id', m.provider_message_id).eq('estado', 'nova').maybeSingle();
+        return (ja as Mencao) ?? null;
+      }
       if (error) falhou('registrar menção', error);
       return (data as Mencao) ?? null;
     },
@@ -301,6 +309,16 @@ export function portaDoBanco(): PortaDoIntermediador {
       const m = await esc.gravarMensagem({ conversa_id: conversa.id, de_slug: SLUG_DO_INTERMEDIADOR, de_tipo: 'operador', para_slug: null, grupo_id: g.id,
         corpo: texto.slice(0, 3900), responde_a: null, client_id: clientId, task_id: null, idempotency_key: chave });
       return m.id;
+    },
+    async ultimoEventoGeral(tipo) {
+      const { data, error } = await b.from('intermediador_eventos').select('em').eq('tipo', tipo).order('em', { ascending: false }).limit(1);
+      if (error) return null;
+      return (data?.[0] as { em: string } | undefined)?.em ?? null;
+    },
+    async escritorFalhouDesde(desde) {
+      const { data, error } = await b.from('intermediador_eventos').select('id').eq('tipo', 'texto_segurado').gte('em', desde).ilike('dados->>motivo', '%escritor%').limit(1);
+      if (error) return false;
+      return (data ?? []).length > 0;
     },
     async ultimoEvento(assuntoId, tipo) {
       const { data, error } = await b.from('intermediador_eventos').select('em').eq('assunto_id', assuntoId).eq('tipo', tipo).order('em', { ascending: false }).limit(1);
@@ -635,7 +653,8 @@ export async function cuidarDoAssunto(porta: PortaDoIntermediador, a0: Assunto):
   if (!novas.length) {
     const metade = perguntadoMs + (a.prazo_horas * 3_600_000) / 2;
     if (lidoAte !== a.lido_ate) a = (await porta.atualizarAssunto(a.id, { lido_ate: lidoAte })) ?? a;
-    if (a.estado === 'esperando' && !a.perguntou_de_volta && agora >= metade && emHorario('lembrete', agora) && a.envios_ao_cliente + 2 <= MAXIMO_AO_CLIENTE) {
+    const seguradoHaPouco = async () => { const u = await porta.ultimoEvento(a.id, 'texto_segurado'); return !!u && agora - Date.parse(u) < 15 * 60_000; };
+    if (a.estado === 'esperando' && !a.perguntou_de_volta && agora >= metade && emHorario('lembrete', agora) && a.envios_ao_cliente + 2 <= MAXIMO_AO_CLIENTE && !(await seguradoHaPouco())) {
       const r = await enviarAoGrupo(porta, a, 'lembrete');
       if (!r.ok) return 'lembrete_segurado';
       await porta.atualizarAssunto(a.id, { estado: 'lembrado' }, ['esperando']);
@@ -751,7 +770,14 @@ async function tratarMencao(porta: PortaDoIntermediador, reg: Mencao, m: MsgMenc
   const podeResponder = agora - Date.parse(m.occurred_at) <= JANELA_DE_RESPOSTA_MS;
   const ctx = await porta.contextoDoCliente(m.client_id);
   const pedido = pedidoAoPlanejador({ intencao: intencao.intencao, cliente: ctx.nome, contexto: ctx.dossie, conversa, quem_marcou: quem, mensagem, pode_responder: podeResponder });
-  const plano = lerPlano(await porta.escrever({ clientId: m.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: reg.id }));
+  const bruto = await porta.escrever({ clientId: m.client_id, sistema: pedido.sistema, usuario: pedido.usuario, assuntoId: reg.id });
+  if (!bruto) {
+    // IA do painel sem resposta (ex.: sem crédito): tenta de novo em 15 min, sem incomodar ninguém.
+    await porta.atualizarMencao(reg.id, { estado: 'nova', intencao: intencao.intencao, notas: intencao, tentativas: (reg.tentativas ?? 0) + 1, motivo: 'o escritor do painel não respondeu' });
+    await porta.evento(null, 'texto_segurado', { tipo: 'mencao', motivo: 'o escritor do painel não respondeu', mencao: reg.id });
+    return 'mencao_sem_escritor';
+  }
+  const plano = lerPlano(bruto);
   if (!plano) {
     await porta.atualizarMencao(reg.id, { estado: 'segurada', intencao: intencao.intencao, notas: intencao, motivo: 'o planejador não devolveu um plano' });
     await avisarDonoDaMencao(porta, reg, `Me marcaram e não consegui montar o que fazer.\n"${mensagem.slice(0, 400)}"`);
@@ -874,12 +900,29 @@ export async function intermediadorRodada(input: unknown, ctx: AuthContext, port
     conta('pergunta');
   }
 
+  // 2b) A IA do painel parou de escrever (ex.: sem crédito): avisa o dono uma vez por dia.
+  if (await porta.escritorFalhouDesde(iso(agora - 10 * 60_000))) {
+    const ultimo = await porta.ultimoEventoGeral('aviso_escritor_parado');
+    const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(agora));
+    if (!ultimo || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(ultimo)) !== hoje) {
+      const esperando = (await porta.assuntos({ estados: ['na_fila', 'esperando', 'lembrado'] })).length;
+      const texto = `Intermediador parado: a IA do painel não está escrevendo (provável falta de crédito no OpenRouter).\n\nEnquanto isso nada sai nos grupos. Pedidos esperando: ${esperando}. Marcações do assistente ficam guardadas e são tratadas quando a IA voltar.`;
+      await porta.criarEnvio({ assunto_id: null, tipo: 'aviso_dono', destino: 'dono', texto, texto_previa: texto, mencoes: [] });
+      await porta.evento(null, 'aviso_escritor_parado', { esperando });
+      conta('aviso_escritor_parado');
+    }
+  }
+
   // 3) O que o VPS precisa mandar agora.
   const pendentes = await porta.envios({ estado: 'pendente' });
   const porId = new Map<string, Assunto>();
   const envios = [];
   for (const e of pendentes) {
     if (!e.assunto_id) {
+      if (e.destino === 'dono') {
+        envios.push({ envio_id: e.id, tipo: e.tipo, destino: e.destino, client_id: e.client_id ?? null, chat_id: null, grupo_nome: e.grupo_nome ?? 'Aceleriq', texto: e.texto, texto_previa: e.texto_previa, mencoes: [], criado_em: e.criado_em });
+        continue;
+      }
       if (!e.group_id || !e.grupo_nome || !e.client_id) continue;
       envios.push({
         envio_id: e.id, tipo: e.tipo, destino: e.destino, client_id: e.client_id, chat_id: e.destino === 'grupo' ? e.group_id : null,
