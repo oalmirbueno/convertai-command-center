@@ -3393,6 +3393,14 @@
       "remote_name": "intermediador_resposta",
       "remote_statements_sha256": "6e7b7205469b6eb6da9e4b909b00bc2ce1d45c56554e6ca9979f27600bc4cdb5",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261127200000",
+      "path": "supabase/migrations/20261127200000_intermediador_contexto.sql",
+      "local_sha256": "dbd2b757a7f2759f54edd757b350b3b4f4dc54f86e09e7a83ad102e121896aaa",
+      "remote_name": "intermediador_contexto",
+      "remote_statements_sha256": "d795c4535e52eec6eb596901bc0c7902b9ad187ac47a3e379511605abe2e8df8",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
