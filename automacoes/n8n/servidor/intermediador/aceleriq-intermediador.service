@@ -10,9 +10,10 @@ WorkingDirectory=/opt/aceleriq-intermediador
 # previa = cada texto vai só ao WhatsApp do Almir. "grupos" (real) só com ok dele em palavras.
 Environment=INTERMEDIADOR_MODO=previa
 ExecStart=/opt/mercurio-pilot/node /opt/aceleriq-intermediador/intermediador.mjs
-TimeoutStartSec=240
+TimeoutStartSec=420
 Nice=10
 ProtectSystem=strict
-ReadWritePaths=/var/lib/aceleriq-intermediador
+# /root/.codex: a reserva do escritor (Codex) renova o login da conta do ChatGPT ali.
+ReadWritePaths=/var/lib/aceleriq-intermediador /root/.codex
 PrivateTmp=yes
 NoNewPrivileges=yes

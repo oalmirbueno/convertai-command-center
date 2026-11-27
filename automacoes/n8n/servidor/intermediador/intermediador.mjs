@@ -8,6 +8,9 @@
 // Estado em /var/lib/aceleriq-intermediador/diario.jsonl. Envio com resultado incerto nunca é repetido sozinho.
 // Não imprime chave, token nem número de cliente.
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const MODO = process.env.INTERMEDIADOR_MODO === 'grupos' ? 'grupos' : 'previa';
@@ -24,6 +27,11 @@ const ESTADO_DIR = process.env.INTERMEDIADOR_ESTADO || '/var/lib/aceleriq-interm
 // Outros envios automáticos no mesmo grupo (lembrete, mensagem da semana, post no ar): pergunta nova não sai colada.
 const OUTROS_DIARIOS = ['/var/lib/aceleriq-grupo-cliente/diario.jsonl', '/var/lib/aceleriq-post-no-ar/diario.jsonl'];
 const DONO = '554198848435@s.whatsapp.net'; // o mesmo destino individual liberado no pilot_guard.mjs
+// Reserva do escritor (27/11/2026, pedido do Almir: "uma segunda solução pra não parar se o OpenRouter acabar"):
+// o Codex desta máquina, logado na conta do ChatGPT. Roda numa pasta vazia, só leitura, sem guardar sessão; se tentar
+// qualquer ferramenta (comando, arquivo, busca) o texto é descartado.
+const CODEX = process.env.INTERMEDIADOR_CODEX || '/usr/local/bin/codex';
+export const ESCRITAS_POR_RODADA = 2;
 export const MAX_POR_RODADA = 4;
 export const FOLGA_DE_OUTRO_ENVIO_MS = 10 * 60 * 1000;
 export const TENTATIVAS_RECUSADAS = 3;
@@ -95,6 +103,39 @@ export function planoDoEnvio(envio, { modo: modoGeral, clientesReais, grupos, di
   return { acao: 'grupo' };
 }
 
+/** Lê o registro (--json) do Codex: o último texto, ou nada se ele tentou usar qualquer ferramenta. */
+export function lerSaidaDoCodex(jsonl) {
+  let texto = null;
+  for (const linha of String(jsonl || '').split('\n')) {
+    let e;
+    try { e = JSON.parse(linha); } catch { continue; }
+    const it = e && e.item;
+    if (!it || !it.type) continue;
+    if (it.type === 'agent_message') { if (e.type === 'item.completed' && typeof it.text === 'string') texto = it.text.trim(); continue; }
+    // Raciocínio e aviso interno do Codex (ex.: "Exceeded skills context budget") não são ferramenta.
+    if (it.type === 'reasoning' || it.type === 'error') continue;
+    return { texto: null, motivo: 'a reserva tentou usar ferramenta (' + it.type + ')' };
+  }
+  return texto ? { texto, motivo: null } : { texto: null, motivo: 'a reserva não devolveu texto' };
+}
+export const AVISO_SEM_FERRAMENTAS = 'Importante: não use ferramentas, não rode comandos, não leia nem procure arquivos e não pesquise na internet. Responda só com o texto pedido.';
+
+function escreverComCodex(sistema, usuario) {
+  return new Promise((ok) => {
+    const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'intermediador-'));
+    const prompt = sistema + '\n\n' + AVISO_SEM_FERRAMENTAS + '\n\n' + usuario;
+    const filho = execFile(CODEX, ['exec', '-s', 'read-only', '--skip-git-repo-check', '--ephemeral', '--color', 'never', '--json', '-C', pasta, prompt],
+      { timeout: 120000, maxBuffer: 8 * 1024 * 1024, cwd: pasta, env: Object.assign({}, process.env, { NO_COLOR: '1' }) },
+      (erro, saida) => {
+        try { fs.rmSync(pasta, { recursive: true, force: true }); } catch { /* pasta temporária */ }
+        if (erro && !saida) return ok({ texto: null, motivo: 'a reserva falhou: ' + String(erro.message || erro).slice(0, 120) });
+        ok(lerSaidaDoCodex(saida));
+      });
+    // Sem terminal o Codex espera "entrada adicional" pela entrada padrão: fecha logo, senão ele trava até o tempo acabar.
+    if (filho.stdin) filho.stdin.end();
+  });
+}
+
 // ---------------------------------------------------------------- entrada e saída
 function lerLinhas(arq) {
   try { return fs.readFileSync(arq, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); }
@@ -154,8 +195,22 @@ async function main() {
   const diario = diarioEmMapa(lerLinhas(ESTADO_DIR + '/diario.jsonl'));
   const outros = ultimoPorGrupo(OUTROS_DIARIOS.flatMap(lerLinhas));
 
-  const rodada = await mcp(chave, 'aceleriq_intermediador_rodada', { operator: OPERADOR, modo: MODO });
-  log({ evento: 'rodada', feito: rodada.feito || {}, envios: (rodada.envios || []).length, clientes_reais: CLIENTES_REAIS.size });
+  let rodada = await mcp(chave, 'aceleriq_intermediador_rodada', { operator: OPERADOR, modo: MODO });
+  log({ evento: 'rodada', feito: rodada.feito || {}, envios: (rodada.envios || []).length, escritas: (rodada.escritas || []).length, clientes_reais: CLIENTES_REAIS.size });
+  // O motor do painel não escreveu: a reserva (Codex) escreve e a rodada roda de novo para usar o texto.
+  let escritas = 0;
+  for (const w of (rodada.escritas || []).slice(0, ESCRITAS_POR_RODADA)) {
+    const r = await escreverComCodex(w.sistema, w.usuario);
+    await mcp(chave, 'aceleriq_intermediador_escrita_feita', Object.assign({ operator: OPERADOR, escrita_id: w.id, quem: 'codex' }, r.texto ? { texto: r.texto } : { motivo: r.motivo }))
+      .catch((e) => log({ evento: 'escrita_nao_devolvida', id: w.id, erro: String(e.message).slice(0, 160) }));
+    log({ evento: r.texto ? 'reserva_escreveu' : 'reserva_falhou', id: w.id, motivo: r.motivo || undefined });
+    if (r.texto) escritas++;
+  }
+  if (escritas) {
+    const segunda = await mcp(chave, 'aceleriq_intermediador_rodada', { operator: OPERADOR, modo: MODO });
+    log({ evento: 'rodada', depois_da_reserva: true, feito: segunda.feito || {}, envios: (segunda.envios || []).length });
+    rodada = segunda;
+  }
   let feitos = 0;
   for (const envio of rodada.envios || []) {
     if (feitos >= MAX_POR_RODADA) break;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { destinoConfere, diarioEmMapa, lerGrupos, mencoesConferem, modoDoEnvio, partesDoEnvio, pausaAntes, PARTE, planoDoEnvio, textoDaPrevia, ultimoPorGrupo, TENTATIVAS_RECUSADAS } from './intermediador.mjs';
+import { lerSaidaDoCodex, destinoConfere, diarioEmMapa, lerGrupos, mencoesConferem, modoDoEnvio, partesDoEnvio, pausaAntes, PARTE, planoDoEnvio, textoDaPrevia, ultimoPorGrupo, TENTATIVAS_RECUSADAS } from './intermediador.mjs';
 
 const GRUPO = '120363000000000001@g.us';
 const grupos = lerGrupos({ schemaVersion: 1, groups: [{ chat_id: GRUPO, group_name: 'Verzelo - MKT - Aceleriq', client_id: 'c1' }] });
@@ -74,4 +74,21 @@ test('mensagem picada: cada parte vira uma mensagem, a menção vai só na parte
   assert.equal(partesDoEnvio({ texto: 'a' + PARTE + 'b' + PARTE + 'c' + PARTE + 'd', mencoes: [] }).length, 3);
   assert.equal(pausaAntes('ok'), 2000);
   assert.equal(pausaAntes('x'.repeat(400)), 7000);
+});
+
+test('reserva (Codex): usa o último texto; se tentou comando ou arquivo, descarta tudo', () => {
+  const ok = [
+    JSON.stringify({ type: 'thread.started' }),
+    JSON.stringify({ type: 'item.completed', item: { id: '0', type: 'error', message: 'Exceeded skills context budget.' } }),
+    JSON.stringify({ type: 'item.completed', item: { id: '1', type: 'reasoning', text: 'pensando' } }),
+    JSON.stringify({ type: 'item.completed', item: { id: '2', type: 'agent_message', text: ' Combinado! Já passei pro time. ' } }),
+  ].join('\n');
+  assert.deepEqual(lerSaidaDoCodex(ok), { texto: 'Combinado! Já passei pro time.', motivo: null });
+  const comando = [
+    JSON.stringify({ type: 'item.started', item: { id: '1', type: 'command_execution', command: 'cat /etc/hostname' } }),
+    JSON.stringify({ type: 'item.completed', item: { id: '2', type: 'agent_message', text: 'vps-1' } }),
+  ].join('\n');
+  assert.equal(lerSaidaDoCodex(comando).texto, null);
+  assert.match(lerSaidaDoCodex(comando).motivo, /ferramenta/);
+  assert.equal(lerSaidaDoCodex('').texto, null);
 });
